@@ -40,6 +40,7 @@ fun TemplateGeneratorScreen(
     var isAnalyzing by remember { mutableStateOf(false) }
     var saveStatus by remember { mutableStateOf("") }
     val logs = remember { mutableStateListOf<String>() }
+    var streamedJson by remember { mutableStateOf("") }
 
     val imagePicker = rememberImagePicker { uris ->
         if (uris.isNotEmpty()) {
@@ -86,13 +87,15 @@ fun TemplateGeneratorScreen(
                         isAnalyzing = true
                         generatedState = null
                         saveStatus = ""
+                        streamedJson = ""
                         logs.clear()
                         logs.add("🚀 开始准备上传图片并分析...")
                         try {
                             generatedState = aiService.analyzeImagesForTemplate(
                                 imageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() },
                                 apiKey = apiKey,
-                                onLog = { logMsg -> logs.add("[$logMsg]") }
+                                onLog = { logMsg -> logs.add("[$logMsg]") },
+                                onChunk = { chunk -> streamedJson += chunk }
                             )
                             logs.add("✅ 分析成功并已生成数据模型！")
                         } catch (e: Exception) {
@@ -114,67 +117,70 @@ fun TemplateGeneratorScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        if (logs.isNotEmpty() || generatedState != null) {
-            var selectedTabIndex by remember { mutableStateOf(0) }
-            val tabs = buildList {
-                if (logs.isNotEmpty()) add("运行日志")
-                if (generatedState != null) add("分析结果")
+        var selectedTabIndex by remember { mutableStateOf(0) }
+        val tabLog = stringResource(Res.string.tab_log)
+        val tabResult = stringResource(Res.string.tab_result)
+        val tabs = listOf(tabLog, tabResult)
+
+        PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
+            tabs.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTabIndex == index,
+                    onClick = { selectedTabIndex = index },
+                    text = { Text(title) }
+                )
             }
+        }
 
-            // Ensure valid selected index if state changes
-            if (selectedTabIndex >= tabs.size) {
-                selectedTabIndex = tabs.size - 1
-            }
+        Spacer(modifier = Modifier.height(8.dp))
 
-            PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTabIndex == index,
-                        onClick = { selectedTabIndex = index },
-                        text = { Text(title) }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            val currentTab = tabs.getOrNull(selectedTabIndex)
-            
-            if (currentTab == "运行日志") {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    shape = MaterialTheme.shapes.small
-                ) {
+        val currentTab = tabs.getOrNull(selectedTabIndex)
+        
+        if (currentTab == tabLog) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 4.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                shape = MaterialTheme.shapes.small
+            ) {
+                if (logs.isEmpty() && !isAnalyzing) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        Text("暂无日志", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
                     LazyColumn(modifier = Modifier.padding(8.dp)) {
                         items(logs) { log ->
                             Text(log, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
-            } else if (currentTab == "分析结果" && generatedState != null) {
-                val jsonString = remember(generatedState) {
+            }
+        } else if (currentTab == tabResult) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.small
+            ) {
+                val displayJson = if (generatedState != null) {
                     val jsonFormat = Json { prettyPrint = true }
                     jsonFormat.encodeToString(ProjectState.serializer(), generatedState!!)
+                } else {
+                    streamedJson
                 }
 
-                Surface(
-                    modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = MaterialTheme.shapes.small
-                ) {
+                if (displayJson.isNotEmpty()) {
                     val scrollState = rememberScrollState()
                     Text(
-                        text = jsonString,
+                        text = displayJson,
                         modifier = Modifier.padding(8.dp).verticalScroll(scrollState),
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace
                     )
+                } else {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        Text("等待 AI 返回数据流...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
-        } else if (!isAnalyzing) {
-            // Fill space when nothing is generated and no logs
-            Spacer(modifier = Modifier.weight(1f))
         }
 
         if (generatedState != null) {

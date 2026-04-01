@@ -103,7 +103,8 @@ class AIGenerationService {
         apiKey: String = "", 
         maxRetries: Int = 3,
         onLog: (String) -> Unit = {},
-        onProgress: (String) -> Unit = {}
+        onProgress: (String) -> Unit = {},
+        onChunk: (String) -> Unit = {}
     ): ProjectState {
         AppLogger.i(TAG, "开始使用 Gemini 3 Pro Preview 分析图片，数量: ${imageUris.size}")
         onLog("准备上传 ${imageUris.size} 张图片进行分析...")
@@ -112,7 +113,7 @@ class AIGenerationService {
             throw Exception("Gemini API 密钥为空，请在设置中配置。")
         }
 
-        val url = ApiConfig.getGenerateContentEndpoint(apiKey)
+        val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
         val client = NetworkClient.shared
 
         // 构造请求的 Part 列表
@@ -173,9 +174,10 @@ class AIGenerationService {
         onLog("请求已准备就绪，正在发送至 Gemini API (大小: ${requestBody.length / 1024} KB)...")
 
         var lastException: Exception? = null
+        val accumulatedText = StringBuilder()
 
         try {
-            val response = client.post(url) {
+            client.preparePost(url) {
                 contentType(ContentType.Application.Json)
                 setBody(requestBody)
                 
@@ -194,32 +196,52 @@ class AIGenerationService {
                         retry * 3000L
                     }
                 }
-            }
-            
-            onLog("收到 API 响应，状态码: ${response.status}")
+            }.execute { response ->
+                onLog("收到 API 响应，状态码: ${response.status}，开始接收数据流...")
 
-            if (response.status.isSuccess()) {
-                val jsonResponse = jsonConfig.parseToJsonElement(response.bodyAsText())
+                if (response.status.isSuccess()) {
+                    val channel = response.bodyAsChannel()
+                    while (!channel.isClosedForRead) {
+                        val line = channel.readUTF8Line() ?: break
+                        if (line.startsWith("data: ")) {
+                            val dataJson = line.substringAfter("data: ").trim()
+                            if (dataJson.isEmpty() || dataJson == "[DONE]") continue
+                            
+                            try {
+                                val jsonElement = jsonConfig.parseToJsonElement(dataJson)
+                                val textChunk = jsonElement.jsonObject["candidates"]
+                                    ?.jsonArray?.firstOrNull()
+                                    ?.jsonObject?.get("content")
+                                    ?.jsonObject?.get("parts")
+                                    ?.jsonArray?.firstOrNull()
+                                    ?.jsonObject?.get("text")?.jsonPrimitive?.content
 
-                val textContent = jsonResponse.jsonObject["candidates"]
-                    ?.jsonArray?.firstOrNull()
-                    ?.jsonObject?.get("content")
-                    ?.jsonObject?.get("parts")
-                    ?.jsonArray?.firstOrNull()
-                    ?.jsonObject?.get("text")?.jsonPrimitive?.content
-
-                if (textContent != null) {
-                    val cleanJson = textContent.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-                    val parsedState = jsonConfig.decodeFromString<ProjectState>(cleanJson)
-                    // 使用第一张输入图片的原始路径作为 coverImage
-                    val cover = imageUris.firstOrNull()
-                    return parsedState.copy(coverImage = cover)
+                                if (textChunk != null) {
+                                    accumulatedText.append(textChunk)
+                                    onChunk(textChunk)
+                                }
+                            } catch (e: Exception) {
+                                AppLogger.e(TAG, "解析流数据块失败: $dataJson", e)
+                            }
+                        }
+                    }
                 } else {
-                    throw Exception("Gemini 响应中缺少文本数据。")
+                    throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")
                 }
-            } else {
-                throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")
             }
+
+            val finalString = accumulatedText.toString()
+            if (finalString.isEmpty()) {
+                throw Exception("Gemini 响应中缺少文本数据。")
+            }
+
+            val cleanJson = finalString.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+            val parsedState = jsonConfig.decodeFromString<ProjectState>(cleanJson)
+            
+            // 使用第一张输入图片的原始路径作为 coverImage
+            val cover = imageUris.firstOrNull()
+            return parsedState.copy(coverImage = cover)
+
         } catch (e: Exception) {
             lastException = e
             AppLogger.e(TAG, "请求异常", e)

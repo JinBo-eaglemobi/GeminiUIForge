@@ -23,4 +23,11 @@ object ApiConfig {
     fun getGenerateContentEndpoint(apiKey: String, modelName: String = GeminiModel.GEMINI_3_PRO_IMAGE_PREVIEW.modelName): String {
         return "$BASE_URL/models/$modelName:generateContent?key=$apiKey"
     }
+
+    /**
+     * 获取 Gemini 流式生成 Endpoint URL (SSE)
+     */
+    fun getStreamGenerateContentEndpoint(apiKey: String, modelName: String = GeminiModel.GEMINI_3_PRO_IMAGE_PREVIEW.modelName): String {
+        return "$BASE_URL/models/$modelName:streamGenerateContent?alt=sse&key=$apiKey"
+    }
 }
