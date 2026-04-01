@@ -1,0 +1,24 @@
+Please strictly analyze these images. You MUST recognize and break down the ENTIRE UI displayed in the image into distinct, granular functional modules/blocks. Do not just focus on the main area; analyze headers, footers, panels, texts, buttons, backgrounds, icons, and decorations.
+
+Generate a comprehensive JSON structure representing this complete UI template breakdown.
+
+CRITICAL REQUIREMENT: EVERY functional layer, background, content panel, or interactive element displayed in the image MUST have a corresponding distinct template (UIBlock) with accurate bounding coordinates.
+
+The JSON must strictly map to the following Kotlin classes (do NOT wrap in markdown blocks, return pure JSON):
+ProjectState(projectId: String, globalTheme: String, pages: List<UIPage>)
+UIPage(id: String, nameStr: String, blocks: List<UIBlock>)
+UIBlock(id: String, type: UIBlockType, bounds: SerialRect(left, top, right, bottom), userPrompt: String)
+
+UIBlockType MUST be one of the following exact strings:
+- REEL (Slot machine reel area)
+- SPIN_BUTTON (Main spin button)
+- WIN_DISPLAY (Win score display box)
+- BACKGROUND (Full screen game background)
+- SYMBOL (Individual slot machine symbol)
+- BUTTON (Generic interactive button)
+- PANEL (Content panel or container box)
+- HEADER (Top header bar, title area)
+- FOOTER (Bottom footer bar, navigation)
+- TEXT_AREA (Text display area)
+- ICON (Small icon or badge)
+- DECORATION (Ornamental or decorative UI element)
