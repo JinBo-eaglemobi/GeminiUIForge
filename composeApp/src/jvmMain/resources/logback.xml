@@ -1,0 +1,29 @@
+<configuration>
+    <!-- 设置日志保存的本地路径 -->
+    <property name="LOG_DIR" value="${user.home}/.geminiuiforge/logs" />
+
+    <!-- 控制台输出配置 -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 本地文件输出配置 -->
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${LOG_DIR}/app.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT" />
+        <appender-ref ref="FILE" />
+    </root>
+    
+    <!-- 为特定包开 Debug 级别 -->
+    <logger name="org.gemini.ui.forge" level="DEBUG" />
+    <logger name="io.ktor" level="DEBUG" />
+</configuration>

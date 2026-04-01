@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Gemini UI Forge</string>
+    <string name="select_block_to_edit">请选择要编辑的功能块</string>
+    <string name="edit_block">编辑功能块:</string>
+    <string name="style_prompt">风格提示词</string>
+    <string name="generate_ideas">生成创意</string>
+    <string name="candidate">候选图</string>
+    <string name="image_loaded">已加载图片</string>
+    
+    <string name="block_reel">转轴区域</string>
+    <string name="block_spin_button">旋转按钮</string>
+    <string name="block_win_display">赢分显示</string>
+    <string name="block_background">背景</string>
+    <string name="block_symbol">图标</string>
+    <string name="block_button">按钮</string>
+    <string name="block_panel">面板</string>
+    <string name="block_header">顶部栏</string>
+    <string name="block_footer">底部栏</string>
+    <string name="block_text_area">文本区</string>
+    <string name="block_icon">小图标</string>
+    <string name="block_decoration">装饰物</string>
+
+    <string name="menu_file">文件</string>
+    <string name="menu_settings">设置</string>
+    <string name="menu_help">帮助</string>
+    <string name="settings_title">设置</string>
+    <string name="settings_language">语言</string>
+    <string name="language_english">English</string>
+    <string name="language_chinese">中文</string>
+    <string name="close">关闭</string>
+
+    <string name="settings_theme">主题</string>
+    <string name="theme_system">跟随系统</string>
+    <string name="theme_light">浅色模式</string>
+    <string name="theme_dark">深色模式</string>
+    <string name="no_modules">暂无可用模块</string>
+    <string name="module_basic_slots">基础 Slots 模板</string>
+    <string name="back_to_home">返回主页</string>
+
+    <!-- UI Pages -->
+    <string name="page_main">主游戏界面</string>
+    <string name="page_bonus">奖励游戏界面</string>
+
+    <string name="menu_generate_template">生成模板</string>
+    <string name="template_gen_title">通过 Gemini 生成模板</string>
+    <string name="template_gen_input_hint">输入图片路径/URL（逗号分隔）</string>
+    <string name="template_gen_analyze">发送给 Gemini 分析</string>
+    <string name="template_gen_save">保存模板</string>
+    <string name="template_name_hint">模板名称</string>
+    <string name="template_gen_pick_local">选择本地图片</string>
+
+    <string name="settings_gemini_key">Gemini API 密钥</string>
+    <string name="settings_max_retries">最大重试次数</string>
+
+    <string name="dialog_error_title">出错了</string>
+    <string name="dialog_action_retry">留在当前页</string>
+    <string name="dialog_action_exit">退出返回</string>
+
+    <string name="tab_log">通信日志</string>
+    <string name="tab_result">最终结果</string>
+    <string name="dialog_delete_title">删除模板</string>
+    <string name="dialog_delete_message">确定要删除这个模板吗？此操作无法撤销。</string>
+    <string name="dialog_action_delete">删除</string>
+    <string name="dialog_action_cancel">取消</string>
+</resources>

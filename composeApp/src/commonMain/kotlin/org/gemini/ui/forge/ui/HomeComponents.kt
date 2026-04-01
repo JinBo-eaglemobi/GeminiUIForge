@@ -1,0 +1,178 @@
+package org.gemini.ui.forge.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
+import org.gemini.ui.forge.domain.ProjectState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+
+data class UIModule(
+    val id: String,
+    val nameRes: org.jetbrains.compose.resources.StringResource? = null,
+    val nameStr: String? = null,
+    val projectState: ProjectState? = null,
+    val absolutePath: String? = null
+)
+
+@Composable
+fun HomeScreen(
+    modules: List<UIModule>,
+    onModuleSelected: (String) -> Unit,
+    onDeleteModule: (String) -> Unit = {}
+) {
+    var moduleToDelete by remember { mutableStateOf<UIModule?>(null) }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        if (modules.isEmpty()) {
+            Text(
+                text = stringResource(Res.string.no_modules),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
+            ) {
+                items(modules) { module ->
+                    ModuleCard(
+                        module = module,
+                        onClick = { onModuleSelected(module.id) },
+                        onDelete = { moduleToDelete = module }
+                    )
+                }
+            }
+        }
+    }
+
+    moduleToDelete?.let { module ->
+        val title = if (module.nameRes != null) stringResource(module.nameRes) else module.nameStr ?: "Unknown"
+        AlertDialog(
+            onDismissRequest = { moduleToDelete = null },
+            title = { Text(stringResource(Res.string.dialog_delete_title)) },
+            text = { Text("${stringResource(Res.string.dialog_delete_message)}\n($title)") },
+            confirmButton = {
+                TextButton(onClick = { 
+                    onDeleteModule(module.id)
+                    moduleToDelete = null 
+                }) { 
+                    Text(stringResource(Res.string.dialog_action_delete), color = MaterialTheme.colorScheme.error) 
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { moduleToDelete = null }) { 
+                    Text(stringResource(Res.string.dialog_action_cancel)) 
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun ModuleCard(module: UIModule, onClick: () -> Unit, onDelete: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .size(260.dp, 360.dp)
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            val title = if (module.nameRes != null) stringResource(module.nameRes) else module.nameStr ?: "Unknown"
+
+            // Image Preview Area
+            val coverUrl = module.projectState?.coverImage
+            if (!coverUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = coverUrl,
+                    contentDescription = "Cover for $title",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(Color.LightGray),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No Preview", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Start,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Delete Icon Button, only if absolutePath exists (meaning it's a saved template)
+                if (module.absolutePath != null) {
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete Template",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            module.absolutePath?.let { path ->
+                Text(
+                    text = "Location: $path",
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = TextAlign.Start,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
