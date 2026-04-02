@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.viewmodel.EditorState
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 
 @Composable
 fun EditorScreen(
@@ -27,9 +28,9 @@ fun EditorScreen(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val maxWidth = maxWidth
         
-        // 全平台统一横向布局（左侧画布区 + 右侧属性栏）
+        // 全平台统一横向布局（左侧画布区 + 右侧属性栏�?
         var leftWeight by remember { mutableStateOf(0.6f) }
-        val totalWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
+        val totalWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) { maxWidth.toPx() }
 
         Row(modifier = Modifier.fillMaxSize()) {
             // 左侧：标签页 + 画布面板
@@ -56,6 +57,8 @@ fun EditorScreen(
 
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     CanvasArea(
+                        pageWidth = state.currentPage?.width ?: 1080f,
+                        pageHeight = state.currentPage?.height ?: 1920f,
                         blocks = state.currentPage?.blocks ?: emptyList(),
                         selectedBlockId = state.selectedBlockId,
                         onBlockClicked = onBlockClicked,
@@ -70,6 +73,7 @@ fun EditorScreen(
                     .width(4.dp)
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.outlineVariant)
+                    .pointerHoverIcon(org.gemini.ui.forge.ResizeHorizontalIcon)
                     .draggable(
                         orientation = Orientation.Horizontal,
                         state = rememberDraggableState { delta ->
@@ -79,7 +83,7 @@ fun EditorScreen(
                     )
             )
 
-            // 右侧属性面板
+            // 右侧属性面�?
             Surface(
                 modifier = Modifier.weight(1f - leftWeight).fillMaxHeight(),
                 color = MaterialTheme.colorScheme.surface

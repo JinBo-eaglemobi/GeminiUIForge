@@ -17,6 +17,11 @@ expect fun getPlatform(): Platform
 expect fun getCurrentTimeMillis(): Long
 
 /**
+ * 跨平台的鼠标水平调整大小图标
+ */
+expect val ResizeHorizontalIcon: androidx.compose.ui.input.pointer.PointerIcon
+
+/**
  * 将时间戳格式化为本地时间格式 (yyyy-MM-dd HH:mm:ss)
  */
 fun formatTimestamp(timeMillis: Long, format: String = "yyyy-MM-dd HH:mm:ss"): String {

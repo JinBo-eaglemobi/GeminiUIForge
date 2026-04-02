@@ -138,6 +138,8 @@ data class UIBlock(
 data class UIPage(
     val id: String,
     val nameStr: String = "Page",
+    val width: Float = 1080f,
+    val height: Float = 1920f,
     val blocks: List<UIBlock> = emptyList()
 )
 

@@ -67,8 +67,8 @@ class EditorViewModel(
             UIBlock("spin_1", UIBlockType.SPIN_BUTTON, SerialRect(400f, 1500f, 680f, 1780f)),
             UIBlock("win_1", UIBlockType.WIN_DISPLAY, SerialRect(200f, 150f, 880f, 300f))
         )
-        val mainPage = UIPage("page_1", "Main Game", mainBlocks)
-        val bonusPage = UIPage("page_2", "Bonus Game", emptyList())
+        val mainPage = UIPage("page_1", "Main Game", 1080f, 1920f, mainBlocks)
+        val bonusPage = UIPage("page_2", "Bonus Game", 1080f, 1920f, emptyList())
 
         _state.update { 
             it.copy(

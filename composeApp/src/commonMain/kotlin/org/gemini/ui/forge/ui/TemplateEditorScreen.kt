@@ -24,9 +24,9 @@ import org.gemini.ui.forge.domain.UIBlock
 import org.gemini.ui.forge.domain.UIBlockType
 import org.gemini.ui.forge.viewmodel.EditorState
 import org.jetbrains.compose.resources.stringResource
-
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 
 @Composable
 fun TemplateEditorScreen(
@@ -119,6 +119,8 @@ fun TemplateEditorScreen(
             // ==================== 中间：画布 ====================
             Box(modifier = Modifier.weight(centerWeight).fillMaxHeight()) {
                 CanvasArea(
+                    pageWidth = state.currentPage?.width ?: 1080f,
+                    pageHeight = state.currentPage?.height ?: 1920f,
                     blocks = state.currentPage?.blocks ?: emptyList(),
                     selectedBlockId = state.selectedBlockId,
                     onBlockClicked = onBlockClicked,
@@ -175,6 +177,7 @@ private fun VerticalSplitter(onDrag: (Float) -> Unit) {
             .width(4.dp)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.outlineVariant)
+            .pointerHoverIcon(org.gemini.ui.forge.ResizeHorizontalIcon)
             .draggable(
                 orientation = Orientation.Horizontal,
                 state = rememberDraggableState { delta -> onDrag(delta) }
