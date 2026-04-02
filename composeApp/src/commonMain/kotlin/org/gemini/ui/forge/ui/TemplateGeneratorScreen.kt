@@ -25,6 +25,11 @@ import org.gemini.ui.forge.utils.rememberImagePicker
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
+import androidx.compose.foundation.text.selection.SelectionContainer
+
+import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.formatTimestamp
+
 @Composable
 fun TemplateGeneratorScreen(
     onNavigateBack: () -> Unit,
@@ -89,18 +94,18 @@ fun TemplateGeneratorScreen(
                         saveStatus = ""
                         streamedJson = ""
                         logs.clear()
-                        logs.add("🚀 开始准备上传图片并分析...")
+                        logs.add("[${getCurrentTimeMillis().formatTimestamp()}] 🚀 开始准备上传图片并分析...")
                         try {
                             generatedState = aiService.analyzeImagesForTemplate(
                                 imageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() },
                                 apiKey = apiKey,
-                                onLog = { logMsg -> logs.add("[$logMsg]") },
+                                onLog = { logMsg -> logs.add("[${getCurrentTimeMillis().formatTimestamp()}] $logMsg") },
                                 onChunk = { chunk -> streamedJson += chunk }
                             )
-                            logs.add("✅ 分析成功并已生成数据模型！")
+                            logs.add("[${getCurrentTimeMillis().formatTimestamp()}] ✅ 分析成功并已生成数据模型！")
                         } catch (e: Exception) {
                             saveStatus = "分析失败: ${e.message}"
-                            logs.add("❌ 发生错误: ${e.message}")
+                            logs.add("[${getCurrentTimeMillis().formatTimestamp()}] ❌ 发生错误: ${e.message}")
                         }
                         isAnalyzing = false
                     }
@@ -147,9 +152,11 @@ fun TemplateGeneratorScreen(
                         Text("暂无日志", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
-                    LazyColumn(modifier = Modifier.padding(8.dp)) {
-                        items(logs) { log ->
-                            Text(log, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SelectionContainer {
+                        LazyColumn(modifier = Modifier.padding(8.dp)) {
+                            items(logs) { log ->
+                                Text(log, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
@@ -168,13 +175,15 @@ fun TemplateGeneratorScreen(
                 }
 
                 if (displayJson.isNotEmpty()) {
-                    val scrollState = rememberScrollState()
-                    Text(
-                        text = displayJson,
-                        modifier = Modifier.padding(8.dp).verticalScroll(scrollState),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    SelectionContainer {
+                        val scrollState = rememberScrollState()
+                        Text(
+                            text = displayJson,
+                            modifier = Modifier.padding(8.dp).verticalScroll(scrollState),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
                         Text("等待 AI 返回数据流...", color = MaterialTheme.colorScheme.onSurfaceVariant)

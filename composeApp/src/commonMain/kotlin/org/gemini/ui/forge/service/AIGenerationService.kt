@@ -65,7 +65,7 @@ class AIGenerationService {
             val response = client.post(url) {
                 contentType(ContentType.Application.Json)
                 setBody(requestBody)
-                
+
                 retry {
                     maxRetries = 3
                     retryOnExceptionOrServerErrors(3)
@@ -99,8 +99,8 @@ class AIGenerationService {
 
     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
     suspend fun analyzeImagesForTemplate(
-        imageUris: List<String>, 
-        apiKey: String = "", 
+        imageUris: List<String>,
+        apiKey: String = "",
         maxRetries: Int = 3,
         onLog: (String) -> Unit = {},
         onProgress: (String) -> Unit = {},
@@ -171,19 +171,26 @@ class AIGenerationService {
         }.toString()
 
         AppLogger.i(TAG, "请求体总大小: ${requestBody.length / 1024} KB")
-        onLog("请求已准备就绪，正在发送至 Gemini API (大小: ${requestBody.length / 1024} KB)...")
+        onLog("---- [HTTP REQUEST] ----")
+        onLog("URL: $url")
+        onLog("Method: POST")
+        onLog("Headers: Content-Type=application/json")
+        onLog("BodySize: ${requestBody.length / 1024} KB")
+        onLog("BodyPreview: ${requestBody.take(200)}...")
+        onLog("------------------------")
+        onLog("请求已准备就绪，正在发送至 Gemini API (流式通道)...")
 
         var lastException: Exception? = null
         val accumulatedText = StringBuilder()
 
         try {
-            client.preparePost(url) {
+            val response = client.post(url) {
                 contentType(ContentType.Application.Json)
                 setBody(requestBody)
-                
+
                 timeout {
-                    requestTimeoutMillis = 600_000L
-                    socketTimeoutMillis = 600_000L
+                    requestTimeoutMillis = 60_000L
+                    socketTimeoutMillis = 60_000L
                 }
 
                 retry {
@@ -196,38 +203,37 @@ class AIGenerationService {
                         retry * 3000L
                     }
                 }
-            }.execute { response ->
-                onLog("收到 API 响应，状态码: ${response.status}，开始接收数据流...")
+            }
 
-                if (response.status.isSuccess()) {
-                    val channel = response.bodyAsChannel()
-                    while (!channel.isClosedForRead) {
-                        val line = channel.readUTF8Line() ?: break
-                        if (line.startsWith("data: ")) {
-                            val dataJson = line.substringAfter("data: ").trim()
-                            if (dataJson.isEmpty() || dataJson == "[DONE]") continue
-                            
-                            try {
-                                val jsonElement = jsonConfig.parseToJsonElement(dataJson)
-                                val textChunk = jsonElement.jsonObject["candidates"]
-                                    ?.jsonArray?.firstOrNull()
-                                    ?.jsonObject?.get("content")
-                                    ?.jsonObject?.get("parts")
-                                    ?.jsonArray?.firstOrNull()
-                                    ?.jsonObject?.get("text")?.jsonPrimitive?.content
+            onLog("收到 API 响应，状态码: ${response.status}，开始接收数据流...")
+            if (response.status.isSuccess()) {
+                val channel = response.bodyAsChannel()
+                while (!channel.isClosedForRead) {
+                    val line = channel.readUTF8Line() ?: break
+                    if (line.startsWith("data: ")) {
+                        val dataJson = line.substringAfter("data: ").trim()
+                        if (dataJson.isEmpty() || dataJson == "[DONE]") continue
 
-                                if (textChunk != null) {
-                                    accumulatedText.append(textChunk)
-                                    onChunk(textChunk)
-                                }
-                            } catch (e: Exception) {
-                                AppLogger.e(TAG, "解析流数据块失败: $dataJson", e)
+                        try {
+                            val jsonElement = jsonConfig.parseToJsonElement(dataJson)
+                            val textChunk = jsonElement.jsonObject["candidates"]
+                                ?.jsonArray?.firstOrNull()
+                                ?.jsonObject?.get("content")
+                                ?.jsonObject?.get("parts")
+                                ?.jsonArray?.firstOrNull()
+                                ?.jsonObject?.get("text")?.jsonPrimitive?.content
+
+                            if (textChunk != null) {
+                                accumulatedText.append(textChunk)
+                                onChunk(textChunk)
                             }
+                        } catch (e: Exception) {
+                            AppLogger.e(TAG, "解析流数据块失败: $dataJson", e)
                         }
                     }
-                } else {
-                    throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")
                 }
+            } else {
+                throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")
             }
 
             val finalString = accumulatedText.toString()
@@ -237,7 +243,7 @@ class AIGenerationService {
 
             val cleanJson = finalString.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
             val parsedState = jsonConfig.decodeFromString<ProjectState>(cleanJson)
-            
+
             // 使用第一张输入图片的原始路径作为 coverImage
             val cover = imageUris.firstOrNull()
             return parsedState.copy(coverImage = cover)
@@ -246,7 +252,6 @@ class AIGenerationService {
             lastException = e
             AppLogger.e(TAG, "请求异常", e)
         }
-
         throw Exception("生成模板失败 (已重试 $maxRetries 次): ${lastException?.message}", lastException)
     }
 }

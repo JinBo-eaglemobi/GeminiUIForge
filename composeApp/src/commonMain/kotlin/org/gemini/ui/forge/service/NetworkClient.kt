@@ -15,9 +15,9 @@ object NetworkClient {
         HttpClient {
             install(HttpRequestRetry)
             install(HttpTimeout) {
-                requestTimeoutMillis = 300_000L // 5 minutes
-                connectTimeoutMillis = 60_000L  // 1 minute
-                socketTimeoutMillis = 300_000L  // 5 minutes
+                requestTimeoutMillis = 30_000L // 5 minutes
+                connectTimeoutMillis = 6_000L  // 1 minute
+                socketTimeoutMillis = 30_000L  // 5 minutes
             }
             install(Logging) {
                 level = LogLevel.INFO
