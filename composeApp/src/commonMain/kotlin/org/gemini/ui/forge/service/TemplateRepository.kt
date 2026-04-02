@@ -4,10 +4,19 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.domain.ProjectState
 
+/**
+ * 模板持久化仓库类，负责项目模板及关联资源的保存、读取和删除
+ * @property fileStorage 本地文件存储抽象层
+ */
 class TemplateRepository(val fileStorage: LocalFileStorage = LocalFileStorage()) {
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
 
+    /**
+     * 保存项目模板到本地
+     * @param templateName 模板/项目名称
+     * @param projectState 项目的状态数据
+     */
     fun saveTemplate(templateName: String, projectState: ProjectState) {
         val sanitizedName = templateName.replace(" ", "_")
 
@@ -30,13 +39,21 @@ class TemplateRepository(val fileStorage: LocalFileStorage = LocalFileStorage())
         fileStorage.saveToFile(fileName, content)
     }
 
+    /**
+     * 删除指定的模板及其所有关联资源
+     * @param templateName 模板名称
+     */
     fun deleteTemplate(templateName: String) {
         val sanitizedName = templateName.replace(" ", "_")
         fileStorage.deleteDirectory(sanitizedName)
     }
 
     /**
-     * 将选中的候选图（Base64）保存为模板文件夹内的物理文件，并返回本地绝对路径
+     * 将 AI 生成的图片资源（Base64）保存为模板文件夹内的物理文件，并返回其本地绝对路径
+     * @param templateName 模板名称
+     * @param blockId 资源所属的 UI 组件 ID
+     * @param base64Data 图片的 Base64 数据
+     * @return 返回保存后的文件绝对路径
      */
     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
     fun saveResource(templateName: String, blockId: String, base64Data: String): String {
@@ -44,12 +61,16 @@ class TemplateRepository(val fileStorage: LocalFileStorage = LocalFileStorage())
         val pureBase64 = if (base64Data.contains(",")) base64Data.substringAfter(",") else base64Data
         val bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
 
-        // 资源文件名格式: 模板目录/组件ID_时间戳.png
+        // 资源文件名格式: 模板目录/组件ID_随机数.png
         val resourceName = "$sanitizedName/${blockId}_${kotlin.random.Random.nextInt(1000000)}.png"
 
         return fileStorage.saveBytesToFile(resourceName, bytes)
     }
 
+    /**
+     * 获取本地已存储的所有模板列表
+     * @return 返回模板名称与项目状态的键值对列表
+     */
     fun getTemplates(): List<Pair<String, ProjectState>> {
         val dirs = fileStorage.listDirectories()
         return dirs.mapNotNull { dirName ->

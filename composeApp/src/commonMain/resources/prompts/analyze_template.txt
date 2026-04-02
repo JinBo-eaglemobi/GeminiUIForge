@@ -2,11 +2,14 @@ Please strictly analyze these images. You MUST recognize and break down the ENTI
 
 Generate a comprehensive JSON structure representing this complete UI template breakdown.
 
-CRITICAL REQUIREMENT: EVERY functional layer, background, content panel, or interactive element displayed in the image MUST have a corresponding distinct template (UIBlock) with accurate bounding coordinates.
+CRITICAL REQUIREMENT: 
+1. EVERY functional layer, background, content panel, or interactive element displayed in the image MUST have a corresponding distinct template (UIBlock) with accurate bounding coordinates.
+2. The `width` and `height` in `UIPage` MUST represent the total canvas size (resolution) of the analyzed image.
+3. ALL `UIBlock` coordinates (left, top, right, bottom) MUST be strictly within the bounds of [0, width] for X-axis and [0, height] for Y-axis.
 
 The JSON must strictly map to the following Kotlin classes (do NOT wrap in markdown blocks, return pure JSON):
 ProjectState(projectId: String, globalTheme: String, pages: List<UIPage>)
-UIPage(id: String, nameStr: String, blocks: List<UIBlock>)
+UIPage(id: String, nameStr: String, width: Float, height: Float, blocks: List<UIBlock>)
 UIBlock(id: String, type: UIBlockType, bounds: SerialRect(left, top, right, bottom), userPrompt: String)
 
 UIBlockType MUST be one of the following exact strings:

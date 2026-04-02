@@ -3,6 +3,11 @@ package org.gemini.ui.forge
 /**
  * 自动生成的 Gemini 模型枚举类
  * 包含了当前 API Key 支持的所有可用模型。
+ *
+ * @property modelName 实际传给 API 请求的模型标识符（如 "gemini-3-pro-preview"）
+ * @property displayName 用于 UI 展示的人类可读名称
+ * @property description 模型的官方描述及功能说明
+ * @property supportedMethods 该模型支持调用的 API 方法列表
  */
 enum class GeminiModel(
     val modelName: String,

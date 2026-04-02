@@ -19,6 +19,9 @@ import org.gemini.ui.forge.utils.AppLogger
 import org.jetbrains.compose.resources.InternalResourceApi
 import org.jetbrains.compose.resources.readResourceBytes
 
+/**
+ * AI 生成服务类，封装了与 Google Gemini 和 Imagen API 的交互逻辑
+ */
 class AIGenerationService {
     private val TAG = "AIGenerationService"
     private val jsonConfig = Json {
@@ -26,6 +29,15 @@ class AIGenerationService {
         prettyPrint = true
     }
 
+    /**
+     * 调用 Imagen 模型根据文本 Prompt 生成 UI 图片资源
+     * @param blockType 组件类型名称（如 "SPIN_BUTTON"），用于构造 Prompt
+     * @param userPrompt 用户自定义的风格描述文本
+     * @param count 请求生成的图片数量，默认为 4
+     * @param apiKey Gemini API 密钥
+     * @return 返回包含图片 Base64 数据的列表 (格式: data:image/jpeg;base64,...)
+     * @throws Exception 当 API 密钥为空或网络请求失败时抛出异常
+     */
     suspend fun generateImages(
         blockType: String,
         userPrompt: String,
@@ -97,6 +109,17 @@ class AIGenerationService {
         }
     }
 
+    /**
+     * 使用 Gemini 3 Pro Preview 模型多模态能力分析图片并生成项目模板
+     * @param imageUris 待分析的图片路径或 URL 列表
+     * @param apiKey Gemini API 密钥
+     * @param maxRetries 最大重试次数，默认为 3
+     * @param onLog 日志回调，用于 UI 层的实时日志展示
+     * @param onProgress 进度回调
+     * @param onChunk 流式数据块回调，每接收到一部分生成的 JSON 文本时触发
+     * @return 返回解析后的项目状态对象 [ProjectState]
+     * @throws Exception 当生成过程彻底失败时抛出异常
+     */
     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
     suspend fun analyzeImagesForTemplate(
         imageUris: List<String>,

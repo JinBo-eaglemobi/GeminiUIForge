@@ -20,6 +20,16 @@ import org.gemini.ui.forge.service.TemplateRepository
 
 import org.gemini.ui.forge.service.EnvManager
 
+/**
+ * 编辑器页面的 UI 状态模型
+ * @property globalState 应用全局状态
+ * @property project 当前正在编辑的项目数据状态
+ * @property projectName 项目名称
+ * @property selectedPageId 当前选中的页面 ID
+ * @property selectedBlockId 当前选中的 UI 组件 ID
+ * @property isGenerating 是否正在通过 AI 生成资源
+ * @property generatedCandidates AI 生成的候选图片数据列表 (Base64)
+ */
 data class EditorState(
     val globalState: AppGlobalState = AppGlobalState(),
     val project: ProjectState = ProjectState(),
@@ -29,13 +39,21 @@ data class EditorState(
     val isGenerating: Boolean = false,
     val generatedCandidates: List<String> = emptyList()
 ) {
+    /** 获取当前选中的页面对象 */
     val currentPage: UIPage?
         get() = project.pages.find { it.id == selectedPageId }
         
+    /** 获取当前选中的 UI 组件对象 */
     val selectedBlock: UIBlock?
         get() = currentPage?.blocks?.find { it.id == selectedBlockId }
 }
 
+/**
+ * 编辑器页面的 ViewModel，负责 UI 逻辑处理与状态管理
+ * @param aiService AI 生成服务，用于调用 Imagen 和 Gemini
+ * @param templateRepo 模板持久化仓库
+ * @param envManager 环境变量与密钥管理工具
+ */
 class EditorViewModel(
     private val aiService: AIGenerationService = AIGenerationService(),
     private val templateRepo: TemplateRepository = TemplateRepository(),
@@ -43,6 +61,7 @@ class EditorViewModel(
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditorState())
+    /** 向外暴露的只读 UI 状态流 */
     val state: StateFlow<EditorState> = _state.asStateFlow()
 
     init {
@@ -50,16 +69,22 @@ class EditorViewModel(
         loadSettings()
     }
 
+    /** 从本地持久化存储加载配置信息 */
     private fun loadSettings() {
         val apiKey = envManager.loadKey("GEMINI_API_KEY") ?: ""
         _state.update { it.copy(globalState = it.globalState.copy(apiKey = apiKey)) }
     }
 
+    /**
+     * 保存并更新 Gemini API 密钥
+     * @param newKey 新的 API Key 字符串
+     */
     fun saveApiKey(newKey: String) {
         envManager.saveKey("GEMINI_API_KEY", newKey)
         _state.update { it.copy(globalState = it.globalState.copy(apiKey = newKey)) }
     }
 
+    /** 加载初始的基础 UI 模板（如背景、卷轴、旋转按钮等） */
     private fun loadBaseTemplate() {
         val mainBlocks = listOf(
             UIBlock("bg_1", UIBlockType.BACKGROUND, SerialRect(0f, 0f, 1080f, 1920f)),
@@ -78,6 +103,11 @@ class EditorViewModel(
         }
     }
     
+    /**
+     * 加载指定的项目数据
+     * @param projectName 项目名称
+     * @param projectState 项目的状态数据
+     */
     fun loadProject(projectName: String, projectState: ProjectState) {
         _state.update { 
             it.copy(
@@ -90,14 +120,26 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * 页面切换回调
+     * @param pageId 目标页面 ID
+     */
     fun onPageSelected(pageId: String) {
         _state.update { it.copy(selectedPageId = pageId, selectedBlockId = null, generatedCandidates = emptyList()) }
     }
 
+    /**
+     * UI 组件点击选择回调
+     * @param blockId 被点击的组件 ID
+     */
     fun onBlockClicked(blockId: String) {
         _state.update { it.copy(selectedBlockId = if (it.selectedBlockId == blockId) null else blockId) }
     }
 
+    /**
+     * 响应用户针对特定组件输入的 Prompt 变化
+     * @param newPrompt 新的 Prompt 文本
+     */
     fun onUserPromptChanged(newPrompt: String) {
         val pageId = _state.value.selectedPageId ?: return
         val blockId = _state.value.selectedBlockId ?: return
@@ -117,6 +159,14 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * 更新 UI 组件的位置和大小
+     * @param blockId 组件 ID
+     * @param left 左边界坐标
+     * @param top 上边界坐标
+     * @param right 右边界坐标
+     * @param bottom 下边界坐标
+     */
     fun updateBlockBounds(blockId: String, left: Float, top: Float, right: Float, bottom: Float) {
         val pageId = _state.value.selectedPageId ?: return
         _state.update { currentState ->
@@ -132,6 +182,11 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * 更改 UI 组件的类型（如背景改为按钮）
+     * @param blockId 组件 ID
+     * @param newType 目标组件类型
+     */
     fun updateBlockType(blockId: String, newType: UIBlockType) {
         val pageId = _state.value.selectedPageId ?: return
         _state.update { currentState ->
@@ -147,10 +202,14 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * 在当前选中的页面添加一个新的 UI 组件
+     * @param type 组件类型
+     */
     fun addBlock(type: UIBlockType) {
         val pageId = _state.value.selectedPageId ?: return
         val newBlockId = "block_${org.gemini.ui.forge.getCurrentTimeMillis()}"
-        // Default bounds somewhere visible
+        // 默认生成在可见区域内
         val defaultBounds = org.gemini.ui.forge.domain.SerialRect(100f, 100f, 400f, 300f)
         val newBlock = UIBlock(newBlockId, type, defaultBounds)
 
@@ -167,6 +226,10 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * 从当前页面删除指定的 UI 组件
+     * @param blockId 要删除的组件 ID
+     */
     fun deleteBlock(blockId: String) {
         val pageId = _state.value.selectedPageId ?: return
         _state.update { currentState ->
@@ -182,6 +245,10 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * 请求 AI 根据当前组件的 Prompt 生成候选图片资源
+     * @param apiKey 用于认证的 Gemini API 密钥
+     */
     fun onRequestGeneration(apiKey: String) {
         val block = state.value.selectedBlock ?: return
         viewModelScope.launch {
@@ -199,12 +266,16 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * 确认选择一张生成的图片作为该组件的正式资源
+     * @param base64Data 被选中的图片的 Base64 数据
+     */
     fun onImageSelected(base64Data: String) {
         val pageId = _state.value.selectedPageId ?: return
         val blockId = _state.value.selectedBlockId ?: return
         val projectName = _state.value.projectName
 
-        // 1. 保存资源并获得其本地引用 (现在返回的是落盘后的本地绝对路径，例如: 某模板目录/spin_1_xxxx.png)
+        // 1. 保存资源并获得其本地引用 (返回落盘后的本地绝对路径)
         val localImagePath = templateRepo.saveResource(projectName, blockId, base64Data)
 
         _state.update { currentState ->
@@ -230,10 +301,18 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * 全局页面导航跳转
+     * @param screen 目标页面枚举
+     */
     fun navigateTo(screen: AppScreen) {
         _state.update { it.copy(globalState = it.globalState.copy(currentScreen = screen)) }
     }
 
+    /**
+     * 设置应用主题模式
+     * @param mode 主题模式 (SYSTEM, LIGHT, DARK)
+     */
     fun setThemeMode(mode: ThemeMode) {
         _state.update { it.copy(globalState = it.globalState.copy(themeMode = mode)) }
     }

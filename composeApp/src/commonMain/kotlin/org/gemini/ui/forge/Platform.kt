@@ -5,24 +5,36 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
+/**
+ * 跨平台标识接口，提供当前运行环境的基础信息
+ */
 interface Platform {
+    /** 平台名称描述（例如 "Android", "iOS", "JVM" 等） */
     val name: String
 }
 
+/**
+ * 获取当前运行平台的实例
+ * @return 对应的 [Platform] 实现类
+ */
 expect fun getPlatform(): Platform
 
 /**
- * 使用 expect/actual 获取当前系统的 Unix 时间戳（毫秒）
+ * 获取当前系统的 Unix 时间戳
+ * @return 以毫秒为单位的时间戳
  */
 expect fun getCurrentTimeMillis(): Long
 
 /**
- * 跨平台的鼠标水平调整大小图标
+ * 跨平台的鼠标水平调整大小图标，主要用于桌面端的边界拖拽
  */
 expect val ResizeHorizontalIcon: androidx.compose.ui.input.pointer.PointerIcon
 
 /**
- * 将时间戳格式化为本地时间格式 (yyyy-MM-dd HH:mm:ss)
+ * 将给定的时间戳格式化为指定的本地时间字符串格式
+ * @param timeMillis 时间戳（毫秒）
+ * @param format 目标时间格式，默认 "yyyy-MM-dd HH:mm:ss"
+ * @return 格式化后的时间字符串
  */
 fun formatTimestamp(timeMillis: Long, format: String = "yyyy-MM-dd HH:mm:ss"): String {
     if (timeMillis <= 0L) return ""
