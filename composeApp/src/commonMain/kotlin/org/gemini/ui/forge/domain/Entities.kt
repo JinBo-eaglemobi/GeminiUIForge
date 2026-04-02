@@ -76,7 +76,7 @@ data class SerialRect(val left: Float, val top: Float, val right: Float, val bot
  * 确保扩散模型 (如 Imagen) 在生图时有基础的环境语义作为支撑。
  */
 enum class UIBlockType(val defaultPrompt: String) {
-    // ---- 老虎机 (Slots) 专用核心组件 ----
+    // ---- (Slots) 专用核心组件 ----
     /** 核心转轴区域：包含 3x5 等网格和抛光的边框 */
     REEL("Slot machine reel area, 3x5 or 4x5 grid, polished frame"),
     /** 旋转主按钮：典型的圆形豪华外观与光泽质感 */

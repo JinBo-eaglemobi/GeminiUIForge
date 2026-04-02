@@ -20,12 +20,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.Res
 import org.gemini.ui.forge.domain.UIBlock
 import org.gemini.ui.forge.utils.decodeBase64ToBitmap
 import org.jetbrains.compose.resources.stringResource
+import org.gemini.ui.forge.ui.getDisplayNameRes
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -40,6 +42,7 @@ fun CanvasArea(
 ) {
     var zoom by remember { mutableStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
+    val density = LocalDensity.current
 
     // 外层容器：负责裁剪和底色
     Box(
@@ -53,8 +56,8 @@ fun CanvasArea(
             val scaleY = maxHeight.value / pageHeight
             val baseScale = min(scaleX, scaleY) * 0.9f
             
-            val offsetX = (maxWidth.value - pageWidth * baseScale) / 2
-            val offsetY = (maxHeight.value - pageHeight * baseScale) / 2
+            val offsetX = (maxWidth.value - (pageWidth * baseScale)) / 2
+            val offsetY = (maxHeight.value - (pageHeight * baseScale)) / 2
 
             // 手势监听与变换容器
             Box(

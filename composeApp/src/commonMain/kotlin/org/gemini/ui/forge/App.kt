@@ -84,11 +84,8 @@ fun App(typography: Typography? = null) {
                                     viewModel.navigateTo(AppScreen.EDITOR)
                                 },
                                 onDeleteModule = { moduleId ->
-                                    val module = availableModules.find { it.id == moduleId }
-                                    if (module?.absolutePath != null) {
-                                        templateRepo.deleteTemplate(module.absolutePath)
-                                        templatesList = templateRepo.getTemplates()
-                                    }
+                                    templateRepo.deleteTemplate(moduleId)
+                                    templatesList = templateRepo.getTemplates()
                                 }
                             )
                         }
@@ -121,7 +118,7 @@ fun App(typography: Typography? = null) {
                                 onNavigateBack = { viewModel.navigateTo(AppScreen.HOME) },
                                 onTemplateSaved = { name, projectState ->
                                     viewModel.loadProject(name, projectState)
-                                    viewModel.navigateTo(AppScreen.EDITOR)
+                                    viewModel.navigateTo(AppScreen.TEMPLATE_EDITOR)
                                 },
                                 templateRepo = templateRepo,
                                 apiKey = globalState.apiKey

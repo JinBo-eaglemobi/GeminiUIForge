@@ -25,6 +25,7 @@ import org.gemini.ui.forge.domain.UIBlockType
 import org.gemini.ui.forge.viewmodel.EditorState
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 
 @Composable
@@ -80,7 +81,7 @@ fun TemplateEditorScreen(
 
                     Text("Add UI Block:", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         items(UIBlockType.entries.toTypedArray()) { type ->
                             OutlinedButton(
