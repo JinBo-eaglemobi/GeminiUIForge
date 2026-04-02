@@ -11,9 +11,3 @@ class JVMPlatform: Platform {
 actual fun getPlatform(): Platform = JVMPlatform()
 
 actual fun getCurrentTimeMillis(): Long = System.currentTimeMillis()
-
-actual fun Long.formatTimestamp(format: String): String {
-    val date = Date(this)
-    val formatter = SimpleDateFormat(format, Locale.getDefault())
-    return formatter.format(date)
-}

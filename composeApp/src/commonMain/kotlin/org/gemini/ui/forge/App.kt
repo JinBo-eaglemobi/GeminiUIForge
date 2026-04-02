@@ -69,19 +69,40 @@ fun App(typography: Typography? = null) {
                         AppScreen.HOME -> {
                             HomeScreen(
                                 modules = availableModules,
-                                onModuleSelected = { moduleId ->
+                                onEditLayout = { moduleId ->
                                     val module = availableModules.find { it.id == moduleId }
                                     if (module?.projectState != null) {
-                                        viewModel.loadProject(module.id, module.projectState)
+                                        viewModel.loadProject(module.nameStr ?: moduleId, module.projectState)
+                                    }
+                                    viewModel.navigateTo(AppScreen.TEMPLATE_EDITOR)
+                                },
+                                onGenerateUI = { moduleId ->
+                                    val module = availableModules.find { it.id == moduleId }
+                                    if (module?.projectState != null) {
+                                        viewModel.loadProject(module.nameStr ?: moduleId, module.projectState)
                                     }
                                     viewModel.navigateTo(AppScreen.EDITOR)
                                 },
                                 onDeleteModule = { moduleId ->
                                     val module = availableModules.find { it.id == moduleId }
-                                    if (module != null) {
-                                        templateRepo.deleteTemplate(module.id)
+                                    if (module?.absolutePath != null) {
+                                        templateRepo.deleteTemplate(module.absolutePath)
                                         templatesList = templateRepo.getTemplates()
                                     }
+                                }
+                            )
+                        }
+                        AppScreen.TEMPLATE_EDITOR -> {
+                            org.gemini.ui.forge.ui.TemplateEditorScreen(
+                                state = state,
+                                onPageSelected = { viewModel.onPageSelected(it) },
+                                onBlockClicked = { viewModel.onBlockClicked(it) },
+                                onBlockBoundsChanged = { id, l, t, r, b -> viewModel.updateBlockBounds(id, l, t, r, b) },
+                                onBlockTypeChanged = { id, type -> viewModel.updateBlockType(id, type) },
+                                onAddBlock = { type -> viewModel.addBlock(type) },
+                                onDeleteBlock = { id -> viewModel.deleteBlock(id) },
+                                onSaveTemplate = {
+                                    templateRepo.saveTemplate(state.projectName, state.project)
                                 }
                             )
                         }

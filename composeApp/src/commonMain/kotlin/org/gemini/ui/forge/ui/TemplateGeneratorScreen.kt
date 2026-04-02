@@ -94,18 +94,18 @@ fun TemplateGeneratorScreen(
                         saveStatus = ""
                         streamedJson = ""
                         logs.clear()
-                        logs.add("[${getCurrentTimeMillis().formatTimestamp()}] 🚀 开始准备上传图片并分析...")
+                        logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🚀 开始准备上传图片并分析...")
                         try {
                             generatedState = aiService.analyzeImagesForTemplate(
                                 imageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() },
                                 apiKey = apiKey,
-                                onLog = { logMsg -> logs.add("[${getCurrentTimeMillis().formatTimestamp()}] $logMsg") },
+                                onLog = { logMsg -> logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] $logMsg") },
                                 onChunk = { chunk -> streamedJson += chunk }
                             )
-                            logs.add("[${getCurrentTimeMillis().formatTimestamp()}] ✅ 分析成功并已生成数据模型！")
+                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ✅ 分析成功并已生成数据模型！")
                         } catch (e: Exception) {
                             saveStatus = "分析失败: ${e.message}"
-                            logs.add("[${getCurrentTimeMillis().formatTimestamp()}] ❌ 发生错误: ${e.message}")
+                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ❌ 发生错误: ${e.message}")
                         }
                         isAnalyzing = false
                     }

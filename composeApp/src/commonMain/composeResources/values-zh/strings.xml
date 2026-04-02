@@ -63,4 +63,19 @@
     <string name="dialog_delete_message">确定要删除这个模板吗？此操作无法撤销。</string>
     <string name="dialog_action_delete">删除</string>
     <string name="dialog_action_cancel">取消</string>
+
+    <!-- Template Editor UI -->
+    <string name="action_edit_layout">编辑布局</string>
+    <string name="action_generate_ui">生成资源</string>
+    <string name="editor_tools">工具栏</string>
+    <string name="editor_properties">属性面板</string>
+    <string name="prop_type">模块类型</string>
+    <string name="prop_x">X 坐标</string>
+    <string name="prop_y">Y 坐标</string>
+    <string name="prop_width">宽度</string>
+    <string name="prop_height">高度</string>
+    <string name="action_add_block">添加模块</string>
+    <string name="action_delete_block">删除此模块</string>
+    <string name="action_save_layout">保存修改</string>
+    <string name="toast_layout_saved">布局保存成功。</string>
 </resources>

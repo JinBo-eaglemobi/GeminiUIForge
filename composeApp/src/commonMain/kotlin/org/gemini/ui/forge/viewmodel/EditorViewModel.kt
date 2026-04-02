@@ -117,6 +117,71 @@ class EditorViewModel(
         }
     }
 
+    fun updateBlockBounds(blockId: String, left: Float, top: Float, right: Float, bottom: Float) {
+        val pageId = _state.value.selectedPageId ?: return
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) {
+                    val updatedBlocks = page.blocks.map { block ->
+                        if (block.id == blockId) block.copy(bounds = org.gemini.ui.forge.domain.SerialRect(left, top, right, bottom)) else block
+                    }
+                    page.copy(blocks = updatedBlocks)
+                } else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+    }
+
+    fun updateBlockType(blockId: String, newType: UIBlockType) {
+        val pageId = _state.value.selectedPageId ?: return
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) {
+                    val updatedBlocks = page.blocks.map { block ->
+                        if (block.id == blockId) block.copy(type = newType) else block
+                    }
+                    page.copy(blocks = updatedBlocks)
+                } else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+    }
+
+    fun addBlock(type: UIBlockType) {
+        val pageId = _state.value.selectedPageId ?: return
+        val newBlockId = "block_${org.gemini.ui.forge.getCurrentTimeMillis()}"
+        // Default bounds somewhere visible
+        val defaultBounds = org.gemini.ui.forge.domain.SerialRect(100f, 100f, 400f, 300f)
+        val newBlock = UIBlock(newBlockId, type, defaultBounds)
+
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) {
+                    page.copy(blocks = page.blocks + newBlock)
+                } else page
+            }
+            currentState.copy(
+                project = currentState.project.copy(pages = updatedPages),
+                selectedBlockId = newBlockId
+            )
+        }
+    }
+
+    fun deleteBlock(blockId: String) {
+        val pageId = _state.value.selectedPageId ?: return
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) {
+                    page.copy(blocks = page.blocks.filterNot { it.id == blockId })
+                } else page
+            }
+            currentState.copy(
+                project = currentState.project.copy(pages = updatedPages),
+                selectedBlockId = if (currentState.selectedBlockId == blockId) null else currentState.selectedBlockId
+            )
+        }
+    }
+
     fun onRequestGeneration(apiKey: String) {
         val block = state.value.selectedBlock ?: return
         viewModelScope.launch {

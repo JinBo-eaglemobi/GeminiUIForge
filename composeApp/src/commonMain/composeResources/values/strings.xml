@@ -63,4 +63,19 @@
     <string name="dialog_delete_message">Are you sure you want to delete this template? This action cannot be undone.</string>
     <string name="dialog_action_delete">Delete</string>
     <string name="dialog_action_cancel">Cancel</string>
+
+    <!-- Template Editor UI -->
+    <string name="action_edit_layout">Edit Layout</string>
+    <string name="action_generate_ui">Generate Resources</string>
+    <string name="editor_tools">Tools</string>
+    <string name="editor_properties">Properties</string>
+    <string name="prop_type">Type</string>
+    <string name="prop_x">X</string>
+    <string name="prop_y">Y</string>
+    <string name="prop_width">Width</string>
+    <string name="prop_height">Height</string>
+    <string name="action_add_block">Add Block</string>
+    <string name="action_delete_block">Delete Block</string>
+    <string name="action_save_layout">Save Changes</string>
+    <string name="toast_layout_saved">Layout saved successfully.</string>
 </resources>

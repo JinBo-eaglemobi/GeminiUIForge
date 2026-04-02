@@ -72,6 +72,8 @@ kotlin {
 
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)
+            // Source: https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-datetime
+            api(libs.kotlinx.datetime)
 
             // https://mvnrepository.com/artifact/io.ktor/ktor-client-core
             implementation(libs.ktor.client.core)

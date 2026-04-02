@@ -13,12 +13,4 @@ class IOSPlatform: Platform {
 
 actual fun getPlatform(): Platform = IOSPlatform()
 
-actual fun getCurrentTimeMillis(): Long = (NSDate().timeIntervalSince1970 * 1000).toLong()
-
-actual fun Long.formatTimestamp(format: String): String {
-    val date = NSDate.dateWithTimeIntervalSince1970(this / 1000.0)
-    val formatter = NSDateFormatter()
-    formatter.locale = NSLocale.currentLocale
-    formatter.dateFormat = format
-    return formatter.stringFromDate(date)
-}
+actual fun getCurrentTimeMillis(): Long = (platform.Foundation.NSDate().timeIntervalSince1970 * 1000).toLong()

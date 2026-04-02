@@ -37,7 +37,8 @@ data class UIModule(
 @Composable
 fun HomeScreen(
     modules: List<UIModule>,
-    onModuleSelected: (String) -> Unit,
+    onEditLayout: (String) -> Unit,
+    onGenerateUI: (String) -> Unit,
     onDeleteModule: (String) -> Unit = {}
 ) {
     var moduleToDelete by remember { mutableStateOf<UIModule?>(null) }
@@ -61,7 +62,8 @@ fun HomeScreen(
                 items(modules) { module ->
                     ModuleCard(
                         module = module,
-                        onClick = { onModuleSelected(module.id) },
+                        onEditLayout = { onEditLayout(module.id) },
+                        onGenerateUI = { onGenerateUI(module.id) },
                         onDelete = { moduleToDelete = module }
                     )
                 }
@@ -93,11 +95,9 @@ fun HomeScreen(
 }
 
 @Composable
-fun ModuleCard(module: UIModule, onClick: () -> Unit, onDelete: () -> Unit) {
+fun ModuleCard(module: UIModule, onEditLayout: () -> Unit, onGenerateUI: () -> Unit, onDelete: () -> Unit) {
     Card(
-        modifier = Modifier
-            .size(260.dp, 360.dp)
-            .clickable(onClick = onClick),
+        modifier = Modifier.size(280.dp, 400.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(
@@ -153,7 +153,7 @@ fun ModuleCard(module: UIModule, onClick: () -> Unit, onDelete: () -> Unit) {
                     val createdAt = module.projectState?.createdAt ?: 0L
                     if (createdAt > 0L) {
                         Text(
-                            text = "Created: $createdAt", // Quick standard string format if external format function fails
+                            text = org.gemini.ui.forge.formatTimestamp(createdAt), // Correct function call
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -175,17 +175,29 @@ fun ModuleCard(module: UIModule, onClick: () -> Unit, onDelete: () -> Unit) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            module.absolutePath?.let { path ->
-                Text(
-                    text = "Location: $path",
-                    style = MaterialTheme.typography.labelSmall,
-                    textAlign = TextAlign.Start,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Action Buttons Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Button(
+                    onClick = onEditLayout,
+                    modifier = Modifier.weight(1f).padding(end = 4.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) {
+                    Text(stringResource(Res.string.action_edit_layout), maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                }
+                
+                Button(
+                    onClick = onGenerateUI,
+                    modifier = Modifier.weight(1f).padding(start = 4.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) {
+                    Text(stringResource(Res.string.action_generate_ui), maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
     }
