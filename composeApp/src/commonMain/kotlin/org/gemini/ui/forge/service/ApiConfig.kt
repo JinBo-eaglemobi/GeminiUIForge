@@ -17,14 +17,6 @@ object ApiConfig {
     }
 
     /**
-     * 获取 Gemini 官方多模态交互 Endpoint URL
-     * 使用具备视觉推理能力的 Gemini Pro 模型
-     */
-    fun getGenerateContentEndpoint(apiKey: String, modelName: String = GeminiModel.GEMINI_3_PRO_IMAGE_PREVIEW.modelName): String {
-        return "$BASE_URL/models/$modelName:generateContent?key=$apiKey"
-    }
-
-    /**
      * 获取 Gemini 流式生成 Endpoint URL (SSE)
      */
     fun getStreamGenerateContentEndpoint(apiKey: String, modelName: String = GeminiModel.GEMINI_3_PRO_IMAGE_PREVIEW.modelName): String {

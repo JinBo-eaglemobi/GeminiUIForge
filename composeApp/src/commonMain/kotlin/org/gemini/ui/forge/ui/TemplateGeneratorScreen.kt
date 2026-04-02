@@ -153,9 +153,33 @@ fun TemplateGeneratorScreen(
                     }
                 } else {
                     SelectionContainer {
-                        LazyColumn(modifier = Modifier.padding(8.dp)) {
+                        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                        
+                        // Smart auto-scroll logic
+                        LaunchedEffect(logs.size) {
+                            if (logs.isNotEmpty()) {
+                                // 允许 5 像素的误差来判断是否在底部，增强触控环境下的稳定性
+                                val isAtBottom = !listState.canScrollForward || listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index == logs.size - 2
+                                if (isAtBottom || logs.size == 1) {
+                                    listState.animateScrollToItem(logs.size - 1)
+                                }
+                            }
+                        }
+                        
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(0.dp) // 紧凑排列，模拟连续文本
+                        ) {
                             items(logs) { log ->
-                                Text(log, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = log, 
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = FontFamily.Monospace, // 控制台等宽字体
+                                        lineHeight = androidx.compose.ui.unit.TextUnit.Unspecified
+                                    ), 
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -205,9 +229,10 @@ fun TemplateGeneratorScreen(
                 onClick = {
                     if (templateName.isNotBlank() && generatedState != null) {
                         try {
-                            templateRepo.saveTemplate(templateName, generatedState!!)
+                            val stateToSave = generatedState!!.copy(createdAt = getCurrentTimeMillis())
+                            templateRepo.saveTemplate(templateName, stateToSave)
                             saveStatus = "保存成功！正在进入编辑模式..."
-                            onTemplateSaved(templateName, generatedState!!)
+                            onTemplateSaved(templateName, stateToSave)
                         } catch (e: Exception) {
                             saveStatus = "保存错误: ${e.message}"
                         }

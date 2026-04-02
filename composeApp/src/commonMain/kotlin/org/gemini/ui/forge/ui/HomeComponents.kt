@@ -138,13 +138,27 @@ fun ModuleCard(module: UIModule, onClick: () -> Unit, onDelete: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    textAlign = TextAlign.Start,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
-                )
+                val rawTitle = if (module.nameRes != null) stringResource(module.nameRes) else module.nameStr ?: "Unknown"
+                val displayTitle = if (rawTitle.length > 20) rawTitle.take(20) + "..." else rawTitle
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = displayTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Start,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1
+                    )
+                    
+                    val createdAt = module.projectState?.createdAt ?: 0L
+                    if (createdAt > 0L) {
+                        Text(
+                            text = "Created: $createdAt", // Quick standard string format if external format function fails
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
                 // Delete Icon Button, only if absolutePath exists (meaning it's a saved template)
                 if (module.absolutePath != null) {

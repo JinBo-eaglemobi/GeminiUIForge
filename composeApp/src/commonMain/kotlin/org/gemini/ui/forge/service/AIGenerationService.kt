@@ -184,13 +184,13 @@ class AIGenerationService {
         val accumulatedText = StringBuilder()
 
         try {
-            val response = client.post(url) {
+            client.preparePost(url) {
                 contentType(ContentType.Application.Json)
                 setBody(requestBody)
 
                 timeout {
-                    requestTimeoutMillis = 60_000L
-                    socketTimeoutMillis = 60_000L
+                    requestTimeoutMillis = 120_000L
+                    socketTimeoutMillis = 120_000L
                 }
 
                 retry {
@@ -203,37 +203,48 @@ class AIGenerationService {
                         retry * 3000L
                     }
                 }
-            }
-
-            onLog("收到 API 响应，状态码: ${response.status}，开始接收数据流...")
-            if (response.status.isSuccess()) {
-                val channel = response.bodyAsChannel()
-                while (!channel.isClosedForRead) {
-                    val line = channel.readUTF8Line() ?: break
-                    if (line.startsWith("data: ")) {
-                        val dataJson = line.substringAfter("data: ").trim()
-                        if (dataJson.isEmpty() || dataJson == "[DONE]") continue
-
-                        try {
-                            val jsonElement = jsonConfig.parseToJsonElement(dataJson)
-                            val textChunk = jsonElement.jsonObject["candidates"]
-                                ?.jsonArray?.firstOrNull()
-                                ?.jsonObject?.get("content")
-                                ?.jsonObject?.get("parts")
-                                ?.jsonArray?.firstOrNull()
-                                ?.jsonObject?.get("text")?.jsonPrimitive?.content
-
-                            if (textChunk != null) {
-                                accumulatedText.append(textChunk)
-                                onChunk(textChunk)
+            }.execute { response ->
+                onLog("收到 API 响应，状态码: ${response.status}，开始准备接收流式数据管道...")
+                if (response.status.isSuccess()) {
+                    val channel = response.bodyAsChannel()
+                    onLog("数据管道已连接，等待 Gemini 吐字...")
+                    while (!channel.isClosedForRead) {
+                        val line = channel.readUTF8Line() ?: break
+                        if (line.startsWith("data: ")) {
+                            val dataJson = line.substringAfter("data: ").trim()
+                            if (dataJson.isEmpty() || dataJson == "[DONE]") {
+                                onLog("收到结束标识符 [DONE] 或空数据包")
+                                continue
                             }
-                        } catch (e: Exception) {
-                            AppLogger.e(TAG, "解析流数据块失败: $dataJson", e)
+
+                            onLog("接收到数据块: ${line.length} 字节")
+
+                            try {
+                                val jsonElement = jsonConfig.parseToJsonElement(dataJson)
+                                val textChunk = jsonElement.jsonObject["candidates"]
+                                    ?.jsonArray?.firstOrNull()
+                                    ?.jsonObject?.get("content")
+                                    ?.jsonObject?.get("parts")
+                                    ?.jsonArray?.firstOrNull()
+                                    ?.jsonObject?.get("text")?.jsonPrimitive?.content
+
+                                if (textChunk != null) {
+                                    accumulatedText.append(textChunk)
+                                    onChunk(textChunk)
+                                }
+                            } catch (e: Exception) {
+                                AppLogger.e(TAG, "解析流数据块失败: $dataJson", e)
+                                onLog("警告: 解析当前数据块 JSON 失败 (Size: ${dataJson.length})")
+                            }
+                        } else if (line.trim().isNotEmpty()) {
+                            onLog("收到非数据报文: ${line.take(20)}... (Size: ${line.length})")
                         }
                     }
+                    onLog("流式读取循环已结束。")
+                } else {
+                    val errorBody = response.bodyAsText()
+                    throw Exception("API 请求失败: ${response.status} - $errorBody")
                 }
-            } else {
-                throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")
             }
 
             val finalString = accumulatedText.toString()

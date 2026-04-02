@@ -1,13 +1,13 @@
 # Gemini UI Forge - Gemini CLI 指令规范
 
 ## 核心工作流 (Mandatory Workflow)
-**所有修改类任务必须严格遵守以下流程：**
+**【绝对拦截指令】凡是涉及到本地代码及文件的生成、修改、替换或删除，必须无条件暂停并遵守以下流程，不可有任何例外：**
 
-1.  **分析 (Analysis)**: 深入研究需求，识别受影响的文件、类和依赖关系。
-2.  **方案列举 (Proposed Solutions)**: 针对需求提出至少一个（推荐两个）技术方案，说明各方案的优缺点。
-3.  **用户确认 (User Confirmation)**: 使用 `ask_user` 工具展示方案并征求用户同意。**严禁在未经用户明确选择/同意前修改任何项目文件。**
-4.  **执行 (Execution)**: 按照用户选定的方案进行手术刀式的代码修改。
-5.  **验证 (Validation)**: 运行编译或相关测试确保修改正确。
+1.  **分析与方案列举 (Analysis & Proposals)**: 深入研究需求，明确受影响的文件。提出具体的修改计划和至少一个技术方案。
+2.  **强制用户确认 (Mandatory User Confirmation)**: **必须**立即使用 `ask_user` 工具，向用户展示你的分析和修改计划。
+    - **系统红线**：在 `ask_user` 工具返回用户的明确同意之前，**绝对禁止**调用 `write_file`、`replace` 或执行任何会改变代码状态的命令。
+3.  **授权执行 (Authorized Execution)**: 只有在获取到用户的同意或方案选择后，才允许进行实际的代码修改。
+4.  **验证 (Validation)**: 运行编译或相关测试确保修改正确。
 
 ## 技术栈规范 (Tech Stack & Conventions)
 - **核心框架**: Kotlin Multiplatform (KMP), Compose Multiplatform。
