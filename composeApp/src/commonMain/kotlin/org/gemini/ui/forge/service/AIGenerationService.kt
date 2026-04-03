@@ -42,9 +42,10 @@ class AIGenerationService {
         blockType: String,
         userPrompt: String,
         count: Int = 4,
-        apiKey: String = ""
+        apiKey: String = "",
+        maxRetries: Int = 3
     ): List<String> {
-        AppLogger.i(TAG, "开始通过 Imagen 生成图片: blockType=$blockType, userPrompt=$userPrompt, count=$count")
+        AppLogger.i(TAG, "开始通过 Imagen 生成图片: blockType=$blockType, userPrompt=$userPrompt, count=$count, maxRetries=$maxRetries")
 
         if (apiKey.isBlank()) {
             val errorMsg = "Gemini API 密钥为空，请在设置中配置。"
@@ -73,40 +74,42 @@ class AIGenerationService {
             })
         }.toString()
 
-        try {
-            val response = client.post(url) {
-                contentType(ContentType.Application.Json)
-                setBody(requestBody)
-
-                retry {
-                    maxRetries = 3
-                    retryOnExceptionOrServerErrors(3)
-                    delayMillis { retry -> retry * 2000L }
+        var lastException: Exception? = null
+        for (attempt in 0..maxRetries) {
+            try {
+                if (attempt > 0) {
+                    AppLogger.i(TAG, "generateImages 请求失败，正在进行第 $attempt 次重试...")
+                    kotlinx.coroutines.delay(2000L * attempt)
                 }
-            }
 
-            if (response.status.isSuccess()) {
-                val jsonResponse = jsonConfig.parseToJsonElement(response.bodyAsText())
-                val predictions = jsonResponse.jsonObject["predictions"]?.jsonArray
+                val response = client.post(url) {
+                    contentType(ContentType.Application.Json)
+                    setBody(requestBody)
+                }
 
-                if (predictions != null) {
-                    return predictions.mapNotNull { prediction ->
-                        val base64 = prediction.jsonObject["bytesBase64Encoded"]?.jsonPrimitive?.content
-                        if (base64 != null) {
-                            "data:image/jpeg;base64,$base64"
-                        } else null
+                if (response.status.isSuccess()) {
+                    val jsonResponse = jsonConfig.parseToJsonElement(response.bodyAsText())
+                    val predictions = jsonResponse.jsonObject["predictions"]?.jsonArray
+
+                    if (predictions != null) {
+                        return predictions.mapNotNull { prediction ->
+                            val base64 = prediction.jsonObject["bytesBase64Encoded"]?.jsonPrimitive?.content
+                            if (base64 != null) {
+                                "data:image/jpeg;base64,$base64"
+                            } else null
+                        }
+                    } else {
+                        throw Exception("API 响应中未找到预测数据 (predictions)")
                     }
                 } else {
-                    throw Exception("API 响应中未找到预测数据 (predictions)")
+                    throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")
                 }
-            } else {
-                throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")
+            } catch (e: Exception) {
+                lastException = e
+                AppLogger.e(TAG, "第 $attempt 次生成图片失败: ${e.message}", e)
             }
-        } catch (e: Exception) {
-            val finalError = "生成图片失败: ${e.message}"
-            AppLogger.e(TAG, finalError, e)
-            throw Exception(finalError, e)
         }
+        throw Exception("生成图片失败 (已重试 $maxRetries 次): ${lastException?.message}", lastException)
     }
 
     /**
@@ -293,10 +296,11 @@ class AIGenerationService {
      * 优化并翻译给定的 prompt 为更适合生图的英文 prompt
      * @param originalPrompt 原始输入的文案
      * @param apiKey Gemini API 密钥
+     * @param maxRetries 最大重试次数
      * @return 优化后的英文 prompt
      */
-    suspend fun optimizePrompt(originalPrompt: String, apiKey: String): String {
-        AppLogger.i(TAG, "开始优化 Prompt: $originalPrompt")
+    suspend fun optimizePrompt(originalPrompt: String, apiKey: String, maxRetries: Int = 3): String {
+        AppLogger.i(TAG, "开始优化 Prompt: $originalPrompt, maxRetries=$maxRetries")
 
         if (apiKey.isBlank()) {
             throw Exception("Gemini API 密钥为空，请在设置中配置。")
@@ -322,37 +326,40 @@ class AIGenerationService {
             })
         }.toString()
 
-        try {
-            val response = client.post(url) {
-                setBody(requestBody)
-                contentType(ContentType.Application.Json)
-
-                retry {
-                    maxRetries = 3
-                    retryOnExceptionOrServerErrors(3)
-                    delayMillis { retry -> retry * 2000L }
+        var lastException: Exception? = null
+        for (attempt in 0..maxRetries) {
+            try {
+                if (attempt > 0) {
+                    AppLogger.i(TAG, "optimizePrompt 请求失败，正在进行第 $attempt 次重试...")
+                    kotlinx.coroutines.delay(2000L * attempt)
                 }
-            }
 
-            if (response.status.isSuccess()) {
-                val jsonElement = jsonConfig.parseToJsonElement(response.bodyAsText())
-                
-                // 解析标准的 generateContent 返回格式
-                val text = jsonElement.jsonObject["candidates"]
-                    ?.jsonArray?.firstOrNull()
-                    ?.jsonObject?.get("content")
-                    ?.jsonObject?.get("parts")
-                    ?.jsonArray?.firstOrNull()
-                    ?.jsonObject?.get("text")
-                    ?.jsonPrimitive?.content ?: ""
+                val response = client.post(url) {
+                    setBody(requestBody)
+                    contentType(ContentType.Application.Json)
+                }
 
-                return text.trim()
-            } else {
-                throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")
+                if (response.status.isSuccess()) {
+                    val jsonElement = jsonConfig.parseToJsonElement(response.bodyAsText())
+                    
+                    // 解析标准的 generateContent 返回格式
+                    val text = jsonElement.jsonObject["candidates"]
+                        ?.jsonArray?.firstOrNull()
+                        ?.jsonObject?.get("content")
+                        ?.jsonObject?.get("parts")
+                        ?.jsonArray?.firstOrNull()
+                        ?.jsonObject?.get("text")
+                        ?.jsonPrimitive?.content ?: ""
+
+                    return text.trim()
+                } else {
+                    throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")
+                }
+            } catch (e: Exception) {
+                lastException = e
+                AppLogger.e(TAG, "第 $attempt 次优化 Prompt 失败", e)
             }
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "优化 Prompt 失败", e)
-            throw Exception("优化失败: ${e.message}", e)
         }
+        throw Exception("优化失败 (已重试 $maxRetries 次): ${lastException?.message}", lastException)
     }
 }

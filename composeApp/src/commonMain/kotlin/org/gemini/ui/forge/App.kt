@@ -66,7 +66,9 @@ fun App(typography: Typography? = null) {
                     currentApiKey = globalState.apiKey,
                     onApiKeyChanged = { viewModel.saveApiKey(it) },
                     currentStorageDir = globalState.templateStorageDir,
-                    onStorageDirChanged = { viewModel.updateStorageDir(it) }
+                    onStorageDirChanged = { viewModel.updateStorageDir(it) },
+                    currentMaxRetries = globalState.maxRetries,
+                    onMaxRetriesSaved = { viewModel.setMaxRetries(it) }
                 )
             }
             ) { innerPadding ->
@@ -138,7 +140,8 @@ fun App(typography: Typography? = null) {
                                 viewModel.navigateTo(AppScreen.TEMPLATE_EDITOR)
                             },
                             templateRepo = templateRepo,
-                            apiKey = globalState.effectiveApiKey
+                            apiKey = globalState.effectiveApiKey,
+                            maxRetries = globalState.maxRetries
                         )
                     }
                 }

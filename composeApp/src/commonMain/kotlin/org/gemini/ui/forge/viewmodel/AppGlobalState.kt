@@ -38,5 +38,6 @@ data class AppGlobalState(
     val languageCode: String = "zh",
     val apiKey: String = "",
     val effectiveApiKey: String = "",
-    val templateStorageDir: String = ""
+    val templateStorageDir: String = "",
+    val maxRetries: Int = 3
 )

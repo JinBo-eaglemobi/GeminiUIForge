@@ -39,7 +39,9 @@ fun AppTopBar(
     currentApiKey: String = "",
     onApiKeyChanged: (String) -> Unit = {},
     currentStorageDir: String = "",
-    onStorageDirChanged: (String) -> Unit = {}
+    onStorageDirChanged: (String) -> Unit = {},
+    currentMaxRetries: Int = 3,
+    onMaxRetriesSaved: (Int) -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -138,11 +140,13 @@ fun AppSettingsDialog(
     currentLanguage: String,
     currentApiKey: String,
     currentStorageDir: String,
+    currentMaxRetries: Int = 3,
     onDismiss: () -> Unit,
     onLanguageSelected: (String) -> Unit,
     onThemeSelected: (ThemeMode) -> Unit,
     onApiKeySaved: (String) -> Unit,
-    onStorageDirSaved: (String) -> Unit
+    onStorageDirSaved: (String) -> Unit,
+    onMaxRetriesSaved: (Int) -> Unit = {}
 ) {
     var apiKeyInput by remember { mutableStateOf(currentApiKey) }
     var storageDirInput by remember { mutableStateOf(currentStorageDir) }
@@ -237,6 +241,61 @@ fun AppSettingsDialog(
                         
                         Spacer(modifier = Modifier.height(16.dp))
                     }
+
+                    // Max Retries Settings
+                    var retriesExpanded by remember { mutableStateOf(false) }
+                    var retriesDropdownWidth by remember { mutableStateOf(0) }
+                    val retryOptions = listOf(0, 1, 2, 3, 5, 10)
+
+                    Text(
+                        text = stringResource(Res.string.settings_max_retries),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Box(modifier = Modifier.fillMaxWidth().onGloballyPositioned { retriesDropdownWidth = it.size.width }) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().height(48.dp).clickable { retriesExpanded = true }
+                                .pointerHoverIcon(PointerIcon.Default),
+                            shape = MaterialTheme.shapes.small,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            color = MaterialTheme.colorScheme.surface
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(currentMaxRetries.toString(), style = MaterialTheme.typography.bodyLarge)
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = retriesExpanded,
+                            onDismissRequest = { retriesExpanded = false },
+                            modifier = Modifier.width(with(LocalDensity.current) { retriesDropdownWidth.toDp() })
+                        ) {
+                            retryOptions.forEach { count ->
+                                DropdownMenuItem(
+                                    text = { 
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text(count.toString(), style = MaterialTheme.typography.bodyLarge)
+                                            if (count == currentMaxRetries) {
+                                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        onMaxRetriesSaved(count)
+                                        retriesExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Language Dropdown Settings
                     var langExpanded by remember { mutableStateOf(false) }

@@ -78,11 +78,15 @@ class EditorViewModel(
         val language = configManager.loadKey("APP_LANGUAGE") ?: "zh"
         val effectiveKey = apiKey.ifBlank { globalKey }
         val storageDir = templateRepo.getDataDir()
+        val retriesStr = configManager.loadKey("API_MAX_RETRIES") ?: "3"
+        val retries = retriesStr.toIntOrNull() ?: 3
+        
         _state.update { it.copy(globalState = it.globalState.copy(
             apiKey = apiKey, 
             effectiveApiKey = effectiveKey, 
             templateStorageDir = storageDir,
-            languageCode = language
+            languageCode = language,
+            maxRetries = retries
         )) }
     }
 
@@ -119,6 +123,17 @@ class EditorViewModel(
             if (templateRepo.updateStorageDir(newPath)) {
                 _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) }
             }
+        }
+    }
+
+    /**
+     * 设置最大重试次数
+     * @param count 重试次数
+     */
+    fun setMaxRetries(count: Int) {
+        viewModelScope.launch {
+            configManager.saveKey("API_MAX_RETRIES", count.toString())
+            _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) }
         }
     }
 
@@ -208,7 +223,8 @@ class EditorViewModel(
 
         viewModelScope.launch {
             try {
-                val optimized = aiService.optimizePrompt(block.userPrompt, apiKey)
+                // Pass maxRetries from globalState if the service supports it (e.g. manual loop here)
+                val optimized = aiService.optimizePrompt(block.userPrompt, apiKey, _state.value.globalState.maxRetries)
                 onUserPromptChanged(optimized)
                 onComplete(optimized)
             } catch (e: Exception) {
@@ -315,7 +331,8 @@ class EditorViewModel(
                 val candidates = aiService.generateImages(
                     blockType = block.type.name,
                     userPrompt = block.fullPrompt,
-                    apiKey = apiKey
+                    apiKey = apiKey,
+                    maxRetries = _state.value.globalState.maxRetries
                 )
                 _state.update { it.copy(generatedCandidates = candidates, isGenerating = false) }
             } catch (e: Exception) {

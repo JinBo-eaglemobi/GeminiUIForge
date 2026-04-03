@@ -54,7 +54,7 @@
     <string name="settings_gemini_key_hint">Leave blank to use system global key</string>
     <string name="settings_storage_dir">Template Storage Directory</string>
     <string name="settings_storage_dir_hint">Absolute path for template storage</string>
-    <string name="settings_max_retries">Max Retries</string>
+    <string name="settings_max_retries">API Max Retries</string>
 
     <string name="dialog_error_title">Error</string>
     <string name="dialog_action_retry">Stay &amp; Retry</string>

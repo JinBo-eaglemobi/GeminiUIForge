@@ -36,7 +36,8 @@ fun TemplateGeneratorScreen(
     onTemplateSaved: (String, ProjectState) -> Unit,
     aiService: AIGenerationService = remember { AIGenerationService() },
     templateRepo: TemplateRepository = remember { TemplateRepository() },
-    apiKey: String
+    apiKey: String,
+    maxRetries: Int = 3
 ) {
     val coroutineScope = rememberCoroutineScope()
     var inputUris by remember { mutableStateOf("") }
@@ -77,7 +78,7 @@ fun TemplateGeneratorScreen(
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             OutlinedButton(onClick = { imagePicker() }) {
-                Text("选择本地图片")
+                Text(stringResource(Res.string.template_gen_pick_local))
             }
 
             Button(
@@ -93,6 +94,7 @@ fun TemplateGeneratorScreen(
                             generatedState = aiService.analyzeImagesForTemplate(
                                 imageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() },
                                 apiKey = apiKey,
+                                maxRetries = maxRetries,
                                 onLog = { logMsg -> logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] $logMsg") },
                                 onChunk = { chunk -> streamedJson += chunk }
                             )
