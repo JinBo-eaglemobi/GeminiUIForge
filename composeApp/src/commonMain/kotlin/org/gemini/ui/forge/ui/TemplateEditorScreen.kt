@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -35,6 +36,8 @@ fun TemplateEditorScreen(
     onBlockClicked: (String) -> Unit,
     onBlockBoundsChanged: (String, Float, Float, Float, Float) -> Unit,
     onBlockTypeChanged: (String, UIBlockType) -> Unit,
+    onPromptChanged: (String, String) -> Unit,
+    onOptimizePrompt: (String, (String) -> Unit) -> Unit,
     onAddBlock: (UIBlockType) -> Unit,
     onDeleteBlock: (String) -> Unit,
     onSaveTemplate: () -> Unit
@@ -60,7 +63,7 @@ fun TemplateEditorScreen(
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
                     
-                    Text("Pages:", style = MaterialTheme.typography.labelMedium)
+                    Text("添加功能模块:", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(4.dp))
                     
                     val pages = state.project.pages
@@ -79,7 +82,7 @@ fun TemplateEditorScreen(
                     
                     Divider(modifier = Modifier.padding(vertical = 16.dp))
 
-                    Text("Add UI Block:", style = MaterialTheme.typography.labelMedium)
+                    Text("添加功能模块:", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     LazyColumn(modifier = Modifier.weight(1f)) {
@@ -155,12 +158,14 @@ fun TemplateEditorScreen(
                     )
                     
                     if (block == null) {
-                        Text("Select a block to edit its bounds.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(Res.string.prop_select_block), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         BlockPropertiesEditor(
                             block = block,
                             onBoundsChanged = { l, t, r, b -> onBlockBoundsChanged(block.id, l, t, r, b) },
                             onTypeChanged = { newType -> onBlockTypeChanged(block.id, newType) },
+                            onPromptChanged = { newPrompt -> onPromptChanged(block.id, newPrompt) },
+                            onOptimizePrompt = { onComplete -> onOptimizePrompt(block.id, onComplete) },
                             onDelete = { onDeleteBlock(block.id) }
                         )
                     }
@@ -191,9 +196,22 @@ private fun BlockPropertiesEditor(
     block: UIBlock,
     onBoundsChanged: (Float, Float, Float, Float) -> Unit,
     onTypeChanged: (UIBlockType) -> Unit,
+    onPromptChanged: (String) -> Unit,
+    onOptimizePrompt: ((String) -> Unit) -> Unit,
     onDelete: () -> Unit
 ) {
     var expandedType by remember { mutableStateOf(false) }
+    var showPromptDialog by remember { mutableStateOf(false) }
+
+    // ID (Read-only)
+    OutlinedTextField(
+    value = block.id,
+    onValueChange = {},
+    readOnly = true,
+    label = { Text(stringResource(Res.string.prop_block_id)) },
+    modifier = Modifier.fillMaxWidth()
+    )
+    Spacer(modifier = Modifier.height(16.dp))
 
     // Type Selector
     ExposedDropdownMenuBox(
@@ -222,6 +240,81 @@ private fun BlockPropertiesEditor(
                 )
             }
         }
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    // User Prompt (Read-only, clickable to open dialog)
+    Box(modifier = Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = block.userPrompt,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(stringResource(Res.string.prop_user_prompt)) },
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 3
+        )
+        // Overlay to capture clicks
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clickable { showPromptDialog = true }
+        )
+    }
+
+    if (showPromptDialog) {
+        var tempPrompt by remember { mutableStateOf(block.userPrompt) }
+        var isOptimizing by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showPromptDialog = false },
+            title = { Text(stringResource(Res.string.prop_edit_prompt)) },
+            text = {
+                OutlinedTextField(
+                    value = tempPrompt,
+                    onValueChange = { tempPrompt = it },
+                    label = { Text(stringResource(Res.string.prop_prompt_hint)) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp), // 增加了输入框的高度
+                    maxLines = 10,
+                    enabled = !isOptimizing
+                )
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            isOptimizing = true
+                            onPromptChanged(tempPrompt) // 先保存当前输入，以便基于此优化
+                            onOptimizePrompt { optimizedText ->
+                                tempPrompt = optimizedText
+                                isOptimizing = false
+                            }
+                        },
+                        enabled = !isOptimizing && tempPrompt.isNotBlank()
+                    ) {
+                        if (isOptimizing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(stringResource(Res.string.prop_optimize_prompt))
+                    }
+                    Button(
+                        onClick = {
+                            onPromptChanged(tempPrompt)
+                            showPromptDialog = false
+                        },
+                        enabled = !isOptimizing
+                    ) {
+                        Text(stringResource(Res.string.prop_save))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPromptDialog = false }, enabled = !isOptimizing) {
+                    Text(stringResource(Res.string.prop_cancel))
+                }
+            }
+        )
     }
 
     Spacer(modifier = Modifier.height(16.dp))

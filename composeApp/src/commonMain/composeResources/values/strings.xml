@@ -78,4 +78,15 @@
     <string name="action_delete_block">Delete Block</string>
     <string name="action_save_layout">Save Changes</string>
     <string name="toast_layout_saved">Layout saved successfully.</string>
+    
+    <string name="prop_pages">Pages:</string>
+    <string name="prop_add_block">Add UI Block:</string>
+    <string name="prop_select_block">Select a block on the canvas to edit its properties.</string>
+    <string name="prop_block_id">Block ID</string>
+    <string name="prop_user_prompt">Custom Style Prompt</string>
+    <string name="prop_edit_prompt">Edit Style Prompt</string>
+    <string name="prop_prompt_hint">Enter theme or style (Click optimize to translate to professional English)</string>
+    <string name="prop_optimize_prompt">Optimize Prompt (AI)</string>
+    <string name="prop_save">Save</string>
+    <string name="prop_cancel">Cancel</string>
 </resources>

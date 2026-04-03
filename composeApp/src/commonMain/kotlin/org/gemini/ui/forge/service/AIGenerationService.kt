@@ -288,4 +288,71 @@ class AIGenerationService {
         }
         throw Exception("生成模板失败 (已重试 $maxRetries 次): ${lastException?.message}", lastException)
     }
+
+    /**
+     * 优化并翻译给定的 prompt 为更适合生图的英文 prompt
+     * @param originalPrompt 原始输入的文案
+     * @param apiKey Gemini API 密钥
+     * @return 优化后的英文 prompt
+     */
+    suspend fun optimizePrompt(originalPrompt: String, apiKey: String): String {
+        AppLogger.i(TAG, "开始优化 Prompt: $originalPrompt")
+
+        if (apiKey.isBlank()) {
+            throw Exception("Gemini API 密钥为空，请在设置中配置。")
+        }
+
+        // 使用非流式端点，简化解析
+        val url = ApiConfig.getGenerateContentEndpoint(apiKey, "gemini-2.0-flash-exp")
+        val client = NetworkClient.shared
+
+        val requestBody = buildJsonObject {
+            put("contents", buildJsonArray {
+                add(buildJsonObject {
+                    put("role", "user")
+                    put("parts", buildJsonArray {
+                        add(buildJsonObject {
+                            put(
+                                "text",
+                                "Please translate and optimize the following text into a highly descriptive, comma-separated English prompt for an image generation AI (like Midjourney or Imagen). Do not include any conversational filler, just the prompt itself: $originalPrompt"
+                            )
+                        })
+                    })
+                })
+            })
+        }.toString()
+
+        try {
+            val response = client.post(url) {
+                setBody(requestBody)
+                contentType(ContentType.Application.Json)
+
+                retry {
+                    maxRetries = 3
+                    retryOnExceptionOrServerErrors(3)
+                    delayMillis { retry -> retry * 2000L }
+                }
+            }
+
+            if (response.status.isSuccess()) {
+                val jsonElement = jsonConfig.parseToJsonElement(response.bodyAsText())
+                
+                // 解析标准的 generateContent 返回格式
+                val text = jsonElement.jsonObject["candidates"]
+                    ?.jsonArray?.firstOrNull()
+                    ?.jsonObject?.get("content")
+                    ?.jsonObject?.get("parts")
+                    ?.jsonArray?.firstOrNull()
+                    ?.jsonObject?.get("text")
+                    ?.jsonPrimitive?.content ?: ""
+
+                return text.trim()
+            } else {
+                throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "优化 Prompt 失败", e)
+            throw Exception("优化失败: ${e.message}", e)
+        }
+    }
 }

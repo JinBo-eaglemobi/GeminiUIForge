@@ -160,6 +160,26 @@ class EditorViewModel(
     }
 
     /**
+     * 调用 AI 优化指定组件的 Prompt
+     * @param blockId 组件 ID
+     * @param apiKey Gemini API Key
+     */
+    fun optimizePrompt(blockId: String, apiKey: String, onComplete: (String) -> Unit) {
+        val block = state.value.project.pages.flatMap { it.blocks }.find { it.id == blockId } ?: return
+        if (block.userPrompt.isBlank()) return
+
+        viewModelScope.launch {
+            try {
+                val optimized = aiService.optimizePrompt(block.userPrompt, apiKey)
+                onUserPromptChanged(optimized)
+                onComplete(optimized)
+            } catch (e: Exception) {
+                org.gemini.ui.forge.utils.AppLogger.e("EditorViewModel", "Failed to optimize prompt", e)
+            }
+        }
+    }
+
+    /**
      * 更新 UI 组件的位置和大小
      * @param blockId 组件 ID
      * @param left 左边界坐标

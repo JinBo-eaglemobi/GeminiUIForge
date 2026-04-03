@@ -96,6 +96,13 @@ fun App(typography: Typography? = null) {
                                 onBlockClicked = { viewModel.onBlockClicked(it) },
                                 onBlockBoundsChanged = { id, l, t, r, b -> viewModel.updateBlockBounds(id, l, t, r, b) },
                                 onBlockTypeChanged = { id, type -> viewModel.updateBlockType(id, type) },
+                                onPromptChanged = { id, prompt -> 
+                                    viewModel.onBlockClicked(id)
+                                    viewModel.onUserPromptChanged(prompt) 
+                                },
+                                onOptimizePrompt = { id, onComplete ->
+                                    viewModel.optimizePrompt(id, globalState.apiKey, onComplete)
+                                },
                                 onAddBlock = { type -> viewModel.addBlock(type) },
                                 onDeleteBlock = { id -> viewModel.deleteBlock(id) },
                                 onSaveTemplate = {

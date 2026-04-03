@@ -78,4 +78,15 @@
     <string name="action_delete_block">删除此模块</string>
     <string name="action_save_layout">保存修改</string>
     <string name="toast_layout_saved">布局保存成功。</string>
+
+    <string name="prop_pages">页面列表:</string>
+    <string name="prop_add_block">添加功能模块:</string>
+    <string name="prop_select_block">请在左侧画布选择一个模块以编辑其属性。</string>
+    <string name="prop_block_id">模块 ID</string>
+    <string name="prop_user_prompt">自定义风格提示词</string>
+    <string name="prop_edit_prompt">编辑样式提示词</string>
+    <string name="prop_prompt_hint">输入主题或样式（支持中文，点击优化转为专业英文）</string>
+    <string name="prop_optimize_prompt">优化文案 (AI)</string>
+    <string name="prop_save">保存</string>
+    <string name="prop_cancel">取消</string>
 </resources>
