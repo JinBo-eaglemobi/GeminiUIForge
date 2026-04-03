@@ -307,7 +307,7 @@ class AIGenerationService {
         }
 
         // 使用非流式端点，简化解析
-        val url = ApiConfig.getGenerateContentEndpoint(apiKey, "gemini-2.0-flash-exp")
+        val url = ApiConfig.getGenerateContentEndpoint(apiKey)
         val client = NetworkClient.shared
 
         val requestBody = buildJsonObject {

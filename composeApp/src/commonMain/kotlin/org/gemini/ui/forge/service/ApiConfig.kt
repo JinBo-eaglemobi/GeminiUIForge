@@ -35,7 +35,7 @@ object ApiConfig {
      * @param apiKey 用于认证的 API 密钥
      * @param modelName 选用的 Gemini 文本/多模态模型名称
      */
-    fun getGenerateContentEndpoint(apiKey: String, modelName: String = GeminiModel.GEMINI_3_PRO_IMAGE_PREVIEW.modelName): String {
+    fun getGenerateContentEndpoint(apiKey: String, modelName: String = GeminiModel.GEMINI_3_1_PRO_PREVIEW.modelName): String {
         return "$BASE_URL/models/$modelName:generateContent?key=$apiKey"
     }
 }
