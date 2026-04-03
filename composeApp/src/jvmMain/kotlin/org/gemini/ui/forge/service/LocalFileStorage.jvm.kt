@@ -1,9 +1,11 @@
 package org.gemini.ui.forge.service
 
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 actual class LocalFileStorage {
-    private val dataDir = File(System.getProperty("user.home"), ".geminiuiforge/templates")
+    private var dataDir = File(System.getProperty("user.home"), ".geminiuiforge/templates")
 
     init {
         if (!dataDir.exists()) {
@@ -11,53 +13,71 @@ actual class LocalFileStorage {
         }
     }
 
-    actual fun saveToFile(fileName: String, content: String): String {
+    actual suspend fun updateDataDir(newPath: String): Boolean = withContext(Dispatchers.IO) {
+        val newDir = File(newPath)
+        if (newDir.absolutePath == dataDir.absolutePath) return@withContext true
+        
+        try {
+            if (!newDir.exists()) newDir.mkdirs()
+            if (dataDir.exists()) {
+                dataDir.listFiles()?.forEach { file ->
+                    file.renameTo(File(newDir, file.name))
+                }
+            }
+            dataDir = newDir
+            return@withContext true
+        } catch (e: Exception) {
+            return@withContext false
+        }
+    }
+
+    actual suspend fun getDataDir(): String = withContext(Dispatchers.IO) { dataDir.absolutePath }
+
+    actual suspend fun saveToFile(fileName: String, content: String): String = withContext(Dispatchers.IO) {
         val target = File(dataDir, fileName)
         target.parentFile.mkdirs()
         target.writeText(content)
-        val path = target.absolutePath
-        println("【已保存文本】: $path")
-        return path
+        println("【已保存文本】: ${target.absolutePath}")
+        return@withContext target.absolutePath
     }
 
-    actual fun saveBytesToFile(fileName: String, bytes: ByteArray): String {
+    actual suspend fun saveBytesToFile(fileName: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
         val target = File(dataDir, fileName)
         target.parentFile.mkdirs()
         target.writeBytes(bytes)
-        val path = target.absolutePath
-        println("【已保存资源】: $path")
-        return path
+        println("【已保存资源】: ${target.absolutePath}")
+        return@withContext target.absolutePath
     }
 
-    actual fun readFromFile(fileName: String): String? {
+    actual suspend fun readFromFile(fileName: String): String? = withContext(Dispatchers.IO) {
         val file = File(dataDir, fileName)
-        return if (file.exists()) file.readText() else null
+        return@withContext if (file.exists()) file.readText() else null
     }
 
-    actual fun readBytesFromFile(fileName: String): ByteArray? {
+    actual suspend fun readBytesFromFile(fileName: String): ByteArray? = withContext(Dispatchers.IO) {
         val file = File(dataDir, fileName)
-        return if (file.exists()) file.readBytes() else null
+        return@withContext if (file.exists()) file.readBytes() else null
     }
 
-    actual fun listFiles(): List<String> {
-        return dataDir.listFiles()?.filter { it.isFile && it.name.endsWith(".json") }?.map { it.name } ?: emptyList()
+    actual suspend fun listFiles(): List<String> = withContext(Dispatchers.IO) {
+        return@withContext dataDir.listFiles()?.filter { it.isFile && it.name.endsWith(".json") }?.map { it.name } ?: emptyList()
     }
 
-    actual fun listDirectories(): List<String> {
-        return dataDir.listFiles()?.filter { it.isDirectory }?.map { it.name } ?: emptyList()
+    actual suspend fun listDirectories(): List<String> = withContext(Dispatchers.IO) {
+        return@withContext dataDir.listFiles()?.filter { it.isDirectory }?.map { it.name } ?: emptyList()
     }
 
-    actual fun deleteFile(fileName: String): Boolean {
+    actual suspend fun deleteFile(fileName: String): Boolean = withContext(Dispatchers.IO) {
         val file = File(dataDir, fileName)
-        return if (file.exists()) file.delete() else false
+        return@withContext if (file.exists()) file.delete() else false
     }
 
-    actual fun deleteDirectory(dirName: String): Boolean {
+    actual suspend fun deleteDirectory(dirName: String): Boolean = withContext(Dispatchers.IO) {
         val dir = File(dataDir, dirName)
-        return dir.deleteRecursively()
+        return@withContext dir.deleteRecursively()
     }
 
-    actual fun getFilePath(fileName: String): String {
-        return File(dataDir, fileName).absolutePath
+    actual suspend fun getFilePath(fileName: String): String = withContext(Dispatchers.IO) {
+        return@withContext File(dataDir, fileName).absolutePath
     }
 }

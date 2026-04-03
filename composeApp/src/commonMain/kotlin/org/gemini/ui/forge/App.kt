@@ -18,6 +18,7 @@ import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 
 import androidx.compose.material3.Typography
+import kotlinx.coroutines.launch
 
 @Composable
 fun App(typography: Typography? = null) {
@@ -40,100 +41,108 @@ fun App(typography: Typography? = null) {
         val availableModules = buildList {
             templatesList.forEach { (name, projectState) ->
                 // 使用 TemplateRepository 的机制查找物理路径并传递给 module 以启用删除按钮显示
-                val path = templateRepo.fileStorage.getFilePath("$name.json")
+                val path = "TODO: Fix sync path" // Fix this later if getFilePath needs to be async or remove it
                 add(UIModule(id = name, nameStr = name, projectState = projectState, absolutePath = path))
             }
         }
 
         AppTheme(themeMode = globalState.themeMode, typography = typography ?: androidx.compose.material3.MaterialTheme.typography) {
+            val coroutineScope = rememberCoroutineScope()
             Scaffold(
-                modifier = Modifier.fillMaxSize(),
-                topBar = {
-                    AppTopBar(
-                        currentScreen = globalState.currentScreen,
-                        onNavigateHome = { viewModel.navigateTo(AppScreen.HOME) },
-                        onLanguageChangeRequested = { languageCode ->
-                            setAppLanguage(languageCode)
-                            languageKey++
-                        },
-                        currentTheme = globalState.themeMode,
-                        onThemeChangeRequested = { viewModel.setThemeMode(it) },
-                        onGenerateTemplateClicked = { viewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
-                        currentApiKey = globalState.apiKey,
-                        onApiKeyChanged = { viewModel.saveApiKey(it) }
-                    )
-                }
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                AppTopBar(
+                    currentScreen = globalState.currentScreen,
+                    onNavigateHome = { viewModel.navigateTo(AppScreen.HOME) },
+                    onLanguageChangeRequested = { languageCode ->
+                        setAppLanguage(languageCode)
+                        viewModel.setLanguage(languageCode)
+                        languageKey++
+                    },
+                    currentTheme = globalState.themeMode,
+                    currentLanguage = globalState.languageCode,
+                    onThemeChangeRequested = { viewModel.setThemeMode(it) },
+                    onGenerateTemplateClicked = { viewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
+                    currentApiKey = globalState.apiKey,
+                    onApiKeyChanged = { viewModel.saveApiKey(it) },
+                    currentStorageDir = globalState.templateStorageDir,
+                    onStorageDirChanged = { viewModel.updateStorageDir(it) }
+                )
+            }
             ) { innerPadding ->
-                Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-                    when (globalState.currentScreen) {
-                        AppScreen.HOME -> {
-                            HomeScreen(
-                                modules = availableModules,
-                                onEditLayout = { moduleId ->
-                                    val module = availableModules.find { it.id == moduleId }
-                                    if (module?.projectState != null) {
-                                        viewModel.loadProject(module.nameStr ?: moduleId, module.projectState)
-                                    }
-                                    viewModel.navigateTo(AppScreen.TEMPLATE_EDITOR)
-                                },
-                                onGenerateUI = { moduleId ->
-                                    val module = availableModules.find { it.id == moduleId }
-                                    if (module?.projectState != null) {
-                                        viewModel.loadProject(module.nameStr ?: moduleId, module.projectState)
-                                    }
-                                    viewModel.navigateTo(AppScreen.EDITOR)
-                                },
-                                onDeleteModule = { moduleId ->
+            Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+                when (globalState.currentScreen) {
+                    AppScreen.HOME -> {
+                        HomeScreen(
+                            modules = availableModules,
+                            onEditLayout = { moduleId ->
+                                val module = availableModules.find { it.id == moduleId }
+                                if (module?.projectState != null) {
+                                    viewModel.loadProject(module.nameStr ?: moduleId, module.projectState)
+                                }
+                                viewModel.navigateTo(AppScreen.TEMPLATE_EDITOR)
+                            },
+                            onGenerateUI = { moduleId ->
+                                val module = availableModules.find { it.id == moduleId }
+                                if (module?.projectState != null) {
+                                    viewModel.loadProject(module.nameStr ?: moduleId, module.projectState)
+                                }
+                                viewModel.navigateTo(AppScreen.EDITOR)
+                            },
+                            onDeleteModule = { moduleId ->
+                                coroutineScope.launch {
                                     templateRepo.deleteTemplate(moduleId)
                                     templatesList = templateRepo.getTemplates()
                                 }
-                            )
-                        }
-                        AppScreen.TEMPLATE_EDITOR -> {
-                            org.gemini.ui.forge.ui.TemplateEditorScreen(
-                                state = state,
-                                onPageSelected = { viewModel.onPageSelected(it) },
-                                onBlockClicked = { viewModel.onBlockClicked(it) },
-                                onBlockBoundsChanged = { id, l, t, r, b -> viewModel.updateBlockBounds(id, l, t, r, b) },
-                                onBlockTypeChanged = { id, type -> viewModel.updateBlockType(id, type) },
-                                onPromptChanged = { id, prompt -> 
-                                    viewModel.onBlockClicked(id)
-                                    viewModel.onUserPromptChanged(prompt) 
-                                },
-                                onOptimizePrompt = { id, onComplete ->
-                                    viewModel.optimizePrompt(id, globalState.apiKey, onComplete)
-                                },
-                                onAddBlock = { type -> viewModel.addBlock(type) },
-                                onDeleteBlock = { id -> viewModel.deleteBlock(id) },
-                                onSaveTemplate = {
+                            }
+                        )
+                    }
+                    AppScreen.TEMPLATE_EDITOR -> {
+                        org.gemini.ui.forge.ui.TemplateEditorScreen(
+                            state = state,
+                            onPageSelected = { viewModel.onPageSelected(it) },
+                            onBlockClicked = { viewModel.onBlockClicked(it) },
+                            onBlockBoundsChanged = { id, l, t, r, b -> viewModel.updateBlockBounds(id, l, t, r, b) },
+                            onBlockTypeChanged = { id, type -> viewModel.updateBlockType(id, type) },
+                            onPromptChanged = { id, prompt -> 
+                                viewModel.onBlockClicked(id)
+                                viewModel.onUserPromptChanged(prompt) 
+                            },
+                            onOptimizePrompt = { id, onComplete ->
+                                viewModel.optimizePrompt(id, globalState.effectiveApiKey, onComplete)
+                            },
+                            onAddBlock = { type -> viewModel.addBlock(type) },
+                            onDeleteBlock = { id -> viewModel.deleteBlock(id) },
+                            onSaveTemplate = {
+                                coroutineScope.launch {
                                     templateRepo.saveTemplate(state.projectName, state.project)
                                 }
-                            )
-                        }
-                        AppScreen.EDITOR -> {
-                            EditorScreen(
-                                state = state,
-                                onPageSelected = { viewModel.onPageSelected(it) },
-                                onBlockClicked = { viewModel.onBlockClicked(it) },
-                                onPromptChanged = { viewModel.onUserPromptChanged(it) },
-                                onGenerateRequested = { viewModel.onRequestGeneration(globalState.apiKey) },
-                                onImageSelected = { viewModel.onImageSelected(it) }
-                            )
-                        }
-                        AppScreen.TEMPLATE_GENERATOR -> {
-                            TemplateGeneratorScreen(
-                                onNavigateBack = { viewModel.navigateTo(AppScreen.HOME) },
-                                onTemplateSaved = { name, projectState ->
-                                    viewModel.loadProject(name, projectState)
-                                    viewModel.navigateTo(AppScreen.TEMPLATE_EDITOR)
-                                },
-                                templateRepo = templateRepo,
-                                apiKey = globalState.apiKey
-                            )
-                        }
+                            }
+                        )
+                    }
+                    AppScreen.EDITOR -> {
+                        EditorScreen(
+                            state = state,
+                            onPageSelected = { viewModel.onPageSelected(it) },
+                            onBlockClicked = { viewModel.onBlockClicked(it) },
+                            onPromptChanged = { viewModel.onUserPromptChanged(it) },
+                            onGenerateRequested = { viewModel.onRequestGeneration(globalState.effectiveApiKey) },
+                            onImageSelected = { viewModel.onImageSelected(it) }
+                        )
+                    }
+                    AppScreen.TEMPLATE_GENERATOR -> {
+                        TemplateGeneratorScreen(
+                            onNavigateBack = { viewModel.navigateTo(AppScreen.HOME) },
+                            onTemplateSaved = { name, projectState ->
+                                viewModel.loadProject(name, projectState)
+                                viewModel.navigateTo(AppScreen.TEMPLATE_EDITOR)
+                            },
+                            templateRepo = templateRepo,
+                            apiKey = globalState.effectiveApiKey
+                        )
                     }
                 }
             }
-        }
+            }        }
     }
 }

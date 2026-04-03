@@ -8,3 +8,10 @@ actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
         onResult(emptyList())
     }
 }
+
+@Composable
+actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): () -> Unit {
+    return {
+        onResult(null)
+    }
+}

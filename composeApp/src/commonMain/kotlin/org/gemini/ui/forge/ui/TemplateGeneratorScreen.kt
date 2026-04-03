@@ -57,12 +57,6 @@ fun TemplateGeneratorScreen(
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            IconButton(onClick = onNavigateBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back"
-                )
-            }
             Text(
                 text = stringResource(Res.string.template_gen_title),
                 style = MaterialTheme.typography.headlineMedium
@@ -228,13 +222,15 @@ fun TemplateGeneratorScreen(
             Button(
                 onClick = {
                     if (templateName.isNotBlank() && generatedState != null) {
-                        try {
-                            val stateToSave = generatedState!!.copy(createdAt = getCurrentTimeMillis())
-                            templateRepo.saveTemplate(templateName, stateToSave)
-                            saveStatus = "保存成功！正在进入编辑模式..."
-                            onTemplateSaved(templateName, stateToSave)
-                        } catch (e: Exception) {
-                            saveStatus = "保存错误: ${e.message}"
+                        coroutineScope.launch {
+                            try {
+                                val stateToSave = generatedState!!.copy(createdAt = getCurrentTimeMillis())
+                                templateRepo.saveTemplate(templateName, stateToSave)
+                                saveStatus = "保存成功！正在进入编辑模式..."
+                                onTemplateSaved(templateName, stateToSave)
+                            } catch (e: Exception) {
+                                saveStatus = "保存错误: ${e.message}"
+                            }
                         }
                     }
                 },

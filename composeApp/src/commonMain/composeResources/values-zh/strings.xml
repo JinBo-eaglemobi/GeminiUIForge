@@ -51,6 +51,9 @@
     <string name="template_gen_pick_local">选择本地图片</string>
 
     <string name="settings_gemini_key">Gemini API 密钥</string>
+    <string name="settings_gemini_key_hint">留空则尝试使用全局密钥 (.gemini/.env)</string>
+    <string name="settings_storage_dir">模板存储目录</string>
+    <string name="settings_storage_dir_hint">模板文件的绝对存储路径</string>
     <string name="settings_max_retries">最大重试次数</string>
 
     <string name="dialog_error_title">出错了</string>

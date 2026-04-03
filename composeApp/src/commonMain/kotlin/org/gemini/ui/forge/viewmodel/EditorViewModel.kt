@@ -18,7 +18,7 @@ import org.gemini.ui.forge.domain.UIPage
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.TemplateRepository
 
-import org.gemini.ui.forge.service.EnvManager
+import org.gemini.ui.forge.service.ConfigManager
 
 /**
  * 编辑器页面的 UI 状态模型
@@ -52,12 +52,12 @@ data class EditorState(
  * 编辑器页面的 ViewModel，负责 UI 逻辑处理与状态管理
  * @param aiService AI 生成服务，用于调用 Imagen 和 Gemini
  * @param templateRepo 模板持久化仓库
- * @param envManager 环境变量与密钥管理工具
+ * @param configManager 配置与密钥管理工具
  */
 class EditorViewModel(
     private val aiService: AIGenerationService = AIGenerationService(),
     private val templateRepo: TemplateRepository = TemplateRepository(),
-    private val envManager: EnvManager = EnvManager()
+    private val configManager: ConfigManager = ConfigManager()
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditorState())
@@ -66,13 +66,24 @@ class EditorViewModel(
 
     init {
         loadBaseTemplate()
-        loadSettings()
+        viewModelScope.launch {
+            loadSettings()
+        }
     }
 
     /** 从本地持久化存储加载配置信息 */
-    private fun loadSettings() {
-        val apiKey = envManager.loadKey("GEMINI_API_KEY") ?: ""
-        _state.update { it.copy(globalState = it.globalState.copy(apiKey = apiKey)) }
+    private suspend fun loadSettings() {
+        val apiKey = configManager.loadKey("GEMINI_API_KEY") ?: ""
+        val globalKey = configManager.loadGlobalGeminiKey() ?: ""
+        val language = configManager.loadKey("APP_LANGUAGE") ?: "zh"
+        val effectiveKey = apiKey.ifBlank { globalKey }
+        val storageDir = templateRepo.getDataDir()
+        _state.update { it.copy(globalState = it.globalState.copy(
+            apiKey = apiKey, 
+            effectiveApiKey = effectiveKey, 
+            templateStorageDir = storageDir,
+            languageCode = language
+        )) }
     }
 
     /**
@@ -80,8 +91,35 @@ class EditorViewModel(
      * @param newKey 新的 API Key 字符串
      */
     fun saveApiKey(newKey: String) {
-        envManager.saveKey("GEMINI_API_KEY", newKey)
-        _state.update { it.copy(globalState = it.globalState.copy(apiKey = newKey)) }
+        viewModelScope.launch {
+            configManager.saveKey("GEMINI_API_KEY", newKey)
+            val globalKey = configManager.loadGlobalGeminiKey() ?: ""
+            val effectiveKey = newKey.ifBlank { globalKey }
+            _state.update { it.copy(globalState = it.globalState.copy(apiKey = newKey, effectiveApiKey = effectiveKey)) }
+        }
+    }
+
+    /**
+     * 设置并保存应用语言
+     * @param code 语言代码 (en, zh)
+     */
+    fun setLanguage(code: String) {
+        viewModelScope.launch {
+            configManager.saveKey("APP_LANGUAGE", code)
+            _state.update { it.copy(globalState = it.globalState.copy(languageCode = code)) }
+        }
+    }
+
+    /**
+     * 更新模板存储目录
+     * @param newPath 新的目录路径
+     */
+    fun updateStorageDir(newPath: String) {
+        viewModelScope.launch {
+            if (templateRepo.updateStorageDir(newPath)) {
+                _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) }
+            }
+        }
     }
 
     /** 加载初始的基础 UI 模板（如背景、卷轴、旋转按钮等） */
@@ -295,29 +333,33 @@ class EditorViewModel(
         val blockId = _state.value.selectedBlockId ?: return
         val projectName = _state.value.projectName
 
-        // 1. 保存资源并获得其本地引用 (返回落盘后的本地绝对路径)
-        val localImagePath = templateRepo.saveResource(projectName, blockId, base64Data)
+        viewModelScope.launch {
+            // 1. 保存资源并获得其本地引用 (返回落盘后的本地绝对路径)
+            val localImagePath = templateRepo.saveResource(projectName, blockId, base64Data)
 
-        _state.update { currentState ->
-            val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == pageId) {
-                    val updatedBlocks = page.blocks.map { block ->
-                        if (block.id == blockId) block.copy(currentImageUri = localImagePath) else block
+            _state.update { currentState ->
+                val updatedPages = currentState.project.pages.map { page ->
+                    if (page.id == pageId) {
+                        val updatedBlocks = page.blocks.map { block ->
+                            if (block.id == blockId) block.copy(currentImageUri = localImagePath) else block
+                        }
+                        page.copy(blocks = updatedBlocks)
+                    } else {
+                        page
                     }
-                    page.copy(blocks = updatedBlocks)
-                } else {
-                    page
                 }
+                val newState = currentState.copy(
+                    project = currentState.project.copy(pages = updatedPages),
+                    generatedCandidates = emptyList()
+                )
+                
+                newState
             }
-            val newState = currentState.copy(
-                project = currentState.project.copy(pages = updatedPages),
-                generatedCandidates = emptyList()
-            )
+            // 获取最新状态以保存
+            val latestState = _state.value
             
             // 2. 自动保存整个项目 JSON
-            templateRepo.saveTemplate(projectName, newState.project)
-            
-            newState
+            templateRepo.saveTemplate(projectName, latestState.project)
         }
     }
 

@@ -35,5 +35,8 @@ enum class AppScreen {
 data class AppGlobalState(
     val currentScreen: AppScreen = AppScreen.HOME,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val apiKey: String = ""
+    val languageCode: String = "zh",
+    val apiKey: String = "",
+    val effectiveApiKey: String = "",
+    val templateStorageDir: String = ""
 )

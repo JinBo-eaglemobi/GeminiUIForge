@@ -17,7 +17,7 @@ class TemplateRepository(val fileStorage: LocalFileStorage = LocalFileStorage())
      * @param templateName 模板/项目名称
      * @param projectState 项目的状态数据
      */
-    fun saveTemplate(templateName: String, projectState: ProjectState) {
+    suspend fun saveTemplate(templateName: String, projectState: ProjectState) {
         val sanitizedName = templateName.replace(" ", "_")
 
         var updatedState = projectState
@@ -43,7 +43,7 @@ class TemplateRepository(val fileStorage: LocalFileStorage = LocalFileStorage())
      * 删除指定的模板及其所有关联资源
      * @param templateName 模板名称
      */
-    fun deleteTemplate(templateName: String) {
+    suspend fun deleteTemplate(templateName: String) {
         val sanitizedName = templateName.replace(" ", "_")
         fileStorage.deleteDirectory(sanitizedName)
     }
@@ -56,7 +56,7 @@ class TemplateRepository(val fileStorage: LocalFileStorage = LocalFileStorage())
      * @return 返回保存后的文件绝对路径
      */
     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-    fun saveResource(templateName: String, blockId: String, base64Data: String): String {
+    suspend fun saveResource(templateName: String, blockId: String, base64Data: String): String {
         val sanitizedName = templateName.replace(" ", "_")
         val pureBase64 = if (base64Data.contains(",")) base64Data.substringAfter(",") else base64Data
         val bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
@@ -71,7 +71,7 @@ class TemplateRepository(val fileStorage: LocalFileStorage = LocalFileStorage())
      * 获取本地已存储的所有模板列表
      * @return 返回模板名称与项目状态的键值对列表
      */
-    fun getTemplates(): List<Pair<String, ProjectState>> {
+    suspend fun getTemplates(): List<Pair<String, ProjectState>> {
         val dirs = fileStorage.listDirectories()
         return dirs.mapNotNull { dirName ->
             val content = fileStorage.readFromFile("$dirName/template.json")
@@ -85,5 +85,19 @@ class TemplateRepository(val fileStorage: LocalFileStorage = LocalFileStorage())
                 }
             } else null
         }
+    }
+
+    /**
+     * 更新模板存储目录并迁移文件
+     */
+    suspend fun updateStorageDir(newPath: String): Boolean {
+        return fileStorage.updateDataDir(newPath)
+    }
+
+    /**
+     * 获取当前模板存储目录
+     */
+    suspend fun getDataDir(): String {
+        return fileStorage.getDataDir()
     }
 }
