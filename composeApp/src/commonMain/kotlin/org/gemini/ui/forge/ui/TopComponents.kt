@@ -25,9 +25,16 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.MoreVert
 
 import org.gemini.ui.forge.viewmodel.PromptLanguage
+
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.text.font.FontWeight
+
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 
 @Composable
 fun AppTopBar(
@@ -48,19 +55,30 @@ fun AppTopBar(
     currentPromptLang: PromptLanguage = PromptLanguage.AUTO,
     onPromptLangChanged: (PromptLanguage) -> Unit = {}
 ) {
-    var menuExpanded by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
 
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        modifier = Modifier.fillMaxWidth().height(40.dp)
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .drawBehind {
+                drawLine(
+                    color = borderColor,
+                    start = Offset(0f, size.height),
+                    end = Offset(size.width, size.height),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            // 左侧：返回按钮 + 标题
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (currentScreen != AppScreen.HOME) {
                     IconButton(onClick = onNavigateHome, modifier = Modifier.size(32.dp)) {
@@ -69,53 +87,40 @@ fun AppTopBar(
                             contentDescription = "Back"
                         )
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
                 Text(
                     text = stringResource(Res.string.app_name),
-                    style = MaterialTheme.typography.titleSmall
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
-            Box {
-                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Menu"
-                    )
-                }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false }
+            // 右侧：平铺的功能按钮 (移除了原本的 DropdownMenu)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextButton(
+                    onClick = onGenerateTemplateClicked,
+                    contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(Res.string.menu_file)) },
-                        onClick = { menuExpanded = false }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(Res.string.menu_generate_template)) },
-                        onClick = { 
-                            menuExpanded = false 
-                            onGenerateTemplateClicked()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("云端资产管理") }, // 这里为了简便先硬编码，建议后续加到 strings.xml
-                        onClick = { 
-                            menuExpanded = false 
-                            onCloudAssetManagerClicked()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(Res.string.menu_settings)) },
-                        onClick = {
-                            menuExpanded = false
-                            showSettingsDialog = true
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(Res.string.menu_help)) },
-                        onClick = { menuExpanded = false }
-                    )
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(Res.string.menu_generate_template), style = MaterialTheme.typography.labelLarge)
+                }
+
+                TextButton(
+                    onClick = onCloudAssetManagerClicked,
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Icon(Icons.Default.Cloud, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("云端资产", style = MaterialTheme.typography.labelLarge) // 硬编码，建议后续加入 string 资源
+                }
+
+                IconButton(onClick = { showSettingsDialog = true }) {
+                    Icon(Icons.Default.Settings, contentDescription = stringResource(Res.string.menu_settings))
                 }
             }
         }
@@ -127,6 +132,8 @@ fun AppTopBar(
             currentLanguage = currentLanguage,
             currentApiKey = currentApiKey,
             currentStorageDir = currentStorageDir,
+            currentMaxRetries = currentMaxRetries,
+            currentPromptLang = currentPromptLang,
             onDismiss = { showSettingsDialog = false },
             onLanguageSelected = { 
                 onLanguageChangeRequested(it)
@@ -140,7 +147,9 @@ fun AppTopBar(
             },
             onStorageDirSaved = {
                 onStorageDirChanged(it)
-            }
+            },
+            onMaxRetriesSaved = onMaxRetriesSaved,
+            onPromptLangSelected = onPromptLangChanged
         )
     }
 }
@@ -485,25 +494,6 @@ fun AppSettingsDialog(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun ThemeOptionRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
-        if (selected) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
         }
     }
 }
