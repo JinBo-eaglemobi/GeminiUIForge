@@ -10,7 +10,7 @@ CRITICAL REQUIREMENT:
 The JSON must strictly map to the following Kotlin classes (do NOT wrap in markdown blocks, return pure JSON):
 ProjectState(projectId: String, globalTheme: String, pages: List<UIPage>)
 UIPage(id: String, nameStr: String, width: Float, height: Float, blocks: List<UIBlock>)
-UIBlock(id: String, type: UIBlockType, bounds: SerialRect(left, top, right, bottom), userPrompt: String)
+UIBlock(id: String, type: UIBlockType, bounds: SerialRect(left, top, right, bottom), userPromptEn: String, userPromptZh: String)
 
 UIBlockType MUST be one of the following exact strings:
 - REEL (Slot machine reel area)
@@ -27,8 +27,8 @@ UIBlockType MUST be one of the following exact strings:
 - DECORATION (Ornamental or decorative UI element)
 
 ASSET GENERATION & PROMPT REQUIREMENTS:
-1. For EACH `UIBlock`, the `userPrompt` field MUST contain a detailed and high-quality prompt describing that specific component.
-2. The `userPrompt` SHOULD instruct the generation model to strictly follow the visual style, shape, and colors of the UI components seen in the provided reference image.
-3. For all interactive or standalone components (such as BUTTON, ICON, SYMBOL, PANEL, etc.), the `userPrompt` MUST explicitly require a "SOLID CONTRAST COLOR BACKGROUND" (e.g., solid neon green or magenta) that does not exist in the UI element itself.
-4. Explain in the `userPrompt` that this background is intended for automated script-based background removal to create a transparent PNG with an alpha channel.
-5. The `userPrompt` should be a standalone prompt that can be directly used by an image generator to produce a high-fidelity recreation of the specific UI module.
+1. For EACH `UIBlock`, you MUST provide two detailed and distinct fields: `userPromptEn` and `userPromptZh`.
+2. `userPromptEn`: A professional, high-quality English prompt optimized for AI image generation. It MUST explicitly detail materials (e.g., polished gold, frosted glass, carbon fiber), lighting effects (e.g., cinematic lighting, neon glow, sub-surface scattering), specific textures, and the overall artistic style (e.g., flat design, 3D skeuomorphic, cyberpunk). It MUST instruct the model to strictly follow the visual language of the reference image.
+3. `userPromptZh`: 对应的详尽中文描述。必须清晰说明该组件的功能、视觉特征、设计风格以及在游戏界面中的意图（例如：“这是一个具有科幻感的蓝色发光控制面板，边缘有金属拉丝质感，体现了高科技的交互氛围”）。
+4. For all interactive or standalone components (such as BUTTON, ICON, SYMBOL, PANEL, etc.), the `userPromptEn` MUST explicitly require a "SOLID CONTRAST COLOR BACKGROUND" (e.g., solid neon green or magenta) to facilitate automated background removal.
+5. Each prompt MUST be self-contained and of the highest fidelity to ensure accurate recreation of the specific UI module.

@@ -9,7 +9,8 @@ import kotlinx.serialization.Serializable
  * @property type 该模块所属的功能分类
  * @property bounds 该模块在页面设计稿上的绝对坐标系（由大模型推断）
  * @property currentImageUri 当前选定加载的本地图片路径或远程 URL
- * @property userPrompt 用户在编辑界面为此模块添加的自定义细化 Prompt（如：深海主题、蒸汽朋克风）
+ * @property userPromptEn 详细的英文提示词 (High-quality English prompt for image generation, including style, material, and lighting)
+ * @property userPromptZh 详细的中文提示词 (对应的详尽中文描述，包含组件功能、设计意图和视觉特征)
  */
 @Serializable
 data class UIBlock(
@@ -17,9 +18,14 @@ data class UIBlock(
     val type: UIBlockType,
     val bounds: SerialRect,
     val currentImageUri: String? = null,
-    val userPrompt: String = ""
+    val userPromptEn: String = "",
+    val userPromptZh: String = ""
 ) {
-    /** 自动拼接基础类别描述与用户自定义描述，形成最终发给生成模型的完整 Prompt */
+    /** 自动拼接基础类别描述与英文自定义描述，形成最终发给生图模型的完整 Prompt */
     val fullPrompt: String
-        get() = "${type.defaultPrompt}, $userPrompt"
+        get() = "${type.defaultPrompt}, $userPromptEn"
+
+    /** 向下兼容字段：优先返回中文描述，无则返回英文 */
+    val userPrompt: String
+        get() = userPromptZh.ifBlank { userPromptEn }
 }

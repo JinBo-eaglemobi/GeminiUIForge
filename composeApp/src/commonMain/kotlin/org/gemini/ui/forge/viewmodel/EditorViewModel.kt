@@ -2,9 +2,6 @@ package org.gemini.ui.forge.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import geminiuiforge.composeapp.generated.resources.Res
-import geminiuiforge.composeapp.generated.resources.page_bonus
-import geminiuiforge.composeapp.generated.resources.page_main
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,34 +16,7 @@ import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.TemplateRepository
 import org.gemini.ui.forge.service.ConfigManager
 import org.gemini.ui.forge.service.CloudAssetManager
-
-/**
- * 编辑器页面的 UI 状态模型
- * @property globalState 应用全局状态
- * @property project 当前正在编辑的项目数据状态
- * @property projectName 项目名称
- * @property selectedPageId 当前选中的页面 ID
- * @property selectedBlockId 当前选中的 UI 组件 ID
- * @property isGenerating 是否正在通过 AI 生成资源
- * @property generatedCandidates AI 生成的候选图片数据列表 (Base64)
- */
-data class EditorState(
-    val globalState: AppGlobalState = AppGlobalState(),
-    val project: ProjectState = ProjectState(),
-    val projectName: String = "Untitled",
-    val selectedPageId: String? = null,
-    val selectedBlockId: String? = null,
-    val isGenerating: Boolean = false,
-    val generatedCandidates: List<String> = emptyList()
-) {
-    /** 获取当前选中的页面对象 */
-    val currentPage: UIPage?
-        get() = project.pages.find { it.id == selectedPageId }
-        
-    /** 获取当前选中的 UI 组件对象 */
-    val selectedBlock: UIBlock?
-        get() = currentPage?.blocks?.find { it.id == selectedBlockId }
-}
+import org.gemini.ui.forge.utils.AppLogger
 
 /**
  * 编辑器页面的 ViewModel，负责 UI 逻辑处理与状态管理
@@ -77,19 +47,47 @@ class EditorViewModel(
     private suspend fun loadSettings() {
         val apiKey = configManager.loadKey("GEMINI_API_KEY") ?: ""
         val globalKey = configManager.loadGlobalGeminiKey() ?: ""
-        val language = configManager.loadKey("APP_LANGUAGE") ?: "zh"
+        val languageCode = configManager.loadKey("APP_LANGUAGE") ?: "zh"
+        val promptLangStr = configManager.loadKey("PROMPT_LANGUAGE_PREF") ?: "AUTO"
+        val promptLang = try { PromptLanguage.valueOf(promptLangStr) } catch (e: Exception) { PromptLanguage.AUTO }
+        
         val effectiveKey = apiKey.ifBlank { globalKey }
         val storageDir = templateRepo.getDataDir()
         val retriesStr = configManager.loadKey("API_MAX_RETRIES") ?: "3"
         val retries = retriesStr.toIntOrNull() ?: 3
         
-        _state.update { it.copy(globalState = it.globalState.copy(
-            apiKey = apiKey, 
-            effectiveApiKey = effectiveKey, 
-            templateStorageDir = storageDir,
-            languageCode = language,
-            maxRetries = retries
-        )) }
+        _state.update { it.copy(
+            globalState = it.globalState.copy(
+                apiKey = apiKey, 
+                effectiveApiKey = effectiveKey, 
+                templateStorageDir = storageDir,
+                languageCode = languageCode,
+                promptLangPref = promptLang,
+                maxRetries = retries
+            ),
+            // 初始化编辑语言：如果偏好是 EN 则显示 EN，否则默认 ZH
+            currentEditingPromptLang = if (promptLang == PromptLanguage.EN) PromptLanguage.EN else PromptLanguage.ZH
+        ) }
+    }
+
+    /**
+     * 设置提示词语言偏好
+     */
+    fun setPromptLanguagePref(pref: PromptLanguage) {
+        viewModelScope.launch {
+            configManager.saveKey("PROMPT_LANGUAGE_PREF", pref.name)
+            _state.update { it.copy(
+                globalState = it.globalState.copy(promptLangPref = pref),
+                currentEditingPromptLang = if (pref == PromptLanguage.EN) PromptLanguage.EN else PromptLanguage.ZH
+            ) }
+        }
+    }
+
+    /**
+     * 在 UI 上临时切换当前正在编辑的语言（不改变全局偏好）
+     */
+    fun switchEditingLanguage(lang: PromptLanguage) {
+        _state.update { it.copy(currentEditingPromptLang = lang) }
     }
 
     /**
@@ -194,16 +192,24 @@ class EditorViewModel(
     /**
      * 响应用户针对特定组件输入的 Prompt 变化
      * @param newPrompt 新的 Prompt 文本
+     * @param lang 指定更新哪种语言，如果不传则根据当前 UI 状态自动判定
      */
-    fun onUserPromptChanged(newPrompt: String) {
+    fun onUserPromptChanged(newPrompt: String, lang: PromptLanguage? = null) {
         val pageId = _state.value.selectedPageId ?: return
         val blockId = _state.value.selectedBlockId ?: return
+        val targetLang = lang ?: _state.value.currentEditingPromptLang
         
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
                     val updatedBlocks = page.blocks.map { block ->
-                        if (block.id == blockId) block.copy(userPrompt = newPrompt) else block
+                        if (block.id == blockId) {
+                            if (targetLang == PromptLanguage.EN) {
+                                block.copy(userPromptEn = newPrompt)
+                            } else {
+                                block.copy(userPromptZh = newPrompt)
+                            }
+                        } else block
                     }
                     page.copy(blocks = updatedBlocks)
                 } else {
@@ -215,22 +221,32 @@ class EditorViewModel(
     }
 
     /**
-     * 调用 AI 优化指定组件的 Prompt
+     * 调用 AI 优化指定组件的 Prompt。
+     * 现在支持根据当前选择的语言进行针对性优化，而不再强制转为英文。
      * @param blockId 组件 ID
      * @param apiKey Gemini API Key
      */
     fun optimizePrompt(blockId: String, apiKey: String, onComplete: (String) -> Unit) {
         val block = state.value.project.pages.flatMap { it.blocks }.find { it.id == blockId } ?: return
-        if (block.userPrompt.isBlank()) return
+        val currentLang = _state.value.currentEditingPromptLang
+        val textToOptimize = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
+        
+        if (textToOptimize.isBlank()) return
 
         viewModelScope.launch {
             try {
-                // Pass maxRetries from globalState if the service supports it (e.g. manual loop here)
-                val optimized = aiService.optimizePrompt(block.userPrompt, apiKey, _state.value.globalState.maxRetries)
-                onUserPromptChanged(optimized)
+                // 构造更加动态的优化指令
+                val systemInstruction = if (currentLang == PromptLanguage.EN) {
+                    "Please optimize and polish the following English image generation prompt. Make it highly descriptive, artistic, and technical (lighting, texture, style). Keep it in English: "
+                } else {
+                    "请优化并润色以下关于 UI 组件的中文描述，使其更具设计感、更详尽且生动。请保持使用中文回答： "
+                }
+
+                val optimized = aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, _state.value.globalState.maxRetries)
+                onUserPromptChanged(optimized, currentLang)
                 onComplete(optimized)
             } catch (e: Exception) {
-                org.gemini.ui.forge.utils.AppLogger.e("EditorViewModel", "Failed to optimize prompt", e)
+                AppLogger.e("EditorViewModel", "Failed to optimize prompt", e)
             }
         }
     }
@@ -249,7 +265,7 @@ class EditorViewModel(
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
                     val updatedBlocks = page.blocks.map { block ->
-                        if (block.id == blockId) block.copy(bounds = org.gemini.ui.forge.domain.SerialRect(left, top, right, bottom)) else block
+                        if (block.id == blockId) block.copy(bounds = SerialRect(left, top, right, bottom)) else block
                     }
                     page.copy(blocks = updatedBlocks)
                 } else page
@@ -285,8 +301,7 @@ class EditorViewModel(
     fun addBlock(type: UIBlockType) {
         val pageId = _state.value.selectedPageId ?: return
         val newBlockId = "block_${org.gemini.ui.forge.getCurrentTimeMillis()}"
-        // 默认生成在可见区域内
-        val defaultBounds = org.gemini.ui.forge.domain.SerialRect(100f, 100f, 400f, 300f)
+        val defaultBounds = SerialRect(100f, 100f, 400f, 300f)
         val newBlock = UIBlock(newBlockId, type, defaultBounds)
 
         _state.update { currentState ->
@@ -327,12 +342,17 @@ class EditorViewModel(
      */
     fun onRequestGeneration(apiKey: String) {
         val block = state.value.selectedBlock ?: return
+        val currentLang = _state.value.currentEditingPromptLang
+        
+        // 根据当前 UI 选择的语言提交提示词进行生图
+        val submitPrompt = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
+
         viewModelScope.launch {
             _state.update { it.copy(isGenerating = true, generatedCandidates = emptyList()) }
             try {
                 val candidates = aiService.generateImages(
                     blockType = block.type.name,
-                    userPrompt = block.fullPrompt,
+                    userPrompt = submitPrompt,
                     apiKey = apiKey,
                     maxRetries = _state.value.globalState.maxRetries
                 )
@@ -353,7 +373,6 @@ class EditorViewModel(
         val projectName = _state.value.projectName
 
         viewModelScope.launch {
-            // 1. 保存资源并获得其本地引用 (返回落盘后的本地绝对路径)
             val localImagePath = templateRepo.saveResource(projectName, blockId, base64Data)
 
             _state.update { currentState ->
@@ -374,10 +393,7 @@ class EditorViewModel(
                 
                 newState
             }
-            // 获取最新状态以保存
             val latestState = _state.value
-            
-            // 2. 自动保存整个项目 JSON
             templateRepo.saveTemplate(projectName, latestState.project)
         }
     }

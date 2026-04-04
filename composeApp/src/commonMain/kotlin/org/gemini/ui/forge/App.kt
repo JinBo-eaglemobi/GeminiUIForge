@@ -79,7 +79,9 @@ fun App(typography: Typography? = null) {
                     currentStorageDir = globalState.templateStorageDir,
                     onStorageDirChanged = { viewModel.updateStorageDir(it) },
                     currentMaxRetries = globalState.maxRetries,
-                    onMaxRetriesSaved = { viewModel.setMaxRetries(it) }
+                    onMaxRetriesSaved = { viewModel.setMaxRetries(it) },
+                    currentPromptLang = globalState.promptLangPref,
+                    onPromptLangChanged = { viewModel.setPromptLanguagePref(it) }
                 )
             }
             ) { innerPadding ->
@@ -124,6 +126,7 @@ fun App(typography: Typography? = null) {
                             onOptimizePrompt = { id, onComplete ->
                                 viewModel.optimizePrompt(id, globalState.effectiveApiKey, onComplete)
                             },
+                            onSwitchEditingLanguage = { viewModel.switchEditingLanguage(it) },
                             onAddBlock = { type -> viewModel.addBlock(type) },
                             onDeleteBlock = { id -> viewModel.deleteBlock(id) },
                             onSaveTemplate = {
@@ -139,6 +142,7 @@ fun App(typography: Typography? = null) {
                             onPageSelected = { viewModel.onPageSelected(it) },
                             onBlockClicked = { viewModel.onBlockClicked(it) },
                             onPromptChanged = { viewModel.onUserPromptChanged(it) },
+                            onSwitchEditingLanguage = { viewModel.switchEditingLanguage(it) },
                             onGenerateRequested = { viewModel.onRequestGeneration(globalState.effectiveApiKey) },
                             onImageSelected = { viewModel.onImageSelected(it) }
                         )

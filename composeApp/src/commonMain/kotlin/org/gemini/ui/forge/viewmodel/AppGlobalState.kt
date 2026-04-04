@@ -1,22 +1,10 @@
 package org.gemini.ui.forge.viewmodel
 
 /**
- * 主题模式枚举
- */
-enum class ThemeMode {
-    /** 跟随系统设置 */
-    SYSTEM,
-    /** 浅色模式 */
-    LIGHT,
-    /** 深色模式 */
-    DARK
-}
-
-/**
- * 应用页面枚举，用于导航管理
+ * 应用中支持显示的屏幕枚举
  */
 enum class AppScreen {
-    /** 首页（模板列表） */
+    /** 首页：展示已有的模板列表 */
     HOME,
     /** 基于模板生成 UI 资源的页面 */
     EDITOR,
@@ -27,15 +15,39 @@ enum class AppScreen {
 }
 
 /**
+ * 提示词显示的语言偏好选项
+ */
+enum class PromptLanguage(val displayName: String) {
+    AUTO("自动"),
+    ZH("中文"),
+    EN("英文")
+}
+
+/**
+ * 应用主题模式
+ */
+enum class ThemeMode {
+    SYSTEM,
+    LIGHT,
+    DARK
+}
+
+/**
  * 应用全局状态模型
  * @property currentScreen 当前正在显示的页面
  * @property themeMode 当前应用的主题模式设置
- * @property apiKey 从环境变量或设置中加载的 Gemini API 密钥
+ * @property languageCode 应用界面的语言设置 (zh, en)
+ * @property promptLangPref 提示词显示的语言偏好选项 (AUTO, ZH, EN)
+ * @property apiKey 从设置中加载的 Gemini API 密钥
+ * @property effectiveApiKey 实际生效的密钥 (apiKey 或环境变量)
+ * @property templateStorageDir 模板数据的存储目录
+ * @property maxRetries API 请求的最大重试次数
  */
 data class AppGlobalState(
     val currentScreen: AppScreen = AppScreen.HOME,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val languageCode: String = "zh",
+    val promptLangPref: PromptLanguage = PromptLanguage.AUTO,
     val apiKey: String = "",
     val effectiveApiKey: String = "",
     val templateStorageDir: String = "",

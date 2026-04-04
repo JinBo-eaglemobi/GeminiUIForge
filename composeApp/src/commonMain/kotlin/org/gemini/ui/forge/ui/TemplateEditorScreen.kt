@@ -38,6 +38,7 @@ fun TemplateEditorScreen(
     onBlockTypeChanged: (String, UIBlockType) -> Unit,
     onPromptChanged: (String, String) -> Unit,
     onOptimizePrompt: (String, (String) -> Unit) -> Unit,
+    onSwitchEditingLanguage: (org.gemini.ui.forge.viewmodel.PromptLanguage) -> Unit,
     onAddBlock: (UIBlockType) -> Unit,
     onDeleteBlock: (String) -> Unit,
     onSaveTemplate: () -> Unit
@@ -162,6 +163,8 @@ fun TemplateEditorScreen(
                     } else {
                         BlockPropertiesEditor(
                             block = block,
+                            currentEditingLang = state.currentEditingPromptLang,
+                            onSwitchEditingLang = onSwitchEditingLanguage,
                             onBoundsChanged = { l, t, r, b -> onBlockBoundsChanged(block.id, l, t, r, b) },
                             onTypeChanged = { newType -> onBlockTypeChanged(block.id, newType) },
                             onPromptChanged = { newPrompt -> onPromptChanged(block.id, newPrompt) },
@@ -194,6 +197,8 @@ private fun VerticalSplitter(onDrag: (Float) -> Unit) {
 @Composable
 private fun BlockPropertiesEditor(
     block: UIBlock,
+    currentEditingLang: org.gemini.ui.forge.viewmodel.PromptLanguage,
+    onSwitchEditingLang: (org.gemini.ui.forge.viewmodel.PromptLanguage) -> Unit,
     onBoundsChanged: (Float, Float, Float, Float) -> Unit,
     onTypeChanged: (UIBlockType) -> Unit,
     onPromptChanged: (String) -> Unit,
@@ -245,12 +250,15 @@ private fun BlockPropertiesEditor(
     Spacer(modifier = Modifier.height(16.dp))
 
     // User Prompt (Read-only, clickable to open dialog)
+    // 根据当前编辑语言显示对应的提示词预览
+    val displayPrompt = if (currentEditingLang == org.gemini.ui.forge.viewmodel.PromptLanguage.EN) block.userPromptEn else block.userPromptZh
+
     Box(modifier = Modifier.fillMaxWidth()) {
         OutlinedTextField(
-            value = block.userPrompt,
+            value = displayPrompt,
             onValueChange = {},
             readOnly = true,
-            label = { Text(stringResource(Res.string.prop_user_prompt)) },
+            label = { Text("提示词 (${currentEditingLang.displayName})") },
             modifier = Modifier.fillMaxWidth(),
             maxLines = 3
         )
@@ -263,18 +271,44 @@ private fun BlockPropertiesEditor(
     }
 
     if (showPromptDialog) {
-        var tempPrompt by remember { mutableStateOf(block.userPrompt) }
+        // 使用临时变量暂存用户输入
+        var tempPrompt by remember { mutableStateOf(displayPrompt) }
         var isOptimizing by remember { mutableStateOf(false) }
+
+        // 关键：当用户在弹窗内切换语言时，自动更新输入框内容
+        LaunchedEffect(currentEditingLang, block) {
+            tempPrompt = if (currentEditingLang == org.gemini.ui.forge.viewmodel.PromptLanguage.EN) block.userPromptEn else block.userPromptZh
+        }
 
         AlertDialog(
             onDismissRequest = { showPromptDialog = false },
-            title = { Text(stringResource(Res.string.prop_edit_prompt)) },
+            title = { 
+                Column {
+                    Text(stringResource(Res.string.prop_edit_prompt))
+                    Spacer(Modifier.height(8.dp))
+                    // 语言切换 SegmentedButton
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        org.gemini.ui.forge.viewmodel.PromptLanguage.entries.filter { it != org.gemini.ui.forge.viewmodel.PromptLanguage.AUTO }.forEachIndexed { index, lang ->
+                            SegmentedButton(
+                                selected = currentEditingLang == lang,
+                                onClick = { onSwitchEditingLang(lang) },
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+                                label = { Text(lang.displayName) }
+                            )
+                        }
+                    }
+                }
+            },
             text = {
                 OutlinedTextField(
                     value = tempPrompt,
-                    onValueChange = { tempPrompt = it },
-                    label = { Text(stringResource(Res.string.prop_prompt_hint)) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp), // 增加了输入框的高度
+                    onValueChange = { 
+                        tempPrompt = it 
+                        // 实时同步回 ViewModel，防止切换语言时丢失
+                        onPromptChanged(it)
+                    },
+                    label = { Text("详细描述 (${currentEditingLang.displayName})") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp),
                     maxLines = 10,
                     enabled = !isOptimizing
                 )
@@ -284,7 +318,7 @@ private fun BlockPropertiesEditor(
                     TextButton(
                         onClick = {
                             isOptimizing = true
-                            onPromptChanged(tempPrompt) // 先保存当前输入，以便基于此优化
+                            onPromptChanged(tempPrompt) // 确保 AI 拿到的是最新的输入
                             onOptimizePrompt { optimizedText ->
                                 tempPrompt = optimizedText
                                 isOptimizing = false

@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 
+import org.gemini.ui.forge.viewmodel.PromptLanguage
+
 @Composable
 fun AppTopBar(
     currentScreen: AppScreen,
@@ -42,7 +44,9 @@ fun AppTopBar(
     currentStorageDir: String = "",
     onStorageDirChanged: (String) -> Unit = {},
     currentMaxRetries: Int = 3,
-    onMaxRetriesSaved: (Int) -> Unit = {}
+    onMaxRetriesSaved: (Int) -> Unit = {},
+    currentPromptLang: PromptLanguage = PromptLanguage.AUTO,
+    onPromptLangChanged: (PromptLanguage) -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -149,12 +153,14 @@ fun AppSettingsDialog(
     currentApiKey: String,
     currentStorageDir: String,
     currentMaxRetries: Int = 3,
+    currentPromptLang: PromptLanguage = PromptLanguage.AUTO,
     onDismiss: () -> Unit,
     onLanguageSelected: (String) -> Unit,
     onThemeSelected: (ThemeMode) -> Unit,
     onApiKeySaved: (String) -> Unit,
     onStorageDirSaved: (String) -> Unit,
-    onMaxRetriesSaved: (Int) -> Unit = {}
+    onMaxRetriesSaved: (Int) -> Unit = {},
+    onPromptLangSelected: (PromptLanguage) -> Unit = {}
 ) {
     var apiKeyInput by remember { mutableStateOf(currentApiKey) }
     var storageDirInput by remember { mutableStateOf(currentStorageDir) }
@@ -416,6 +422,62 @@ fun AppSettingsDialog(
                                     onClick = {
                                         onThemeSelected(mode)
                                         themeExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Prompt Language Dropdown Settings (NEW)
+                    var promptLangExpanded by remember { mutableStateOf(false) }
+                    var promptLangDropdownWidth by remember { mutableStateOf(0) }
+                    val promptLangOptions = PromptLanguage.entries
+                    val displayPromptLangLabel = currentPromptLang.displayName
+
+                    Text(
+                        text = "默认提示词显示语言", // 这里后续建议加到 strings.xml
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Box(modifier = Modifier.fillMaxWidth().onGloballyPositioned { promptLangDropdownWidth = it.size.width }) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().height(48.dp).clickable { promptLangExpanded = true }
+                                .pointerHoverIcon(PointerIcon.Default),
+                            shape = MaterialTheme.shapes.small,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            color = MaterialTheme.colorScheme.surface
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(displayPromptLangLabel, style = MaterialTheme.typography.bodyLarge)
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = promptLangExpanded,
+                            onDismissRequest = { promptLangExpanded = false },
+                            modifier = Modifier.width(with(LocalDensity.current) { promptLangDropdownWidth.toDp() })
+                        ) {
+                            promptLangOptions.forEach { lang ->
+                                DropdownMenuItem(
+                                    text = { 
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text(lang.displayName, style = MaterialTheme.typography.bodyLarge)
+                                            if (lang == currentPromptLang) {
+                                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        onPromptLangSelected(lang)
+                                        promptLangExpanded = false
                                     }
                                 )
                             }
