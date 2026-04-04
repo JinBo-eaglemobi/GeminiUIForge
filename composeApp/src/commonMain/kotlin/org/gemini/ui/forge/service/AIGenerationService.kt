@@ -8,6 +8,9 @@ import io.ktor.client.statement.*
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.domain.ProjectState
@@ -22,7 +25,9 @@ import org.jetbrains.compose.resources.readResourceBytes
 /**
  * AI 生成服务类，封装了与 Google Gemini 和 Imagen API 的交互逻辑
  */
-class AIGenerationService {
+class AIGenerationService(
+    private val cloudAssetManager: CloudAssetManager
+) {
     private val TAG = "AIGenerationService"
     private val jsonConfig = Json {
         ignoreUnknownKeys = true
@@ -31,12 +36,6 @@ class AIGenerationService {
 
     /**
      * 调用 Imagen 模型根据文本 Prompt 生成 UI 图片资源
-     * @param blockType 组件类型名称（如 "SPIN_BUTTON"），用于构造 Prompt
-     * @param userPrompt 用户自定义的风格描述文本
-     * @param count 请求生成的图片数量，默认为 4
-     * @param apiKey Gemini API 密钥
-     * @return 返回包含图片 Base64 数据的列表 (格式: data:image/jpeg;base64,...)
-     * @throws Exception 当 API 密钥为空或网络请求失败时抛出异常
      */
     suspend fun generateImages(
         blockType: String,
@@ -53,18 +52,13 @@ class AIGenerationService {
             throw Exception(errorMsg)
         }
 
-        // 使用 Imagen 模型生成真正的图像字节数据
         val url = ApiConfig.getImagenEndpoint(apiKey)
-
         val client = NetworkClient.shared
-
         val fullPrompt = "Game UI asset for a Slot game. Type: $blockType. Style requirements: $userPrompt"
 
         val requestBody = buildJsonObject {
             put("instances", buildJsonArray {
-                add(buildJsonObject {
-                    put("prompt", fullPrompt)
-                })
+                add(buildJsonObject { put("prompt", fullPrompt) })
             })
             put("parameters", buildJsonObject {
                 put("sampleCount", count.coerceIn(1, 4))
@@ -79,7 +73,7 @@ class AIGenerationService {
             try {
                 if (attempt > 0) {
                     AppLogger.i(TAG, "generateImages 请求失败，正在进行第 $attempt 次重试...")
-                    kotlinx.coroutines.delay(2000L * attempt)
+                    delay(2000L * attempt)
                 }
 
                 val response = client.post(url) {
@@ -113,15 +107,68 @@ class AIGenerationService {
     }
 
     /**
+     * 并发批量生成项目状态中所有空缺的 UIBlock 的图片 (Demo 画像填充)。
+     * 为了避免达到并发上限，采取了分批（Chunking）机制。
+     */
+    suspend fun generateDemoImagesForProject(
+        projectState: ProjectState,
+        apiKey: String,
+        batchSize: Int = 3,
+        onBlockGenerated: (UIBlock, String) -> Unit = { _, _ -> }
+    ) = coroutineScope {
+        AppLogger.i(TAG, "开始批量生成组件 Demo 图片...")
+        
+        // 收集所有需要生成图片的 Block
+        val pendingBlocks = mutableListOf<UIBlock>()
+        projectState.pages.forEach { page ->
+            pendingBlocks.addAll(page.blocks)
+        }
+        
+        AppLogger.i(TAG, "共计 ${pendingBlocks.size} 个模块需要生成图片，按每批 $batchSize 个并发处理")
+
+        // 分批执行，以避免一次性开启过多请求导致 Rate Limit
+        val chunkedBlocks = pendingBlocks.chunked(batchSize)
+        
+        chunkedBlocks.forEachIndexed { index, batch ->
+            AppLogger.d(TAG, "处理第 ${index + 1}/${chunkedBlocks.size} 批次...")
+            
+            // 当前批次内部并发请求
+            val deferredResults = batch.map { block ->
+                async {
+                    try {
+                        // 只要求生成 1 张高质量 Demo 图即可
+                        val generatedImages = generateImages(
+                            blockType = block.type.name,
+                            userPrompt = block.userPrompt,
+                            count = 1,
+                            apiKey = apiKey
+                        )
+                        val resultImage = generatedImages.firstOrNull()
+                        if (resultImage != null) {
+                            onBlockGenerated(block, resultImage)
+                        } else {
+                            AppLogger.i(TAG, "模块 ${block.id} 成功调用但返回了空图片。")
+                        }
+                    } catch (e: Exception) {
+                        AppLogger.e(TAG, "模块 ${block.id} 生成图片时出错: ${e.message}")
+                    }
+                }
+            }
+            
+            // 等待当前批次完成
+            deferredResults.awaitAll()
+            
+            // 如果还有下一批，可稍微延迟降低 QPS 压力
+            if (index < chunkedBlocks.size - 1) {
+                delay(1500L) 
+            }
+        }
+        AppLogger.i(TAG, "批量生成 Demo 图片任务结束。")
+    }
+
+    /**
      * 使用 Gemini 3 Pro Preview 模型多模态能力分析图片并生成项目模板
-     * @param imageUris 待分析的图片路径或 URL 列表
-     * @param apiKey Gemini API 密钥
-     * @param maxRetries 最大重试次数，默认为 3
-     * @param onLog 日志回调，用于 UI 层的实时日志展示
-     * @param onProgress 进度回调
-     * @param onChunk 流式数据块回调，每接收到一部分生成的 JSON 文本时触发
-     * @return 返回解析后的项目状态对象 [ProjectState]
-     * @throws Exception 当生成过程彻底失败时抛出异常
+     * 使用 Gemini File API 机制先上传图片获取 URI，再执行轻量级推断。
      */
     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
     suspend fun analyzeImagesForTemplate(
@@ -133,7 +180,7 @@ class AIGenerationService {
         onChunk: (String) -> Unit = {}
     ): ProjectState {
         AppLogger.i(TAG, "开始使用 Gemini 3 Pro Preview 分析图片，数量: ${imageUris.size}")
-        onLog("准备上传 ${imageUris.size} 张图片进行分析...")
+        onLog("正在准备图片资源，启用云端资产管理器上传加速...")
 
         if (apiKey.isBlank()) {
             throw Exception("Gemini API 密钥为空，请在设置中配置。")
@@ -150,37 +197,66 @@ class AIGenerationService {
             "Please strictly analyze these images..." // fallback
         }
 
+        // 核心优化：并发处理参考图，若云端同步失败则强制执行 Base64 降级，确保流程 100% 可用
+        onLog("🚀 正在同步参考资源 (并发模式)...")
+
         val partsArray = buildJsonArray {
-            add(buildJsonObject {
-                put("text", promptText)
-            })
+            add(buildJsonObject { put("text", promptText) })
 
-            // 尝试将图片转为 Base64 并添加到请求体
-            for ((index, uri) in imageUris.withIndex()) {
-                try {
-                    onLog("正在处理第 ${index + 1} 张图片: ${uri.take(30)}...")
-                    val bytes = if (uri.startsWith("http")) {
-                        client.get(uri).readRawBytes()
-                    } else {
-                        org.gemini.ui.forge.utils.readLocalFileBytes(uri)
-                    }
+            coroutineScope {
+                val deferredParts = imageUris.mapIndexed { index, localUri ->
+                    async {
+                        try {
+                            val bytes = if (localUri.startsWith("http")) {
+                                client.get(localUri).readRawBytes()
+                            } else {
+                                org.gemini.ui.forge.utils.readLocalFileBytes(localUri)
+                            }
 
-                    if (bytes != null) {
-                        AppLogger.i(TAG, "图片 ${index + 1} 大小: ${bytes.size / 1024} KB")
-                        val base64Data = kotlin.io.encoding.Base64.Default.encode(bytes)
-                        add(buildJsonObject {
-                            put("inlineData", buildJsonObject {
-                                put("mimeType", "image/jpeg")
-                                put("data", base64Data)
-                            })
-                        })
-                    } else {
-                        onLog("警告: 无法读取图片 ${index + 1}")
+                            if (bytes == null) {
+                                onLog("❌ 错误: 无法读取参考图 ${index + 1}")
+                                return@async null
+                            }
+
+                            val displayName = localUri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "image_$index.jpg" }
+                            val currentMimeType = org.gemini.ui.forge.utils.getMimeType(localUri)
+                            
+                            // 尝试云端上传 (File API)
+                            val fileUri = try {
+                                cloudAssetManager.getOrUploadFile(displayName, bytes, currentMimeType)
+                            } catch (e: Exception) {
+                                AppLogger.e(TAG, "图 ${index + 1} 云端上传异常: ${e.message}")
+                                null
+                            }
+
+                            if (fileUri != null) {
+                                onLog("✅ 图 [${index + 1}] 云端同步成功")
+                                buildJsonObject {
+                                    put("fileData", buildJsonObject {
+                                        put("mimeType", currentMimeType)
+                                        put("fileUri", fileUri)
+                                    })
+                                }
+                            } else {
+                                // 关键：如果上传失败，强制执行 Base64 降级补偿
+                                onLog("⚠️ 图 [${index + 1}] 云端上传失败，正在执行 Base64 降级补偿...")
+                                val base64Data = kotlin.io.encoding.Base64.Default.encode(bytes)
+                                buildJsonObject {
+                                    put("inlineData", buildJsonObject {
+                                        put("mimeType", currentMimeType)
+                                        put("data", base64Data)
+                                    })
+                                }
+                            }
+                        } catch (e: Exception) {
+                            onLog("❌ 处理图 ${index + 1} 发生致命错误: ${e.message}")
+                            null
+                        }
                     }
-                } catch (e: Exception) {
-                    AppLogger.e(TAG, "读取图片失败: $uri", e)
-                    onLog("错误: 读取图片 ${index + 1} 失败")
                 }
+                
+                // 收集所有部分并装载到请求体
+                deferredParts.awaitAll().filterNotNull().forEach { add(it) }
             }
         }
 
@@ -196,15 +272,16 @@ class AIGenerationService {
             })
         }.toString()
 
-        AppLogger.i(TAG, "请求体总大小: ${requestBody.length / 1024} KB")
+        onLog("📡 正在建立安全连接并提交分析协议...")
+
+        AppLogger.i(TAG, "请求体总大小 (File URI 模式): ${requestBody.length / 1024} KB")
         onLog("---- [HTTP REQUEST] ----")
         onLog("URL: $url")
         onLog("Method: POST")
         onLog("Headers: Content-Type=application/json")
-        onLog("BodySize: ${requestBody.length / 1024} KB")
-        onLog("BodyPreview: ${requestBody.take(200)}...")
+        onLog("BodySize: ${requestBody.length / 1024} KB (轻量)")
         onLog("------------------------")
-        onLog("请求已准备就绪，正在发送至 Gemini API (流式通道)...")
+        onLog("请求已准备就绪，正在发送至 Gemini API 分析界面模块...")
 
         var lastException: Exception? = null
         val accumulatedText = StringBuilder()
@@ -230,20 +307,14 @@ class AIGenerationService {
                     }
                 }
             }.execute { response ->
-                onLog("收到 API 响应，状态码: ${response.status}，开始准备接收流式数据管道...")
+                onLog("收到 API 响应，状态码: ${response.status}，开始接收 JSON 模块流...")
                 if (response.status.isSuccess()) {
                     val channel = response.bodyAsChannel()
-                    onLog("数据管道已连接，等待 Gemini 吐字...")
                     while (!channel.isClosedForRead) {
                         val line = channel.readUTF8Line() ?: break
                         if (line.startsWith("data: ")) {
                             val dataJson = line.substringAfter("data: ").trim()
-                            if (dataJson.isEmpty() || dataJson == "[DONE]") {
-                                onLog("收到结束标识符 [DONE] 或空数据包")
-                                continue
-                            }
-
-                            onLog("接收到数据块: ${line.length} 字节")
+                            if (dataJson.isEmpty() || dataJson == "[DONE]") continue
 
                             try {
                                 val jsonElement = jsonConfig.parseToJsonElement(dataJson)
@@ -260,13 +331,10 @@ class AIGenerationService {
                                 }
                             } catch (e: Exception) {
                                 AppLogger.e(TAG, "解析流数据块失败: $dataJson", e)
-                                onLog("警告: 解析当前数据块 JSON 失败 (Size: ${dataJson.length})")
                             }
-                        } else if (line.trim().isNotEmpty()) {
-                            onLog("收到非数据报文: ${line.take(20)}... (Size: ${line.length})")
                         }
                     }
-                    onLog("流式读取循环已结束。")
+                    onLog("UI 框架结构解析完毕。")
                 } else {
                     val errorBody = response.bodyAsText()
                     throw Exception("API 请求失败: ${response.status} - $errorBody")
@@ -294,10 +362,6 @@ class AIGenerationService {
 
     /**
      * 优化并翻译给定的 prompt 为更适合生图的英文 prompt
-     * @param originalPrompt 原始输入的文案
-     * @param apiKey Gemini API 密钥
-     * @param maxRetries 最大重试次数
-     * @return 优化后的英文 prompt
      */
     suspend fun optimizePrompt(originalPrompt: String, apiKey: String, maxRetries: Int = 3): String {
         AppLogger.i(TAG, "开始优化 Prompt: $originalPrompt, maxRetries=$maxRetries")
@@ -306,7 +370,6 @@ class AIGenerationService {
             throw Exception("Gemini API 密钥为空，请在设置中配置。")
         }
 
-        // 使用非流式端点，简化解析
         val url = ApiConfig.getGenerateContentEndpoint(apiKey)
         val client = NetworkClient.shared
 
@@ -330,8 +393,7 @@ class AIGenerationService {
         for (attempt in 0..maxRetries) {
             try {
                 if (attempt > 0) {
-                    AppLogger.i(TAG, "optimizePrompt 请求失败，正在进行第 $attempt 次重试...")
-                    kotlinx.coroutines.delay(2000L * attempt)
+                    delay(2000L * attempt)
                 }
 
                 val response = client.post(url) {
@@ -341,8 +403,6 @@ class AIGenerationService {
 
                 if (response.status.isSuccess()) {
                     val jsonElement = jsonConfig.parseToJsonElement(response.bodyAsText())
-                    
-                    // 解析标准的 generateContent 返回格式
                     val text = jsonElement.jsonObject["candidates"]
                         ?.jsonArray?.firstOrNull()
                         ?.jsonObject?.get("content")
@@ -350,7 +410,6 @@ class AIGenerationService {
                         ?.jsonArray?.firstOrNull()
                         ?.jsonObject?.get("text")
                         ?.jsonPrimitive?.content ?: ""
-
                     return text.trim()
                 } else {
                     throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")

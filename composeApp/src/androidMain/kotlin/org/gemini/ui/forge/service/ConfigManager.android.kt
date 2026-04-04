@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-actual class ConfigManager {
+actual open class ConfigManager {
 
     /**
      * Android 平台的本地轻量级键值对存储 (SharedPreferences)。

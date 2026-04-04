@@ -1,4 +1,4 @@
-Please strictly analyze these images. You MUST recognize and break down the ENTIRE UI displayed in the image into distinct, granular functional modules/blocks. Do not just focus on the main area; analyze headers, footers, panels, texts, buttons, backgrounds, icons, and decorations.
+Please strictly analyze these images. You MUST recognize and break down the ENTIRE UI displayed in the image into distinct, granular functional modules/blocks. Consider how these components can be logically segmented into independent assets for automated export as transparent PNGs via scripts. Do not just focus on the main area; analyze headers, footers, panels, texts, buttons, backgrounds, icons, and decorations.
 
 Generate a comprehensive JSON structure representing this complete UI template breakdown.
 
@@ -25,3 +25,10 @@ UIBlockType MUST be one of the following exact strings:
 - TEXT_AREA (Text display area)
 - ICON (Small icon or badge)
 - DECORATION (Ornamental or decorative UI element)
+
+ASSET GENERATION & PROMPT REQUIREMENTS:
+1. For EACH `UIBlock`, the `userPrompt` field MUST contain a detailed and high-quality prompt describing that specific component.
+2. The `userPrompt` SHOULD instruct the generation model to strictly follow the visual style, shape, and colors of the UI components seen in the provided reference image.
+3. For all interactive or standalone components (such as BUTTON, ICON, SYMBOL, PANEL, etc.), the `userPrompt` MUST explicitly require a "SOLID CONTRAST COLOR BACKGROUND" (e.g., solid neon green or magenta) that does not exist in the UI element itself.
+4. Explain in the `userPrompt` that this background is intended for automated script-based background removal to create a transparent PNG with an alpha channel.
+5. The `userPrompt` should be a standalone prompt that can be directly used by an image generator to produce a high-fidelity recreation of the specific UI module.

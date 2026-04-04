@@ -55,3 +55,18 @@ fun formatTimestamp(timeMillis: Long, format: String = "yyyy-MM-dd HH:mm:ss"): S
         "$year-$month-$day $hour:$minute:$second"
     }
 }
+
+/**
+ * 将 Gemini API 返回的 RFC 3339 格式字符串解析并格式化为本地时间
+ * @param isoString RFC 3339 格式的时间字符串 (如 2024-05-01T12:00:00Z)
+ */
+fun formatIsoTime(isoString: String?): String {
+    if (isoString.isNullOrBlank()) return "未知"
+    return try {
+        // Instant.parse 支持 ISO 8601 / RFC 3339 格式
+        val instant = Instant.parse(isoString)
+        formatTimestamp(instant.toEpochMilliseconds())
+    } catch (e: Exception) {
+        isoString // 解析失败则原样返回
+    }
+}

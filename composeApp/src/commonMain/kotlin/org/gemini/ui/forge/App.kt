@@ -46,8 +46,18 @@ fun App(typography: Typography? = null) {
             }
         }
 
+        var showCloudAssetDialog by remember { mutableStateOf(false) }
+
         AppTheme(themeMode = globalState.themeMode, typography = typography ?: androidx.compose.material3.MaterialTheme.typography) {
             val coroutineScope = rememberCoroutineScope()
+
+            if (showCloudAssetDialog) {
+                org.gemini.ui.forge.ui.CloudAssetDialog(
+                    cloudAssetManager = viewModel.cloudAssetManager,
+                    onDismiss = { showCloudAssetDialog = false }
+                )
+            }
+
             Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {
@@ -63,6 +73,7 @@ fun App(typography: Typography? = null) {
                     currentLanguage = globalState.languageCode,
                     onThemeChangeRequested = { viewModel.setThemeMode(it) },
                     onGenerateTemplateClicked = { viewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
+                    onCloudAssetManagerClicked = { showCloudAssetDialog = true },
                     currentApiKey = globalState.apiKey,
                     onApiKeyChanged = { viewModel.saveApiKey(it) },
                     currentStorageDir = globalState.templateStorageDir,

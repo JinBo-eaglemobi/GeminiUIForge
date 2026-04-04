@@ -2,7 +2,10 @@ package org.gemini.ui.forge.service
 
 import io.ktor.client.*
 import io.ktor.client.plugins.*
+import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
+import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.utils.AppLogger
 
 /**
@@ -13,11 +16,18 @@ import org.gemini.ui.forge.utils.AppLogger
 object NetworkClient {
     val shared: HttpClient by lazy {
         HttpClient {
+            install(ContentNegotiation) {
+                json(Json {
+                    prettyPrint = true
+                    isLenient = true
+                    ignoreUnknownKeys = true
+                })
+            }
             install(HttpRequestRetry)
             install(HttpTimeout) {
-                requestTimeoutMillis = 30_000L // 5 minutes
-                connectTimeoutMillis = 6_000L  // 1 minute
-                socketTimeoutMillis = 30_000L  // 5 minutes
+                requestTimeoutMillis = 120_000L // 2 minutes for complete multi-modal analysis
+                connectTimeoutMillis = 10_000L  // 10 seconds to fail-fast if no internet/proxy issue
+                socketTimeoutMillis = 60_000L   // 60 seconds for streaming large JSON responses
             }
             install(Logging) {
                 level = LogLevel.INFO

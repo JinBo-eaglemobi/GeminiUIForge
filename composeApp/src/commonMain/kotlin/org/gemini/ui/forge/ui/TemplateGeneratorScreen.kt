@@ -30,13 +30,20 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.formatTimestamp
 
+import androidx.compose.material.icons.filled.Cloud
+import org.gemini.ui.forge.ui.CloudAssetDialog
+
 @Composable
 fun TemplateGeneratorScreen(
     onNavigateBack: () -> Unit,
     onTemplateSaved: (String, ProjectState) -> Unit,
-    aiService: AIGenerationService = remember { AIGenerationService() },
-    templateRepo: TemplateRepository = remember { TemplateRepository() },
     apiKey: String,
+    configManager: org.gemini.ui.forge.service.ConfigManager = remember { org.gemini.ui.forge.service.ConfigManager() },
+    cloudAssetManager: org.gemini.ui.forge.service.CloudAssetManager = remember { 
+        org.gemini.ui.forge.service.CloudAssetManager(org.gemini.ui.forge.service.ConfigManager()) 
+    },
+    aiService: AIGenerationService = remember { AIGenerationService(cloudAssetManager) },
+    templateRepo: TemplateRepository = remember { TemplateRepository() },
     maxRetries: Int = 3
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -44,9 +51,18 @@ fun TemplateGeneratorScreen(
     var templateName by remember { mutableStateOf("") }
     var generatedState by remember { mutableStateOf<ProjectState?>(null) }
     var isAnalyzing by remember { mutableStateOf(false) }
+    var generateDemoImages by remember { mutableStateOf(true) }
     var saveStatus by remember { mutableStateOf("") }
     val logs = remember { mutableStateListOf<String>() }
     var streamedJson by remember { mutableStateOf("") }
+    var showAssetManager by remember { mutableStateOf(false) } // 新增状态：控制资产管理器显示
+
+    if (showAssetManager) {
+        CloudAssetDialog(
+            cloudAssetManager = cloudAssetManager,
+            onDismiss = { showAssetManager = false }
+        )
+    }
 
     val imagePicker = rememberImagePicker { uris ->
         if (uris.isNotEmpty()) {
@@ -57,11 +73,21 @@ fun TemplateGeneratorScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
             Text(
                 text = stringResource(Res.string.template_gen_title),
                 style = MaterialTheme.typography.headlineMedium
             )
+            IconButton(
+                onClick = { showAssetManager = true },
+                colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.Cloud, contentDescription = "Cloud Assets")
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -73,6 +99,21 @@ fun TemplateGeneratorScreen(
             modifier = Modifier.fillMaxWidth(),
             maxLines = 3
         )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Checkbox(
+                checked = generateDemoImages,
+                onCheckedChange = { generateDemoImages = it },
+                enabled = !isAnalyzing
+            )
+            Text(
+                text = "同时生成 Demo UI 图片 (生成后可直接预览)",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(start = 4.dp)
+            )
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -99,6 +140,28 @@ fun TemplateGeneratorScreen(
                                 onChunk = { chunk -> streamedJson += chunk }
                             )
                             logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ✅ 分析成功并已生成数据模型！")
+
+                            // 新增逻辑：如果选中了同时生成 Demo 图片，则启动批量生成流程
+                            if (generateDemoImages && generatedState != null) {
+                                logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🎨 正在启动批量组件 Demo 图片生成...")
+                                aiService.generateDemoImagesForProject(
+                                    projectState = generatedState!!,
+                                    apiKey = apiKey,
+                                    batchSize = 3,
+                                    onBlockGenerated = { block, imageBase64 ->
+                                        // 更新 UI 状态中的 Block 图片
+                                        generatedState = generatedState!!.let { state ->
+                                            state.copy(pages = state.pages.map { page ->
+                                                page.copy(blocks = page.blocks.map { b ->
+                                                    if (b.id == block.id) b.copy(currentImageUri = imageBase64) else b
+                                                })
+                                            })
+                                        }
+                                        logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ✨ 模块 [${block.type}] 图片已生成。")
+                                    }
+                                )
+                                logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🎉 所有组件 Demo 图片生成任务已下发。")
+                            }
                         } catch (e: Exception) {
                             saveStatus = "分析失败: ${e.message}"
                             logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ❌ 发生错误: ${e.message}")

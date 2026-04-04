@@ -17,8 +17,8 @@ import org.gemini.ui.forge.domain.UIBlockType
 import org.gemini.ui.forge.domain.UIPage
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.TemplateRepository
-
 import org.gemini.ui.forge.service.ConfigManager
+import org.gemini.ui.forge.service.CloudAssetManager
 
 /**
  * 编辑器页面的 UI 状态模型
@@ -50,14 +50,16 @@ data class EditorState(
 
 /**
  * 编辑器页面的 ViewModel，负责 UI 逻辑处理与状态管理
- * @param aiService AI 生成服务，用于调用 Imagen 和 Gemini
- * @param templateRepo 模板持久化仓库
  * @param configManager 配置与密钥管理工具
+ * @param templateRepo 模板持久化仓库
+ * @param cloudAssetManager 云端资产管理器
+ * @param aiService AI 生成服务，用于调用 Imagen 和 Gemini
  */
 class EditorViewModel(
-    private val aiService: AIGenerationService = AIGenerationService(),
+    private val configManager: ConfigManager = ConfigManager(),
     private val templateRepo: TemplateRepository = TemplateRepository(),
-    private val configManager: ConfigManager = ConfigManager()
+    val cloudAssetManager: CloudAssetManager = CloudAssetManager(configManager),
+    private val aiService: AIGenerationService = AIGenerationService(cloudAssetManager)
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditorState())

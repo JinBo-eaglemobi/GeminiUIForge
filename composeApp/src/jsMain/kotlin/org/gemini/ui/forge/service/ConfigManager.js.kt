@@ -3,7 +3,7 @@ package org.gemini.ui.forge.service
 import kotlinx.browser.window
 import kotlinx.coroutines.await
 
-actual class ConfigManager {
+actual open class ConfigManager {
 
     /**
      * JS 平台下利用 OPFS (Origin Private File System) 进行文件写入。

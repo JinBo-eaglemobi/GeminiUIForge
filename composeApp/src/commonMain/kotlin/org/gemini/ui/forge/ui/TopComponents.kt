@@ -36,6 +36,7 @@ fun AppTopBar(
     currentLanguage: String = "zh",
     onThemeChangeRequested: (ThemeMode) -> Unit,
     onGenerateTemplateClicked: () -> Unit = {},
+    onCloudAssetManagerClicked: () -> Unit = {},
     currentApiKey: String = "",
     onApiKeyChanged: (String) -> Unit = {},
     currentStorageDir: String = "",
@@ -91,6 +92,13 @@ fun AppTopBar(
                         onClick = { 
                             menuExpanded = false 
                             onGenerateTemplateClicked()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("云端资产管理") }, // 这里为了简便先硬编码，建议后续加到 strings.xml
+                        onClick = { 
+                            menuExpanded = false 
+                            onCloudAssetManagerClicked()
                         }
                     )
                     DropdownMenuItem(

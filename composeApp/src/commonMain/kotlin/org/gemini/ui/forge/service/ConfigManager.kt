@@ -4,7 +4,7 @@ package org.gemini.ui.forge.service
  * 持久化配置密钥的跨平台管理类
  * 负责在不同平台（如 Android, JVM, iOS）上以安全、持久化的方式存储配置信息（如 API Key）。
  */
-expect class ConfigManager() {
+expect open class ConfigManager() {
     /**
      * 将键值对保存到本地安全存储或配置文件中
      * @param keyName 配置键的名称

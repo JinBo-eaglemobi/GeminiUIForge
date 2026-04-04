@@ -9,7 +9,7 @@ object ApiConfig {
     /**
      * Gemini API 的基础 URL
      */
-    const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+    const val BASE_URL = "https://generativelanguage.googleapis.com"
 
     /**
      * 获取图片生成的完整 Endpoint URL (Imagen)
@@ -18,7 +18,7 @@ object ApiConfig {
      * @param modelName 选用的 Imagen 模型名称
      */
     fun getImagenEndpoint(apiKey: String, modelName: String = GeminiModel.IMAGEN_4_0_GENERATE_001.modelName): String {
-        return "$BASE_URL/models/$modelName:predict?key=$apiKey"
+        return "$BASE_URL/v1beta/models/$modelName:predict?key=$apiKey"
     }
 
     /**
@@ -27,7 +27,7 @@ object ApiConfig {
      * @param modelName 选用的 Gemini 文本/多模态模型名称
      */
     fun getStreamGenerateContentEndpoint(apiKey: String, modelName: String = GeminiModel.GEMINI_3_PRO_IMAGE_PREVIEW.modelName): String {
-        return "$BASE_URL/models/$modelName:streamGenerateContent?alt=sse&key=$apiKey"
+        return "$BASE_URL/v1beta/models/$modelName:streamGenerateContent?alt=sse&key=$apiKey"
     }
 
     /**
@@ -36,6 +36,31 @@ object ApiConfig {
      * @param modelName 选用的 Gemini 文本/多模态模型名称
      */
     fun getGenerateContentEndpoint(apiKey: String, modelName: String = GeminiModel.GEMINI_3_1_PRO_PREVIEW.modelName): String {
-        return "$BASE_URL/models/$modelName:generateContent?key=$apiKey"
+        return "$BASE_URL/v1beta/models/$modelName:generateContent?key=$apiKey"
+    }
+
+    /**
+     * 获取上传文件的 Endpoint URL
+     * @param apiKey API 密钥
+     */
+    fun getUploadFileEndpoint(apiKey: String): String {
+        return "$BASE_URL/upload/v1beta/files?key=$apiKey" // 注意：根据官方文档，上传需要用到 upload 前缀
+    }
+
+    /**
+     * 获取列出文件的 Endpoint URL
+     * @param apiKey API 密钥
+     */
+    fun getListFilesEndpoint(apiKey: String): String {
+        return "$BASE_URL/v1beta/files?key=$apiKey"
+    }
+
+    /**
+     * 获取文件详情或删除文件的 Endpoint URL
+     * @param fileName 文件的唯一标识符 (格式为 "files/xxx")
+     * @param apiKey API 密钥
+     */
+    fun getFileEndpoint(fileName: String, apiKey: String): String {
+        return "$BASE_URL/v1beta/$fileName?key=$apiKey"
     }
 }

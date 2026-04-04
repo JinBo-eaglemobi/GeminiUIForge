@@ -4,7 +4,7 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-actual class ConfigManager {
+actual open class ConfigManager {
     /**
      * JVM (桌面端) 平台的配置文件路径。
      * 将配置存储在用户的 Home 目录下的隐藏文件夹中（`~/.geminiuiforge/config.conf`），
@@ -22,7 +22,7 @@ actual class ConfigManager {
         }
     }
 
-    actual suspend fun loadGlobalGeminiKey(): String? = withContext(Dispatchers.IO) {
+    actual open suspend fun loadGlobalGeminiKey(): String? = withContext(Dispatchers.IO) {
         // 1. 优先尝试从系统环境变量中获取
         System.getProperty("GEMINI_API_KEY")?.let { return@withContext it }
         
@@ -39,7 +39,7 @@ actual class ConfigManager {
         return@withContext null
     }
 
-    actual suspend fun saveKey(keyName: String, keyValue: String) {
+    actual open suspend fun saveKey(keyName: String, keyValue: String) {
         withContext(Dispatchers.IO) {
             val lines = if (envFile.exists()) envFile.readLines() else emptyList()
             val newLines = mutableListOf<String>()
@@ -61,7 +61,7 @@ actual class ConfigManager {
         }
     }
 
-    actual suspend fun loadKey(keyName: String): String? = withContext(Dispatchers.IO) {
+    actual open suspend fun loadKey(keyName: String): String? = withContext(Dispatchers.IO) {
         if (!envFile.exists()) return@withContext null
         return@withContext envFile.readLines()
             .firstOrNull { it.trim().startsWith("export $keyName=") }
