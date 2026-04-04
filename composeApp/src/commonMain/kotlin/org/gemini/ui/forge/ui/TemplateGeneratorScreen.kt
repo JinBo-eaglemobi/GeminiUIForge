@@ -55,7 +55,6 @@ fun TemplateGeneratorScreen(
     var templateName by remember { mutableStateOf("") }
     var generatedState by remember { mutableStateOf<ProjectState?>(null) }
     var isAnalyzing by remember { mutableStateOf(false) }
-    var generateDemoImages by remember { mutableStateOf(true) }
     var saveStatus by remember { mutableStateOf("") }
     val logs = remember { mutableStateListOf<String>() }
     var streamedJson by remember { mutableStateOf("") }
@@ -117,22 +116,7 @@ fun TemplateGeneratorScreen(
             enabled = !isAnalyzing
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Checkbox(
-                checked = generateDemoImages,
-                onCheckedChange = { generateDemoImages = it },
-                enabled = !isAnalyzing
-            )
-            Text(
-                text = "同时生成 Demo UI 图片 (生成后可直接预览)",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(start = 4.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             OutlinedButton(onClick = { imagePicker() }, enabled = !isAnalyzing) {
@@ -179,33 +163,9 @@ fun TemplateGeneratorScreen(
                             logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 💾 正在自动保存模板数据...")
                             val stateToSave = resultState.copy(createdAt = getCurrentTimeMillis())
                             templateRepo.saveTemplate(finalTemplateName, stateToSave)
-                            saveStatus = "模板已成功自动保存至本地。"
                             
-                            // 4. 保存完成后，如果选中了同时生成 Demo 图片，则启动批量生成流程
-                            if (generateDemoImages) {
-                                logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🎨 正在启动批量组件 Demo 图片生成...")
-                                aiService.generateDemoImagesForProject(
-                                    projectState = stateToSave,
-                                    apiKey = apiKey,
-                                    batchSize = 3,
-                                    onBlockGenerated = { block, imageBase64 ->
-                                        // 更新 UI 状态中的 Block 图片
-                                        generatedState = generatedState?.let { state ->
-                                            state.copy(pages = state.pages.map { page ->
-                                                page.copy(blocks = page.blocks.map { b ->
-                                                    if (b.id == block.id) b.copy(currentImageUri = imageBase64) else b
-                                                })
-                                            })
-                                        }
-                                        // 这里可以选择是否在每张图生成后重新保存一次，或者等全部结束后手动点一下同步
-                                        logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ✨ 模块 [${block.type}] 图片已生成。")
-                                    }
-                                )
-                                logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🎉 所有组件 Demo 图片生成任务已下发。")
-                            }
-
-                            // 5. 全部任务成功后，触发自动跳转至编辑器界面
-                            onTemplateSaved(finalTemplateName, generatedState!!)
+                            // 4. 全部任务成功后，触发自动跳转至编辑器界面
+                            onTemplateSaved(finalTemplateName, stateToSave)
                             
                         } catch (e: Exception) {
                             saveStatus = "分析失败: ${e.message}"
@@ -287,5 +247,5 @@ fun TemplateGeneratorScreen(
         if (saveStatus.isNotBlank()) {
             Text(saveStatus, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 8.dp))
         }
-        }
-        }
+    }
+}
