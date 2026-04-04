@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.*
@@ -32,6 +33,9 @@ import org.gemini.ui.forge.formatTimestamp
 
 import androidx.compose.material.icons.filled.Cloud
 import org.gemini.ui.forge.ui.CloudAssetDialog
+
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.rememberScrollbarAdapter
 
 @Composable
 fun TemplateGeneratorScreen(
@@ -97,7 +101,20 @@ fun TemplateGeneratorScreen(
             onValueChange = { inputUris = it },
             label = { Text(stringResource(Res.string.template_gen_input_hint)) },
             modifier = Modifier.fillMaxWidth(),
-            maxLines = 3
+            maxLines = 3,
+            enabled = !isAnalyzing
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 新增：模板名称输入框，提前到分析之前
+        OutlinedTextField(
+            value = templateName,
+            onValueChange = { templateName = it },
+            label = { Text("模板名称 (留空则自动根据图片命名)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            enabled = !isAnalyzing
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -118,7 +135,7 @@ fun TemplateGeneratorScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            OutlinedButton(onClick = { imagePicker() }) {
+            OutlinedButton(onClick = { imagePicker() }, enabled = !isAnalyzing) {
                 Text(stringResource(Res.string.template_gen_pick_local))
             }
 
@@ -130,38 +147,66 @@ fun TemplateGeneratorScreen(
                         saveStatus = ""
                         streamedJson = ""
                         logs.clear()
-                        logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🚀 开始准备上传图片并分析...")
+                        
+                        // 1. 确定最终模板名称
+                        val finalTemplateName = if (templateName.isBlank()) {
+                            inputUris.split(",")
+                                .firstOrNull { it.isNotBlank() }
+                                ?.substringAfterLast("/")
+                                ?.substringAfterLast("\\")
+                                ?.substringBeforeLast(".")
+                                ?.ifBlank { "NewTemplate_${getCurrentTimeMillis()}" } ?: "NewTemplate"
+                        } else {
+                            templateName
+                        }
+
+                        logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🚀 准备分析图片并创建模板 [$finalTemplateName]...")
+                        
                         try {
-                            generatedState = aiService.analyzeImagesForTemplate(
+                            // 2. 执行 AI 分析
+                            val resultState = aiService.analyzeImagesForTemplate(
                                 imageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() },
                                 apiKey = apiKey,
                                 maxRetries = maxRetries,
                                 onLog = { logMsg -> logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] $logMsg") },
                                 onChunk = { chunk -> streamedJson += chunk }
                             )
-                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ✅ 分析成功并已生成数据模型！")
+                            
+                            generatedState = resultState
+                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ✅ 分析成功！")
 
-                            // 新增逻辑：如果选中了同时生成 Demo 图片，则启动批量生成流程
-                            if (generateDemoImages && generatedState != null) {
+                            // 3. 立即自动保存到本地缓存目录
+                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 💾 正在自动保存模板数据...")
+                            val stateToSave = resultState.copy(createdAt = getCurrentTimeMillis())
+                            templateRepo.saveTemplate(finalTemplateName, stateToSave)
+                            saveStatus = "模板已成功自动保存至本地。"
+                            
+                            // 4. 保存完成后，如果选中了同时生成 Demo 图片，则启动批量生成流程
+                            if (generateDemoImages) {
                                 logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🎨 正在启动批量组件 Demo 图片生成...")
                                 aiService.generateDemoImagesForProject(
-                                    projectState = generatedState!!,
+                                    projectState = stateToSave,
                                     apiKey = apiKey,
                                     batchSize = 3,
                                     onBlockGenerated = { block, imageBase64 ->
                                         // 更新 UI 状态中的 Block 图片
-                                        generatedState = generatedState!!.let { state ->
+                                        generatedState = generatedState?.let { state ->
                                             state.copy(pages = state.pages.map { page ->
                                                 page.copy(blocks = page.blocks.map { b ->
                                                     if (b.id == block.id) b.copy(currentImageUri = imageBase64) else b
                                                 })
                                             })
                                         }
+                                        // 这里可以选择是否在每张图生成后重新保存一次，或者等全部结束后手动点一下同步
                                         logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ✨ 模块 [${block.type}] 图片已生成。")
                                     }
                                 )
                                 logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🎉 所有组件 Demo 图片生成任务已下发。")
                             }
+
+                            // 5. 全部任务成功后，触发自动跳转至编辑器界面
+                            onTemplateSaved(finalTemplateName, generatedState!!)
+                            
                         } catch (e: Exception) {
                             saveStatus = "分析失败: ${e.message}"
                             logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ❌ 发生错误: ${e.message}")
@@ -181,132 +226,66 @@ fun TemplateGeneratorScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        var selectedTabIndex by remember { mutableStateOf(0) }
-        val tabLog = stringResource(Res.string.tab_log)
-        val tabResult = stringResource(Res.string.tab_result)
-        val tabs = listOf(tabLog, tabResult)
+        Surface(
+            modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 4.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = MaterialTheme.shapes.small
+        ) {
+            if (logs.isEmpty() && !isAnalyzing) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    Text("暂无运行日志", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                SelectionContainer {
+                    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
-        PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
-            tabs.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTabIndex == index,
-                    onClick = { selectedTabIndex = index },
-                    text = { Text(title) }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        val currentTab = tabs.getOrNull(selectedTabIndex)
-        
-        if (currentTab == tabLog) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 4.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                shape = MaterialTheme.shapes.small
-            ) {
-                if (logs.isEmpty() && !isAnalyzing) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                        Text("暂无日志", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                } else {
-                    SelectionContainer {
-                        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-                        
-                        // Smart auto-scroll logic
-                        LaunchedEffect(logs.size) {
-                            if (logs.isNotEmpty()) {
-                                // 允许 5 像素的误差来判断是否在底部，增强触控环境下的稳定性
-                                val isAtBottom = !listState.canScrollForward || listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index == logs.size - 2
-                                if (isAtBottom || logs.size == 1) {
-                                    listState.animateScrollToItem(logs.size - 1)
-                                }
-                            }
+                    // 自动滚动到最新日志
+                    LaunchedEffect(logs.size, streamedJson.length) {
+                        if (logs.isNotEmpty()) {
+                            listState.animateScrollToItem(logs.size - 1)
                         }
-                        
+                    }
+
+                    Box(modifier = Modifier.fillMaxSize()) {
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalArrangement = Arrangement.spacedBy(0.dp) // 紧凑排列，模拟连续文本
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             items(logs) { log ->
                                 Text(
                                     text = log, 
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = FontFamily.Monospace, // 控制台等宽字体
-                                        lineHeight = androidx.compose.ui.unit.TextUnit.Unspecified
-                                    ), 
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), 
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                        }
-                    }
-                }
-            }
-        } else if (currentTab == tabResult) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.small
-            ) {
-                val displayJson = if (generatedState != null) {
-                    val jsonFormat = Json { prettyPrint = true }
-                    jsonFormat.encodeToString(ProjectState.serializer(), generatedState!!)
-                } else {
-                    streamedJson
-                }
 
-                if (displayJson.isNotEmpty()) {
-                    SelectionContainer {
-                        val scrollState = rememberScrollState()
-                        Text(
-                            text = displayJson,
-                            modifier = Modifier.padding(8.dp).verticalScroll(scrollState),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-                } else {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                        Text("等待 AI 返回数据流...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-
-        if (generatedState != null) {
-            OutlinedTextField(
-                value = templateName,
-                onValueChange = { templateName = it },
-                label = { Text(stringResource(Res.string.template_name_hint)) },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = {
-                    if (templateName.isNotBlank() && generatedState != null) {
-                        coroutineScope.launch {
-                            try {
-                                val stateToSave = generatedState!!.copy(createdAt = getCurrentTimeMillis())
-                                templateRepo.saveTemplate(templateName, stateToSave)
-                                saveStatus = "保存成功！正在进入编辑模式..."
-                                onTemplateSaved(templateName, stateToSave)
-                            } catch (e: Exception) {
-                                saveStatus = "保存错误: ${e.message}"
+                            // 关键：实时展示接收中的 JSON 数据流 (精简版)
+                            if (isAnalyzing && streamedJson.isNotEmpty() && generatedState == null) {
+                                item {
+                                    Text(
+                                        text = "[数据流同步中] 长度: ${streamedJson.length} | 预览: ...${streamedJson.takeLast(60)}",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                        ),
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
                             }
                         }
+
+                        // 恢复物理滚动条
+                        VerticalScrollbar(
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                            adapter = rememberScrollbarAdapter(scrollState = listState)
+                        )
                     }
-                },
-                enabled = templateName.isNotBlank()
-            ) {
-                Text(stringResource(Res.string.template_gen_save))
+                }
             }
         }
 
         if (saveStatus.isNotBlank()) {
-            Text(saveStatus, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+            Text(saveStatus, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 8.dp))
         }
-    }
-}
+        }
+        }
