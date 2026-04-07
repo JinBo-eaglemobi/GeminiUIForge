@@ -12,6 +12,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,7 +25,9 @@ import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.domain.UIBlock
 import org.gemini.ui.forge.domain.UIBlockType
+import org.gemini.ui.forge.domain.SerialRect
 import org.gemini.ui.forge.viewmodel.EditorState
+import org.gemini.ui.forge.viewmodel.PromptLanguage
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,11 +42,60 @@ fun TemplateEditorScreen(
     onBlockTypeChanged: (String, UIBlockType) -> Unit,
     onPromptChanged: (String, String) -> Unit,
     onOptimizePrompt: (String, (String) -> Unit) -> Unit,
-    onSwitchEditingLanguage: (org.gemini.ui.forge.viewmodel.PromptLanguage) -> Unit,
+    onRefineArea: (String, String, (Boolean) -> Unit) -> Unit,
+    onRefineCustomArea: (SerialRect, String, (Boolean) -> Unit) -> Unit, // 新增：自定义区域重塑
+    onSwitchEditingLanguage: (PromptLanguage) -> Unit,
     onAddBlock: (UIBlockType) -> Unit,
     onDeleteBlock: (String) -> Unit,
     onSaveTemplate: () -> Unit
 ) {
+    // 页面级状态：是否处于框选模式
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var showCustomRefineDialog by remember { mutableStateOf(false) }
+    var pendingRect by remember { mutableStateOf<SerialRect?>(null) }
+
+    if (showCustomRefineDialog && pendingRect != null) {
+        var instruction by remember { mutableStateOf("") }
+        var isProcessing by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { if (!isProcessing) showCustomRefineDialog = false },
+            title = { Text("框选区域重塑") },
+            text = {
+                Column {
+                    Text("AI 将分析您框选的区域，并将其作为新组件合并到当前模板中。", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = instruction,
+                        onValueChange = { instruction = it },
+                        label = { Text("描述该区域 (例如：顶部状态栏和返回按钮)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isProcessing
+                    )
+                    if (isProcessing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        isProcessing = true
+                        onRefineCustomArea(pendingRect!!, instruction) { success ->
+                            isProcessing = false
+                            if (success) {
+                                showCustomRefineDialog = false
+                                isSelectionMode = false
+                            }
+                        }
+                    },
+                    enabled = !isProcessing && instruction.isNotBlank()
+                ) { Text("确认重塑") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomRefineDialog = false }, enabled = !isProcessing) { Text("取消") }
+            }
+        )
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val maxWidth = maxWidth
         val totalWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
@@ -59,16 +112,26 @@ fun TemplateEditorScreen(
             ) {
                 Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
                     Text(
-                        stringResource(Res.string.editor_tools), 
+                        "编辑工具", 
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
                     
-                    Text("添加功能模块:", style = MaterialTheme.typography.labelMedium)
+                    // 核心工具按钮：框选重塑模式开关
+                    FilterChip(
+                        selected = isSelectionMode,
+                        onClick = { isSelectionMode = !isSelectionMode },
+                        label = { Text("框选区域重塑") },
+                        leadingIcon = { Icon(Icons.Default.Crop, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    Text("页面列表:", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(4.dp))
                     
-                    val pages = state.project.pages
-                    pages.forEach { page ->
+                    state.project.pages.forEach { page ->
                         val isSelected = state.selectedPageId == page.id
                         TextButton(
                             onClick = { onPageSelected(page.id) },
@@ -81,9 +144,9 @@ fun TemplateEditorScreen(
                         }
                     }
                     
-                    Divider(modifier = Modifier.padding(vertical = 16.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-                    Text("添加功能模块:", style = MaterialTheme.typography.labelMedium)
+                    Text("添加组件:", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     LazyColumn(modifier = Modifier.weight(1f)) {
@@ -110,15 +173,13 @@ fun TemplateEditorScreen(
             }
 
             // 分割线 1
-            VerticalSplitter(
-                onDrag = { deltaPx ->
-                    val deltaW = deltaPx / totalWidthPx
-                    if (leftWeight + deltaW in 0.15f..0.3f) {
-                        leftWeight += deltaW
-                        centerWeight -= deltaW
-                    }
+            VerticalSplitter(onDrag = { delta ->
+                val deltaW = delta / totalWidthPx
+                if (leftWeight + deltaW in 0.15f..0.3f) {
+                    leftWeight += deltaW
+                    centerWeight -= deltaW
                 }
-            )
+            })
 
             // ==================== 中间：画布 ====================
             Box(modifier = Modifier.weight(centerWeight).fillMaxHeight()) {
@@ -128,20 +189,23 @@ fun TemplateEditorScreen(
                     blocks = state.currentPage?.blocks ?: emptyList(),
                     selectedBlockId = state.selectedBlockId,
                     onBlockClicked = onBlockClicked,
+                    isSelectionMode = isSelectionMode,
+                    onAreaSelected = { rect ->
+                        pendingRect = rect
+                        showCustomRefineDialog = true
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
             // 分割线 2
-            VerticalSplitter(
-                onDrag = { deltaPx ->
-                    val deltaW = deltaPx / totalWidthPx
-                    if (rightWeight - deltaW in 0.2f..0.4f) {
-                        rightWeight -= deltaW
-                        centerWeight += deltaW
-                    }
+            VerticalSplitter(onDrag = { delta ->
+                val deltaW = delta / totalWidthPx
+                if (rightWeight - deltaW in 0.2f..0.4f) {
+                    rightWeight -= deltaW
+                    centerWeight += deltaW
                 }
-            )
+            })
 
             // ==================== 右侧：属性面板 ====================
             Surface(
@@ -169,6 +233,7 @@ fun TemplateEditorScreen(
                             onTypeChanged = { newType -> onBlockTypeChanged(block.id, newType) },
                             onPromptChanged = { newPrompt -> onPromptChanged(block.id, newPrompt) },
                             onOptimizePrompt = { onComplete -> onOptimizePrompt(block.id, onComplete) },
+                            onRefineArea = { instruction, onComplete -> onRefineArea(block.id, instruction, onComplete) },
                             onDelete = { onDeleteBlock(block.id) }
                         )
                     }
@@ -197,25 +262,28 @@ private fun VerticalSplitter(onDrag: (Float) -> Unit) {
 @Composable
 private fun BlockPropertiesEditor(
     block: UIBlock,
-    currentEditingLang: org.gemini.ui.forge.viewmodel.PromptLanguage,
-    onSwitchEditingLang: (org.gemini.ui.forge.viewmodel.PromptLanguage) -> Unit,
+    currentEditingLang: PromptLanguage,
+    onSwitchEditingLang: (PromptLanguage) -> Unit,
     onBoundsChanged: (Float, Float, Float, Float) -> Unit,
     onTypeChanged: (UIBlockType) -> Unit,
     onPromptChanged: (String) -> Unit,
     onOptimizePrompt: ((String) -> Unit) -> Unit,
+    onRefineArea: (String, (Boolean) -> Unit) -> Unit,
     onDelete: () -> Unit
 ) {
     var expandedType by remember { mutableStateOf(false) }
     var showPromptDialog by remember { mutableStateOf(false) }
+    var showRefineDialog by remember { mutableStateOf(false) }
 
-    // ID (Read-only)
+    // ID
     OutlinedTextField(
-    value = block.id,
-    onValueChange = {},
-    readOnly = true,
-    label = { Text(stringResource(Res.string.prop_block_id)) },
-    modifier = Modifier.fillMaxWidth()
+        value = block.id,
+        onValueChange = {},
+        readOnly = true,
+        label = { Text(stringResource(Res.string.prop_block_id)) },
+        modifier = Modifier.fillMaxWidth()
     )
+    
     Spacer(modifier = Modifier.height(16.dp))
 
     // Type Selector
@@ -249,9 +317,8 @@ private fun BlockPropertiesEditor(
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    // User Prompt (Read-only, clickable to open dialog)
-    // 根据当前编辑语言显示对应的提示词预览
-    val displayPrompt = if (currentEditingLang == org.gemini.ui.forge.viewmodel.PromptLanguage.EN) block.userPromptEn else block.userPromptZh
+    // Prompt Section
+    val displayPrompt = if (currentEditingLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
 
     Box(modifier = Modifier.fillMaxWidth()) {
         OutlinedTextField(
@@ -262,22 +329,15 @@ private fun BlockPropertiesEditor(
             modifier = Modifier.fillMaxWidth(),
             maxLines = 3
         )
-        // Overlay to capture clicks
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clickable { showPromptDialog = true }
-        )
+        Box(modifier = Modifier.matchParentSize().clickable { showPromptDialog = true })
     }
 
     if (showPromptDialog) {
-        // 使用临时变量暂存用户输入
         var tempPrompt by remember { mutableStateOf(displayPrompt) }
         var isOptimizing by remember { mutableStateOf(false) }
-
-        // 关键：当用户在弹窗内切换语言时，自动更新输入框内容
+        
         LaunchedEffect(currentEditingLang, block) {
-            tempPrompt = if (currentEditingLang == org.gemini.ui.forge.viewmodel.PromptLanguage.EN) block.userPromptEn else block.userPromptZh
+            tempPrompt = if (currentEditingLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
         }
 
         AlertDialog(
@@ -286,9 +346,8 @@ private fun BlockPropertiesEditor(
                 Column {
                     Text(stringResource(Res.string.prop_edit_prompt))
                     Spacer(Modifier.height(8.dp))
-                    // 语言切换 SegmentedButton
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        org.gemini.ui.forge.viewmodel.PromptLanguage.entries.filter { it != org.gemini.ui.forge.viewmodel.PromptLanguage.AUTO }.forEachIndexed { index, lang ->
+                        PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang ->
                             SegmentedButton(
                                 selected = currentEditingLang == lang,
                                 onClick = { onSwitchEditingLang(lang) },
@@ -304,10 +363,9 @@ private fun BlockPropertiesEditor(
                     value = tempPrompt,
                     onValueChange = { 
                         tempPrompt = it 
-                        // 实时同步回 ViewModel，防止切换语言时丢失
                         onPromptChanged(it)
                     },
-                    label = { Text("详细描述 (${currentEditingLang.displayName})") },
+                    label = { Text("详细描述") },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp),
                     maxLines = 10,
                     enabled = !isOptimizing
@@ -318,7 +376,7 @@ private fun BlockPropertiesEditor(
                     TextButton(
                         onClick = {
                             isOptimizing = true
-                            onPromptChanged(tempPrompt) // 确保 AI 拿到的是最新的输入
+                            onPromptChanged(tempPrompt)
                             onOptimizePrompt { optimizedText ->
                                 tempPrompt = optimizedText
                                 isOptimizing = false
@@ -326,28 +384,50 @@ private fun BlockPropertiesEditor(
                         },
                         enabled = !isOptimizing && tempPrompt.isNotBlank()
                     ) {
-                        if (isOptimizing) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                        }
+                        if (isOptimizing) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Text(stringResource(Res.string.prop_optimize_prompt))
                     }
-                    Button(
-                        onClick = {
-                            onPromptChanged(tempPrompt)
-                            showPromptDialog = false
-                        },
-                        enabled = !isOptimizing
-                    ) {
-                        Text(stringResource(Res.string.prop_save))
-                    }
+                    Button(onClick = { showPromptDialog = false }) { Text(stringResource(Res.string.prop_save)) }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showPromptDialog = false }, enabled = !isOptimizing) {
-                    Text(stringResource(Res.string.prop_cancel))
+            dismissButton = { TextButton(onClick = { showPromptDialog = false }) { Text(stringResource(Res.string.prop_cancel)) } }
+        )
+    }
+
+    if (showRefineDialog) {
+        var refineInstruction by remember { mutableStateOf("") }
+        var isProcessing by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { if (!isProcessing) showRefineDialog = false },
+            title = { Text("针对此组件重塑") },
+            text = {
+                Column {
+                    Text("AI 将针对此组件所在的局部区域进行深度识别和重新拆分。", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = refineInstruction,
+                        onValueChange = { refineInstruction = it },
+                        label = { Text("修正指令 (例如：拆分成背景和图标)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isProcessing
+                    )
+                    if (isProcessing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
                 }
-            }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        isProcessing = true
+                        onRefineArea(refineInstruction) { success ->
+                            isProcessing = false
+                            if (success) showRefineDialog = false
+                        }
+                    },
+                    enabled = !isProcessing && refineInstruction.isNotBlank()
+                ) { Text("开始重塑") }
+            },
+            dismissButton = { TextButton(onClick = { showRefineDialog = false }) { Text("取消") } }
         )
     }
 
@@ -368,40 +448,29 @@ private fun BlockPropertiesEditor(
     }
 
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = xStr,
-            onValueChange = { xStr = it; submitBounds() },
-            label = { Text(stringResource(Res.string.prop_x)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.weight(1f)
-        )
-        OutlinedTextField(
-            value = yStr,
-            onValueChange = { yStr = it; submitBounds() },
-            label = { Text(stringResource(Res.string.prop_y)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.weight(1f)
-        )
+        OutlinedTextField(value = xStr, onValueChange = { xStr = it; submitBounds() }, label = { Text(stringResource(Res.string.prop_x)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+        OutlinedTextField(value = yStr, onValueChange = { yStr = it; submitBounds() }, label = { Text(stringResource(Res.string.prop_y)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
     }
     Spacer(modifier = Modifier.height(8.dp))
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = wStr,
-            onValueChange = { wStr = it; submitBounds() },
-            label = { Text(stringResource(Res.string.prop_width)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.weight(1f)
-        )
-        OutlinedTextField(
-            value = hStr,
-            onValueChange = { hStr = it; submitBounds() },
-            label = { Text(stringResource(Res.string.prop_height)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.weight(1f)
-        )
+        OutlinedTextField(value = wStr, onValueChange = { wStr = it; submitBounds() }, label = { Text(stringResource(Res.string.prop_width)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+        OutlinedTextField(value = hStr, onValueChange = { hStr = it; submitBounds() }, label = { Text(stringResource(Res.string.prop_height)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
     }
 
     Spacer(modifier = Modifier.height(24.dp))
+
+    OutlinedButton(
+        onClick = { showRefineDialog = true },
+        modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)
+    ) {
+        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("AI 组件重塑")
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
     Button(
         onClick = onDelete,
         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),

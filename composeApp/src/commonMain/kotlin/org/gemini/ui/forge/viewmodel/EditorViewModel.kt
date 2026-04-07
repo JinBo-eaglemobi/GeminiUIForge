@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.domain.ProjectState
 import org.gemini.ui.forge.domain.SerialRect
 import org.gemini.ui.forge.domain.UIBlock
@@ -333,6 +334,99 @@ class EditorViewModel(
                 project = currentState.project.copy(pages = updatedPages),
                 selectedBlockId = if (currentState.selectedBlockId == blockId) null else currentState.selectedBlockId
             )
+        }
+    }
+
+    /**
+     * 针对选定区域调用 AI 进行结构重塑
+     * @param blockId 目标组件 ID
+     * @param userInstruction 用户修正指令
+     */
+    fun onRefineArea(blockId: String, userInstruction: String, onComplete: (Boolean) -> Unit) {
+        val currentState = _state.value
+        val block = currentState.project.pages.flatMap { it.blocks }.find { it.id == blockId } ?: return
+        val originalImage = currentState.project.coverImage ?: return // 必须有原始参考图
+        val apiKey = currentState.globalState.effectiveApiKey
+
+        viewModelScope.launch {
+            try {
+                // 1. 执行物理裁剪
+                val croppedBytes = org.gemini.ui.forge.utils.cropImage(originalImage, block.bounds)
+                    ?: throw Exception("图像裁剪失败")
+
+                // 2. 序列化当前项目状态作为上下文
+                val currentJson = Json.encodeToString(ProjectState.serializer(), currentState.project)
+
+                // 3. 尝试获取原图的云端 URI（如果管理器中有）
+                val originalFileName = originalImage.substringAfterLast("/").substringAfterLast("\\")
+                val originalFileUri = cloudAssetManager.assets.value.find { it.displayName == originalFileName }?.uri
+                    ?: "" // 如果云端没有，AI 将仅依赖裁剪图
+
+                // 4. 调用重塑服务
+                val updatedProject = aiService.refineAreaForTemplate(
+                    originalImageUri = originalFileUri,
+                    croppedBytes = croppedBytes,
+                    currentJson = currentJson,
+                    userInstruction = userInstruction,
+                    apiKey = apiKey,
+                    onLog = { AppLogger.d("Refine", it) }
+                )
+
+                // 5. 更新本地状态并保存
+                _state.update { it.copy(project = updatedProject) }
+                templateRepo.saveTemplate(currentState.projectName, updatedProject)
+                onComplete(true)
+
+            } catch (e: Exception) {
+                AppLogger.e("EditorViewModel", "区域重塑失败", e)
+                onComplete(false)
+            }
+        }
+    }
+
+    /**
+     * 针对手动框选区域调用 AI 进行结构重塑
+     * @param bounds 用户框选的逻辑坐标区域
+     * @param userInstruction 用户修正指令
+     */
+    fun onRefineCustomArea(bounds: SerialRect, userInstruction: String, onComplete: (Boolean) -> Unit) {
+        val currentState = _state.value
+        val originalImage = currentState.project.coverImage ?: return
+        val apiKey = currentState.globalState.effectiveApiKey
+
+        viewModelScope.launch {
+            try {
+                onComplete(false) // 标记开始
+                // 1. 执行物理裁剪
+                val croppedBytes = org.gemini.ui.forge.utils.cropImage(originalImage, bounds)
+                    ?: throw Exception("图像裁剪失败")
+
+                // 2. 序列化当前项目状态作为上下文
+                val currentJson = Json.encodeToString(ProjectState.serializer(), currentState.project)
+
+                // 3. 尝试获取原图的云端 URI
+                val originalFileName = originalImage.substringAfterLast("/").substringAfterLast("\\")
+                val originalFileUri = cloudAssetManager.assets.value.find { it.displayName == originalFileName }?.uri ?: ""
+
+                // 4. 调用重塑服务
+                val updatedProject = aiService.refineAreaForTemplate(
+                    originalImageUri = originalFileUri,
+                    croppedBytes = croppedBytes,
+                    currentJson = currentJson,
+                    userInstruction = userInstruction,
+                    apiKey = apiKey,
+                    onLog = { AppLogger.d("Refine", it) }
+                )
+
+                // 5. 更新本地状态并保存
+                _state.update { it.copy(project = updatedProject) }
+                templateRepo.saveTemplate(currentState.projectName, updatedProject)
+                onComplete(true)
+
+            } catch (e: Exception) {
+                AppLogger.e("EditorViewModel", "手动区域重塑失败", e)
+                onComplete(false)
+            }
         }
     }
 

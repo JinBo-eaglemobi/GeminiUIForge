@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,11 +26,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.Res
 import org.gemini.ui.forge.domain.UIBlock
+import org.gemini.ui.forge.domain.SerialRect
 import org.gemini.ui.forge.utils.decodeBase64ToBitmap
 import org.jetbrains.compose.resources.stringResource
-import org.gemini.ui.forge.ui.getDisplayNameRes
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.abs
 
 @Composable
 fun CanvasArea(
@@ -38,13 +40,18 @@ fun CanvasArea(
     blocks: List<UIBlock>,
     selectedBlockId: String?,
     onBlockClicked: (String) -> Unit,
+    isSelectionMode: Boolean = false, // 框选模式开关
+    onAreaSelected: (SerialRect) -> Unit = {}, // 框选完成回调
     modifier: Modifier = Modifier
 ) {
     var zoom by remember { mutableStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
-    // 外层容器：负责裁剪和底色
+    // 内部选区临时状态
+    var selectionStart by remember { mutableStateOf<Offset?>(null) }
+    var selectionEnd by remember { mutableStateOf<Offset?>(null) }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -59,16 +66,48 @@ fun CanvasArea(
             val offsetX = (maxWidth.value - (pageWidth * baseScale)) / 2
             val offsetY = (maxHeight.value - (pageHeight * baseScale)) / 2
 
-            // 手势监听与变换容器
+            // 主交互容器
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTransformGestures { _, panChange, zoomChange, _ ->
-                            zoom = (zoom * zoomChange).coerceIn(0.1f, 5f)
-                            pan += panChange
+                    // 1. 处理框选或平移缩放
+                    .pointerInput(isSelectionMode) {
+                        if (isSelectionMode) {
+                            detectDragGestures(
+                                onDragStart = { selectionStart = it; selectionEnd = it },
+                                onDrag = { change, _ -> selectionEnd = change.position; change.consume() },
+                                onDragEnd = {
+                                    val start = selectionStart
+                                    val end = selectionEnd
+                                    if (start != null && end != null) {
+                                        // 坐标转换逻辑：(屏幕坐标 - 居中偏移 - 当前平移) / (基础缩放 * 缩放倍率)
+                                        fun toLogical(offset: Offset): Offset {
+                                            val lx = (offset.x / density.density - offsetX - pan.x) / (baseScale * zoom)
+                                            val ly = (offset.y / density.density - offsetY - pan.y) / (baseScale * zoom)
+                                            return Offset(lx.coerceIn(0f, pageWidth), ly.coerceIn(0f, pageHeight))
+                                        }
+                                        val lStart = toLogical(start)
+                                        val lEnd = toLogical(end)
+                                        onAreaSelected(SerialRect(
+                                            left = min(lStart.x, lEnd.x),
+                                            top = min(lStart.y, lEnd.y),
+                                            right = maxOf(lStart.x, lEnd.x),
+                                            bottom = maxOf(lStart.y, lEnd.y)
+                                        ))
+                                    }
+                                    selectionStart = null
+                                    selectionEnd = null
+                                },
+                                onDragCancel = { selectionStart = null; selectionEnd = null }
+                            )
+                        } else {
+                            detectTransformGestures { _, panChange, zoomChange, _ ->
+                                zoom = (zoom * zoomChange).coerceIn(0.1f, 5f)
+                                pan += panChange
+                            }
                         }
                     }
+                    // 2. 处理滚轮缩放
                     .pointerInput(Unit) {
                         awaitPointerEventScope {
                             while (true) {
@@ -91,9 +130,9 @@ fun CanvasArea(
                         translationY = pan.y
                     )
             ) {
+                // 渲染 UI 块
                 blocks.forEach { block ->
                     val isSelected = block.id == selectedBlockId
-                    
                     Box(
                         modifier = Modifier
                             .offset(
@@ -104,91 +143,60 @@ fun CanvasArea(
                                 width = (block.bounds.width * baseScale).dp,
                                 height = (block.bounds.height * baseScale).dp
                             )
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
                             .border(
-                                width = if (isSelected) (3.dp / zoom) else (1.dp / zoom), // 补偿 zoom 导致的边框变粗
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                shape = RoundedCornerShape(4.dp)
+                                width = if (isSelected) (2.dp / zoom) else (0.5.dp / zoom),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                             )
-                            .clickable { onBlockClicked(block.id) },
+                            .clickable(enabled = !isSelectionMode) { onBlockClicked(block.id) },
                         contentAlignment = Alignment.Center
                     ) {
                         if (block.currentImageUri != null) {
-                            val bitmap = block.currentImageUri.decodeBase64ToBitmap()
-                            if (bitmap != null) {
-                                Image(
-                                    bitmap = bitmap,
-                                    contentDescription = null,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                Text(text = "Error", style = MaterialTheme.typography.labelSmall)
+                            block.currentImageUri.decodeBase64ToBitmap()?.let {
+                                Image(bitmap = it, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                             }
                         } else {
-                            Text(
-                                text = stringResource(block.type.getDisplayNameRes()),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.labelSmall,
-                                textAlign = TextAlign.Center
-                            )
+                            Text(text = stringResource(block.type.getDisplayNameRes()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
                         }
                     }
                 }
             }
+
+            // 选区 Overlay (在 graphicsLayer 之外渲染，确保它跟随屏幕坐标而不是画布坐标)
+            if (isSelectionMode && selectionStart != null && selectionEnd != null) {
+                val s = selectionStart!!
+                val e = selectionEnd!!
+                Box(
+                    modifier = Modifier
+                        .offset(x = (min(s.x, e.x) / density.density).dp, y = (min(s.y, e.y) / density.density).dp)
+                        .size(width = (abs(e.x - s.x) / density.density).dp, height = (abs(e.y - s.y) / density.density).dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                        .border(1.dp, MaterialTheme.colorScheme.primary)
+                )
+            }
         }
 
-        // 顶部居中药丸形控制条 (保留)
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 16.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                    shape = RoundedCornerShape(50)
-                )
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // 控制条
+        Surface(
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+            tonalElevation = 4.dp,
+            shadowElevation = 2.dp
         ) {
-            IconButton(
-                onClick = { zoom = (zoom - 0.1f).coerceAtLeast(0.1f) },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Text("-", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-            }
-
-            Text(
-                text = "${(zoom * 100).roundToInt()}%",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.widthIn(min = 40.dp),
-                textAlign = TextAlign.Center
-            )
-
-            IconButton(
-                onClick = { zoom = (zoom + 0.1f).coerceAtMost(5f) },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Text("+", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-            }
-
-            Box(modifier = Modifier.width(1.dp).height(16.dp).background(MaterialTheme.colorScheme.outlineVariant))
-
-            IconButton(
-                onClick = {
-                    zoom = 1f
-                    pan = Offset.Zero
-                },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Reset View",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
+            Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IconButton(onClick = { zoom = (zoom - 0.2f).coerceAtLeast(0.1f) }, modifier = Modifier.size(28.dp)) {
+                    Text("-", style = MaterialTheme.typography.titleMedium)
+                }
+                Text(text = "${(zoom * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, modifier = Modifier.widthIn(min = 40.dp), textAlign = TextAlign.Center)
+                IconButton(onClick = { zoom = (zoom + 0.2f).coerceAtMost(5f) }, modifier = Modifier.size(28.dp)) {
+                    Text("+", style = MaterialTheme.typography.titleMedium)
+                }
+                VerticalDivider(modifier = Modifier.height(16.dp))
+                IconButton(onClick = { zoom = 1f; pan = Offset.Zero }, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Reset", modifier = Modifier.size(18.dp))
+                }
             }
         }
     }

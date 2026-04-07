@@ -365,6 +365,92 @@ class AIGenerationService(
     }
 
     /**
+     * 调用 Gemini 3 Pro Preview 的多轮对话/上下文修正能力，针对特定区域重新分析 UI。
+     * @param originalImageUri 原始参考图的云端 URI (File API)
+     * @param croppedBytes 该区域的局部高分辨率裁剪图字节
+     * @param currentJson 当前的完整 ProjectState JSON 字符串
+     * @param userInstruction 用户提供的修正建议文案
+     */
+    suspend fun refineAreaForTemplate(
+        originalImageUri: String,
+        croppedBytes: ByteArray,
+        currentJson: String,
+        userInstruction: String,
+        apiKey: String = "",
+        onLog: (String) -> Unit = {}
+    ): ProjectState {
+        AppLogger.i(TAG, "开始区域重塑分析: $userInstruction")
+        onLog("正在准备上下文数据（原图引用 + 局部细节）...")
+
+        if (apiKey.isBlank()) throw Exception("API 密钥缺失")
+
+        val url = ApiConfig.getGenerateContentEndpoint(apiKey) // 修正通常使用非流式以获得完整 JSON
+        val client = NetworkClient.shared
+
+        val promptTemplate = try {
+            @OptIn(InternalResourceApi::class)
+            readResourceBytes("prompts/refine_template.txt").decodeToString()
+        } catch (e: Exception) {
+            "Please refine the template..." 
+        }
+
+        val fullPrompt = promptTemplate.replace("\${USER_INSTRUCTION}", userInstruction)
+
+        val requestBody = buildJsonObject {
+            put("contents", buildJsonArray {
+                add(buildJsonObject {
+                    put("role", "user")
+                    put("parts", buildJsonArray {
+                        add(buildJsonObject { put("text", fullPrompt) })
+                        add(buildJsonObject { put("text", "CURRENT_JSON_STATE: \n$currentJson") })
+                        // 原图上下文（URI 引用）
+                        add(buildJsonObject {
+                            put("fileData", buildJsonObject {
+                                put("mimeType", "image/jpeg")
+                                put("fileUri", originalImageUri)
+                            })
+                        })
+                        // 局部细节（Inline Base64）
+                        add(buildJsonObject {
+                            put("inlineData", buildJsonObject {
+                                put("mimeType", "image/jpeg")
+                                @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                                put("data", kotlin.io.encoding.Base64.Default.encode(croppedBytes))
+                            })
+                        })
+                    })
+                })
+            })
+            put("generationConfig", buildJsonObject {
+                put("responseMimeType", "application/json")
+            })
+        }.toString()
+
+        onLog("---- [HTTP REQUEST (REFINE)] ----")
+        onLog("指令: $userInstruction")
+        onLog("------------------------")
+        onLog("正在请求 Gemini 重新评估该区域结构...")
+
+        val response = client.post(url) {
+            contentType(ContentType.Application.Json)
+            setBody(requestBody)
+        }
+
+        if (response.status.isSuccess()) {
+            val text = jsonConfig.parseToJsonElement(response.bodyAsText())
+                .jsonObject["candidates"]?.jsonArray?.firstOrNull()
+                ?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()
+                ?.jsonObject?.get("text")?.jsonPrimitive?.content ?: ""
+            
+            val cleanJson = text.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+            onLog("✅ 区域重塑成功，正在合并数据...")
+            return jsonConfig.decodeFromString<ProjectState>(cleanJson)
+        } else {
+            throw Exception("修正失败: ${response.status} - ${response.bodyAsText()}")
+        }
+    }
+
+    /**
      * 优化并翻译给定的 prompt 为更适合生图的英文 prompt
      */
     suspend fun optimizePrompt(originalPrompt: String, apiKey: String, maxRetries: Int = 3): String {
