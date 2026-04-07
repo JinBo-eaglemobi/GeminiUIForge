@@ -143,66 +143,6 @@ class AIGenerationService(
     }
 
     /**
-     * 并发批量生成项目状态中所有空缺的 UIBlock 的图片 (Demo 画像填充)。
-     * 为了避免达到并发上限，采取了分批（Chunking）机制。
-     */
-    suspend fun generateDemoImagesForProject(
-        projectState: ProjectState,
-        apiKey: String,
-        batchSize: Int = 3,
-        onBlockGenerated: (UIBlock, String) -> Unit = { _, _ -> }
-    ) = coroutineScope {
-        AppLogger.i(TAG, "开始批量生成组件 Demo 图片...")
-        
-        // 收集所有需要生成图片的 Block
-        val pendingBlocks = mutableListOf<UIBlock>()
-        projectState.pages.forEach { page ->
-            pendingBlocks.addAll(page.blocks)
-        }
-        
-        AppLogger.i(TAG, "共计 ${pendingBlocks.size} 个模块需要生成图片，按每批 $batchSize 个并发处理")
-
-        // 分批执行，以避免一次性开启过多请求导致 Rate Limit
-        val chunkedBlocks = pendingBlocks.chunked(batchSize)
-        
-        chunkedBlocks.forEachIndexed { index, batch ->
-            AppLogger.d(TAG, "处理第 ${index + 1}/${chunkedBlocks.size} 批次...")
-            
-            // 当前批次内部并发请求
-            val deferredResults = batch.map { block ->
-                async {
-                    try {
-                        // 只要求生成 1 张高质量 Demo 图即可
-                        val generatedImages = generateImages(
-                            blockType = block.type.name,
-                            userPrompt = block.userPrompt,
-                            count = 1,
-                            apiKey = apiKey
-                        )
-                        val resultImage = generatedImages.firstOrNull()
-                        if (resultImage != null) {
-                            onBlockGenerated(block, resultImage)
-                        } else {
-                            AppLogger.i(TAG, "模块 ${block.id} 成功调用但返回了空图片。")
-                        }
-                    } catch (e: Exception) {
-                        AppLogger.e(TAG, "模块 ${block.id} 生成图片时出错: ${e.message}")
-                    }
-                }
-            }
-            
-            // 等待当前批次完成
-            deferredResults.awaitAll()
-            
-            // 如果还有下一批，可稍微延迟降低 QPS 压力
-            if (index < chunkedBlocks.size - 1) {
-                delay(1500L) 
-            }
-        }
-        AppLogger.i(TAG, "批量生成 Demo 图片任务结束。")
-    }
-
-    /**
      * 使用 Gemini 3 Pro Preview 模型多模态能力分析图片并生成项目模板
      * 使用 Gemini File API 机制先上传图片获取 URI，再执行轻量级推断。
      */
@@ -377,7 +317,9 @@ class AIGenerationService(
                     onLog("UI 框架结构解析完毕。")
                 } else {
                     val errorBody = response.bodyAsText()
-                    throw Exception("API 请求失败: ${response.status} - $errorBody")
+                    val errorMsg = "API 请求失败: ${response.status} - $errorBody"
+                    AppLogger.e(TAG, errorMsg)
+                    throw Exception(errorMsg)
                 }
             }
 
@@ -389,9 +331,13 @@ class AIGenerationService(
             val cleanJson = finalString.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
             val parsedState = jsonConfig.decodeFromString<ProjectState>(cleanJson)
 
-            // 使用第一张输入图片的原始路径作为 coverImage
-            val cover = imageUris.firstOrNull()
-            return parsedState.copy(coverImage = cover)
+            // 核心优化：将生成的每一个 UIPage 与其原始参考图路径进行关联绑定
+            val updatedPages = parsedState.pages.mapIndexed { index, page ->
+                // 假设分析顺序与传入的图片顺序一致
+                page.copy(sourceImageUri = imageUris.getOrNull(index))
+            }
+
+            return parsedState.copy(pages = updatedPages)
 
         } catch (e: Exception) {
             lastException = e
@@ -401,7 +347,7 @@ class AIGenerationService(
     }
 
     /**
-     * 调用 Gemini 3 Pro Preview 的多轮对话/上下文修正能力，针对特定区域重新分析 UI。
+     * 调用 Gemini 3 Pro Preview 的多轮对话/上下文修正能力，针对特定区域重新分析 UI (流式版本)。
      * @param originalImageUri 原始参考图的云端 URI (File API)
      * @param croppedBytes 该区域的局部高分辨率裁剪图字节
      * @param currentJson 当前的完整 ProjectState JSON 字符串
@@ -413,14 +359,16 @@ class AIGenerationService(
         currentJson: String,
         userInstruction: String,
         apiKey: String = "",
-        onLog: (String) -> Unit = {}
+        onLog: (String) -> Unit = {},
+        onChunk: (String) -> Unit = {}
     ): ProjectState {
-        AppLogger.i(TAG, "开始区域重塑分析: $userInstruction")
+        AppLogger.i(TAG, "开始区域重塑流式分析: $userInstruction")
         onLog("正在准备上下文数据（原图引用 + 局部细节）...")
 
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
 
-        val url = ApiConfig.getGenerateContentEndpoint(apiKey) // 修正通常使用非流式以获得完整 JSON
+        // 切换到流式端点
+        val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey) 
         val client = NetworkClient.shared
 
         val promptTemplate = try {
@@ -439,13 +387,19 @@ class AIGenerationService(
                     put("parts", buildJsonArray {
                         add(buildJsonObject { put("text", fullPrompt) })
                         add(buildJsonObject { put("text", "CURRENT_JSON_STATE: \n$currentJson") })
-                        // 原图上下文（URI 引用）
-                        add(buildJsonObject {
-                            put("fileData", buildJsonObject {
-                                put("mimeType", "image/jpeg")
-                                put("fileUri", originalImageUri)
+                        
+                        // 原图上下文（仅在 URI 不为空时添加，防止 400 错误）
+                        if (originalImageUri.isNotBlank()) {
+                            add(buildJsonObject {
+                                put("fileData", buildJsonObject {
+                                    put("mimeType", "image/jpeg")
+                                    put("fileUri", originalImageUri)
+                                })
                             })
-                        })
+                        } else {
+                            onLog("⚠️ 警告: 未在云端找到原始参考图引用，将仅基于局部裁剪图进行修正。")
+                        }
+
                         // 局部细节（Inline Base64）
                         add(buildJsonObject {
                             put("inlineData", buildJsonObject {
@@ -462,28 +416,63 @@ class AIGenerationService(
             })
         }.toString()
 
+        // 屏蔽庞大的 Base64 和 上下文 JSON 以防止日志刷屏
+        val loggableBody = requestBody
+            .replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
+            .replace(Regex("\"text\"\\s*:\\s*\"CURRENT_JSON_STATE: [\\s\\S]*?\""), "\"text\": \"CURRENT_JSON_STATE: <HIDDEN_FOR_LOGS>\"")
+
         onLog("---- [HTTP REQUEST (REFINE)] ----")
-        onLog("指令: $userInstruction")
+        onLog("URL: $url")
+        onLog("Body: \n$loggableBody")
         onLog("------------------------")
-        onLog("正在请求 Gemini 重新评估该区域结构...")
+        onLog("📡 正在向服务器建立安全连接并提交重塑协议...")
 
-        val response = client.post(url) {
-            contentType(ContentType.Application.Json)
-            setBody(requestBody)
-        }
+        val accumulatedText = StringBuilder()
+        var lastException: Exception? = null
 
-        if (response.status.isSuccess()) {
-            val text = jsonConfig.parseToJsonElement(response.bodyAsText())
-                .jsonObject["candidates"]?.jsonArray?.firstOrNull()
-                ?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()
-                ?.jsonObject?.get("text")?.jsonPrimitive?.content ?: ""
-            
-            val cleanJson = text.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-            onLog("✅ 区域重塑成功，正在合并数据...")
+        try {
+            client.preparePost(url) {
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+                timeout { requestTimeoutMillis = 60_000L }
+            }.execute { response ->
+                if (response.status.isSuccess()) {
+                    val channel = response.bodyAsChannel()
+                    while (!channel.isClosedForRead) {
+                        val line = channel.readUTF8Line() ?: break
+                        if (line.startsWith("data: ")) {
+                            val dataJson = line.substringAfter("data: ").trim()
+                            if (dataJson.isEmpty() || dataJson == "[DONE]") continue
+                            try {
+                                val jsonElement = jsonConfig.parseToJsonElement(dataJson)
+                                val textChunk = jsonElement.jsonObject["candidates"]?.jsonArray?.firstOrNull()
+                                    ?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()
+                                    ?.jsonObject?.get("text")?.jsonPrimitive?.content
+                                if (textChunk != null) {
+                                    accumulatedText.append(textChunk)
+                                    onChunk(textChunk)
+                                }
+                            } catch (e: Exception) {
+                                // ignore chunk errors
+                            }
+                        }
+                    }
+                    onLog("✅ 重塑结构解析完毕。")
+                } else {
+                    throw Exception("API 请求失败: ${response.status} - ${response.bodyAsText()}")
+                }
+            }
+
+            val finalString = accumulatedText.toString()
+            if (finalString.isEmpty()) throw Exception("Gemini 响应中缺少文本数据。")
+            val cleanJson = finalString.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
             return jsonConfig.decodeFromString<ProjectState>(cleanJson)
-        } else {
-            throw Exception("修正失败: ${response.status} - ${response.bodyAsText()}")
+
+        } catch (e: Exception) {
+            lastException = e
+            AppLogger.e(TAG, "重塑请求异常", e)
         }
+        throw Exception("区域重塑失败: ${lastException?.message}", lastException)
     }
 
     /**

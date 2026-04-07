@@ -106,8 +106,8 @@ fun ModuleCard(module: UIModule, onEditLayout: () -> Unit, onGenerateUI: () -> U
         ) {
             val title = if (module.nameRes != null) stringResource(module.nameRes) else module.nameStr ?: "Unknown"
 
-            // Image Preview Area
-            val coverUrl = module.projectState?.coverImage
+            // 核心优化：动态推导封面图，优先使用第一个页面的归档图
+            val coverUrl = module.projectState?.pages?.firstOrNull()?.sourceImageUri
             if (!coverUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = coverUrl,

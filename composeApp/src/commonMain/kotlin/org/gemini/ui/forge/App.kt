@@ -126,11 +126,11 @@ fun App(typography: Typography? = null) {
                             onOptimizePrompt = { id, onComplete ->
                                 viewModel.optimizePrompt(id, globalState.effectiveApiKey, onComplete)
                             },
-                            onRefineArea = { id, instruction, onComplete ->
-                                viewModel.onRefineArea(id, instruction, onComplete)
+                            onRefineArea = { id, instruction, onLog, onChunk, onComplete ->
+                                viewModel.onRefineArea(id, instruction, onLog, onChunk, onComplete)
                             },
-                            onRefineCustomArea = { bounds, instruction, onComplete ->
-                                viewModel.onRefineCustomArea(bounds, instruction, onComplete)
+                            onRefineCustomArea = { bounds, instruction, onLog, onChunk, onComplete ->
+                                viewModel.onRefineCustomArea(bounds, instruction, onLog, onChunk, onComplete)
                             },
                             onSwitchEditingLanguage = { viewModel.switchEditingLanguage(it) },
                             onAddBlock = { type -> viewModel.addBlock(type) },

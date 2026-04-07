@@ -1,38 +1,29 @@
 package org.gemini.ui.forge.utils
 
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 actual object AppLogger {
-    private val logFile = File(System.getProperty("user.home"), ".geminiuiforge/logs/app.log")
+    private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
 
-    private fun writeLog(level: String, tag: String, message: String, throwable: Throwable?) {
-        val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(Date())
-        val logLine = "[$time] [$level] $tag - $message\n"
+    private fun log(level: String, tag: String, message: String, throwable: Throwable?) {
+        val time = LocalDateTime.now().format(formatter)
+        val thread = Thread.currentThread().name
+        val out = if (level == "ERROR") System.err else System.out
         
-        // 控制台输出
-        if (level == "ERROR") {
-            System.err.print(logLine)
-        } else {
-            print(logLine)
-        }
-
-        // 本地文件持久化
-        try {
-            if (logFile.parentFile?.exists() == false) {
-                logFile.parentFile?.mkdirs()
-            }
-            logFile.appendText(logLine)
-            if (throwable != null) {
-                logFile.appendText(throwable.stackTraceToString() + "\n")
-            }
-        } catch (e: Exception) {
-            // 静默失败，避免日志系统崩溃导致应用闪退
-        }
+        out.println("[$time] [$level] [$thread] $tag - $message")
+        throwable?.printStackTrace(out)
     }
 
-    actual fun d(tag: String, message: String) = writeLog("DEBUG", tag, message, null)
-    actual fun i(tag: String, message: String) = writeLog("INFO", tag, message, null)
-    actual fun e(tag: String, message: String, throwable: Throwable?) = writeLog("ERROR", tag, message, throwable)
+    actual fun d(tag: String, message: String, throwable: Throwable?) {
+        log("DEBUG", tag, message, throwable)
+    }
+
+    actual fun i(tag: String, message: String, throwable: Throwable?) {
+        log("INFO", tag, message, throwable)
+    }
+
+    actual fun e(tag: String, message: String, throwable: Throwable?) {
+        log("ERROR", tag, message, throwable)
+    }
 }

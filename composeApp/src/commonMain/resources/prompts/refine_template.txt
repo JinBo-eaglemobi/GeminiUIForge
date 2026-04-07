@@ -12,7 +12,9 @@ CRITICAL CONSTRAINTS:
    - DO NOT change IDs or coordinates of UIBlocks that are OUTSIDE the cropped area.
    - For the area inside the cropped image, you may DELETE incorrect blocks, MODIFY existing ones, or ADD new granular blocks.
 3. GRANULARITY: Break down the UI into functional components (buttons, icons, text, panels) as instructed.
-4. OUTPUT FORMAT: Return the ENTIRE updated ProjectState as a single JSON object. Do NOT wrap in markdown blocks. 
+4. EXACT TYPE MATCH: The `type` field of ANY new or modified `UIBlock` MUST strictly be one of the following strings. Do NOT invent types like 'TITLE' or 'LABEL'. Use these exact strings:
+   - REEL, SPIN_BUTTON, WIN_DISPLAY, BACKGROUND, SYMBOL, BUTTON, PANEL, HEADER, FOOTER, TEXT_AREA, ICON, DECORATION
+5. OUTPUT FORMAT: Return the ENTIRE updated ProjectState as a single JSON object. Do NOT wrap in markdown blocks. 
 
 Ensure the `width` and `height` of the `UIPage` remain consistent with the original analysis. All coordinates must be absolute relative to the original image canvas [0, width] and [0, height].
 
