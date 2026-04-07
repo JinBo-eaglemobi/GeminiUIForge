@@ -421,6 +421,10 @@ class AIGenerationService(
             .replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
             .replace(Regex("\"text\"\\s*:\\s*\"CURRENT_JSON_STATE: [\\s\\S]*?\""), "\"text\": \"CURRENT_JSON_STATE: <HIDDEN_FOR_LOGS>\"")
 
+        // 核心优化：将完整请求记录到本地日志文件（不精简文本内容，仅脱敏 Base64 避免过大）
+        val fileLogBody = requestBody.replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
+        AppLogger.d(TAG, "---- [FULL HTTP REQUEST JSON] ----\n$fileLogBody\n----------------------------------")
+
         onLog("---- [HTTP REQUEST (REFINE)] ----")
         onLog("URL: $url")
         onLog("Body: \n$loggableBody")
