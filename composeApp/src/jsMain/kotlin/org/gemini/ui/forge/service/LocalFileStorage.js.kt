@@ -158,6 +158,17 @@ actual class LocalFileStorage {
         }
     }
 
+    actual suspend fun exists(fileName: String): Boolean {
+        return try {
+            val (dirPath, name) = getParentPathAndName(fileName)
+            val dirHandle = getTargetDirectoryHandle(dirPath) ?: return false
+            dirHandle.getFileHandle(name, js("{ create: false }")).unsafeCast<kotlin.js.Promise<dynamic>>().await()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     actual suspend fun getFilePath(fileName: String): String {
         return fileName
     }

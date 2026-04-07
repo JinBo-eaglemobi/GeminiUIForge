@@ -1,5 +1,9 @@
 package org.gemini.ui.forge.service
 
+import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.client.statement.readRawBytes
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.domain.ProjectState
@@ -8,32 +12,72 @@ import org.gemini.ui.forge.domain.ProjectState
  * 模板持久化仓库类，负责项目模板及关联资源的保存、读取和删除
  * @property fileStorage 本地文件存储抽象层
  */
-class TemplateRepository(val fileStorage: LocalFileStorage = LocalFileStorage()) {
+class TemplateRepository(
+    val fileStorage: LocalFileStorage = LocalFileStorage(),
+    private val httpClient: HttpClient = NetworkClient.shared
+) {
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
 
     /**
-     * 保存项目模板到本地
+     * 保存项目模板到本地。
+     * 同时也负责将所有参与分析的参考图物理归档（下载/解码/移动）到模板专属的 assets 目录中。
+     * 
      * @param templateName 模板/项目名称
      * @param projectState 项目的状态数据
      */
     suspend fun saveTemplate(templateName: String, projectState: ProjectState) {
         val sanitizedName = templateName.replace(" ", "_")
+        val updatedReferenceImages = mutableListOf<String>()
 
-        var updatedState = projectState
-        val originalCover = projectState.coverImage
+        // 全量归档参考图
+        projectState.referenceImages.forEachIndexed { index, originalPath ->
+            try {
+                var bytes: ByteArray? = null
+                var ext = "png"
 
-        // 如果 coverImage 存在且是一个本地路径（不是 http 也不是 data:base64），将其复制到模板专属文件夹内
-        if (originalCover != null && !originalCover.startsWith("data:") && !originalCover.startsWith("http")) {
-            val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(originalCover)
-            if (bytes != null) {
-                val ext = originalCover.substringAfterLast(".", "png")
-                val coverFileName = "$sanitizedName/cover.$ext"
-                val savedPath = fileStorage.saveBytesToFile(coverFileName, bytes)
-                updatedState = updatedState.copy(coverImage = savedPath)
+                when {
+                    // 处理 URL
+                    originalPath.startsWith("http") -> {
+                        val response = httpClient.get(originalPath)
+                        if (response.status.value == 200) {
+                            bytes = response.readRawBytes()
+                            // 尝试根据 Content-Type 推断后缀
+                            ext = response.headers["Content-Type"]?.substringAfter("/")?.substringBefore(";") ?: "png"
+                        }
+                    }
+                    // 处理 Base64
+                    originalPath.startsWith("data:image") -> {
+                        val pureBase64 = if (originalPath.contains(",")) originalPath.substringAfter(",") else originalPath
+                        @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                        bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
+                        ext = originalPath.substringAfter("data:image/").substringBefore(";").ifBlank { "png" }
+                    }
+                    // 处理本地文件路径
+                    else -> {
+                        bytes = org.gemini.ui.forge.utils.readLocalFileBytes(originalPath)
+                        ext = originalPath.substringAfterLast(".", "png")
+                    }
+                }
+
+                if (bytes != null) {
+                    val archivedFileName = "$sanitizedName/assets/reference_$index.$ext"
+                    val savedPath = fileStorage.saveBytesToFile(archivedFileName, bytes)
+                    updatedReferenceImages.add(savedPath)
+                }
+            } catch (e: Exception) {
+                org.gemini.ui.forge.utils.AppLogger.e("TemplateRepository", "归档参考图失败: $originalPath", e)
             }
         }
 
+        // 更新 ProjectState 状态（封面默认指向第一张归档图）
+        val finalCover = updatedReferenceImages.firstOrNull() ?: projectState.coverImage
+        val updatedState = projectState.copy(
+            referenceImages = updatedReferenceImages,
+            coverImage = finalCover
+        )
+
+        // 持久化 JSON
         val fileName = "$sanitizedName/template.json"
         val content = json.encodeToString(updatedState)
         fileStorage.saveToFile(fileName, content)

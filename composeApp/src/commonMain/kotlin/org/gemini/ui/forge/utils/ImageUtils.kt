@@ -19,17 +19,17 @@ expect suspend fun cropImage(imageSource: String, bounds: org.gemini.ui.forge.do
  * 处理各种图片源：Base64 字符串、HTTP 链接或本地物理文件路径。
  */
 @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-fun String.decodeBase64ToBitmap(): ImageBitmap? {
+suspend fun String.decodeBase64ToBitmap(): ImageBitmap? {
     return try {
         if (this.startsWith("data:image")) {
             val pureBase64 = if (this.contains(",")) this.substringAfter(",") else this
             val bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
             bytes.toImageBitmap()
         } else if (this.startsWith("http")) {
-            // Http 链接由于涉及到异步网络加载，不应在这里同步返回 ImageBitmap，交由 AsyncImage 处理
+            // Http 链接由 AsyncImage 处理，此处仅处理本地异步读取
             null 
         } else {
-            // 是一个本地绝对路径
+            // 是一个本地绝对路径 (现在读取是异步的)
             val bytes = readLocalFileBytes(this)
             bytes?.toImageBitmap()
         }

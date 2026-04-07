@@ -144,6 +144,18 @@ fun TemplateGeneratorScreen(
                             templateName
                         }
 
+                        logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🔍 正在预验证图片资源有效性...")
+                        val allImageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                        
+                        // 执行预验证 (URL 连通性、Base64 格式、本地文件存在性)
+                        val validationError = aiService.validateImageUris(allImageUris)
+                        if (validationError != null) {
+                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ❌ 验证失败: $validationError")
+                            saveStatus = "验证失败，请修正路径后重试。"
+                            isAnalyzing = false
+                            return@launch
+                        }
+
                         logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🚀 准备分析图片并创建模板 [$finalTemplateName]...")
                         
                         try {
@@ -159,9 +171,15 @@ fun TemplateGeneratorScreen(
                             generatedState = resultState
                             logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ✅ 分析成功！")
 
-                            // 3. 立即自动保存到本地缓存目录
-                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 💾 正在自动保存模板数据...")
-                            val stateToSave = resultState.copy(createdAt = getCurrentTimeMillis())
+                            // 3. 立即自动保存到本地缓存目录 (包含全量参考图归档)
+                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 💾 正在自动归档参考图并保存模板...")
+                            val allImageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                            
+                            val stateToSave = resultState.copy(
+                                createdAt = getCurrentTimeMillis(),
+                                referenceImages = allImageUris // 传递全量路径供 Repository 执行搬迁
+                            )
+                            
                             templateRepo.saveTemplate(finalTemplateName, stateToSave)
                             
                             // 4. 全部任务成功后，触发自动跳转至编辑器界面

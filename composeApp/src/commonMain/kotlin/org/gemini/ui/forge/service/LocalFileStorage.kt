@@ -47,6 +47,13 @@ expect class LocalFileStorage() {
     suspend fun listDirectories(): List<String>
 
     /**
+     * 判断指定的文件或目录是否存在
+     * @param fileName 文件或目录名称
+     * @return 是否存在
+     */
+    suspend fun exists(fileName: String): Boolean
+
+    /**
      * 获取指定文件的本地绝对路径
      * @param fileName 文件名称
      * @return 绝对路径字符串

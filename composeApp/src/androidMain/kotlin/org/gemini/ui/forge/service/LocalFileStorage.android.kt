@@ -93,6 +93,10 @@ actual class LocalFileStorage {
         return@withContext dir.deleteRecursively()
     }
 
+    actual suspend fun exists(fileName: String): Boolean = withContext(Dispatchers.IO) {
+        return@withContext File(currentDir, fileName).exists()
+    }
+
     actual suspend fun getFilePath(fileName: String): String = withContext(Dispatchers.IO) {
         return@withContext File(currentDir, fileName).absolutePath
     }

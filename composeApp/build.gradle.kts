@@ -54,7 +54,6 @@ kotlin {
             implementation(libs.ktor.client.js)
         }
         commonMain.dependencies {
-            implementation(kotlin("stdlib"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)

@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -133,6 +134,13 @@ fun CanvasArea(
                 // 渲染 UI 块
                 blocks.forEach { block ->
                     val isSelected = block.id == selectedBlockId
+                    
+                    // 异步加载图片的局部状态
+                    val imageBitmapState = produceState<ImageBitmap?>(initialValue = null, key1 = block.currentImageUri) {
+                        value = block.currentImageUri?.decodeBase64ToBitmap()
+                    }
+                    val imageBitmap = imageBitmapState.value
+
                     Box(
                         modifier = Modifier
                             .offset(
@@ -152,10 +160,16 @@ fun CanvasArea(
                             .clickable(enabled = !isSelectionMode) { onBlockClicked(block.id) },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (block.currentImageUri != null) {
-                            block.currentImageUri.decodeBase64ToBitmap()?.let {
-                                Image(bitmap = it, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                            }
+                        if (imageBitmap != null) {
+                            Image(
+                                bitmap = imageBitmap,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else if (block.currentImageUri != null) {
+                            // 加载中状态提示
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.dp)
                         } else {
                             Text(text = stringResource(block.type.getDisplayNameRes()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
                         }

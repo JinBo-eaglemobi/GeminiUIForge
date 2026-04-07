@@ -1,108 +1,68 @@
 package org.gemini.ui.forge.ui
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import geminiuiforge.composeapp.generated.resources.Res
-import geminiuiforge.composeapp.generated.resources.*
-import org.gemini.ui.forge.domain.UIBlock
 import org.gemini.ui.forge.utils.decodeBase64ToBitmap
-import org.jetbrains.compose.resources.stringResource
 
-@Composable
-fun PropertyPanel(
-    selectedBlock: UIBlock?,
-    isGenerating: Boolean,
-    onPromptChanged: (String) -> Unit,
-    onGenerateRequested: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth().padding(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            if (selectedBlock == null) {
-                Text(stringResource(Res.string.select_block_to_edit), style = MaterialTheme.typography.bodyLarge)
-            } else {
-                Text(
-                    text = "${stringResource(Res.string.edit_block)} ${stringResource(selectedBlock.type.getDisplayNameRes())}", 
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                OutlinedTextField(
-                    value = selectedBlock.userPrompt,
-                    onValueChange = onPromptChanged,
-                    label = { Text(stringResource(Res.string.style_prompt)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Button(
-                    onClick = onGenerateRequested,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isGenerating
-                ) {
-                    if (isGenerating) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
-                    } else {
-                        Text(stringResource(Res.string.generate_ideas))
-                    }
-                }
-            }
-        }
-    }
-}
-
+/**
+ * AI 生成候选图片的展示列表组件
+ * @param candidates Base64 图片数据列表
+ * @param onImageSelected 当用户点击选中某张图片时的回调
+ */
 @Composable
 fun CandidateGallery(
     candidates: List<String>,
-    onImageSelected: (String) -> Unit,
-    modifier: Modifier = Modifier
+    onImageSelected: (String) -> Unit
 ) {
     if (candidates.isEmpty()) return
-    
-    Surface(
-        modifier = modifier.fillMaxWidth().height(240.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-    ) {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text(
+            text = "AI 生成候选资源",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(candidates) { base64Data ->
-                Box(
+            items(candidates) { base64 ->
+                // 异步加载候选项图片，防止 UI 卡顿
+                val imageBitmapState = produceState<ImageBitmap?>(initialValue = null, key1 = base64) {
+                    value = base64.decodeBase64ToBitmap()
+                }
+                val bitmap = imageBitmapState.value
+
+                Card(
                     modifier = Modifier
-                        .aspectRatio(1f)
-                        .background(Color.Gray)
-                        .clickable { onImageSelected(base64Data) },
-                    contentAlignment = Alignment.Center
+                        .size(120.dp)
+                        .clickable { onImageSelected(base64) },
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    val bitmap = base64Data.decodeBase64ToBitmap()
-                    if (bitmap != null) {
-                        Image(
-                            bitmap = bitmap,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Text(text = stringResource(Res.string.candidate), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        if (bitmap != null) {
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = "Generated candidate",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            // 加载中状态
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        }
                     }
                 }
             }

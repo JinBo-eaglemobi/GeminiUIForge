@@ -1,9 +1,20 @@
 package org.gemini.ui.forge.utils
 
 /**
- * 跨平台读取本地文件为字节数组
+ * 跨平台读取本地文件为字节数组 (异步版，以支持 JS OPFS)
  */
-expect fun readLocalFileBytes(filePath: String): ByteArray?
+expect suspend fun readLocalFileBytes(filePath: String): ByteArray?
+
+/**
+ * 跨平台计算字节数组的 MD5 哈希值（十六进制字符串）
+ */
+expect fun ByteArray.calculateMd5(): String
+
+/**
+ * 跨平台判断本地文件是否存在 (异步版，以支持 JS OPFS)
+ * 用于轻量化预验证，避免直接加载大文件进内存。
+ */
+expect suspend fun isFileExists(filePath: String): Boolean
 
 /**
  * 根据文件路径或 URI 后缀名推断准确的 MIME 类型。

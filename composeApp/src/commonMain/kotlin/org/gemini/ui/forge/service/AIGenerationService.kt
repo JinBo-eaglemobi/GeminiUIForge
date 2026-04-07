@@ -35,6 +35,42 @@ class AIGenerationService(
     }
 
     /**
+     * 在正式提交 AI 分析前，预先验证图片路径的有效性。
+     * 支持验证本地文件、HTTP URL 连通性以及 Base64 字符串格式。
+     * @return 如果所有路径均有效则返回 null，否则返回第一个错误描述
+     */
+    suspend fun validateImageUris(imageUris: List<String>): String? {
+        val client = NetworkClient.shared
+        for ((index, uri) in imageUris.withIndex()) {
+            try {
+                when {
+                    uri.startsWith("http") -> {
+                        val response = client.head(uri)
+                        if (response.status.value != 200) {
+                            return "参考图 ${index + 1} 链接不可访问 (状态码: ${response.status.value})"
+                        }
+                    }
+                    uri.startsWith("data:image") -> {
+                        val pureBase64 = if (uri.contains(",")) uri.substringAfter(",") else uri
+                        if (pureBase64.isBlank() || pureBase64.length < 100) {
+                            return "参考图 ${index + 1} 的 Base64 数据格式错误或过短"
+                        }
+                    }
+                    else -> {
+                        // 核心优化：使用存在性判断而非读取全量字节，避免内存浪费
+                        if (!org.gemini.ui.forge.utils.isFileExists(uri)) {
+                            return "无法找到本地参考图 ${index + 1}，请检查路径是否正确。"
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                return "验证参考图 ${index + 1} 时发生错误: ${e.message}"
+            }
+        }
+        return null
+    }
+
+    /**
      * 调用 Imagen 模型根据文本 Prompt 生成 UI 图片资源
      */
     suspend fun generateImages(
