@@ -9,13 +9,12 @@ import kotlin.test.Test
 
 class GeminiModelsTest {
 
-    // 请在此处填入您的 API KEY 进行测试
-    private val TEST_API_KEY = "AIzaSyBbH7DdObL74t3ykBCE2dDvzzF80jIgCS4"
-
     @Test
     fun listAvailableGeminiModels() = runTest {
+        val configManager = ConfigManager()
+        val testApiKey = configManager.loadKey("GEMINI_API_KEY") ?: configManager.loadGlobalGeminiKey()
         val client = HttpClient()
-        val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$TEST_API_KEY"
+        val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$testApiKey"
 
         println("=== 正在请求 Gemini 可用模型列表 ===")
         

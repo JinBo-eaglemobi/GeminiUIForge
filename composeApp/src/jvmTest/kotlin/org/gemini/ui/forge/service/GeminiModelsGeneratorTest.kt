@@ -11,13 +11,14 @@ import kotlin.test.assertTrue
 
 class GeminiModelsGeneratorTest {
 
-    // 使用您提供的 API Key
-    private val TEST_API_KEY = "AIzaSyBbH7DdObL74t3ykBCE2dDvzzF80jIgCS4"
-
     @Test
     fun generateGeminiModelEnum() = runBlocking {
+
+        val configManager = ConfigManager()
+        val testApiKey = configManager.loadKey("GEMINI_API_KEY") ?: configManager.loadGlobalGeminiKey()
+
         val client = HttpClient()
-        val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$TEST_API_KEY"
+        val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$testApiKey"
 
         println("=== 正在请求 Gemini 可用模型列表 ===")
         
