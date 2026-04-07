@@ -43,6 +43,8 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
+            // https://mvnrepository.com/artifact/org.jetbrains.skiko/skiko-android
+//            implementation("org.jetbrains.skiko:skiko-android:0.9.37.3")
 
         }
         iosMain.dependencies {

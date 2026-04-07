@@ -199,10 +199,17 @@ fun TemplateGeneratorScreen(
                 SelectionContainer {
                     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
-                    // 自动滚动到最新日志
-                    LaunchedEffect(logs.size, streamedJson.length) {
+                    // 智能滚动到最新日志 (仅在新增一行日志时判断，避免流数据高频触发导致强制拉到底部)
+                    LaunchedEffect(logs.size) {
                         if (logs.isNotEmpty()) {
-                            listState.animateScrollToItem(logs.size - 1)
+                            // 允许一定的容错范围：如果用户在最底部或只差几个元素，或者是第一条日志，则自动滚动
+                            val isAtBottom = !listState.canScrollForward || 
+                                             (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= listState.layoutInfo.totalItemsCount - 2
+                            
+                            if (isAtBottom || logs.size == 1) {
+                                // 滚动到最后一个元素 (包括可能存在的数据流 item)
+                                listState.animateScrollToItem(listState.layoutInfo.totalItemsCount - 1)
+                            }
                         }
                     }
 
@@ -223,7 +230,7 @@ fun TemplateGeneratorScreen(
                             if (isAnalyzing && streamedJson.isNotEmpty() && generatedState == null) {
                                 item {
                                     Text(
-                                        text = "[数据流同步中] 长度: ${streamedJson.length} | 预览: ...${streamedJson.takeLast(60)}",
+                                        text = "[数据流同步中] 长度: ${streamedJson.length} | 预览: ...${streamedJson.takeLast(40)}",
                                         style = MaterialTheme.typography.bodySmall.copy(
                                             fontFamily = FontFamily.Monospace,
                                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)

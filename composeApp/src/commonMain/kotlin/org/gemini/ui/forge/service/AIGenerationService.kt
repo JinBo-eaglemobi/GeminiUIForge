@@ -272,16 +272,20 @@ class AIGenerationService(
             })
         }.toString()
 
-        onLog("📡 正在建立安全连接并提交分析协议...")
+        // 屏蔽庞大的 Base64 字符串以防止日志刷屏和 UI 卡顿
+        val loggableBody = requestBody.replace(
+            Regex("\"data\"\\s*:\\s*\"[^\"]+\""), 
+            "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\""
+        )
 
-        AppLogger.i(TAG, "请求体总大小 (File URI 模式): ${requestBody.length / 1024} KB")
+        AppLogger.i(TAG, "请求体总大小: ${requestBody.length / 1024} KB")
         onLog("---- [HTTP REQUEST] ----")
         onLog("URL: $url")
         onLog("Method: POST")
         onLog("Headers: Content-Type=application/json")
-        onLog("BodySize: ${requestBody.length / 1024} KB (轻量)")
+        onLog("Body: \n$loggableBody")
         onLog("------------------------")
-        onLog("请求已准备就绪，正在发送至 Gemini API 分析界面模块...")
+        onLog("📡 正在向服务器建立安全连接并提交分析协议...")
 
         var lastException: Exception? = null
         val accumulatedText = StringBuilder()
