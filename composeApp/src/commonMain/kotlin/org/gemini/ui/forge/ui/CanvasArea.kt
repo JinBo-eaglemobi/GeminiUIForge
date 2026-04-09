@@ -316,14 +316,14 @@ fun RenderBlock(
             .clip(RoundedCornerShape(2.dp))
             .background(
                 when {
-                    isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                    isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                     isDimmed -> Color.Black.copy(alpha = 0.4f)
-                    else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) // 极浅的背景色替代完全透明
+                    else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) // 提高背景亮度
                 }
             )
             .border(
                 width = if (isSelected) (2.dp / zoom) else (1.dp / zoom),
-                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) // 提高边框亮度
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -335,7 +335,7 @@ fun RenderBlock(
             Text(
                 text = stringResource(block.type.getDisplayNameRes()), 
                 style = MaterialTheme.typography.labelSmall, 
-                color = if (isDimmed) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), 
+                color = if (isDimmed) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary, // 文字亮度调到最高
                 textAlign = TextAlign.Center
             )
         }

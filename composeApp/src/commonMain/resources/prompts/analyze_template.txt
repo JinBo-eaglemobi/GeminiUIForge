@@ -5,14 +5,16 @@ Generate a comprehensive JSON structure representing this complete UI template b
 CRITICAL REQUIREMENT: 
 1. EVERY functional layer, background, content panel, or interactive element displayed in the image MUST have a corresponding distinct template (UIBlock) with accurate bounding coordinates.
 2. The `width` and `height` in `UIPage` MUST represent the total canvas size (resolution) of the analyzed image.
-3. ALL `UIBlock` coordinates (left, top, right, bottom) MUST be strictly within the bounds of [0, width] for X-axis and [0, height] for Y-axis.
+3. HIERARCHY & GROUPING: When UI elements are visually grouped together (e.g., a top bar with a background containing several buttons, or a panel containing icons and text), you MUST create a parent UIBlock with type `GROUP` representing the container/background, and place the contained elements inside its `children` array. 
+4. COORDINATES: ALL top-level `UIBlock` coordinates (left, top, right, bottom) MUST be strictly absolute within the bounds of [0, width] and [0, height]. However, the `bounds` of any `children` inside a `GROUP` MUST be RELATIVE to their parent's top-left corner (e.g., if a parent is at absolute x:100, y:100, and a child is at absolute x:120, y:120, the child's relative bounds are left:20, top:20).
 
 The JSON must strictly map to the following Kotlin classes (do NOT wrap in markdown blocks, return pure JSON):
 ProjectState(projectId: String, globalTheme: String, pages: List<UIPage>)
 UIPage(id: String, nameStr: String, width: Float, height: Float, blocks: List<UIBlock>)
-UIBlock(id: String, type: UIBlockType, bounds: SerialRect(left, top, right, bottom), userPromptEn: String, userPromptZh: String)
+UIBlock(id: String, type: UIBlockType, bounds: SerialRect(left, top, right, bottom), userPromptEn: String, userPromptZh: String, children: List<UIBlock>)
 
 UIBlockType MUST be one of the following exact strings:
+- GROUP (UI Group container, holds multiple UI elements, background layer)
 - REEL (Slot machine reel area)
 - SPIN_BUTTON (Main spin button)
 - WIN_DISPLAY (Win score display box)
