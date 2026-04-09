@@ -318,12 +318,12 @@ fun RenderBlock(
                 when {
                     isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                     isDimmed -> Color.Black.copy(alpha = 0.4f)
-                    else -> Color.Transparent
+                    else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) // 极浅的背景色替代完全透明
                 }
             )
             .border(
-                width = if (isSelected) (2.dp / zoom) else (0.5.dp / zoom),
-                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                width = if (isSelected) (2.dp / zoom) else (1.dp / zoom),
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -335,7 +335,7 @@ fun RenderBlock(
             Text(
                 text = stringResource(block.type.getDisplayNameRes()), 
                 style = MaterialTheme.typography.labelSmall, 
-                color = if (isDimmed) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), 
+                color = if (isDimmed) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), 
                 textAlign = TextAlign.Center
             )
         }
