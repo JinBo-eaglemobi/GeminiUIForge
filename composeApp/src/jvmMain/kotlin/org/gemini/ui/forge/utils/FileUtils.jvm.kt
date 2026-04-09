@@ -3,6 +3,10 @@ package org.gemini.ui.forge.utils
 import java.io.File
 import java.security.MessageDigest
 
+actual fun Throwable.getPlatformStackTrace(): String {
+    return this.stackTraceToString()
+}
+
 actual suspend fun readLocalFileBytes(filePath: String): ByteArray? {
     return try {
         val file = File(filePath)
@@ -15,6 +19,15 @@ actual suspend fun readLocalFileBytes(filePath: String): ByteArray? {
 actual suspend fun isFileExists(filePath: String): Boolean {
     return try {
         File(filePath).exists()
+    } catch (e: Exception) {
+        false
+    }
+}
+
+actual suspend fun appendToLocalFile(filePath: String, content: String): Boolean {
+    return try {
+        File(filePath).appendText(content)
+        true
     } catch (e: Exception) {
         false
     }

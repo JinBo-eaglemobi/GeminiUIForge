@@ -1,10 +1,30 @@
 package org.gemini.ui.forge.utils
 
-actual object AppLogger {
-    actual fun d(tag: String, message: String) { println("[DEBUG] $tag - $message") }
-    actual fun i(tag: String, message: String) { println("[INFO] $tag - $message") }
-    actual fun e(tag: String, message: String, throwable: Throwable?) { 
-        println("[ERROR] $tag - $message") 
-        throwable?.printStackTrace()
+import platform.Foundation.*
+
+actual fun printToConsole(level: String, tag: String, message: String, throwable: Throwable?) {
+    val prefix = when(level) {
+        "DEBUG" -> "🔍"
+        "INFO" -> "ℹ️"
+        "ERROR" -> "❌"
+        else -> "📝"
     }
+    println("$prefix [$tag] $message")
+    throwable?.let {
+        println("💥 Exception: ${it.message}")
+        it.cause?.let { cause -> println("⛓️ Caused by: ${cause.message}") }
+    }
+}
+
+actual fun getPlatformLogDirectory(): String {
+    val paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
+    val documentsDirectory = paths.firstOrNull() as? String ?: return ""
+    val logDir = "$documentsDirectory/logs"
+    
+    val fileManager = NSFileManager.defaultManager
+    if (!fileManager.fileExistsAtPath(logDir)) {
+        fileManager.createDirectoryAtPath(logDir, withIntermediateDirectories = true, attributes = null, error = null)
+    }
+    
+    return logDir
 }

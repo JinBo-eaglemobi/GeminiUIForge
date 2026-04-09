@@ -30,7 +30,7 @@ object NetworkClient {
                 socketTimeoutMillis = 60_000L   // 60 seconds for streaming large JSON responses
             }
             install(Logging) {
-                level = LogLevel.INFO
+                level = LogLevel.ALL
                 logger = object : Logger {
                     override fun log(message: String) {
                         // 统一输出网络请求日志

@@ -1,5 +1,6 @@
 package org.gemini.ui.forge.service
 
+import androidx.compose.foundation.VerticalScrollbar
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

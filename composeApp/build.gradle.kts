@@ -43,9 +43,10 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
+            // Source: https://mvnrepository.com/artifact/org.jetbrains.compose.foundation/foundation-desktop
+            implementation("org.jetbrains.compose.foundation:foundation-desktop:1.10.0")
             // https://mvnrepository.com/artifact/org.jetbrains.skiko/skiko-android
 //            implementation("org.jetbrains.skiko:skiko-android:0.9.37.3")
-
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
@@ -126,6 +127,7 @@ kotlin {
                         if (name.startsWith("kotlinx-coroutines")) useVersion(libs.versions.kotlinx.coroutines.get())
 
                     }
+
                     "org.jetbrains.kotlin" -> {
 
                         val name = requested.name

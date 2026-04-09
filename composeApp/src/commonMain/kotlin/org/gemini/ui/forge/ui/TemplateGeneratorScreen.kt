@@ -248,7 +248,7 @@ fun TemplateGeneratorScreen(
                             if (isAnalyzing && streamedJson.isNotEmpty() && generatedState == null) {
                                 item {
                                     Text(
-                                        text = "[数据流同步中] 长度: ${streamedJson.length} | 预览: ...${streamedJson.takeLast(40)}",
+                                        text = "[数据流同步中] 长度: ${streamedJson.length}",
                                         style = MaterialTheme.typography.bodySmall.copy(
                                             fontFamily = FontFamily.Monospace,
                                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)

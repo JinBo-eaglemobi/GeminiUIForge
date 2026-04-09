@@ -2,6 +2,11 @@ package org.gemini.ui.forge.utils
 
 import org.gemini.ui.forge.service.LocalFileStorage
 
+actual fun Throwable.getPlatformStackTrace(): String {
+    // JS 中的 Throwable 通常包含 stack 属性，或者直接调用 toString()
+    return this.message ?: "Unknown JS Error"
+}
+
 actual suspend fun readLocalFileBytes(filePath: String): ByteArray? {
     val storage = LocalFileStorage()
     return storage.readBytesFromFile(filePath)
@@ -10,6 +15,19 @@ actual suspend fun readLocalFileBytes(filePath: String): ByteArray? {
 actual suspend fun isFileExists(filePath: String): Boolean {
     val storage = LocalFileStorage()
     return storage.exists(filePath)
+}
+
+actual suspend fun appendToLocalFile(filePath: String, content: String): Boolean {
+    // 暂行兜底方案：在 JS 环境下，若 OPFS 尚未暴露 append 句柄，采用先读后写。
+    // 在真实生产环境中，应在 LocalFileStorage.js.kt 中扩展真正的 getAccessHandle API。
+    return try {
+        val storage = LocalFileStorage()
+        val oldContent = storage.readFromFile(filePath) ?: ""
+        storage.saveToFile(filePath, oldContent + content)
+        true
+    } catch (e: Exception) {
+        false
+    }
 }
 
 actual fun ByteArray.calculateMd5(): String {

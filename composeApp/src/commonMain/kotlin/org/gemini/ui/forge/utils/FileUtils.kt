@@ -1,9 +1,19 @@
 package org.gemini.ui.forge.utils
 
 /**
+ * 跨平台将 Throwable 转换为详尽的堆栈跟踪字符串。
+ */
+expect fun Throwable.getPlatformStackTrace(): String
+
+/**
  * 跨平台读取本地文件为字节数组 (异步版，以支持 JS OPFS)
  */
 expect suspend fun readLocalFileBytes(filePath: String): ByteArray?
+
+/**
+ * 将文本以追加模式高效写入到文件末尾 (支持日志持久化)
+ */
+expect suspend fun appendToLocalFile(filePath: String, content: String): Boolean
 
 /**
  * 跨平台计算字节数组的 MD5 哈希值（十六进制字符串）
