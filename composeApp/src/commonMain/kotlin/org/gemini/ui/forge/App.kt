@@ -74,6 +74,13 @@ fun App(typography: Typography? = null) {
                     onThemeChangeRequested = { viewModel.setThemeMode(it) },
                     onGenerateTemplateClicked = { viewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
                     onCloudAssetManagerClicked = { showCloudAssetDialog = true },
+                    onSaveClicked = {
+                        if (globalState.currentScreen == AppScreen.TEMPLATE_EDITOR || globalState.currentScreen == AppScreen.EDITOR) {
+                            coroutineScope.launch {
+                                templateRepo.saveTemplate(state.projectName, state.project)
+                            }
+                        }
+                    },
                     currentApiKey = globalState.apiKey,
                     onApiKeyChanged = { viewModel.saveApiKey(it) },
                     currentStorageDir = globalState.templateStorageDir,
@@ -133,6 +140,8 @@ fun App(typography: Typography? = null) {
                                 viewModel.onRefineCustomArea(bounds, instruction, onLog, onChunk, onComplete)
                             },
                             onSwitchEditingLanguage = { viewModel.switchEditingLanguage(it) },
+                            onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
+                            onExitGroupEdit = { viewModel.exitGroupEditMode() },
                             onAddBlock = { type -> viewModel.addBlock(type) },
                             onDeleteBlock = { id -> viewModel.deleteBlock(id) },
                             onSaveTemplate = {
@@ -147,6 +156,8 @@ fun App(typography: Typography? = null) {
                             state = state,
                             onPageSelected = { viewModel.onPageSelected(it) },
                             onBlockClicked = { viewModel.onBlockClicked(it) },
+                            onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
+                            onExitGroupEdit = { viewModel.exitGroupEditMode() },
                             onPromptChanged = { viewModel.onUserPromptChanged(it) },
                             onSwitchEditingLanguage = { viewModel.switchEditingLanguage(it) },
                             onGenerateRequested = { viewModel.onRequestGeneration(globalState.effectiveApiKey) },

@@ -53,6 +53,8 @@ fun TemplateEditorScreen(
     onRefineArea: (String, SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit, // 增加了选区参数
     onRefineCustomArea: (SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit,
     onSwitchEditingLanguage: (PromptLanguage) -> Unit,
+    onBlockDoubleClicked: (String) -> Unit,
+    onExitGroupEdit: () -> Unit,
     onAddBlock: (UIBlockType) -> Unit,
     onDeleteBlock: (String) -> Unit,
     onSaveTemplate: () -> Unit
@@ -93,30 +95,37 @@ fun TemplateEditorScreen(
         Row(modifier = Modifier.fillMaxSize()) {
             // 工具栏
             Surface(modifier = Modifier.weight(leftWeight).fillMaxHeight(), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
-                Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                    Text("编辑工具", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
-                    
-                    Button(
-                        onClick = { refineTargetId = null; showVisualRefine = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Crop, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("进入框选重塑")
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("编辑工具", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+                        
+                        Button(
+                            onClick = { refineTargetId = null; showVisualRefine = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Crop, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("进入框选重塑")
+                        }
+
+                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                        Text("页面列表:", style = MaterialTheme.typography.labelMedium)
+                        state.project.pages.forEach { page ->
+                            val selected = state.selectedPageId == page.id
+                            TextButton(onClick = { onPageSelected(page.id) }, modifier = Modifier.fillMaxWidth()) {
+                                Text(page.nameStr, color = if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     }
 
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    Text("页面列表:", style = MaterialTheme.typography.labelMedium)
-                    state.project.pages.forEach { page ->
-                        val selected = state.selectedPageId == page.id
-                        TextButton(onClick = { onPageSelected(page.id) }, modifier = Modifier.fillMaxWidth()) {
-                            Text(page.nameStr, color = if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    Button(onClick = onSaveTemplate, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)) {
-                        Text(stringResource(Res.string.action_save_layout))
-                    }
+                    // 层级列表
+                    HierarchySidebar(
+                        blocks = state.currentPage?.blocks ?: emptyList(),
+                        selectedBlockId = state.selectedBlockId,
+                        onBlockClicked = onBlockClicked,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
@@ -133,6 +142,10 @@ fun TemplateEditorScreen(
                     blocks = state.currentPage?.blocks ?: emptyList(),
                     selectedBlockId = state.selectedBlockId,
                     onBlockClicked = onBlockClicked,
+                    onBlockDoubleClicked = onBlockDoubleClicked,
+                    editingGroupId = state.editingGroupId,
+                    onExitGroupEdit = onExitGroupEdit,
+                    referenceUri = state.currentPage?.sourceImageUri,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -146,6 +159,7 @@ fun TemplateEditorScreen(
             Surface(modifier = Modifier.weight(rightWeight).fillMaxHeight(), color = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
                     Text(stringResource(Res.string.editor_properties), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+                    
                     val block = state.selectedBlock
                     if (block == null) {
                         Text(stringResource(Res.string.prop_select_block), color = MaterialTheme.colorScheme.onSurfaceVariant)

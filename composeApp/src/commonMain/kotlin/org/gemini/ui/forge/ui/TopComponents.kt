@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.ui.text.font.FontWeight
 
 import androidx.compose.ui.draw.drawBehind
@@ -33,6 +34,7 @@ fun AppTopBar(
     onThemeChangeRequested: (ThemeMode) -> Unit,
     onGenerateTemplateClicked: () -> Unit = {},
     onCloudAssetManagerClicked: () -> Unit = {},
+    onSaveClicked: () -> Unit = {},
     currentApiKey: String = "",
     onApiKeyChanged: (String) -> Unit = {},
     currentStorageDir: String = "",
@@ -83,12 +85,12 @@ fun AppTopBar(
                 )
             }
 
-            // 右侧：平铺的功能按钮 (仅在首页显示)
-            if (currentScreen == AppScreen.HOME) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+            // 右侧功能按钮
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (currentScreen == AppScreen.HOME) {
                     TextButton(
                         onClick = onGenerateTemplateClicked,
                         contentPadding = PaddingValues(horizontal = 8.dp)
@@ -110,9 +112,11 @@ fun AppTopBar(
                     IconButton(onClick = { showSettingsDialog = true }) {
                         Icon(Icons.Default.Settings, contentDescription = stringResource(Res.string.menu_settings))
                     }
+                } else if (currentScreen == AppScreen.TEMPLATE_EDITOR || currentScreen == AppScreen.EDITOR) {
+                    IconButton(onClick = onSaveClicked) {
+                        Icon(Icons.Default.Save, contentDescription = "Save Layout", tint = MaterialTheme.colorScheme.primary)
+                    }
                 }
-            } else {
-                Spacer(modifier = Modifier.width(0.dp))
             }
         }
     }

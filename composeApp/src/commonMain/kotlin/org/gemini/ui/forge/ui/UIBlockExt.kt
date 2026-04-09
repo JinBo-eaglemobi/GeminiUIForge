@@ -14,6 +14,7 @@ import geminiuiforge.composeapp.generated.resources.block_spin_button
 import geminiuiforge.composeapp.generated.resources.block_symbol
 import geminiuiforge.composeapp.generated.resources.block_text_area
 import geminiuiforge.composeapp.generated.resources.block_win_display
+import geminiuiforge.composeapp.generated.resources.block_group
 import org.jetbrains.compose.resources.StringResource
 
 fun UIBlockType.getDisplayNameRes(): StringResource {
@@ -30,5 +31,6 @@ fun UIBlockType.getDisplayNameRes(): StringResource {
         UIBlockType.TEXT_AREA -> Res.string.block_text_area
         UIBlockType.ICON -> Res.string.block_icon
         UIBlockType.DECORATION -> Res.string.block_decoration
+        UIBlockType.GROUP -> Res.string.block_group
     }
 }

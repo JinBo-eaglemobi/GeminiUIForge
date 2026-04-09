@@ -18,8 +18,9 @@
     <string name="block_header">顶部栏</string>
     <string name="block_footer">底部栏</string>
     <string name="block_text_area">文本区</string>
-    <string name="block_icon">小图标</string>
+    <string name="block_icon">图标</string>
     <string name="block_decoration">装饰物</string>
+    <string name="block_group">UI 组容器</string>
 
     <string name="menu_file">文件</string>
     <string name="menu_settings">设置</string>

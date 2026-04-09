@@ -19,7 +19,8 @@ data class UIBlock(
     val bounds: SerialRect,
     val currentImageUri: String? = null,
     val userPromptEn: String = "",
-    val userPromptZh: String = ""
+    val userPromptZh: String = "",
+    val children: List<UIBlock> = emptyList()
 ) {
     /** 自动拼接基础类别描述与英文自定义描述，形成最终发给生图模型的完整 Prompt */
     val fullPrompt: String

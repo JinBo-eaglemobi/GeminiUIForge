@@ -10,3 +10,4 @@ actual fun getPlatform(): Platform = JsPlatform()
 actual fun getCurrentTimeMillis(): Long = kotlin.js.Date.now().toLong()
 
 actual val ResizeHorizontalIcon: PointerIcon = PointerIcon.Default
+actual val ResizeVerticalIcon: PointerIcon = PointerIcon.Default

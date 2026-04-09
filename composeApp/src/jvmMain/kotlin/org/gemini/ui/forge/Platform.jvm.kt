@@ -14,3 +14,4 @@ actual fun getPlatform(): Platform = JVMPlatform()
 actual fun getCurrentTimeMillis(): Long = System.currentTimeMillis()
 
 actual val ResizeHorizontalIcon: PointerIcon = PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR))
+actual val ResizeVerticalIcon: PointerIcon = PointerIcon(Cursor(Cursor.N_RESIZE_CURSOR))

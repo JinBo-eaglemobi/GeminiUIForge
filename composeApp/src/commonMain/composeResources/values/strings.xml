@@ -20,6 +20,7 @@
     <string name="block_text_area">Text Area</string>
     <string name="block_icon">Icon</string>
     <string name="block_decoration">Decoration</string>
+    <string name="block_group">UI Group</string>
 
     <string name="menu_file">File</string>
     <string name="menu_settings">Settings</string>

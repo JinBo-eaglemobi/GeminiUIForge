@@ -14,3 +14,4 @@ actual fun getPlatform(): Platform = AndroidPlatform()
 actual fun getCurrentTimeMillis(): Long = System.currentTimeMillis()
 
 actual val ResizeHorizontalIcon: PointerIcon = PointerIcon.Default
+actual val ResizeVerticalIcon: PointerIcon = PointerIcon.Default

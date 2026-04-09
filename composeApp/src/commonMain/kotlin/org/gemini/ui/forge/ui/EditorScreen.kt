@@ -24,6 +24,8 @@ fun EditorScreen(
     state: EditorState,
     onPageSelected: (String) -> Unit,
     onBlockClicked: (String) -> Unit,
+    onBlockDoubleClicked: (String) -> Unit,
+    onExitGroupEdit: () -> Unit,
     onPromptChanged: (String) -> Unit,
     onSwitchEditingLanguage: (PromptLanguage) -> Unit,
     onGenerateRequested: () -> Unit,
@@ -32,13 +34,25 @@ fun EditorScreen(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val maxWidth = maxWidth
         
-        // 全平台统一横向布局（左侧画布区 + 右侧属性栏）
-        var leftWeight by remember { mutableStateOf(0.6f) }
+        // 全平台统一横向布局（左侧层级 + 中间画布区 + 右侧属性栏）
+        var hierarchyWeight by remember { mutableStateOf(0.15f) }
+        var canvasWeight by remember { mutableStateOf(0.55f) }
         val totalWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
 
         Row(modifier = Modifier.fillMaxSize()) {
-            // 左侧：标签页 + 画布面板
-            Column(modifier = Modifier.weight(leftWeight).fillMaxHeight()) {
+            // 最左侧：层级列表
+            HierarchySidebar(
+                blocks = state.currentPage?.blocks ?: emptyList(),
+                selectedBlockId = state.selectedBlockId,
+                onBlockClicked = onBlockClicked,
+                modifier = Modifier.weight(hierarchyWeight).fillMaxHeight()
+            )
+
+            // 拖拽分割线 1
+            VerticalDivider(modifier = Modifier.width(1.dp).fillMaxHeight())
+
+            // 中间：标签页 + 画布面板
+            Column(modifier = Modifier.weight(canvasWeight).fillMaxHeight()) {
                 val pages = state.project.pages
                 val selectedIndex = pages.indexOfFirst { it.id == state.selectedPageId }.coerceAtLeast(0)
 
@@ -66,12 +80,16 @@ fun EditorScreen(
                         blocks = state.currentPage?.blocks ?: emptyList(),
                         selectedBlockId = state.selectedBlockId,
                         onBlockClicked = onBlockClicked,
+                        onBlockDoubleClicked = onBlockDoubleClicked,
+                        editingGroupId = state.editingGroupId,
+                        onExitGroupEdit = onExitGroupEdit,
+                        referenceUri = state.currentPage?.sourceImageUri,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
             }
             
-            // 中间的拖拽分割线
+            // 中间的拖拽分割线 2
             Box(
                 modifier = Modifier
                     .width(4.dp)
@@ -82,14 +100,15 @@ fun EditorScreen(
                         orientation = Orientation.Horizontal,
                         state = rememberDraggableState { delta ->
                             val deltaWeight = delta / totalWidthPx
-                            leftWeight = (leftWeight + deltaWeight).coerceIn(0.3f, 0.7f)
+                            // 简单调整 canvasWeight，保持整体比例
+                            canvasWeight = (canvasWeight - deltaWeight).coerceIn(0.3f, 0.7f)
                         }
                     )
             )
 
             // 右侧属性面板
             Surface(
-                modifier = Modifier.weight(1f - leftWeight).fillMaxHeight(),
+                modifier = Modifier.weight(1f - hierarchyWeight - canvasWeight).fillMaxHeight(),
                 color = MaterialTheme.colorScheme.surface
             ) {
                 Column(

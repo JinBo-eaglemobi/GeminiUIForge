@@ -32,5 +32,7 @@ enum class UIBlockType(val defaultPrompt: String) {
     /** 独立小图标：无文字的小徽章或控制小控件 */
     ICON("Small icon or badge, UI control element, crisp vector style"),
     /** 环境装饰物：没有功能意义的花纹、边框、特效粒子或氛围点缀 */
-    DECORATION("Ornamental or decorative UI element, flourishes, borders, or particles")
+    DECORATION("Ornamental or decorative UI element, flourishes, borders, or particles"),
+    /** UI 组容器：包含多个子组件的父级容器 */
+    GROUP("Group container, container for multiple UI elements, background frame")
 }

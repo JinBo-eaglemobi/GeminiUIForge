@@ -93,8 +93,40 @@ class EditorViewModel(
         _state.update { it.copy(project = it.project.copy(pages = listOf(mainPage, bonusPage)), selectedPageId = "page_1") }
     }
 
-    fun onPageSelected(pageId: String) = _state.update { it.copy(selectedPageId = pageId, selectedBlockId = null, generatedCandidates = emptyList()) }
+    fun onPageSelected(pageId: String) = _state.update { it.copy(selectedPageId = pageId, selectedBlockId = null, editingGroupId = null, generatedCandidates = emptyList()) }
     fun onBlockClicked(blockId: String) = _state.update { it.copy(selectedBlockId = if (it.selectedBlockId == blockId) null else blockId) }
+
+    /** 双击组件逻辑：如果是组，则进入孤立编辑模式 */
+    fun onBlockDoubleClicked(blockId: String) {
+        val block = state.value.project.pages.flatMap { it.blocks }.let { findBlockById(it, blockId) }
+        if (block?.type == UIBlockType.GROUP) {
+            _state.update { it.copy(editingGroupId = blockId, selectedBlockId = null) }
+        }
+    }
+
+    /** 退出组编辑模式 */
+    fun exitGroupEditMode() {
+        _state.update { it.copy(editingGroupId = null) }
+    }
+
+    private fun findBlockById(blocks: List<UIBlock>, id: String): UIBlock? {
+        for (block in blocks) {
+            if (block.id == id) return block
+            val found = findBlockById(block.children, id)
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun updateBlockInList(blocks: List<UIBlock>, blockId: String, transform: (UIBlock) -> UIBlock): List<UIBlock> {
+        return blocks.map { block ->
+            if (block.id == blockId) {
+                transform(block)
+            } else {
+                block.copy(children = updateBlockInList(block.children, blockId, transform))
+            }
+        }
+    }
 
     fun onUserPromptChanged(newPrompt: String, lang: PromptLanguage? = null) {
         val pageId = _state.value.selectedPageId ?: return
@@ -103,12 +135,9 @@ class EditorViewModel(
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
-                    val updatedBlocks = page.blocks.map { block ->
-                        if (block.id == blockId) {
-                            if (targetLang == PromptLanguage.EN) block.copy(userPromptEn = newPrompt) else block.copy(userPromptZh = newPrompt)
-                        } else block
-                    }
-                    page.copy(blocks = updatedBlocks)
+                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
+                        if (targetLang == PromptLanguage.EN) block.copy(userPromptEn = newPrompt) else block.copy(userPromptZh = newPrompt)
+                    })
                 } else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
@@ -116,7 +145,7 @@ class EditorViewModel(
     }
 
     fun optimizePrompt(blockId: String, apiKey: String, onComplete: (String) -> Unit) {
-        val block = state.value.project.pages.flatMap { it.blocks }.find { it.id == blockId } ?: return
+        val block = state.value.project.pages.flatMap { it.blocks }.let { findBlockById(it, blockId) } ?: return
         val currentLang = _state.value.currentEditingPromptLang
         val textToOptimize = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
         if (textToOptimize.isBlank()) return
@@ -142,10 +171,9 @@ class EditorViewModel(
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
-                    val updatedBlocks = page.blocks.map { block ->
-                        if (block.id == blockId) block.copy(bounds = SerialRect(left, top, right, bottom)) else block
-                    }
-                    page.copy(blocks = updatedBlocks)
+                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
+                        block.copy(bounds = SerialRect(left, top, right, bottom))
+                    })
                 } else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
@@ -157,10 +185,9 @@ class EditorViewModel(
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
-                    val updatedBlocks = page.blocks.map { block ->
-                        if (block.id == blockId) block.copy(type = newType) else block
-                    }
-                    page.copy(blocks = updatedBlocks)
+                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
+                        block.copy(type = newType)
+                    })
                 } else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
@@ -171,21 +198,114 @@ class EditorViewModel(
         val pageId = _state.value.selectedPageId ?: return
         val newBlockId = "block_${org.gemini.ui.forge.getCurrentTimeMillis()}"
         val newBlock = UIBlock(newBlockId, type, SerialRect(100f, 100f, 400f, 300f))
+        
         _state.update { currentState ->
+            val editingGroupId = currentState.editingGroupId
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == pageId) page.copy(blocks = page.blocks + newBlock) else page
+                if (page.id == pageId) {
+                    if (editingGroupId != null) {
+                        page.copy(blocks = updateBlockInList(page.blocks, editingGroupId) { group ->
+                            group.copy(children = group.children + newBlock)
+                        })
+                    } else {
+                        page.copy(blocks = page.blocks + newBlock)
+                    }
+                } else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = newBlockId)
+        }
+    }
+
+    /** 将多个组件打包成组 */
+    fun groupBlocks(blockIds: Set<String>) {
+        if (blockIds.isEmpty()) return
+        val pageId = _state.value.selectedPageId ?: return
+        
+        _state.update { currentState ->
+            val currentPage = currentState.currentPage ?: return@update currentState
+            val allBlocks = currentPage.blocks
+            val targetBlocks = mutableListOf<UIBlock>()
+            
+            // 找出所有选中的组件（仅限同级，简单起见先处理顶层或同级）
+            // 这里的逻辑可以复杂，目前先实现从当前列表（顶层或 editingGroup 内）中提取
+            val parentId = currentState.editingGroupId
+            
+            fun extractBlocks(blocks: List<UIBlock>): Pair<List<UIBlock>, List<UIBlock>> {
+                val extracted = blocks.filter { it.id in blockIds }
+                val remaining = blocks.filterNot { it.id in blockIds }.map { 
+                    it.copy(children = extractBlocks(it.children).second) 
+                }
+                return extracted to remaining
+            }
+
+            val (extracted, remainingBlocks) = if (parentId != null) {
+                // 如果在组内，则在组的 children 中操作
+                var ext = emptyList<UIBlock>()
+                val newAll = updateBlockInList(allBlocks, parentId) { group ->
+                    val (e, r) = extractBlocks(group.children)
+                    ext = e
+                    group.copy(children = r)
+                }
+                ext to newAll
+            } else {
+                extractBlocks(allBlocks)
+            }
+
+            if (extracted.isEmpty()) return@update currentState
+
+            // 计算组的 bounds (包围盒)
+            val minL = extracted.minOf { it.bounds.left }
+            val minT = extracted.minOf { it.bounds.top }
+            val maxR = extracted.maxOf { it.bounds.right }
+            val maxB = extracted.maxOf { it.bounds.bottom }
+            
+            // 转换子组件坐标为相对坐标
+            val childrenWithRelativeBounds = extracted.map { child ->
+                child.copy(bounds = SerialRect(
+                    child.bounds.left - minL,
+                    child.bounds.top - minT,
+                    child.bounds.right - minL,
+                    child.bounds.bottom - minT
+                ))
+            }
+
+            val newGroupId = "group_${org.gemini.ui.forge.getCurrentTimeMillis()}"
+            val newGroup = UIBlock(
+                id = newGroupId,
+                type = UIBlockType.GROUP,
+                bounds = SerialRect(minL, minT, maxR, maxB),
+                children = childrenWithRelativeBounds
+            )
+
+            val finalBlocks = if (parentId != null) {
+                updateBlockInList(remainingBlocks, parentId) { group ->
+                    group.copy(children = group.children + newGroup)
+                }
+            } else {
+                remainingBlocks + newGroup
+            }
+
+            val updatedPages = currentState.project.pages.map { 
+                if (it.id == pageId) it.copy(blocks = finalBlocks) else it 
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = newGroupId)
         }
     }
 
     fun deleteBlock(blockId: String) {
         val pageId = _state.value.selectedPageId ?: return
         _state.update { currentState ->
-            val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == pageId) page.copy(blocks = page.blocks.filterNot { it.id == blockId }) else page
+            fun removeRecursive(blocks: List<UIBlock>): List<UIBlock> {
+                return blocks.filterNot { it.id == blockId }.map { it.copy(children = removeRecursive(it.children)) }
             }
-            currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = if (currentState.selectedBlockId == blockId) null else currentState.selectedBlockId)
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) page.copy(blocks = removeRecursive(page.blocks)) else page
+            }
+            currentState.copy(
+                project = currentState.project.copy(pages = updatedPages), 
+                selectedBlockId = if (currentState.selectedBlockId == blockId) null else currentState.selectedBlockId,
+                editingGroupId = if (currentState.editingGroupId == blockId) null else currentState.editingGroupId
+            )
         }
     }
 
@@ -335,10 +455,9 @@ class EditorViewModel(
             _state.update { currentState ->
                 val updatedPages = currentState.project.pages.map { page ->
                     if (page.id == pageId) {
-                        val updatedBlocks = page.blocks.map { block ->
-                            if (block.id == blockId) block.copy(currentImageUri = localImagePath) else block
-                        }
-                        page.copy(blocks = updatedBlocks)
+                        page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
+                            block.copy(currentImageUri = localImagePath)
+                        })
                     } else page
                 }
                 currentState.copy(project = currentState.project.copy(pages = updatedPages), generatedCandidates = emptyList())

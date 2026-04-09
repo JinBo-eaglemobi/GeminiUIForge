@@ -31,6 +31,11 @@ expect fun getCurrentTimeMillis(): Long
 expect val ResizeHorizontalIcon: androidx.compose.ui.input.pointer.PointerIcon
 
 /**
+ * 跨平台的鼠标垂直调整大小图标，主要用于桌面端的边界拖拽
+ */
+expect val ResizeVerticalIcon: androidx.compose.ui.input.pointer.PointerIcon
+
+/**
  * 将给定的时间戳格式化为指定的本地时间字符串格式
  * @param timeMillis 时间戳（毫秒）
  * @param format 目标时间格式，默认 "yyyy-MM-dd HH:mm:ss"
