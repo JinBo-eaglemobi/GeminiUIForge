@@ -5,15 +5,16 @@ import org.gemini.ui.forge.domain.UIPage
 import org.gemini.ui.forge.domain.UIBlock
 
 /**
+ * 参考图显示模式
+ */
+enum class ReferenceDisplayMode {
+    HIDDEN,   // 隐藏参考图
+    SPLIT,    // 上下分屏对照
+    OVERLAY   // 重叠半透明对齐
+}
+
+/**
  * 编辑器页面的 UI 状态模型
- * @property globalState 应用全局状态
- * @property project 当前正在编辑的项目数据状态
- * @property projectName 项目名称
- * @property selectedPageId 当前选中的页面 ID
- * @property selectedBlockId 当前选中的 UI 组件 ID
- * @property currentEditingPromptLang 当前 UI 上正在编辑的提示词语言 (用于切换显示)
- * @property isGenerating 是否正在通过 AI 生成资源
- * @property generatedCandidates AI 生成的候选图片数据列表 (Base64)
  */
 data class EditorState(
     val globalState: AppGlobalState = AppGlobalState(),
@@ -23,7 +24,11 @@ data class EditorState(
     val selectedBlockId: String? = null,
     val currentEditingPromptLang: PromptLanguage = PromptLanguage.ZH,
     val isGenerating: Boolean = false,
-    val generatedCandidates: List<String> = emptyList()
+    val generatedCandidates: List<String> = emptyList(),
+    
+    // 视觉对照相关状态
+    val referenceMode: ReferenceDisplayMode = ReferenceDisplayMode.HIDDEN,
+    val referenceOpacity: Float = 0.4f
 ) {
     /** 获取当前选中的页面对象 */
     val currentPage: UIPage?

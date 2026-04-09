@@ -126,8 +126,8 @@ fun App(typography: Typography? = null) {
                             onOptimizePrompt = { id, onComplete ->
                                 viewModel.optimizePrompt(id, globalState.effectiveApiKey, onComplete)
                             },
-                            onRefineArea = { id, instruction, onLog, onChunk, onComplete ->
-                                viewModel.onRefineArea(id, instruction, onLog, onChunk, onComplete)
+                            onRefineArea = { id, bounds, instruction, onLog, onChunk, onComplete ->
+                                viewModel.onRefineArea(id, bounds, instruction, onLog, onChunk, onComplete)
                             },
                             onRefineCustomArea = { bounds, instruction, onLog, onChunk, onComplete ->
                                 viewModel.onRefineCustomArea(bounds, instruction, onLog, onChunk, onComplete)

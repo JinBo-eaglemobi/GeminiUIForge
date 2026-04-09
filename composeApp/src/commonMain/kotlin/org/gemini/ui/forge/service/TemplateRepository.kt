@@ -20,6 +20,45 @@ class TemplateRepository(
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
 
     /**
+     * 将临时图片（如 AI 候选图或重塑裁剪图）保存到模板的 cache 目录下
+     * @return 返回保存后的本地绝对路径
+     */
+    suspend fun saveCacheImage(templateName: String, fileNamePrefix: String, bytes: ByteArray): String {
+        val sanitizedName = templateName.replace(" ", "_")
+        val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
+        val fileName = "$sanitizedName/cache/${fileNamePrefix}_$timestamp.jpg"
+        return fileStorage.saveBytesToFile(fileName, bytes)
+    }
+
+    /**
+     * 清理指定模板下超过 24 小时的缓存文件
+     */
+    suspend fun cleanupExpiredCache(templateName: String) {
+        val sanitizedName = templateName.replace(" ", "_")
+        val cacheDirName = "$sanitizedName/cache"
+        // 注意：LocalFileStorage 目前没有直接暴露绝对路径转换，
+        // 我们假设 getTemplates 能列出目录，以此类推。
+        // 这里我们先通过 FileUtils 的扩展能力尝试。
+        try {
+            val rootDir = fileStorage.getDataDir()
+            val fullCacheDir = "$rootDir/$cacheDirName"
+            val files = org.gemini.ui.forge.utils.listFilesInLocalDirectory(fullCacheDir)
+            val now = org.gemini.ui.forge.getCurrentTimeMillis()
+            val oneDay = 24 * 60 * 60 * 1000L
+
+            files.forEach { filePath ->
+                val lastMod = org.gemini.ui.forge.utils.getLocalFileLastModified(filePath)
+                if (now - lastMod > oneDay) {
+                    org.gemini.ui.forge.utils.deleteLocalFile(filePath)
+                    org.gemini.ui.forge.utils.AppLogger.d("TemplateRepository", "已清理过期缓存文件: $filePath")
+                }
+            }
+        } catch (e: Exception) {
+            org.gemini.ui.forge.utils.AppLogger.e("TemplateRepository", "清理缓存异常", e)
+        }
+    }
+
+    /**
      * 保存项目模板到本地。
      * 同时也负责将所有参与分析的参考图物理归档（下载/解码/移动）到模板专属的 assets 目录中。
      * 关键优化：会自动更新 UIPage 中的 sourceImageUri 指向归档后的安全路径。

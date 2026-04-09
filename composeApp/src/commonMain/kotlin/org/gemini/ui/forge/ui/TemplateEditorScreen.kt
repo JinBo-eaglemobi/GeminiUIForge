@@ -1,44 +1,45 @@
 package org.gemini.ui.forge.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.domain.UIBlock
 import org.gemini.ui.forge.domain.UIBlockType
 import org.gemini.ui.forge.domain.SerialRect
+import org.gemini.ui.forge.utils.decodeBase64ToBitmap
 import org.gemini.ui.forge.viewmodel.EditorState
 import org.gemini.ui.forge.viewmodel.PromptLanguage
 import org.jetbrains.compose.resources.stringResource
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.rememberScrollbarAdapter
+import kotlin.math.abs
+import kotlin.math.min
 
 @Composable
 fun TemplateEditorScreen(
@@ -49,63 +50,36 @@ fun TemplateEditorScreen(
     onBlockTypeChanged: (String, UIBlockType) -> Unit,
     onPromptChanged: (String, String) -> Unit,
     onOptimizePrompt: (String, (String) -> Unit) -> Unit,
-    onRefineArea: (String, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit, // 增加了 Log/Chunk 回调
+    onRefineArea: (String, SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit, // 增加了选区参数
     onRefineCustomArea: (SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit,
     onSwitchEditingLanguage: (PromptLanguage) -> Unit,
     onAddBlock: (UIBlockType) -> Unit,
     onDeleteBlock: (String) -> Unit,
     onSaveTemplate: () -> Unit
 ) {
-    var isSelectionMode by remember { mutableStateOf(false) }
-    var showCustomRefineDialog by remember { mutableStateOf(false) }
-    var pendingRect by remember { mutableStateOf<SerialRect?>(null) }
+    var showVisualRefine by remember { mutableStateOf(false) }
+    var refineTargetId by remember { mutableStateOf<String?>(null) } // 如果为 null 代表是自由框选
 
-    if (showCustomRefineDialog && pendingRect != null) {
-        var instruction by remember { mutableStateOf("") }
-        var isProcessing by remember { mutableStateOf(false) }
-        val logs = remember { mutableStateListOf<String>() }
-        var streamText by remember { mutableStateOf("") }
+    // 视觉选择重塑对话框
+    if (showVisualRefine) {
+        val defaultInstruction = if (refineTargetId != null) {
+            "请基于我提供的局部高清图，重新识别并分析这个特定组件的细节。请务必将分析出的 UI 结构（子组件、样式、提示词）更新到我当前选定的这个模块中，不要创建冗余的新模块，也不要修改其他无关区域。"
+        } else {
+            "这段区域是你之前未能识别到的 UI 部分。请重新分析该区域中的视觉元素，提取出准确的 UI 功能组件，并将它们作为新模块正确添加到当前页面的布局结构中。"
+        }
 
-        AlertDialog(
-            onDismissRequest = { if (!isProcessing) showCustomRefineDialog = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-            modifier = Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.85f),
-            title = { Text("框选区域重塑 (AI 流式分析)") },
-            text = {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Text("AI 将分析您框选的区域，并将其作为新组件合并到当前模板中。", style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = instruction,
-                        onValueChange = { instruction = it },
-                        label = { Text("描述该区域 (例如：顶部状态栏和返回按钮)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isProcessing
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    LogTerminal(logs = logs, streamText = streamText, modifier = Modifier.weight(1f))
+        VisualRefineDialog(
+            imageUri = state.currentPage?.sourceImageUri ?: "",
+            pageWidth = state.currentPage?.width ?: 1080f,
+            pageHeight = state.currentPage?.height ?: 1920f,
+            initialInstruction = defaultInstruction,
+            onDismiss = { showVisualRefine = false },
+            onConfirm = { rect, instruction, onLog, onChunk, onDone ->
+                if (refineTargetId != null) {
+                    onRefineArea(refineTargetId!!, rect, instruction, onLog, onChunk, onDone)
+                } else {
+                    onRefineCustomArea(rect, instruction, onLog, onChunk, onDone)
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        isProcessing = true
-                        logs.clear()
-                        streamText = ""
-                        onRefineCustomArea(pendingRect!!, instruction, { logs.add(it) }, { streamText += it }) { success ->
-                            isProcessing = false
-                            if (success) {
-                                showCustomRefineDialog = false
-                                isSelectionMode = false
-                            }
-                        }
-                    },
-                    enabled = !isProcessing && instruction.isNotBlank()
-                ) { Text("确认并开始分析") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCustomRefineDialog = false }, enabled = !isProcessing) { Text("取消") }
             }
         )
     }
@@ -121,13 +95,16 @@ fun TemplateEditorScreen(
             Surface(modifier = Modifier.weight(leftWeight).fillMaxHeight(), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
                 Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
                     Text("编辑工具", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
-                    FilterChip(
-                        selected = isSelectionMode,
-                        onClick = { isSelectionMode = !isSelectionMode },
-                        label = { Text("框选重塑模式") },
-                        leadingIcon = { Icon(Icons.Default.Crop, null, Modifier.size(18.dp)) },
+                    
+                    Button(
+                        onClick = { refineTargetId = null; showVisualRefine = true },
                         modifier = Modifier.fillMaxWidth()
-                    )
+                    ) {
+                        Icon(Icons.Default.Crop, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("进入框选重塑")
+                    }
+
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     Text("页面列表:", style = MaterialTheme.typography.labelMedium)
                     state.project.pages.forEach { page ->
@@ -156,8 +133,6 @@ fun TemplateEditorScreen(
                     blocks = state.currentPage?.blocks ?: emptyList(),
                     selectedBlockId = state.selectedBlockId,
                     onBlockClicked = onBlockClicked,
-                    isSelectionMode = isSelectionMode,
-                    onAreaSelected = { pendingRect = it; showCustomRefineDialog = true },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -183,7 +158,7 @@ fun TemplateEditorScreen(
                             onTypeChanged = { onBlockTypeChanged(block.id, it) },
                             onPromptChanged = { onPromptChanged(block.id, it) },
                             onOptimizePrompt = { onOptimizePrompt(block.id, it) },
-                            onRefineArea = { inst, log, chunk, done -> onRefineArea(block.id, inst, log, chunk, done) },
+                            onOpenRefine = { refineTargetId = block.id; showVisualRefine = true },
                             onDelete = { onDeleteBlock(block.id) }
                         )
                     }
@@ -194,8 +169,231 @@ fun TemplateEditorScreen(
 }
 
 @Composable
+fun VisualRefineDialog(
+    imageUri: String,
+    pageWidth: Float,
+    pageHeight: Float,
+    initialInstruction: String,
+    onDismiss: () -> Unit,
+    onConfirm: (SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit
+) {
+    var instruction by remember { mutableStateOf(initialInstruction) }
+    var selectionRect by remember { mutableStateOf<SerialRect?>(null) }
+    var isProcessing by remember { mutableStateOf(false) }
+    var isDone by remember { mutableStateOf(false) }
+    var showLogs by remember { mutableStateOf(true) } // 默认开启日志侧边栏
+    val logs = remember { mutableStateListOf<String>() }
+    var streamText by remember { mutableStateOf("") }
+
+    val imageBitmapState = produceState<ImageBitmap?>(null, imageUri) {
+        value = imageUri.decodeBase64ToBitmap()
+    }
+    val imageBitmap = imageBitmapState.value
+
+    Dialog(
+        onDismissRequest = { if (!isProcessing) onDismiss() },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.98f).fillMaxHeight(0.95f),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                // 顶栏
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("AI 视觉引导重塑工作间", style = MaterialTheme.typography.headlineSmall)
+                    Spacer(Modifier.weight(1f))
+                    
+                    // 日志开关
+                    FilledTonalIconToggleButton(checked = showLogs, onCheckedChange = { showLogs = it }) {
+                        Icon(Icons.Default.Terminal, null)
+                    }
+                    
+                    Spacer(Modifier.width(12.dp))
+                    IconButton(onClick = onDismiss, enabled = !isProcessing) { Icon(Icons.Default.Close, null) }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // 核心工作区：左侧图片选区，右侧大控制台
+                Row(modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // 左侧：图片选区
+                    Box(modifier = Modifier.weight(0.6f).fillMaxHeight().clip(RoundedCornerShape(8.dp)).background(Color.Black)) {
+                        if (imageBitmap != null) {
+                            ImageSelector(
+                                bitmap = imageBitmap,
+                                logicalWidth = pageWidth,
+                                logicalHeight = pageHeight,
+                                enabled = !isProcessing && !isDone, // 正在处理或已完成时冻结
+                                onSelectionChanged = { selectionRect = it },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            CircularProgressIndicator(Modifier.align(Alignment.Center))
+                        }
+                    }
+
+                    // 右侧：持久化日志控制台
+                    if (showLogs) {
+                        Column(modifier = Modifier.weight(0.4f).fillMaxHeight()) {
+                            Text("处理日志 (可滚动选择)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(4.dp))
+                            LogTerminal(
+                                logs = logs, 
+                                streamText = streamText, 
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // 指令与操作区
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = instruction,
+                        onValueChange = { instruction = it },
+                        label = { Text("修正建议或功能描述") },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isProcessing && !isDone
+                    )
+
+                    Spacer(Modifier.width(16.dp))
+
+                    if (isDone) {
+                        Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)) {
+                            Text("分析完成，返回编辑器")
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                if (selectionRect != null) {
+                                    isProcessing = true
+                                    logs.clear()
+                                    streamText = ""
+                                    onConfirm(selectionRect!!, instruction, { logs.add(it) }, { streamText += it }) { success ->
+                                        isProcessing = false
+                                        if (success) isDone = true
+                                    }
+                                }
+                            },
+                            enabled = selectionRect != null && instruction.isNotBlank() && !isProcessing
+                        ) {
+                            if (isProcessing) {
+                                CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text("正在分析...")
+                            } else {
+                                Text("开始 AI 重塑")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ImageSelector(
+    bitmap: ImageBitmap,
+    logicalWidth: Float,
+    logicalHeight: Float,
+    enabled: Boolean = true,
+    onSelectionChanged: (SerialRect?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var startOffset by remember { mutableStateOf<Offset?>(null) }
+    var currentOffset by remember { mutableStateOf<Offset?>(null) }
+    val density = LocalDensity.current
+
+    BoxWithConstraints(modifier = modifier) {
+        // ... (缩放换算逻辑保持不变)
+        val imgWidth = bitmap.width.toFloat()
+        val imgHeight = bitmap.height.toFloat()
+        val scale = min(maxWidth.value / imgWidth, maxHeight.value / imgHeight)
+        val drawWidth = imgWidth * scale
+        val drawHeight = imgHeight * scale
+        val offsetX = (maxWidth.value - drawWidth) / 2
+        val offsetY = (maxHeight.value - drawHeight) / 2
+
+        Canvas(modifier = Modifier.fillMaxSize().pointerInput(enabled) {
+            if (!enabled) return@pointerInput // 关键：禁用状态下不接收手势触发器
+            
+            detectDragGestures(
+                onDragStart = { startOffset = it },
+                onDrag = { change, _ ->
+                    if (!enabled) return@detectDragGestures
+                    currentOffset = change.position
+                    change.consume()
+                    
+                    // 实时换算为逻辑坐标
+                    val start = startOffset
+                    val end = currentOffset
+                    if (start != null && end != null) {
+                        fun toLogical(o: Offset): Offset {
+                            val px = (o.x / density.density - offsetX) / scale
+                            val py = (o.y / density.density - offsetY) / scale
+                            val lx = (px / imgWidth) * logicalWidth
+                            val ly = (py / imgHeight) * logicalHeight
+                            return Offset(lx.coerceIn(0f, logicalWidth), ly.coerceIn(0f, logicalHeight))
+                        }
+                        val l1 = toLogical(start)
+                        val l2 = toLogical(end)
+                        onSelectionChanged(SerialRect(
+                            left = min(l1.x, l2.x),
+                            top = min(l1.y, l2.y),
+                            right = maxOf(l1.x, l2.x),
+                            bottom = maxOf(l1.y, l2.y)
+                        ))
+                    }
+                },
+                onDragEnd = {},
+                onDragCancel = { startOffset = null; currentOffset = null }
+            )
+        }) {
+            // 绘制背景图
+            drawImage(
+                image = bitmap,
+                dstOffset = androidx.compose.ui.unit.IntOffset((offsetX * density.density).toInt(), (offsetY * density.density).toInt()),
+                dstSize = androidx.compose.ui.unit.IntSize((drawWidth * density.density).toInt(), (drawHeight * density.density).toInt())
+            )
+
+            // 绘制选区蒙层
+            val start = startOffset
+            val end = currentOffset
+            if (start != null && end != null) {
+                val rectLeft = min(start.x, end.x)
+                val rectTop = min(start.y, end.y)
+                val rectWidth = abs(end.x - start.x)
+                val rectHeight = abs(end.y - start.y)
+                
+                // 变色反馈：激活时为青色，冻结时为半透明灰色
+                val color = if (enabled) Color.Cyan else Color.LightGray.copy(alpha = 0.5f)
+                
+                drawRect(
+                    color = color.copy(alpha = 0.3f),
+                    topLeft = Offset(rectLeft, rectTop),
+                    size = androidx.compose.ui.geometry.Size(rectWidth, rectHeight)
+                )
+                drawRect(
+                    color = color,
+                    topLeft = Offset(rectLeft, rectTop),
+                    size = androidx.compose.ui.geometry.Size(rectWidth, rectHeight),
+                    style = Stroke(width = 2.dp.toPx())
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun LogTerminal(logs: List<String>, streamText: String, modifier: Modifier = Modifier) {
-    Surface(modifier = modifier.fillMaxWidth(), color = Color.Black, shape = RoundedCornerShape(4.dp)) {
+    Surface(modifier = modifier, color = Color.Black.copy(alpha = 0.85f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color.Green.copy(alpha = 0.5f))) {
         SelectionContainer {
             Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
                 val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -204,7 +402,7 @@ private fun LogTerminal(logs: List<String>, streamText: String, modifier: Modifi
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     items(logs) { Text(it, color = Color.Green, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace) }
                     if (streamText.isNotEmpty()) {
-                        item { Text("[流] 长度:${streamText.length} | 预览: ...${streamText.takeLast(40)}", color = Color.Cyan, style = MaterialTheme.typography.bodySmall) }
+                        item { Text("[流] 当前长度: ${streamText.length}", color = Color.Cyan, style = MaterialTheme.typography.bodySmall) }
                     }
                 }
                 VerticalScrollbar(modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(), adapter = rememberScrollbarAdapter(listState))
@@ -223,12 +421,11 @@ private fun BlockPropertiesEditor(
     onTypeChanged: (UIBlockType) -> Unit,
     onPromptChanged: (String) -> Unit,
     onOptimizePrompt: ((String) -> Unit) -> Unit,
-    onRefineArea: (String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit,
+    onOpenRefine: () -> Unit,
     onDelete: () -> Unit
 ) {
     var expandedType by remember { mutableStateOf(false) }
     var showPromptDialog by remember { mutableStateOf(false) }
-    var showRefineDialog by remember { mutableStateOf(false) }
 
     OutlinedTextField(value = block.id, onValueChange = {}, readOnly = true, label = { Text(stringResource(Res.string.prop_block_id)) }, modifier = Modifier.fillMaxWidth())
     Spacer(Modifier.height(16.dp))
@@ -260,29 +457,6 @@ private fun BlockPropertiesEditor(
         )
     }
 
-    if (showRefineDialog) {
-        var inst by remember { mutableStateOf("") }
-        var isProc by remember { mutableStateOf(false) }
-        val logs = remember { mutableStateListOf<String>() }
-        var streamText by remember { mutableStateOf("") }
-
-        AlertDialog(
-            onDismissRequest = { if (!isProc) showRefineDialog = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-            modifier = Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.85f),
-            title = { Text("组件重塑 (流式)") },
-            text = {
-                Column(Modifier.fillMaxSize()) {
-                    OutlinedTextField(inst, { inst = it }, label = { Text("修正指令") }, modifier = Modifier.fillMaxWidth(), enabled = !isProc)
-                    Spacer(Modifier.height(16.dp))
-                    LogTerminal(logs, streamText, Modifier.weight(1f))
-                }
-            },
-            confirmButton = { Button({ isProc = true; logs.clear(); streamText = ""; onRefineArea(inst, { logs.add(it) }, { streamText += it }) { isProc = false; if(it) showRefineDialog = false } }, enabled = !isProc && inst.isNotBlank()) { Text("开始") } },
-            dismissButton = { TextButton({ showRefineDialog = false }, enabled = !isProc) { Text("取消") } }
-        )
-    }
-
     Spacer(Modifier.height(16.dp))
     var xStr by remember(block.id, block.bounds.left) { mutableStateOf(block.bounds.left.toInt().toString()) }
     var yStr by remember(block.id, block.bounds.top) { mutableStateOf(block.bounds.top.toInt().toString()) }
@@ -307,7 +481,7 @@ private fun BlockPropertiesEditor(
     }
 
     Spacer(Modifier.height(24.dp))
-    OutlinedButton({ showRefineDialog = true }, Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)) {
+    OutlinedButton(onClick = onOpenRefine, Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)) {
         Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp)); Text("AI 组件重塑")
     }
     Spacer(Modifier.height(8.dp))

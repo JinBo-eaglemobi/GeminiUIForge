@@ -7,6 +7,20 @@ actual fun Throwable.getPlatformStackTrace(): String {
     return android.util.Log.getStackTraceString(this)
 }
 
+actual suspend fun getLocalFileLastModified(filePath: String): Long {
+    return File(filePath).lastModified()
+}
+
+actual suspend fun deleteLocalFile(filePath: String): Boolean {
+    return File(filePath).delete()
+}
+
+actual suspend fun listFilesInLocalDirectory(dirPath: String): List<String> {
+    val dir = File(dirPath)
+    if (!dir.exists() || !dir.isDirectory) return emptyList()
+    return dir.listFiles()?.filter { it.isFile }?.map { it.absolutePath } ?: emptyList()
+}
+
 actual suspend fun readLocalFileBytes(filePath: String): ByteArray? {
     return try {
         val file = File(filePath)

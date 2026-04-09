@@ -4,7 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -29,10 +30,10 @@ import geminiuiforge.composeapp.generated.resources.Res
 import org.gemini.ui.forge.domain.UIBlock
 import org.gemini.ui.forge.domain.SerialRect
 import org.gemini.ui.forge.utils.decodeBase64ToBitmap
+import org.gemini.ui.forge.viewmodel.ReferenceDisplayMode
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.abs
 
 @Composable
 fun CanvasArea(
@@ -41,175 +42,140 @@ fun CanvasArea(
     blocks: List<UIBlock>,
     selectedBlockId: String?,
     onBlockClicked: (String) -> Unit,
-    isSelectionMode: Boolean = false, // 框选模式开关
-    onAreaSelected: (SerialRect) -> Unit = {}, // 框选完成回调
+    
+    // 参考图显示增强
+    referenceMode: ReferenceDisplayMode = ReferenceDisplayMode.HIDDEN,
+    referenceUri: String? = null,
+    referenceOpacity: Float = 0.4f,
+    
     modifier: Modifier = Modifier
 ) {
     var zoom by remember { mutableStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
-    // 内部选区临时状态
-    var selectionStart by remember { mutableStateOf<Offset?>(null) }
-    var selectionEnd by remember { mutableStateOf<Offset?>(null) }
+    // 异步加载参考图位图
+    val refBitmapState = produceState<ImageBitmap?>(null, referenceUri) {
+        value = referenceUri?.decodeBase64ToBitmap()
+    }
+    val refBitmap = refBitmapState.value
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .clipToBounds()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val scaleX = maxWidth.value / pageWidth
-            val scaleY = maxHeight.value / pageHeight
-            val baseScale = min(scaleX, scaleY) * 0.9f
-            
-            val offsetX = (maxWidth.value - (pageWidth * baseScale)) / 2
-            val offsetY = (maxHeight.value - (pageHeight * baseScale)) / 2
+    Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        
+        // 模式 A：分屏对照 (参考图在上)
+        if (referenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) {
+            Surface(
+                modifier = Modifier.weight(0.35f).fillMaxWidth().padding(8.dp),
+                color = Color.Black,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Image(bitmap = refBitmap, contentDescription = "Ref", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            }
+        }
 
-            // 主交互容器
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    // 1. 处理框选或平移缩放
-                    .pointerInput(isSelectionMode) {
-                        if (isSelectionMode) {
-                            detectDragGestures(
-                                onDragStart = { selectionStart = it; selectionEnd = it },
-                                onDrag = { change, _ -> selectionEnd = change.position; change.consume() },
-                                onDragEnd = {
-                                    val start = selectionStart
-                                    val end = selectionEnd
-                                    if (start != null && end != null) {
-                                        // 坐标转换逻辑：(屏幕坐标 - 居中偏移 - 当前平移) / (基础缩放 * 缩放倍率)
-                                        fun toLogical(offset: Offset): Offset {
-                                            val lx = (offset.x / density.density - offsetX - pan.x) / (baseScale * zoom)
-                                            val ly = (offset.y / density.density - offsetY - pan.y) / (baseScale * zoom)
-                                            return Offset(lx.coerceIn(0f, pageWidth), ly.coerceIn(0f, pageHeight))
-                                        }
-                                        val lStart = toLogical(start)
-                                        val lEnd = toLogical(end)
-                                        onAreaSelected(SerialRect(
-                                            left = min(lStart.x, lEnd.x),
-                                            top = min(lStart.y, lEnd.y),
-                                            right = maxOf(lStart.x, lEnd.x),
-                                            bottom = maxOf(lStart.y, lEnd.y)
-                                        ))
-                                    }
-                                    selectionStart = null
-                                    selectionEnd = null
-                                },
-                                onDragCancel = { selectionStart = null; selectionEnd = null }
-                            )
-                        } else {
+        // 主舞台区域
+        Box(modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val baseScale = min(maxWidth.value / pageWidth, maxHeight.value / pageHeight) * 0.9f
+                val offsetX = (maxWidth.value - (pageWidth * baseScale)) / 2
+                val offsetY = (maxHeight.value - (pageHeight * baseScale)) / 2
+
+                // 核心容器：承载 UI 块、点击手势、参考蒙层
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(blocks) {
+                            detectTapGestures { offset ->
+                                // 点击坐标还原：(屏幕像素 - 边距像素 - 平移像素) / (总缩放比例 * 密度)
+                                val lx = ((offset.x / density.density - offsetX - pan.x / density.density) / (baseScale * zoom))
+                                val ly = ((offset.y / density.density - offsetY - pan.y / density.density) / (baseScale * zoom))
+                                
+                                val hitBlock = blocks.findLast { b ->
+                                    lx >= b.bounds.left && lx <= b.bounds.right &&
+                                    ly >= b.bounds.top && ly <= b.bounds.bottom
+                                }
+                                onBlockClicked(hitBlock?.id ?: "")
+                            }
+                        }
+                        .pointerInput(Unit) {
                             detectTransformGestures { _, panChange, zoomChange, _ ->
                                 zoom = (zoom * zoomChange).coerceIn(0.1f, 5f)
                                 pan += panChange
                             }
                         }
-                    }
-                    // 2. 处理滚轮缩放
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                if (event.type == PointerEventType.Scroll) {
-                                    val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
-                                    if (delta != 0f) {
-                                        val zoomFactor = if (delta > 0) 0.9f else 1.1f
-                                        zoom = (zoom * zoomFactor).coerceIn(0.1f, 5f)
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    if (event.type == PointerEventType.Scroll) {
+                                        val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                                        if (delta != 0f) zoom = (zoom * (if (delta > 0) 0.9f else 1.1f)).coerceIn(0.1f, 5f)
+                                        event.changes.forEach { it.consume() }
                                     }
-                                    event.changes.forEach { it.consume() }
                                 }
                             }
                         }
+                        .graphicsLayer(scaleX = zoom, scaleY = zoom, translationX = pan.x, translationY = pan.y)
+                ) {
+                    // 1. 渲染模式 B：重叠参考图 (作为底层)
+                    if (referenceMode == ReferenceDisplayMode.OVERLAY && refBitmap != null) {
+                        Image(
+                            bitmap = refBitmap,
+                            contentDescription = null,
+                            alpha = referenceOpacity,
+                            modifier = Modifier
+                                .offset(x = offsetX.dp, y = offsetY.dp)
+                                .size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp),
+                            contentScale = ContentScale.FillBounds
+                        )
                     }
-                    .graphicsLayer(
-                        scaleX = zoom,
-                        scaleY = zoom,
-                        translationX = pan.x,
-                        translationY = pan.y
-                    )
-            ) {
-                // 渲染 UI 块
-                blocks.forEach { block ->
-                    val isSelected = block.id == selectedBlockId
-                    
-                    // 异步加载图片的局部状态
-                    val imageBitmapState = produceState<ImageBitmap?>(initialValue = null, key1 = block.currentImageUri) {
-                        value = block.currentImageUri?.decodeBase64ToBitmap()
-                    }
-                    val imageBitmap = imageBitmapState.value
 
-                    Box(
-                        modifier = Modifier
-                            .offset(
-                                x = (offsetX + block.bounds.left * baseScale).dp,
-                                y = (offsetY + block.bounds.top * baseScale).dp
-                            )
-                            .size(
-                                width = (block.bounds.width * baseScale).dp,
-                                height = (block.bounds.height * baseScale).dp
-                            )
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                            .border(
-                                width = if (isSelected) (2.dp / zoom) else (0.5.dp / zoom),
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                            )
-                            .clickable(enabled = !isSelectionMode) { onBlockClicked(block.id) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (imageBitmap != null) {
-                            Image(
-                                bitmap = imageBitmap,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else if (block.currentImageUri != null) {
-                            // 加载中状态提示
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.dp)
-                        } else {
-                            Text(text = stringResource(block.type.getDisplayNameRes()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
+                    // 2. 渲染 UI 块集合
+                    blocks.forEach { block ->
+                        val isSelected = block.id == selectedBlockId
+                        val imageBitmapState = produceState<ImageBitmap?>(null, block.currentImageUri) {
+                            value = block.currentImageUri?.decodeBase64ToBitmap()
+                        }
+                        val imageBitmap = imageBitmapState.value
+
+                        Box(
+                            modifier = Modifier
+                                .offset(x = (offsetX + block.bounds.left * baseScale).dp, y = (offsetY + block.bounds.top * baseScale).dp)
+                                .size(width = (block.bounds.width * baseScale).dp, height = (block.bounds.height * baseScale).dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(if(isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent)
+                                .border(
+                                    width = if (isSelected) (2.dp / zoom) else (0.5.dp / zoom),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (imageBitmap != null) {
+                                Image(bitmap = imageBitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                            } else if (block.currentImageUri != null) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.dp)
+                            } else {
+                                Text(text = stringResource(block.type.getDisplayNameRes()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), textAlign = TextAlign.Center)
+                            }
                         }
                     }
                 }
             }
 
-            // 选区 Overlay (在 graphicsLayer 之外渲染，确保它跟随屏幕坐标而不是画布坐标)
-            if (isSelectionMode && selectionStart != null && selectionEnd != null) {
-                val s = selectionStart!!
-                val e = selectionEnd!!
-                Box(
-                    modifier = Modifier
-                        .offset(x = (min(s.x, e.x) / density.density).dp, y = (min(s.y, e.y) / density.density).dp)
-                        .size(width = (abs(e.x - s.x) / density.density).dp, height = (abs(e.y - s.y) / density.density).dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-                        .border(1.dp, MaterialTheme.colorScheme.primary)
-                )
-            }
-        }
-
-        // 控制条
-        Surface(
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-            tonalElevation = 4.dp,
-            shadowElevation = 2.dp
-        ) {
-            Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(onClick = { zoom = (zoom - 0.2f).coerceAtLeast(0.1f) }, modifier = Modifier.size(28.dp)) {
-                    Text("-", style = MaterialTheme.typography.titleMedium)
-                }
-                Text(text = "${(zoom * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, modifier = Modifier.widthIn(min = 40.dp), textAlign = TextAlign.Center)
-                IconButton(onClick = { zoom = (zoom + 0.2f).coerceAtMost(5f) }, modifier = Modifier.size(28.dp)) {
-                    Text("+", style = MaterialTheme.typography.titleMedium)
-                }
-                VerticalDivider(modifier = Modifier.height(16.dp))
-                IconButton(onClick = { zoom = 1f; pan = Offset.Zero }, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Reset", modifier = Modifier.size(18.dp))
+            // 悬浮工具条
+            Surface(
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                tonalElevation = 4.dp
+            ) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, Arrangement.spacedBy(8.dp)) {
+                    IconButton(onClick = { zoom = (zoom - 0.2f).coerceAtLeast(0.1f) }, Modifier.size(28.dp)) { Text("-") }
+                    Text("${(zoom * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium)
+                    IconButton(onClick = { zoom = (zoom + 0.2f).coerceAtMost(5f) }, Modifier.size(28.dp)) { Text("+") }
+                    VerticalDivider(Modifier.height(16.dp))
+                    IconButton(onClick = { zoom = 1f; pan = Offset.Zero }, Modifier.size(28.dp)) { Icon(Icons.Default.Refresh, null, Modifier.size(18.dp)) }
                 }
             }
         }

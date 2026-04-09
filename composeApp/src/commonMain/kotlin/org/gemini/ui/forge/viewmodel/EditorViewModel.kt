@@ -32,7 +32,6 @@ class EditorViewModel(
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditorState())
-    /** 向外暴露的只读 UI 状态流 */
     val state: StateFlow<EditorState> = _state.asStateFlow()
 
     init {
@@ -42,7 +41,6 @@ class EditorViewModel(
         }
     }
 
-    /** 从本地持久化存储加载配置信息 */
     private suspend fun loadSettings() {
         val apiKey = configManager.loadKey("GEMINI_API_KEY") ?: ""
         val globalKey = configManager.loadGlobalGeminiKey() ?: ""
@@ -68,70 +66,6 @@ class EditorViewModel(
         ) }
     }
 
-    fun setPromptLanguagePref(pref: PromptLanguage) {
-        viewModelScope.launch {
-            configManager.saveKey("PROMPT_LANGUAGE_PREF", pref.name)
-            _state.update { it.copy(
-                globalState = it.globalState.copy(promptLangPref = pref),
-                currentEditingPromptLang = if (pref == PromptLanguage.EN) PromptLanguage.EN else PromptLanguage.ZH
-            ) }
-        }
-    }
-
-    fun switchEditingLanguage(lang: PromptLanguage) {
-        _state.update { it.copy(currentEditingPromptLang = lang) }
-    }
-
-    fun saveApiKey(newKey: String) {
-        viewModelScope.launch {
-            configManager.saveKey("GEMINI_API_KEY", newKey)
-            val globalKey = configManager.loadGlobalGeminiKey() ?: ""
-            val effectiveKey = newKey.ifBlank { globalKey }
-            _state.update { it.copy(globalState = it.globalState.copy(apiKey = newKey, effectiveApiKey = effectiveKey)) }
-        }
-    }
-
-    fun setLanguage(code: String) {
-        viewModelScope.launch {
-            configManager.saveKey("APP_LANGUAGE", code)
-            _state.update { it.copy(globalState = it.globalState.copy(languageCode = code)) }
-        }
-    }
-
-    fun updateStorageDir(newPath: String) {
-        viewModelScope.launch {
-            if (templateRepo.updateStorageDir(newPath)) {
-                _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) }
-            }
-        }
-    }
-
-    fun setMaxRetries(count: Int) {
-        viewModelScope.launch {
-            configManager.saveKey("API_MAX_RETRIES", count.toString())
-            _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) }
-        }
-    }
-
-    /** 加载初始的基础 UI 模板 */
-    private fun loadBaseTemplate() {
-        val mainBlocks = listOf(
-            UIBlock("bg_1", UIBlockType.BACKGROUND, SerialRect(0f, 0f, 1080f, 1920f)),
-            UIBlock("reels_1", UIBlockType.REEL, SerialRect(100f, 400f, 980f, 1400f)),
-            UIBlock("spin_1", UIBlockType.SPIN_BUTTON, SerialRect(400f, 1500f, 680f, 1780f)),
-            UIBlock("win_1", UIBlockType.WIN_DISPLAY, SerialRect(200f, 150f, 880f, 300f))
-        )
-        val mainPage = UIPage(id = "page_1", nameStr = "Main Game", width = 1080f, height = 1920f, sourceImageUri = null, blocks = mainBlocks)
-        val bonusPage = UIPage(id = "page_2", nameStr = "Bonus Game", width = 1080f, height = 1920f, sourceImageUri = null, blocks = emptyList())
-
-        _state.update { 
-            it.copy(
-                project = it.project.copy(pages = listOf(mainPage, bonusPage)),
-                selectedPageId = "page_1"
-            ) 
-        }
-    }
-    
     fun loadProject(projectName: String, projectState: ProjectState) {
         _state.update { 
             it.copy(
@@ -142,37 +76,40 @@ class EditorViewModel(
                 generatedCandidates = emptyList()
             )
         }
+        viewModelScope.launch {
+            templateRepo.cleanupExpiredCache(projectName)
+        }
     }
 
-    fun onPageSelected(pageId: String) {
-        _state.update { it.copy(selectedPageId = pageId, selectedBlockId = null, generatedCandidates = emptyList()) }
+    private fun loadBaseTemplate() {
+        val mainBlocks = listOf(
+            UIBlock("bg_1", UIBlockType.BACKGROUND, SerialRect(0f, 0f, 1080f, 1920f)),
+            UIBlock("reels_1", UIBlockType.REEL, SerialRect(100f, 400f, 980f, 1400f)),
+            UIBlock("spin_1", UIBlockType.SPIN_BUTTON, SerialRect(400f, 1500f, 680f, 1780f)),
+            UIBlock("win_1", UIBlockType.WIN_DISPLAY, SerialRect(200f, 150f, 880f, 300f))
+        )
+        val mainPage = UIPage(id = "page_1", nameStr = "Main Game", width = 1080f, height = 1920f, sourceImageUri = null, blocks = mainBlocks)
+        val bonusPage = UIPage(id = "page_2", nameStr = "Bonus Game", width = 1080f, height = 1920f, sourceImageUri = null, blocks = emptyList())
+        _state.update { it.copy(project = it.project.copy(pages = listOf(mainPage, bonusPage)), selectedPageId = "page_1") }
     }
 
-    fun onBlockClicked(blockId: String) {
-        _state.update { it.copy(selectedBlockId = if (it.selectedBlockId == blockId) null else blockId) }
-    }
+    fun onPageSelected(pageId: String) = _state.update { it.copy(selectedPageId = pageId, selectedBlockId = null, generatedCandidates = emptyList()) }
+    fun onBlockClicked(blockId: String) = _state.update { it.copy(selectedBlockId = if (it.selectedBlockId == blockId) null else blockId) }
 
     fun onUserPromptChanged(newPrompt: String, lang: PromptLanguage? = null) {
         val pageId = _state.value.selectedPageId ?: return
         val blockId = _state.value.selectedBlockId ?: return
         val targetLang = lang ?: _state.value.currentEditingPromptLang
-        
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
                     val updatedBlocks = page.blocks.map { block ->
                         if (block.id == blockId) {
-                            if (targetLang == PromptLanguage.EN) {
-                                block.copy(userPromptEn = newPrompt)
-                            } else {
-                                block.copy(userPromptZh = newPrompt)
-                            }
+                            if (targetLang == PromptLanguage.EN) block.copy(userPromptEn = newPrompt) else block.copy(userPromptZh = newPrompt)
                         } else block
                     }
                     page.copy(blocks = updatedBlocks)
-                } else {
-                    page
-                }
+                } else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
@@ -182,7 +119,6 @@ class EditorViewModel(
         val block = state.value.project.pages.flatMap { it.blocks }.find { it.id == blockId } ?: return
         val currentLang = _state.value.currentEditingPromptLang
         val textToOptimize = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
-        
         if (textToOptimize.isBlank()) return
 
         viewModelScope.launch {
@@ -192,7 +128,6 @@ class EditorViewModel(
                 } else {
                     "请优化并润色以下关于 UI 组件的中文描述，使其更具设计感、更详尽且生动。请保持使用中文回答： "
                 }
-
                 val optimized = aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, _state.value.globalState.maxRetries)
                 onUserPromptChanged(optimized, currentLang)
                 onComplete(optimized)
@@ -235,19 +170,12 @@ class EditorViewModel(
     fun addBlock(type: UIBlockType) {
         val pageId = _state.value.selectedPageId ?: return
         val newBlockId = "block_${org.gemini.ui.forge.getCurrentTimeMillis()}"
-        val defaultBounds = SerialRect(100f, 100f, 400f, 300f)
-        val newBlock = UIBlock(newBlockId, type, defaultBounds)
-
+        val newBlock = UIBlock(newBlockId, type, SerialRect(100f, 100f, 400f, 300f))
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == pageId) {
-                    page.copy(blocks = page.blocks + newBlock)
-                } else page
+                if (page.id == pageId) page.copy(blocks = page.blocks + newBlock) else page
             }
-            currentState.copy(
-                project = currentState.project.copy(pages = updatedPages),
-                selectedBlockId = newBlockId
-            )
+            currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = newBlockId)
         }
     }
 
@@ -255,31 +183,24 @@ class EditorViewModel(
         val pageId = _state.value.selectedPageId ?: return
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == pageId) {
-                    page.copy(blocks = page.blocks.filterNot { it.id == blockId })
-                } else page
+                if (page.id == pageId) page.copy(blocks = page.blocks.filterNot { it.id == blockId }) else page
             }
-            currentState.copy(
-                project = currentState.project.copy(pages = updatedPages),
-                selectedBlockId = if (currentState.selectedBlockId == blockId) null else currentState.selectedBlockId
-            )
+            currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = if (currentState.selectedBlockId == blockId) null else currentState.selectedBlockId)
         }
     }
 
     /**
-     * 针对选定区域调用 AI 进行结构重塑
+     * 针对选定区域调用 AI 进行结构重塑 (基于视觉选择生成的 Rect)
      */
     fun onRefineArea(
         blockId: String, 
+        bounds: SerialRect,
         userInstruction: String, 
         onLog: (String) -> Unit = {},
         onChunk: (String) -> Unit = {},
         onComplete: (Boolean) -> Unit
     ) {
         val currentState = _state.value
-        val block = currentState.project.pages.flatMap { it.blocks }.find { it.id == blockId } ?: return
-        
-        // 核心优化：仅使用当前页面的溯源图片
         val currentPage = currentState.currentPage
         val originalImage = currentPage?.sourceImageUri ?: throw Exception("找不到当前页面的原始参考图")
         val apiKey = currentState.globalState.effectiveApiKey
@@ -287,48 +208,37 @@ class EditorViewModel(
         viewModelScope.launch {
             try {
                 onLog("正在准备局部细节裁剪...")
-                val croppedBytes = org.gemini.ui.forge.utils.cropImage(originalImage, block.bounds)
-                    ?: throw Exception("图像裁剪失败")
+                val croppedBytes = org.gemini.ui.forge.utils.cropImage(
+                    imageSource = originalImage, 
+                    bounds = bounds,
+                    logicalWidth = currentPage.width,
+                    logicalHeight = currentPage.height
+                ) ?: throw Exception("图像裁剪失败")
+
+                val cachePath = templateRepo.saveCacheImage(currentState.projectName, "refine_crop_${blockId}", croppedBytes)
+                onLog("📸 局部裁剪图已暂存至本地: $cachePath")
 
                 onLog("正在分析原图指纹以同步云端上下文...")
-                val originalBytes = org.gemini.ui.forge.utils.readLocalFileBytes(originalImage) 
-                    ?: throw Exception("无法读取原图: $originalImage")
-                
+                val originalBytes = org.gemini.ui.forge.utils.readLocalFileBytes(originalImage) ?: throw Exception("无法读取原图")
                 val fingerprint = originalBytes.calculateMd5()
                 
-                var originalFileUri = cloudAssetManager.assets.value.find { 
-                    (it.displayName?.contains(fingerprint) == true) && it.state == "ACTIVE"
-                }?.uri ?: ""
+                var originalFileUri = cloudAssetManager.assets.value.find { (it.displayName?.contains(fingerprint) == true) && it.state == "ACTIVE" }?.uri ?: ""
 
                 if (originalFileUri.isBlank()) {
                     onLog("🚀 云端未命中指纹，正在针对当前页面自动重传参考图...")
                     val displayName = originalImage.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "reference.jpg" }
                     val mimeType = org.gemini.ui.forge.utils.getMimeType(originalImage)
-                    originalFileUri = cloudAssetManager.getOrUploadFile(displayName, originalBytes, mimeType) { _, status ->
-                        onLog("[$status]")
-                    } ?: ""
-                }
-
-                if (originalFileUri.isBlank()) {
-                    onLog("⚠️ 警告: 云端资源同步失败，将仅基于局部裁剪图进行重塑。")
+                    originalFileUri = cloudAssetManager.getOrUploadFile(displayName, originalBytes, mimeType) { _, status -> onLog("[$status]") } ?: ""
                 }
 
                 val currentJson = Json.encodeToString(ProjectState.serializer(), currentState.project)
-                val updatedProject = aiService.refineAreaForTemplate(
-                    originalImageUri = originalFileUri,
-                    croppedBytes = croppedBytes,
-                    currentJson = currentJson,
-                    userInstruction = userInstruction,
-                    apiKey = apiKey,
-                    onLog = onLog,
-                    onChunk = onChunk
-                )
+                val updatedProject = aiService.refineAreaForTemplate(originalImageUri = originalFileUri, croppedBytes = croppedBytes, currentJson = currentJson, userInstruction = userInstruction, apiKey = apiKey, onLog = onLog, onChunk = onChunk)
 
                 _state.update { it.copy(project = updatedProject) }
                 templateRepo.saveTemplate(currentState.projectName, updatedProject)
                 onComplete(true)
             } catch (e: Exception) {
-                AppLogger.e("EditorViewModel", "区域重塑失败: ${e.message}", e)
+                AppLogger.e("EditorViewModel", "区域重塑失败", e)
                 onLog("❌ 错误: ${e.message}")
                 onComplete(false)
             }
@@ -353,48 +263,37 @@ class EditorViewModel(
         viewModelScope.launch {
             try {
                 onLog("正在导出选区细节...")
-                val croppedBytes = org.gemini.ui.forge.utils.cropImage(originalImage, bounds)
-                    ?: throw Exception("图像裁剪失败")
+                val croppedBytes = org.gemini.ui.forge.utils.cropImage(
+                    imageSource = originalImage, 
+                    bounds = bounds,
+                    logicalWidth = currentPage.width,
+                    logicalHeight = currentPage.height
+                ) ?: throw Exception("图像裁剪失败")
+
+                val cachePath = templateRepo.saveCacheImage(currentState.projectName, "custom_refine_crop", croppedBytes)
+                onLog("📸 框选裁剪图已暂存至本地: $cachePath")
 
                 onLog("正在分析原图指纹以同步云端上下文...")
-                val originalBytes = org.gemini.ui.forge.utils.readLocalFileBytes(originalImage) 
-                    ?: throw Exception("无法读取原图: $originalImage")
-                
+                val originalBytes = org.gemini.ui.forge.utils.readLocalFileBytes(originalImage) ?: throw Exception("无法读取原图")
                 val fingerprint = originalBytes.calculateMd5()
                 
-                var originalFileUri = cloudAssetManager.assets.value.find { 
-                    (it.displayName?.contains(fingerprint) == true) && it.state == "ACTIVE"
-                }?.uri ?: ""
+                var originalFileUri = cloudAssetManager.assets.value.find { (it.displayName?.contains(fingerprint) == true) && it.state == "ACTIVE" }?.uri ?: ""
 
                 if (originalFileUri.isBlank()) {
                     onLog("🚀 云端未命中指纹，正在针对当前页面自动重传参考图...")
                     val displayName = originalImage.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "reference.jpg" }
                     val mimeType = org.gemini.ui.forge.utils.getMimeType(originalImage)
-                    originalFileUri = cloudAssetManager.getOrUploadFile(displayName, originalBytes, mimeType) { _, status ->
-                        onLog("[$status]")
-                    } ?: ""
-                }
-
-                if (originalFileUri.isBlank()) {
-                    onLog("⚠️ 警告: 云端资源同步失败，将仅基于局部裁剪图进行重塑。")
+                    originalFileUri = cloudAssetManager.getOrUploadFile(displayName, originalBytes, mimeType) { _, status -> onLog("[$status]") } ?: ""
                 }
 
                 val currentJson = Json.encodeToString(ProjectState.serializer(), currentState.project)
-                val updatedProject = aiService.refineAreaForTemplate(
-                    originalImageUri = originalFileUri,
-                    croppedBytes = croppedBytes,
-                    currentJson = currentJson,
-                    userInstruction = userInstruction,
-                    apiKey = apiKey,
-                    onLog = onLog,
-                    onChunk = onChunk
-                )
+                val updatedProject = aiService.refineAreaForTemplate(originalImageUri = originalFileUri, croppedBytes = croppedBytes, currentJson = currentJson, userInstruction = userInstruction, apiKey = apiKey, onLog = onLog, onChunk = onChunk)
 
                 _state.update { it.copy(project = updatedProject) }
                 templateRepo.saveTemplate(currentState.projectName, updatedProject)
                 onComplete(true)
             } catch (e: Exception) {
-                AppLogger.e("EditorViewModel", "手动区域重塑失败: ${e.message}", e)
+                AppLogger.e("EditorViewModel", "手动区域重塑失败", e)
                 onLog("❌ 错误: ${e.message}")
                 onComplete(false)
             }
@@ -405,31 +304,34 @@ class EditorViewModel(
         val block = state.value.selectedBlock ?: return
         val currentLang = _state.value.currentEditingPromptLang
         val submitPrompt = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
+        val projectName = _state.value.projectName
 
         viewModelScope.launch {
             _state.update { it.copy(isGenerating = true, generatedCandidates = emptyList()) }
             try {
-                val candidates = aiService.generateImages(
-                    blockType = block.type.name,
-                    userPrompt = submitPrompt,
-                    apiKey = apiKey,
-                    maxRetries = _state.value.globalState.maxRetries
-                )
-                _state.update { it.copy(generatedCandidates = candidates, isGenerating = false) }
+                val candidatesBase64 = aiService.generateImages(blockType = block.type.name, userPrompt = submitPrompt, apiKey = apiKey, maxRetries = _state.value.globalState.maxRetries)
+                val candidatePaths = candidatesBase64.mapIndexed { index, base64 ->
+                    val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
+                    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                    val bytes = kotlin.io.encoding.Base64.Default.decode(pure)
+                    templateRepo.saveCacheImage(projectName, "candidate_${block.id}_$index", bytes)
+                }
+                _state.update { it.copy(generatedCandidates = candidatePaths, isGenerating = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(isGenerating = false) }
             }
         }
     }
 
-    fun onImageSelected(base64Data: String) {
+    fun onImageSelected(imageUri: String) {
         val pageId = _state.value.selectedPageId ?: return
         val blockId = _state.value.selectedBlockId ?: return
         val projectName = _state.value.projectName
-
         viewModelScope.launch {
+            val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(imageUri) ?: return@launch
+            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+            val base64Data = "data:image/jpeg;base64," + kotlin.io.encoding.Base64.Default.encode(bytes)
             val localImagePath = templateRepo.saveResource(projectName, blockId, base64Data)
-
             _state.update { currentState ->
                 val updatedPages = currentState.project.pages.map { page ->
                     if (page.id == pageId) {
@@ -437,22 +339,31 @@ class EditorViewModel(
                             if (block.id == blockId) block.copy(currentImageUri = localImagePath) else block
                         }
                         page.copy(blocks = updatedBlocks)
-                    } else {
-                        page
-                    }
+                    } else page
                 }
                 currentState.copy(project = currentState.project.copy(pages = updatedPages), generatedCandidates = emptyList())
             }
-            val latestState = _state.value
-            templateRepo.saveTemplate(projectName, latestState.project)
+            templateRepo.saveTemplate(projectName, _state.value.project)
         }
     }
 
-    fun navigateTo(screen: AppScreen) {
-        _state.update { it.copy(globalState = it.globalState.copy(currentScreen = screen)) }
+    fun navigateTo(screen: AppScreen) = _state.update { it.copy(globalState = it.globalState.copy(currentScreen = screen)) }
+    fun setThemeMode(mode: ThemeMode) = _state.update { it.copy(globalState = it.globalState.copy(themeMode = mode)) }
+    fun saveApiKey(newKey: String) = viewModelScope.launch { configManager.saveKey("GEMINI_API_KEY", newKey); val globalKey = configManager.loadGlobalGeminiKey() ?: ""; val effectiveKey = newKey.ifBlank { globalKey }; _state.update { it.copy(globalState = it.globalState.copy(apiKey = newKey, effectiveApiKey = effectiveKey)) } }
+    fun setLanguage(code: String) = viewModelScope.launch { configManager.saveKey("APP_LANGUAGE", code); _state.update { it.copy(globalState = it.globalState.copy(languageCode = code)) } }
+    fun updateStorageDir(newPath: String) = viewModelScope.launch { if (templateRepo.updateStorageDir(newPath)) _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) } }
+    fun setMaxRetries(count: Int) = viewModelScope.launch { configManager.saveKey("API_MAX_RETRIES", count.toString()); _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) } }
+    fun switchEditingLanguage(lang: PromptLanguage) = _state.update { it.copy(currentEditingPromptLang = lang) }
+    
+    /** 切换参考图显示模式 */
+    fun setReferenceMode(mode: ReferenceDisplayMode) {
+        _state.update { it.copy(referenceMode = mode) }
     }
 
-    fun setThemeMode(mode: ThemeMode) {
-        _state.update { it.copy(globalState = it.globalState.copy(themeMode = mode)) }
+    /** 调整参考图透明度 */
+    fun setReferenceOpacity(opacity: Float) {
+        _state.update { it.copy(referenceOpacity = opacity) }
     }
+
+    fun setPromptLanguagePref(pref: PromptLanguage) = viewModelScope.launch { configManager.saveKey("PROMPT_LANGUAGE_PREF", pref.name); _state.update { it.copy(globalState = it.globalState.copy(promptLangPref = pref), currentEditingPromptLang = if (pref == PromptLanguage.EN) PromptLanguage.EN else PromptLanguage.ZH) } }
 }

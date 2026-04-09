@@ -3,8 +3,23 @@ package org.gemini.ui.forge.utils
 import org.gemini.ui.forge.service.LocalFileStorage
 
 actual fun Throwable.getPlatformStackTrace(): String {
-    // JS 中的 Throwable 通常包含 stack 属性，或者直接调用 toString()
     return this.message ?: "Unknown JS Error"
+}
+
+actual suspend fun getLocalFileLastModified(filePath: String): Long {
+    // 暂行方案：由于 JS OPFS 缺乏同步 API，返回当前时间以保持兼容，后续完善
+    return org.gemini.ui.forge.getCurrentTimeMillis()
+}
+
+actual suspend fun deleteLocalFile(filePath: String): Boolean {
+    val storage = LocalFileStorage()
+    // 假设 LocalFileStorage 将来会暴露删除单个文件的 API
+    return false 
+}
+
+actual suspend fun listFilesInLocalDirectory(dirPath: String): List<String> {
+    // 暂返空列表
+    return emptyList()
 }
 
 actual suspend fun readLocalFileBytes(filePath: String): ByteArray? {

@@ -1,6 +1,21 @@
 package org.gemini.ui.forge.utils
 
 /**
+ * 获取本地文件的最后修改时间 (毫秒)
+ */
+expect suspend fun getLocalFileLastModified(filePath: String): Long
+
+/**
+ * 删除本地文件
+ */
+expect suspend fun deleteLocalFile(filePath: String): Boolean
+
+/**
+ * 列出指定目录下的所有文件路径 (非递归)
+ */
+expect suspend fun listFilesInLocalDirectory(dirPath: String): List<String>
+
+/**
  * 跨平台将 Throwable 转换为详尽的堆栈跟踪字符串。
  */
 expect fun Throwable.getPlatformStackTrace(): String

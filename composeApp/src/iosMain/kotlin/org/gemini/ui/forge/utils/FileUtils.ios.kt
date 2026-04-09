@@ -8,6 +8,23 @@ actual fun Throwable.getPlatformStackTrace(): String {
     return this.getStackTrace().joinToString("\n")
 }
 
+actual suspend fun getLocalFileLastModified(filePath: String): Long {
+    val fileManager = NSFileManager.defaultManager
+    val attributes = fileManager.attributesOfItemAtPath(filePath, error = null)
+    val date = attributes?.get(NSFileModificationDate) as? NSDate
+    return (date?.timeIntervalSince1970 ?: 0.0).toLong() * 1000L
+}
+
+actual suspend fun deleteLocalFile(filePath: String): Boolean {
+    return NSFileManager.defaultManager.removeItemAtPath(filePath, error = null)
+}
+
+actual suspend fun listFilesInLocalDirectory(dirPath: String): List<String> {
+    val fileManager = NSFileManager.defaultManager
+    val contents = fileManager.contentsOfDirectoryAtPath(dirPath, error = null) as? List<String>
+    return contents?.map { "$dirPath/$it" } ?: emptyList()
+}
+
 actual suspend fun readLocalFileBytes(filePath: String): ByteArray? {
     val storage = LocalFileStorage()
     return storage.readBytesFromFile(filePath)

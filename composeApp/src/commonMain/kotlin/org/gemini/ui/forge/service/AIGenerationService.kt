@@ -51,9 +51,11 @@ class AIGenerationService(
                         val response = client.head(uri)
                         if (response.status.value != 200) return "参考图 ${index + 1} 链接不可访问"
                     }
+
                     uri.startsWith("data:image") -> {
                         if (uri.length < 100) return "参考图 ${index + 1} 的 Base64 数据错误"
                     }
+
                     else -> {
                         if (!org.gemini.ui.forge.utils.isFileExists(uri)) return "无法找到本地参考图 ${index + 1}"
                     }
@@ -117,7 +119,7 @@ class AIGenerationService(
         onChunk: (String) -> Unit = {}
     ): ProjectState {
         syncLog("开始使用 Gemini 分析图片，数量: ${imageUris.size}", onLog)
-        
+
         if (apiKey.isBlank()) throw Exception("Gemini API 密钥为空")
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
         val client = NetworkClient.shared
@@ -125,7 +127,9 @@ class AIGenerationService(
         val promptText = try {
             @OptIn(InternalResourceApi::class)
             readResourceBytes("prompts/analyze_template.txt").decodeToString()
-        } catch (e: Exception) { "Analyze UI template..." }
+        } catch (e: Exception) {
+            "Analyze UI template..."
+        }
 
         syncLog("🚀 正在同步参考资源 (并发模式)...", onLog)
 
@@ -135,21 +139,36 @@ class AIGenerationService(
                 val deferredParts = imageUris.mapIndexed { index, localUri ->
                     async {
                         try {
-                            val bytes = if (localUri.startsWith("http")) client.get(localUri).readRawBytes() else org.gemini.ui.forge.utils.readLocalFileBytes(localUri)
+                            val bytes = if (localUri.startsWith("http")) client.get(localUri)
+                                .readRawBytes() else org.gemini.ui.forge.utils.readLocalFileBytes(localUri)
                             if (bytes == null) {
                                 syncLog("❌ 无法读取图 ${index + 1}", onLog)
                                 return@async null
                             }
-                            val displayName = localUri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "image_$index.jpg" }
+                            val displayName =
+                                localUri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "image_$index.jpg" }
                             val mime = org.gemini.ui.forge.utils.getMimeType(localUri)
                             val fileUri = cloudAssetManager.getOrUploadFile(displayName, bytes, mime)
-                            
+
                             if (fileUri != null) {
                                 syncLog("✅ 图 [${index + 1}] 云端同步成功", onLog)
-                                buildJsonObject { put("fileData", buildJsonObject { put("mimeType", mime); put("fileUri", fileUri) }) }
+                                buildJsonObject {
+                                    put(
+                                        "fileData",
+                                        buildJsonObject { put("mimeType", mime); put("fileUri", fileUri) })
+                                }
                             } else {
                                 syncLog("⚠️ 图 [${index + 1}] 触发 Base64 降级补偿", onLog)
-                                buildJsonObject { put("inlineData", buildJsonObject { put("mimeType", mime); put("data", kotlin.io.encoding.Base64.Default.encode(bytes)) }) }
+                                buildJsonObject {
+                                    put(
+                                        "inlineData",
+                                        buildJsonObject {
+                                            put("mimeType", mime); put(
+                                            "data",
+                                            kotlin.io.encoding.Base64.Default.encode(bytes)
+                                        )
+                                        })
+                                }
                             }
                         } catch (e: Exception) {
                             syncLog("❌ 处理图 ${index + 1} 异常: ${e.message}", onLog)
@@ -167,9 +186,10 @@ class AIGenerationService(
         }.toString()
 
         // 屏蔽日志里的 Base64
-        val fileLogBody = requestBody.replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
+        val fileLogBody =
+            requestBody.replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
         AppLogger.d(TAG, "---- [FULL ANALYZE REQUEST] ----\n$fileLogBody\n---------------------------------")
-        
+
         syncLog("📡 正在向服务器建立安全连接...", onLog)
 
         val accumulatedText = StringBuilder()
@@ -177,7 +197,9 @@ class AIGenerationService(
             client.preparePost(url) {
                 contentType(ContentType.Application.Json)
                 setBody(requestBody)
-                timeout { requestTimeoutMillis = 120_000L }
+                timeout { 
+                    requestTimeoutMillis = 300_000L 
+                }
             }.execute { response ->
                 syncLog("收到响应，状态: ${response.status}，接收数据流...", onLog)
                 if (response.status.isSuccess()) {
@@ -188,12 +210,16 @@ class AIGenerationService(
                             val dataJson = line.substringAfter("data: ").trim()
                             if (dataJson.isEmpty() || dataJson == "[DONE]") continue
                             try {
-                                val textChunk = jsonConfig.parseToJsonElement(dataJson).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
+                                val textChunk =
+                                    jsonConfig.parseToJsonElement(dataJson).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get(
+                                        "content"
+                                    )?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
                                 if (textChunk != null) {
                                     accumulatedText.append(textChunk)
                                     onChunk(textChunk)
                                 }
-                            } catch (e: Exception) {}
+                            } catch (e: Exception) {
+                            }
                         }
                     }
                     syncLog("UI 框架解析完毕。", onLog)
@@ -208,7 +234,13 @@ class AIGenerationService(
             if (finalString.isEmpty()) throw Exception("响应为空")
             val cleanJson = finalString.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
             val parsedState = jsonConfig.decodeFromString<ProjectState>(cleanJson)
-            return parsedState.copy(pages = parsedState.pages.mapIndexed { i, p -> p.copy(sourceImageUri = imageUris.getOrNull(i)) })
+            return parsedState.copy(pages = parsedState.pages.mapIndexed { i, p ->
+                p.copy(
+                    sourceImageUri = imageUris.getOrNull(
+                        i
+                    )
+                )
+            })
         } catch (e: Exception) {
             AppLogger.e(TAG, "分析异常", e)
             throw e
@@ -225,7 +257,7 @@ class AIGenerationService(
         onChunk: (String) -> Unit = {}
     ): ProjectState {
         syncLog("开始区域重塑流式分析: $userInstruction", onLog)
-        
+
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
         val client = NetworkClient.shared
@@ -233,7 +265,9 @@ class AIGenerationService(
         val promptTemplate = try {
             @OptIn(InternalResourceApi::class)
             readResourceBytes("prompts/refine_template.txt").decodeToString()
-        } catch (e: Exception) { "Please refine..." }
+        } catch (e: Exception) {
+            "Please refine..."
+        }
 
         val fullPrompt = promptTemplate.replace($$"${USER_INSTRUCTION}", userInstruction)
 
@@ -244,9 +278,16 @@ class AIGenerationService(
                     put("parts", buildJsonArray {
                         add(buildJsonObject { put("text", fullPrompt) })
                         add(buildJsonObject { put("text", "CURRENT_JSON_STATE: \n$currentJson") })
-                        if (originalImageUri.isNotBlank()) {
-                            add(buildJsonObject { put("fileData", buildJsonObject { put("mimeType", "image/jpeg"); put("fileUri", originalImageUri) }) })
-                        } else syncLog("⚠️ 未找到原图云端引用，仅使用局部裁剪。", onLog)
+//                        if (originalImageUri.isNotBlank()) {
+//                            add(buildJsonObject {
+//                                put(
+//                                    "fileData",
+//                                    buildJsonObject {
+//                                        put("mimeType", "image/jpeg");
+//                                        put("fileUri", originalImageUri)
+//                                    })
+//                            })
+//                        } else syncLog("⚠️ 未找到原图云端引用，仅使用局部裁剪。", onLog)
 
                         add(buildJsonObject {
                             put("inlineData", buildJsonObject {
@@ -265,10 +306,13 @@ class AIGenerationService(
         // 核心同步：UI 显示精简版，文件记录完整版
         val loggableBody = requestBody
             .replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
-            .replace(Regex("\"text\"\\s*:\\s*\"CURRENT_JSON_STATE: [\\s\\S]*?\""), "\"text\": \"CURRENT_JSON_STATE: <HIDDEN_FOR_LOGS>\"")
+            .replace(
+                Regex("\"text\"\\s*:\\s*\"CURRENT_JSON_STATE: [\\s\\S]*?\""),
+                "\"text\": \"CURRENT_JSON_STATE: <HIDDEN_FOR_LOGS>\""
+            )
 
         AppLogger.d(TAG, "---- [FULL REFINE REQUEST] ----\n$requestBody\n-------------------------------")
-        
+
         onLog("---- [HTTP REQUEST (REFINE)] ----")
         onLog("URL: $url")
         onLog("Body: \n$loggableBody")
@@ -278,7 +322,9 @@ class AIGenerationService(
             client.preparePost(url) {
                 contentType(ContentType.Application.Json)
                 setBody(requestBody)
-                timeout { requestTimeoutMillis = 60_000L }
+                timeout { 
+                    requestTimeoutMillis = 300_000L 
+                }
             }.execute { response ->
                 if (response.status.isSuccess()) {
                     val channel = response.bodyAsChannel()
@@ -288,12 +334,16 @@ class AIGenerationService(
                             val dataJson = line.substringAfter("data: ").trim()
                             if (dataJson.isEmpty() || dataJson == "[DONE]") continue
                             try {
-                                val textChunk = jsonConfig.parseToJsonElement(dataJson).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
+                                val textChunk =
+                                    jsonConfig.parseToJsonElement(dataJson).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get(
+                                        "content"
+                                    )?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
                                 if (textChunk != null) {
                                     accumulatedText.append(textChunk)
                                     onChunk(textChunk)
                                 }
-                            } catch (e: Exception) {}
+                            } catch (e: Exception) {
+                            }
                         }
                     }
                     syncLog("✅ 重塑结构解析完毕。", onLog)
@@ -321,7 +371,16 @@ class AIGenerationService(
             put("contents", buildJsonArray {
                 add(buildJsonObject {
                     put("role", "user")
-                    put("parts", buildJsonArray { add(buildJsonObject { put("text", "Please translate and optimize: $originalPrompt") }) })
+                    put(
+                        "parts",
+                        buildJsonArray {
+                            add(buildJsonObject {
+                                put(
+                                    "text",
+                                    "Please translate and optimize: $originalPrompt"
+                                )
+                            })
+                        })
                 })
             })
         }.toString()
@@ -331,7 +390,10 @@ class AIGenerationService(
             try {
                 val response = client.post(url) { setBody(requestBody); contentType(ContentType.Application.Json) }
                 if (response.status.isSuccess()) {
-                    return jsonConfig.parseToJsonElement(response.bodyAsText()).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content?.trim() ?: ""
+                    return jsonConfig.parseToJsonElement(response.bodyAsText()).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get(
+                        "content"
+                    )?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content?.trim()
+                        ?: ""
                 } else throw Exception("API 错误: ${response.status}")
             } catch (e: Exception) {
                 lastException = e
