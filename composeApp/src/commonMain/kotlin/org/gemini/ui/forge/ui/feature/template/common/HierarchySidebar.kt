@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.editor
+package org.gemini.ui.forge.ui.feature.template.common
 
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.background

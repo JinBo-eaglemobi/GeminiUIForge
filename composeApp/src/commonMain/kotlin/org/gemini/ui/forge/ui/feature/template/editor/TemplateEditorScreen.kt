@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.editor
+package org.gemini.ui.forge.ui.feature.template.editor
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
@@ -43,6 +43,8 @@ import org.gemini.ui.forge.state.EditorState
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.component.VerticalSplitter
+import org.gemini.ui.forge.ui.feature.template.common.CanvasArea
+import org.gemini.ui.forge.ui.feature.template.common.HierarchySidebar
 
 @Composable
 fun TemplateEditorScreen(

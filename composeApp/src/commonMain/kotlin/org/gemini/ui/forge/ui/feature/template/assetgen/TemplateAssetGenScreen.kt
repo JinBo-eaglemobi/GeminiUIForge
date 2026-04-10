@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.editor
+package org.gemini.ui.forge.ui.feature.template.assetgen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,6 +34,8 @@ import org.gemini.ui.forge.state.EditorState
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import kotlinx.coroutines.launch
+import org.gemini.ui.forge.ui.feature.template.common.CanvasArea
+import org.gemini.ui.forge.ui.feature.template.common.HierarchySidebar
 
 @Composable
 fun TemplateAssetGenScreen(

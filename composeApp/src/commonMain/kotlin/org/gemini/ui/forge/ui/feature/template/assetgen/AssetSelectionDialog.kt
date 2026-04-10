@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.editor
+package org.gemini.ui.forge.ui.feature.template.assetgen
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*

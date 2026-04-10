@@ -27,9 +27,9 @@ import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.state.EditorViewModel
 import org.gemini.ui.forge.ui.feature.home.HomeScreen
 import org.gemini.ui.forge.ui.feature.home.ModuleCard
-import org.gemini.ui.forge.ui.feature.editor.TemplateAssetGenScreen
-import org.gemini.ui.forge.ui.feature.editor.TemplateEditorScreen
-import org.gemini.ui.forge.ui.feature.generator.TemplateGeneratorScreen
+import org.gemini.ui.forge.ui.feature.template.assetgen.TemplateAssetGenScreen
+import org.gemini.ui.forge.ui.feature.template.editor.TemplateEditorScreen
+import org.gemini.ui.forge.ui.feature.template.analysis.TemplateGeneratorScreen
 import org.gemini.ui.forge.ui.component.AppTopBar
 import org.gemini.ui.forge.ui.dialog.CloudAssetDialog
 import org.gemini.ui.forge.ui.theme.AppTheme

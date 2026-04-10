@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.editor
+package org.gemini.ui.forge.ui.feature.template.common
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background

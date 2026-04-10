@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.generator
+package org.gemini.ui.forge.ui.feature.template.analysis
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
