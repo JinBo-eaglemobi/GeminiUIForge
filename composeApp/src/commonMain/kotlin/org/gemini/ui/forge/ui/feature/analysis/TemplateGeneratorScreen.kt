@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.template.analysis
+package org.gemini.ui.forge.ui.feature.analysis
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,9 +31,11 @@ import org.gemini.ui.forge.formatTimestamp
 import androidx.compose.material.icons.filled.Cloud
 
 import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.service.CloudAssetManager
 import org.gemini.ui.forge.service.ConfigManager
 import org.gemini.ui.forge.ui.dialog.CloudAssetDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
@@ -43,9 +45,9 @@ fun TemplateGeneratorScreen(
     onNavigateBack: () -> Unit,
     onTemplateSaved: (String, ProjectState) -> Unit,
     apiKey: String,
-    configManager: org.gemini.ui.forge.service.ConfigManager = remember { org.gemini.ui.forge.service.ConfigManager() },
-    cloudAssetManager: org.gemini.ui.forge.service.CloudAssetManager = remember { 
-        org.gemini.ui.forge.service.CloudAssetManager(org.gemini.ui.forge.service.ConfigManager()) 
+    configManager: ConfigManager = remember { ConfigManager() },
+    cloudAssetManager: CloudAssetManager = remember {
+        CloudAssetManager(ConfigManager())
     },
     aiService: AIGenerationService = remember { AIGenerationService(cloudAssetManager) },
     templateRepo: TemplateRepository = remember { TemplateRepository() },
@@ -80,7 +82,7 @@ fun TemplateGeneratorScreen(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = stringResource(Res.string.template_gen_title),
@@ -149,19 +151,19 @@ fun TemplateGeneratorScreen(
                             templateName
                         }
 
-                        logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🔍 正在预验证图片资源有效性...")
+                        logs.add("[${formatTimestamp(getCurrentTimeMillis())}] 🔍 正在预验证图片资源有效性...")
                         val allImageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                         
                         // 执行预验证 (URL 连通性、Base64 格式、本地文件存在性)
                         val validationError = aiService.validateImageUris(allImageUris)
                         if (validationError != null) {
-                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ❌ 验证失败: $validationError")
+                            logs.add("[${formatTimestamp(getCurrentTimeMillis())}] ❌ 验证失败: $validationError")
                             saveStatus = "验证失败，请修正路径后重试。"
                             isAnalyzing = false
                             return@launch
                         }
 
-                        logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 🚀 准备分析图片并创建模板 [$finalTemplateName]...")
+                        logs.add("[${formatTimestamp(getCurrentTimeMillis())}] 🚀 准备分析图片并创建模板 [$finalTemplateName]...")
                         
                         try {
                             // 2. 执行 AI 分析
@@ -169,15 +171,15 @@ fun TemplateGeneratorScreen(
                                 imageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() },
                                 apiKey = apiKey,
                                 maxRetries = maxRetries,
-                                onLog = { logMsg -> logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] $logMsg") },
+                                onLog = { logMsg -> logs.add("[${formatTimestamp(getCurrentTimeMillis())}] $logMsg") },
                                 onChunk = { chunk -> streamedJson += chunk }
                             )
                             
                             generatedState = resultState
-                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ✅ 分析成功！")
+                            logs.add("[${formatTimestamp(getCurrentTimeMillis())}] ✅ 分析成功！")
 
                             // 3. 立即自动保存到本地缓存目录 (包含全量参考图归档)
-                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] 💾 正在自动归档参考图并保存模板...")
+                            logs.add("[${formatTimestamp(getCurrentTimeMillis())}] 💾 正在自动归档参考图并保存模板...")
                             val allImageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                             
                             val stateToSave = resultState.copy(
@@ -192,7 +194,7 @@ fun TemplateGeneratorScreen(
                             
                         } catch (e: Exception) {
                             saveStatus = "分析失败: ${e.message}"
-                            logs.add("[${org.gemini.ui.forge.formatTimestamp(getCurrentTimeMillis())}] ❌ 发生错误: ${e.message}")
+                            logs.add("[${formatTimestamp(getCurrentTimeMillis())}] ❌ 发生错误: ${e.message}")
                         }
                         isAnalyzing = false
                     }
@@ -219,12 +221,12 @@ fun TemplateGeneratorScreen(
             shape = MaterialTheme.shapes.small
         ) {
             if (logs.isEmpty() && !isAnalyzing) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("暂无运行日志", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 SelectionContainer {
-                    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                    val listState = rememberLazyListState()
 
                     // 智能滚动到最新日志 (仅在新增一行日志时判断，避免流数据高频触发导致强制拉到底部)
                     LaunchedEffect(logs.size) {

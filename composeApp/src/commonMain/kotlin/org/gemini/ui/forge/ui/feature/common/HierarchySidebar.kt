@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.template.common
+package org.gemini.ui.forge.ui.feature.common
 
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.background
@@ -38,6 +38,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.graphics.vector.ImageVector
+import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
@@ -62,7 +64,7 @@ fun HierarchySidebar(
     
     var pressedBlockId by remember { mutableStateOf<String?>(null) }
     
-    var dragShadowIcon by remember { mutableStateOf<androidx.compose.ui.graphics.vector.ImageVector?>(null) }
+    var dragShadowIcon by remember { mutableStateOf<ImageVector?>(null) }
     var dragShadowLabel by remember { mutableStateOf<String?>(null) }
 
     var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -81,7 +83,7 @@ fun HierarchySidebar(
     LaunchedEffect(selectedBlockId, isAutoTrackEnabled) {
         if (isAutoTrackEnabled && selectedBlockId != null) {
             delay(100)
-            locateTrigger = org.gemini.ui.forge.getCurrentTimeMillis()
+            locateTrigger = getCurrentTimeMillis()
         }
     }
 
@@ -106,7 +108,7 @@ fun HierarchySidebar(
         )
     }
 
-    var dropPosition by remember { mutableStateOf(org.gemini.ui.forge.model.ui.DropPosition.INSIDE) }
+    var dropPosition by remember { mutableStateOf(DropPosition.INSIDE) }
 
     Box(modifier = modifier.fillMaxHeight()) {
         Column(modifier = Modifier
@@ -157,13 +159,13 @@ fun HierarchySidebar(
                             val margin = rect.height * 0.15f
                             val y = windowOffset.y
                             dropPosition = when {
-                                y < rect.top + margin -> org.gemini.ui.forge.model.ui.DropPosition.BEFORE
-                                y > rect.bottom - margin -> org.gemini.ui.forge.model.ui.DropPosition.AFTER
-                                else -> org.gemini.ui.forge.model.ui.DropPosition.INSIDE
+                                y < rect.top + margin -> DropPosition.BEFORE
+                                y > rect.bottom - margin -> DropPosition.AFTER
+                                else -> DropPosition.INSIDE
                             }
                         } else {
                             hoveredBlockId = null
-                            dropPosition = org.gemini.ui.forge.model.ui.DropPosition.INSIDE
+                            dropPosition = DropPosition.INSIDE
                         }
                     },
                     onDragEnd = {
@@ -329,7 +331,7 @@ private fun HierarchyItem(
     isSelected: Boolean,
     isDragged: Boolean,
     isHovered: Boolean,
-    dropPosition: org.gemini.ui.forge.model.ui.DropPosition,
+    dropPosition: DropPosition,
     locateTrigger: Long,
     onBlockClicked: (String?) -> Unit,
     onBoundsCalculated: (String, Rect) -> Unit,
@@ -370,7 +372,7 @@ private fun HierarchyItem(
                     drawContent()
                     if (isHovered && isDragged.not() && draggedBlockId != null) {
                         when (dropPosition) {
-                            org.gemini.ui.forge.model.ui.DropPosition.BEFORE -> {
+                            DropPosition.BEFORE -> {
                                 drawLine(
                                     color = indicatorColor,
                                     start = Offset(0f, 0f),
@@ -378,7 +380,7 @@ private fun HierarchyItem(
                                     strokeWidth = 4f
                                 )
                             }
-                            org.gemini.ui.forge.model.ui.DropPosition.AFTER -> {
+                            DropPosition.AFTER -> {
                                 if (!hasChildren || !expanded) {
                                     drawLine(
                                         color = indicatorColor,
@@ -394,7 +396,7 @@ private fun HierarchyItem(
                 }
                 .background(
                     when {
-                        isHovered && draggedBlockId != null && dropPosition == org.gemini.ui.forge.model.ui.DropPosition.INSIDE -> 
+                        isHovered && draggedBlockId != null && dropPosition == DropPosition.INSIDE ->
                             MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)
                         isDragged -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f)
                         isSelected -> MaterialTheme.colorScheme.primaryContainer
@@ -453,7 +455,7 @@ private fun HierarchyItem(
                     .fillMaxWidth()
                     .drawWithContent {
                         drawContent()
-                        if (isHovered && isDragged.not() && draggedBlockId != null && dropPosition == org.gemini.ui.forge.model.ui.DropPosition.AFTER) {
+                        if (isHovered && isDragged.not() && draggedBlockId != null && dropPosition == DropPosition.AFTER) {
                             drawLine(
                                 color = indicatorColor,
                                 start = Offset(0f, size.height),

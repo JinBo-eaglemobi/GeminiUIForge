@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.template.common
+package org.gemini.ui.forge.ui.feature.common
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -38,7 +38,6 @@ import kotlin.math.roundToInt
 
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import org.gemini.ui.forge.ResizeVerticalIcon
 import androidx.compose.foundation.gestures.Orientation
@@ -47,7 +46,6 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.unit.Density
-import coil3.compose.AsyncImage
 import org.gemini.ui.forge.model.app.ReferenceDisplayMode
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
@@ -107,7 +105,7 @@ fun CanvasArea(
                         .fillMaxWidth()
                         .height(4.dp)
                         .background(MaterialTheme.colorScheme.outlineVariant)
-                        .pointerHoverIcon(org.gemini.ui.forge.ResizeVerticalIcon)
+                        .pointerHoverIcon(ResizeVerticalIcon)
                         .draggable(
                             orientation = Orientation.Vertical,
                             state = rememberDraggableState { delta ->

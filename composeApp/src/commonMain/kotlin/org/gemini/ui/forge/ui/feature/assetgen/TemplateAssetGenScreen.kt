@@ -1,10 +1,5 @@
-package org.gemini.ui.forge.ui.feature.template.assetgen
+package org.gemini.ui.forge.ui.feature.assetgen
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,14 +11,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import org.jetbrains.compose.resources.stringResource
-import androidx.compose.ui.input.pointer.pointerHoverIcon
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.model.app.PromptLanguage
@@ -34,8 +26,8 @@ import org.gemini.ui.forge.state.EditorState
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import kotlinx.coroutines.launch
-import org.gemini.ui.forge.ui.feature.template.common.CanvasArea
-import org.gemini.ui.forge.ui.feature.template.common.HierarchySidebar
+import org.gemini.ui.forge.ui.feature.common.CanvasArea
+import org.gemini.ui.forge.ui.feature.common.HierarchySidebar
 
 @Composable
 fun TemplateAssetGenScreen(
@@ -51,7 +43,7 @@ fun TemplateAssetGenScreen(
     onClearHistoricalCandidates: () -> Unit, // 清除本次生成的候选
     onClearSelectedImage: (String) -> Unit, // 解除绑定
     onLoadHistoricalImages: suspend (String) -> List<String>, // 加载历史资源
-    onMoveBlock: (String, String?, org.gemini.ui.forge.model.ui.DropPosition) -> Unit,
+    onMoveBlock: (String, String?, DropPosition) -> Unit,
     onBlockDragged: (String, Float, Float) -> Unit,
     onRenameBlock: (String, String) -> Unit,
     onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit
@@ -209,7 +201,7 @@ fun TemplateAssetGenScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PropertyPanel(
-    selectedBlock: org.gemini.ui.forge.model.ui.UIBlock?,
+    selectedBlock: UIBlock?,
     currentEditingLang: PromptLanguage,
     onSwitchEditingLang: (PromptLanguage) -> Unit,
     isGenerating: Boolean,

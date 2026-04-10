@@ -5,7 +5,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 
 import androidx.compose.foundation.focusable
@@ -15,10 +14,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.unit.dp
-import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.model.app.AppScreen
 import org.gemini.ui.forge.model.app.ShortcutAction
@@ -26,12 +21,10 @@ import org.gemini.ui.forge.model.app.UIModule
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.state.EditorViewModel
 import org.gemini.ui.forge.ui.feature.home.HomeScreen
-import org.gemini.ui.forge.ui.feature.home.ModuleCard
-import org.gemini.ui.forge.ui.feature.template.assetgen.TemplateAssetGenScreen
-import org.gemini.ui.forge.ui.feature.template.editor.TemplateEditorScreen
-import org.gemini.ui.forge.ui.feature.template.analysis.TemplateGeneratorScreen
+import org.gemini.ui.forge.ui.feature.assetgen.TemplateAssetGenScreen
+import org.gemini.ui.forge.ui.feature.editor.TemplateEditorScreen
+import org.gemini.ui.forge.ui.feature.analysis.TemplateGeneratorScreen
 import org.gemini.ui.forge.ui.component.AppTopBar
-import org.gemini.ui.forge.ui.dialog.CloudAssetDialog
 import org.gemini.ui.forge.ui.theme.AppTheme
 import org.gemini.ui.forge.utils.*
 import org.gemini.ui.forge.service.*

@@ -1,11 +1,11 @@
-package org.gemini.ui.forge.ui.feature.template.editor
+package org.gemini.ui.forge.ui.feature.editor
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -15,16 +15,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -43,8 +42,8 @@ import org.gemini.ui.forge.state.EditorState
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.component.VerticalSplitter
-import org.gemini.ui.forge.ui.feature.template.common.CanvasArea
-import org.gemini.ui.forge.ui.feature.template.common.HierarchySidebar
+import org.gemini.ui.forge.ui.feature.common.CanvasArea
+import org.gemini.ui.forge.ui.feature.common.HierarchySidebar
 
 @Composable
 fun TemplateEditorScreen(
@@ -63,7 +62,7 @@ fun TemplateEditorScreen(
     onAddBlock: (UIBlockType) -> Unit,
     onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit,
     onDeleteBlock: (String) -> Unit,
-    onMoveBlock: (String, String?, org.gemini.ui.forge.model.ui.DropPosition) -> Unit,
+    onMoveBlock: (String, String?, DropPosition) -> Unit,
     onBlockDragged: (String, Float, Float) -> Unit,
     onRenameBlock: (String, String) -> Unit,
     onSaveTemplate: () -> Unit
@@ -394,8 +393,8 @@ fun ImageSelector(
         }) {
             drawImage(
                 image = bitmap,
-                dstOffset = androidx.compose.ui.unit.IntOffset((offsetX * density.density).toInt(), (offsetY * density.density).toInt()),
-                dstSize = androidx.compose.ui.unit.IntSize((drawWidth * density.density).toInt(), (drawHeight * density.density).toInt())
+                dstOffset = IntOffset((offsetX * density.density).toInt(), (offsetY * density.density).toInt()),
+                dstSize = IntSize((drawWidth * density.density).toInt(), (drawHeight * density.density).toInt())
             )
 
             val start = startOffset
@@ -411,12 +410,12 @@ fun ImageSelector(
                 drawRect(
                     color = color.copy(alpha = 0.3f),
                     topLeft = Offset(rectLeft, rectTop),
-                    size = androidx.compose.ui.geometry.Size(rectWidth, rectHeight)
+                    size = Size(rectWidth, rectHeight)
                 )
                 drawRect(
                     color = color,
                     topLeft = Offset(rectLeft, rectTop),
-                    size = androidx.compose.ui.geometry.Size(rectWidth, rectHeight),
+                    size = Size(rectWidth, rectHeight),
                     style = Stroke(width = 2.dp.toPx())
                 )
             }
@@ -429,7 +428,7 @@ private fun LogTerminal(logs: List<String>, streamText: String, modifier: Modifi
     Surface(modifier = modifier, color = Color.Black.copy(alpha = 0.85f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color.Green.copy(alpha = 0.5f))) {
         SelectionContainer {
             Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                val listState = rememberLazyListState()
                 LaunchedEffect(logs.size) { if(logs.isNotEmpty()) listState.animateScrollToItem(logs.size) }
                 
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
