@@ -1,51 +1,66 @@
 package org.gemini.ui.forge.ui.feature.assetgen
+
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import org.gemini.ui.forge.utils.decodeBase64ToBitmap
-
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import geminiuiforge.composeapp.generated.resources.Res
-import geminiuiforge.composeapp.generated.resources.*
-import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.ui.theme.AppShapes
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.items
+import org.gemini.ui.forge.utils.decodeBase64ToBitmap
+import androidx.compose.foundation.combinedClickable
 
 /**
- * 资源选择弹窗 (弹窗 A)
- * 用于展示 AI 刚生成的候选图或某个模块的历史图片
+ * 资源选择与管理弹窗 (弹窗 A)
  */
 @Composable
 fun AssetSelectionDialog(
     title: String,
     candidates: List<String>,
+    initialSelectedUri: String? = null,
     onImageSelected: (String) -> Unit,
+    onDeleteImages: (List<String>) -> Unit,
     onClearAll: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    // 基础状态
+    var tempSelectedUri by remember { mutableStateOf(initialSelectedUri) }
+    
+    // 多选管理状态
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+    val multiSelectedUris = remember { mutableStateListOf<String>() }
+
+    // 辅助函数：执行删除
+    fun executeDeletion(uris: List<String>) {
+        onDeleteImages(uris)
+        if (tempSelectedUri in uris) {
+            tempSelectedUri = null
+        }
+        multiSelectedUris.removeAll(uris)
+        if (multiSelectedUris.isEmpty()) isMultiSelectMode = false
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth(0.85f).fillMaxHeight(0.85f),
+            modifier = Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.85f),
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
@@ -54,12 +69,34 @@ fun AssetSelectionDialog(
                 // 顶栏
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = title, style = MaterialTheme.typography.headlineSmall)
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    Text(
+                        text = if (isMultiSelectMode) "批量管理 (${multiSelectedUris.size})" else title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    if (isMultiSelectMode) {
+                        IconButton(onClick = { 
+                            multiSelectedUris.clear()
+                            multiSelectedUris.addAll(candidates) 
+                        }) {
+                            Icon(Icons.Default.SelectAll, "全选")
+                        }
+                        IconButton(onClick = { multiSelectedUris.clear() }) {
+                            Icon(Icons.Default.Deselect, "全不选")
+                        }
+                        VerticalDivider(Modifier.height(24.dp).padding(horizontal = 8.dp))
+                        IconButton(
+                            onClick = { isMultiSelectMode = false; multiSelectedUris.clear() }
+                        ) {
+                            Icon(Icons.Default.Close, "退出多选")
+                        }
+                    } else {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, "关闭")
+                        }
                     }
                 }
 
@@ -73,12 +110,15 @@ fun AssetSelectionDialog(
                         }
                     } else {
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 180.dp),
+                            columns = GridCells.Adaptive(minSize = 160.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             items(candidates) { uri ->
+                                val isChosenInMulti = multiSelectedUris.contains(uri)
+                                val isSelectedInSingle = !isMultiSelectMode && tempSelectedUri == uri
+                                
                                 val imageBitmapState = produceState<ImageBitmap?>(null, uri) {
                                     value = uri.decodeBase64ToBitmap()
                                 }
@@ -87,9 +127,28 @@ fun AssetSelectionDialog(
                                 Card(
                                     modifier = Modifier
                                         .aspectRatio(1f)
-                                        .clickable { onImageSelected(uri) },
+                                        .combinedClickable(
+                                            onClick = {
+                                                if (isMultiSelectMode) {
+                                                    if (isChosenInMulti) multiSelectedUris.remove(uri) else multiSelectedUris.add(uri)
+                                                } else {
+                                                    tempSelectedUri = if (isSelectedInSingle) null else uri
+                                                }
+                                            },
+                                            onLongClick = {
+                                                if (!isMultiSelectMode) {
+                                                    isMultiSelectMode = true
+                                                    multiSelectedUris.add(uri)
+                                                }
+                                            }
+                                        )
+                                        .border(
+                                            width = if (isChosenInMulti || isSelectedInSingle) 3.dp else 0.dp,
+                                            color = if (isChosenInMulti) MaterialTheme.colorScheme.error else if (isSelectedInSingle) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                            shape = AppShapes.medium
+                                        ),
                                     shape = AppShapes.medium,
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                    elevation = CardDefaults.cardElevation(defaultElevation = if (isChosenInMulti || isSelectedInSingle) 8.dp else 2.dp)
                                 ) {
                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                         if (bitmap != null) {
@@ -97,8 +156,28 @@ fun AssetSelectionDialog(
                                                 bitmap = bitmap,
                                                 contentDescription = null,
                                                 modifier = Modifier.fillMaxSize(),
-                                                contentScale = ContentScale.Crop
+                                                contentScale = ContentScale.Crop,
+                                                alpha = if (isChosenInMulti || isSelectedInSingle || !isMultiSelectMode) 1.0f else 0.5f
                                             )
+                                            
+                                            if (uri == initialSelectedUri) {
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+                                                    shape = RoundedCornerShape(4.dp)
+                                                ) {
+                                                    Text("使用中", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp), color = Color.White)
+                                                }
+                                            }
+
+                                            if (isChosenInMulti || isSelectedInSingle) {
+                                                Icon(
+                                                    imageVector = if (isMultiSelectMode) Icons.Default.DeleteSweep else Icons.Default.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = if (isMultiSelectMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(24.dp)
+                                                )
+                                            }
                                         } else {
                                             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                                         }
@@ -111,27 +190,78 @@ fun AssetSelectionDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // 底栏：清空/放弃按钮
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(
-                        onClick = {
-                            onClearAll()
-                            onDismiss()
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        shape = AppShapes.medium
-                    ) {
-                        Text("不选中并清空全部")
+                // 底栏
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (isMultiSelectMode) {
+                        Button(
+                            onClick = { executeDeletion(multiSelectedUris.toList()) },
+                            enabled = multiSelectedUris.isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            shape = AppShapes.medium
+                        ) {
+                            Icon(Icons.Default.Delete, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("删除选中 (${multiSelectedUris.size})")
+                        }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { isMultiSelectMode = false; multiSelectedUris.clear() }, shape = AppShapes.medium) {
+                            Text("退出管理")
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (tempSelectedUri != null) {
+                                TextButton(
+                                    onClick = { tempSelectedUri = null },
+                                    shape = AppShapes.medium
+                                ) {
+                                    Text("取消选中")
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Button(
+                                    onClick = { executeDeletion(listOf(tempSelectedUri!!)) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer),
+                                    shape = AppShapes.medium,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.DeleteForever, null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("立即删除", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        TextButton(
+                            onClick = {
+                                onClearAll()
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            shape = AppShapes.medium
+                        ) {
+                            Text("清理全部候选")
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        TextButton(onClick = onDismiss, shape = AppShapes.medium) {
+                            Text("取消")
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Button(
+                            onClick = {
+                                onImageSelected(tempSelectedUri ?: "")
+                                onDismiss()
+                            },
+                            shape = AppShapes.medium
+                        ) {
+                            Text("应用选择")
+                        }
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Button(
-                        onClick = onDismiss,
-                        shape = AppShapes.medium
-                    ) {
-                        Text("关闭")
-                    }
-                }
-            }
+                }            }
         }
     }
 }

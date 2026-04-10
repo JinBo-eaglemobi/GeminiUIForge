@@ -285,8 +285,8 @@ fun App(typography: Typography? = null) {
                                 onSwitchEditingLanguage = { viewModel.switchEditingLanguage(it) },
                                 onGenerateRequested = { viewModel.onRequestGeneration(globalState.effectiveApiKey) },
                                 onImageSelected = { viewModel.onImageSelected(it) },
-                                onClearHistoricalCandidates = { viewModel.clearCandidates() },
-                                onClearSelectedImage = { viewModel.clearSelectedImage(it) },
+                                onDeleteImages = { viewModel.deleteImages(it) }, // 新增
+                                onClearHistoricalCandidates = { viewModel.clearCandidates() },                                onClearSelectedImage = { viewModel.clearSelectedImage(it) },
                                 onLoadHistoricalImages = { viewModel.loadBlockHistoricalImages(it) },
                                 onMoveBlock = { draggedId, targetId, dropPos -> viewModel.moveBlock(draggedId, targetId, dropPos) },
                                 onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },

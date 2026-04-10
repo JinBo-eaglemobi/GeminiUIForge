@@ -40,6 +40,7 @@ fun TemplateAssetGenScreen(
     onSwitchEditingLanguage: (PromptLanguage) -> Unit,
     onGenerateRequested: () -> Unit,
     onImageSelected: (String) -> Unit,
+    onDeleteImages: (List<String>) -> Unit,
     onClearHistoricalCandidates: () -> Unit, // 清除本次生成的候选
     onClearSelectedImage: (String) -> Unit, // 解除绑定
     onLoadHistoricalImages: suspend (String) -> List<String>, // 加载历史资源
@@ -65,9 +66,14 @@ fun TemplateAssetGenScreen(
         AssetSelectionDialog(
             title = "AI 生成资源预览",
             candidates = state.generatedCandidates,
+            initialSelectedUri = state.selectedBlock?.currentImageUri,
             onImageSelected = { 
                 onImageSelected(it)
                 showCurrentGenerationResults = false
+            },
+            onDeleteImages = { uris ->
+                // 删除后，UI 会自动通过 state.generatedCandidates 的变化而刷新
+                onDeleteImages(uris)
             },
             onClearAll = {
                 onClearHistoricalCandidates()
@@ -81,11 +87,17 @@ fun TemplateAssetGenScreen(
         AssetSelectionDialog(
             title = "历史资源列表",
             candidates = historicalImages,
+            initialSelectedUri = state.selectedBlock?.currentImageUri,
             onImageSelected = {
                 onImageSelected(it)
                 showHistoricalDialog = false
             },
-            onClearAll = { /* 历史记录不支持一键清空文件，仅通过属性面板解绑 */ },
+            onDeleteImages = { uris ->
+                // 关键修复：同步更新本地历史记录列表，触发弹窗刷新
+                onDeleteImages(uris)
+                historicalImages = historicalImages.filter { it !in uris }
+            },
+            onClearAll = { /* 历史记录预览不提供清理所有候选的功能 */ },
             onDismiss = { showHistoricalDialog = false }
         )
     }
@@ -201,7 +213,7 @@ fun TemplateAssetGenScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PropertyPanel(
-    selectedBlock: UIBlock?,
+    selectedBlock: org.gemini.ui.forge.model.ui.UIBlock?,
     currentEditingLang: PromptLanguage,
     onSwitchEditingLang: (PromptLanguage) -> Unit,
     isGenerating: Boolean,

@@ -663,11 +663,25 @@ class EditorViewModel(
         val currentLang = _state.value.currentEditingPromptLang
         val submitPrompt = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
         val projectName = _state.value.projectName
+        
+        // 提取宽高并附加到提示词中
+        val width = block.bounds.width.toInt()
+        val height = block.bounds.height.toInt()
+        val promptWithDimensions = if (currentLang == PromptLanguage.EN) {
+            "$submitPrompt. Target image dimensions: ${width}x${height} pixels."
+        } else {
+            "$submitPrompt (图片的生成比例应符合宽:${width}像素, 高:${height}像素)"
+        }
 
         viewModelScope.launch {
             _state.update { it.copy(isGenerating = true, generatedCandidates = emptyList()) }
             try {
-                val candidatesBase64 = aiService.generateImages(blockType = block.type.name, userPrompt = submitPrompt, apiKey = apiKey, maxRetries = _state.value.globalState.maxRetries)
+                val candidatesBase64 = aiService.generateImages(
+                    blockType = block.type.name, 
+                    userPrompt = promptWithDimensions, 
+                    apiKey = apiKey, 
+                    maxRetries = _state.value.globalState.maxRetries
+                )
                 val candidatePaths = candidatesBase64.mapIndexed { index, base64 ->
                     val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
                     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
@@ -728,6 +742,53 @@ class EditorViewModel(
         }
         viewModelScope.launch {
             templateRepo.saveTemplate(_state.value.projectName, _state.value.project)
+        }
+    }
+
+    /**
+     * 批量删除图片资源并同步状态
+     */
+    fun deleteImages(uris: List<String>) {
+        if (uris.isEmpty()) return
+        val blockId = _state.value.selectedBlockId ?: return
+        val projectName = _state.value.projectName
+        
+        viewModelScope.launch {
+            // 1. 物理删除文件
+            uris.forEach { org.gemini.ui.forge.utils.deleteLocalFile(it) }
+            
+            // 2. 检查并同步 state
+            _state.update { currentState ->
+                val pageId = currentState.selectedPageId ?: return@update currentState
+                var needsUpdate = false
+                
+                // 清理绑定引用
+                val updatedPages = currentState.project.pages.map { page ->
+                    if (page.id == pageId) {
+                        page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
+                            if (block.currentImageUri in uris) {
+                                needsUpdate = true
+                                block.copy(currentImageUri = null)
+                            } else block
+                        })
+                    } else page
+                }
+
+                // 清理本次生成的候选列表（如果有）
+                val filteredCandidates = currentState.generatedCandidates.filter { it !in uris }
+                if (filteredCandidates.size != currentState.generatedCandidates.size) needsUpdate = true
+
+                if (needsUpdate) {
+                    currentState.copy(
+                        project = currentState.project.copy(pages = updatedPages),
+                        generatedCandidates = filteredCandidates
+                    )
+                } else currentState
+            }
+            
+            // 3. 始终持久化一次，防止 JSON 里的旧路径变成死链
+            templateRepo.saveTemplate(projectName, _state.value.project)
+            AppLogger.d("EditorViewModel", "Batch deleted ${uris.size} images for $blockId")
         }
     }
 
