@@ -23,8 +23,19 @@ class TemplateRepository(
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
 
     /**
-     * 将临时图片（如 AI 候选图或重塑裁剪图）保存到模板的 cache 目录下
-     * @return 返回保存后的本地绝对路径
+     * 将生成的资源保存到模块专用的资产目录下
+     * 路径：$templateName/assets/$blockId/
+     */
+    suspend fun saveBlockResource(templateName: String, blockId: String, fileNamePrefix: String, bytes: ByteArray): String {
+        val sanitizedName = templateName.replace(" ", "_")
+        val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
+        // 存储规范：项目名/assets/模块名/前缀_时间戳.jpg
+        val fileName = "$sanitizedName/assets/$blockId/${fileNamePrefix}_$timestamp.jpg"
+        return fileStorage.saveBytesToFile(fileName, bytes)
+    }
+
+    /**
+     * 将临时图片（如分析时的局部图）保存到模板的 cache 目录下
      */
     suspend fun saveCacheImage(templateName: String, fileNamePrefix: String, bytes: ByteArray): String {
         val sanitizedName = templateName.replace(" ", "_")
@@ -135,7 +146,8 @@ class TemplateRepository(
         val pureBase64 = if (base64Data.contains(",")) base64Data.substringAfter(",") else base64Data
         val bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
 
-        val resourceName = "$sanitizedName/${blockId}_${kotlin.random.Random.nextInt(1000000)}.png"
+        val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
+        val resourceName = "$sanitizedName/assets/$blockId/manual_$timestamp.png"
         return fileStorage.saveBytesToFile(resourceName, bytes)
     }
 

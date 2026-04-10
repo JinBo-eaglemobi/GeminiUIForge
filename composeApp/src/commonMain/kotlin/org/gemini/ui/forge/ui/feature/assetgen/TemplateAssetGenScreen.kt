@@ -234,9 +234,9 @@ private fun PropertyPanel(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (selectedBlock.selectedImageUri != null) {
+                    if (selectedBlock.currentImageUri != null) {
                         AsyncImage(
-                            model = selectedBlock.selectedImageUri,
+                            model = selectedBlock.currentImageUri,
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
@@ -264,7 +264,7 @@ private fun PropertyPanel(
                     onClick = onUnbindImage,
                     modifier = Modifier.weight(1f),
                     shape = AppShapes.medium,
-                    enabled = selectedBlock.selectedImageUri != null,
+                    enabled = selectedBlock.currentImageUri != null,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Icon(Icons.Default.LinkOff, null, modifier = Modifier.size(16.dp))

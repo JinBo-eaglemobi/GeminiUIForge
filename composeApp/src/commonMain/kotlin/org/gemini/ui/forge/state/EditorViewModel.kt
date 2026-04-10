@@ -672,7 +672,8 @@ class EditorViewModel(
                     val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
                     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
                     val bytes = kotlin.io.encoding.Base64.Default.decode(pure)
-                    templateRepo.saveCacheImage(projectName, "candidate_${block.id}_$index", bytes)
+                    // 核心修改：不再存入 cache，直接存入 assets/blockId/
+                    templateRepo.saveBlockResource(projectName, block.id, "gen", bytes)
                 }
                 _state.update { it.copy(generatedCandidates = candidatePaths, isGenerating = false) }
             } catch (e: Exception) {
@@ -690,28 +691,19 @@ class EditorViewModel(
         val projectName = _state.value.projectName
         
         viewModelScope.launch {
-            // 注意：这里由于是在资源生成模式，图片可能已经是本地路径（如果是从缓存/历史加载）
-            // 如果是 AI 刚生成的临时路径，则执行迁移，否则直接绑定。
-            val finalPath = if (imageUri.contains("cache")) {
-                val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(imageUri) ?: return@launch
-                @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-                val base64Data = "data:image/jpeg;base64," + kotlin.io.encoding.Base64.Default.encode(bytes)
-                templateRepo.saveResource(projectName, blockId, base64Data)
-            } else {
-                imageUri
-            }
-
+            // 现在的逻辑：生成的图片已经在对应的 assets/blockId 目录下了
+            // 我们只需要更新引用即可
             _state.update { currentState ->
                 val updatedPages = currentState.project.pages.map { page ->
                     if (page.id == pageId) {
                         page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
-                            block.copy(selectedImageUri = finalPath)
+                            block.copy(currentImageUri = imageUri)
                         })
                     } else page
                 }
                 currentState.copy(
                     project = currentState.project.copy(pages = updatedPages), 
-                    generatedCandidates = emptyList() // 选中后清空当前候选
+                    generatedCandidates = emptyList()
                 )
             }
             templateRepo.saveTemplate(projectName, _state.value.project)
@@ -728,7 +720,7 @@ class EditorViewModel(
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
                     page.copy(blocks = updateBlockInList(page.blocks, blockId) { 
-                        it.copy(selectedImageUri = null) 
+                        it.copy(currentImageUri = null) 
                     })
                 } else page
             }
@@ -752,13 +744,9 @@ class EditorViewModel(
     suspend fun loadBlockHistoricalImages(blockId: String): List<String> {
         return try {
             val rootDir = templateRepo.getDataDir()
-            val templateDir = "$rootDir/${_state.value.projectName.replace(" ", "_")}"
+            val templateDir = "$rootDir/${_state.value.projectName.replace(" ", "_")}/assets/$blockId"
             val allFiles = org.gemini.ui.forge.utils.listFilesInLocalDirectory(templateDir)
-            // 过滤出以 blockId 开头且是图片的文件
-            allFiles.filter { filePath ->
-                val fileName = filePath.substringAfterLast("/").substringAfterLast("\\")
-                fileName.startsWith(blockId) && (fileName.endsWith(".png") || fileName.endsWith(".jpg"))
-            }
+            allFiles.filter { it.endsWith(".png") || it.endsWith(".jpg") }
         } catch (e: Exception) {
             AppLogger.e("EditorViewModel", "加载历史图片失败: $blockId", e)
             emptyList()
@@ -772,7 +760,7 @@ class EditorViewModel(
     fun updateStorageDir(newPath: String) = viewModelScope.launch { if (templateRepo.updateStorageDir(newPath)) _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) } }
     fun setMaxRetries(count: Int) = viewModelScope.launch { configManager.saveKey("API_MAX_RETRIES", count.toString()); _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) } }
     fun switchEditingLanguage(lang: PromptLanguage) = _state.update { it.copy(currentEditingPromptLang = lang) }
-    
+
     fun setReferenceMode(mode: ReferenceDisplayMode) {
         _state.update { it.copy(referenceMode = mode) }
     }

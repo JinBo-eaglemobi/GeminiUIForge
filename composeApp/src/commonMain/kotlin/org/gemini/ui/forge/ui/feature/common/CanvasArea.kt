@@ -267,10 +267,9 @@ fun RenderBlock(
     selectedBlockId: String?,
     editingGroupId: String?
 ) {
-    // 优先加载 selectedImageUri
-    val imageBitmapState = produceState<ImageBitmap?>(null, block.selectedImageUri, block.currentImageUri) {
-        val targetUri = block.selectedImageUri ?: block.currentImageUri
-        value = targetUri?.decodeBase64ToBitmap()
+    // 统一使用 currentImageUri
+    val imageBitmapState = produceState<ImageBitmap?>(null, block.currentImageUri) {
+        value = block.currentImageUri?.decodeBase64ToBitmap()
     }
     val imageBitmap = imageBitmapState.value
 
@@ -307,7 +306,7 @@ fun RenderBlock(
     ) {
         if (imageBitmap != null) {
             Image(bitmap = imageBitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        } else if (block.selectedImageUri != null || block.currentImageUri != null) {
+        } else if (block.currentImageUri != null) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.dp)
         } else {
             Text(text = stringResource(block.type.getDisplayNameRes()), style = MaterialTheme.typography.labelSmall, color = if (isDimmed) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
