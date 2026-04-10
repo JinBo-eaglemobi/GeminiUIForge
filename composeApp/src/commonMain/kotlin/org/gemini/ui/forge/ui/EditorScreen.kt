@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.viewmodel.EditorState
 import org.gemini.ui.forge.viewmodel.PromptLanguage
+import org.gemini.ui.forge.domain.UIBlockType
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import geminiuiforge.composeapp.generated.resources.Res
@@ -29,7 +30,11 @@ fun EditorScreen(
     onPromptChanged: (String) -> Unit,
     onSwitchEditingLanguage: (PromptLanguage) -> Unit,
     onGenerateRequested: () -> Unit,
-    onImageSelected: (String) -> Unit
+    onImageSelected: (String) -> Unit,
+    onMoveBlock: (String, String?, org.gemini.ui.forge.domain.DropPosition) -> Unit,
+    onBlockDragged: (String, Float, Float) -> Unit,
+    onRenameBlock: (String, String) -> Unit,
+    onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val maxWidth = maxWidth
@@ -45,6 +50,9 @@ fun EditorScreen(
                 blocks = state.currentPage?.blocks ?: emptyList(),
                 selectedBlockId = state.selectedBlockId,
                 onBlockClicked = onBlockClicked,
+                onMoveBlock = onMoveBlock,
+                onAddCustomBlock = onAddCustomBlock,
+                onRenameBlock = onRenameBlock,
                 modifier = Modifier.weight(hierarchyWeight).fillMaxHeight()
             )
 
@@ -81,6 +89,7 @@ fun EditorScreen(
                         selectedBlockId = state.selectedBlockId,
                         onBlockClicked = onBlockClicked,
                         onBlockDoubleClicked = onBlockDoubleClicked,
+                        onBlockDragged = onBlockDragged,
                         editingGroupId = state.editingGroupId,
                         onExitGroupEdit = onExitGroupEdit,
                         referenceUri = state.currentPage?.sourceImageUri,

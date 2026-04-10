@@ -17,6 +17,10 @@
 - **UI 开发**: 优先使用 Compose 原生声明式组件，保持与 Slots 游戏模板的解耦。
 - **命名规范**: 遵循 Kotlin 官方编码规范；UI 组件使用大驼峰（PascalCase），逻辑变量使用小驼峰（camelCase）。
 - **注释规范**: 所有生成的代码必须包含相关说明与注释，且注释内容必须统一使用**中文**。
+- **界面与多语言规范 (I18n)**: 
+  - 严禁在任何 UI 组件（`.kt` 界面文件）中硬编码中英文字符串。
+  - 所有新增的界面文案必须通过 `composeResources/values/strings.xml` (默认/英文) 和 `values-zh/strings.xml` (中文) 进行注册和读取。
+  - 对于带参数的动态文本，必须使用 Compose 原生的花括号占位符格式（例如：`{0}`, `{1}`），并通过 `stringResource(Res.string.XXX, arg1)` 进行赋值传递，**严禁使用 `%s`, `%d` 或在代码中通过 `.replace()` 手动拼接字符串**。
 
 ## 任务执行原则
 - **安全性**: 严禁泄露任何 API Keys（尤其是 Gemini/Nanobanana 相关配置）。

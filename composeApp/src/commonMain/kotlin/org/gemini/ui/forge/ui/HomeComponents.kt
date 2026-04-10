@@ -187,7 +187,7 @@ fun ModuleCard(module: UIModule, onEditLayout: () -> Unit, onGenerateUI: () -> U
                     modifier = Modifier.weight(1f).padding(end = 4.dp),
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
-                    Text(stringResource(Res.string.action_edit_layout), maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(Res.string.action_edit_layout), maxLines = 1, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
                 }
                 
                 Button(
@@ -196,7 +196,7 @@ fun ModuleCard(module: UIModule, onEditLayout: () -> Unit, onGenerateUI: () -> U
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
-                    Text(stringResource(Res.string.action_generate_ui), maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(Res.string.action_generate_ui), maxLines = 1, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
                 }
             }
         }

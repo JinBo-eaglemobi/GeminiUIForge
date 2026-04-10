@@ -14,16 +14,32 @@ import org.gemini.ui.forge.ui.TemplateGeneratorScreen
 import org.gemini.ui.forge.viewmodel.AppScreen
 import org.gemini.ui.forge.viewmodel.EditorViewModel
 import org.gemini.ui.forge.service.TemplateRepository
+import org.gemini.ui.forge.domain.UIBlockType
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 
+import androidx.compose.foundation.focusable
 import androidx.compose.material3.Typography
 import kotlinx.coroutines.launch
 
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.unit.dp
+
+private var originalSystemLanguage: String? = null
+
 @Composable
 fun App(typography: Typography? = null) {
+    if (originalSystemLanguage == null) {
+        originalSystemLanguage = androidx.compose.ui.text.intl.Locale.current.language
+    }
+    
     var languageKey by remember { mutableStateOf(0) }
     val templateRepo = remember { TemplateRepository() }
+    val focusRequester = remember { FocusRequester() }
     
     var templatesList by remember { mutableStateOf(emptyList<Pair<String, org.gemini.ui.forge.domain.ProjectState>>()) }
 
@@ -32,6 +48,18 @@ fun App(typography: Typography? = null) {
         val state by viewModel.state.collectAsState()
         val globalState = state.globalState
         
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+        }
+
+        LaunchedEffect(globalState.languageCode) {
+            val effectiveLang = if (globalState.languageCode == "auto") {
+                val sysLang = originalSystemLanguage ?: androidx.compose.ui.text.intl.Locale.current.language
+                if (sysLang.lowercase().startsWith("zh")) "zh" else "en"
+            } else globalState.languageCode
+            setAppLanguage(effectiveLang)
+        }
+
         LaunchedEffect(globalState.currentScreen) {
             if (globalState.currentScreen == AppScreen.HOME) {
                 templatesList = templateRepo.getTemplates()
@@ -65,7 +93,11 @@ fun App(typography: Typography? = null) {
                     currentScreen = globalState.currentScreen,
                     onNavigateHome = { viewModel.navigateTo(AppScreen.HOME) },
                     onLanguageChangeRequested = { languageCode ->
-                        setAppLanguage(languageCode)
+                        val effectiveLang = if (languageCode == "auto") {
+                            val sysLang = originalSystemLanguage ?: androidx.compose.ui.text.intl.Locale.current.language
+                            if (sysLang.lowercase().startsWith("zh")) "zh" else "en"
+                        } else languageCode
+                        setAppLanguage(effectiveLang)
                         viewModel.setLanguage(languageCode)
                         languageKey++
                     },
@@ -88,11 +120,60 @@ fun App(typography: Typography? = null) {
                     currentMaxRetries = globalState.maxRetries,
                     onMaxRetriesSaved = { viewModel.setMaxRetries(it) },
                     currentPromptLang = globalState.promptLangPref,
-                    onPromptLangChanged = { viewModel.setPromptLanguagePref(it) }
+                    onPromptLangChanged = { viewModel.setPromptLanguagePref(it) },
+                    shortcuts = globalState.shortcuts,
+                    onShortcutSaved = { action, key -> viewModel.saveShortcut(action, key) }
                 )
             }
             ) { innerPadding ->
-            Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .fillMaxSize()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown) {
+                            val isCtrl = event.isCtrlPressed
+                            val isShift = event.isShiftPressed
+                            val keyCode = event.key
+                            val shortcutMap = globalState.shortcuts
+                            
+                            fun matches(action: org.gemini.ui.forge.domain.ShortcutAction): Boolean {
+                                val chord = shortcutMap[action] ?: action.defaultKey
+                                val parts = chord.uppercase().split("+")
+                                val needsCtrl = "CTRL" in parts
+                                val needsShift = "SHIFT" in parts
+                                val keyName = parts.last()
+                                if (needsCtrl != isCtrl || needsShift != isShift) return false
+                                return when (keyName) {
+                                    "Z" -> keyCode == Key.Z
+                                    "Y" -> keyCode == Key.Y
+                                    "S" -> keyCode == Key.S
+                                    "F2" -> keyCode == Key.F2
+                                    "DELETE" -> keyCode == Key.Delete
+                                    "BACKSPACE" -> keyCode == Key.Backspace
+                                    else -> false
+                                }
+                            }
+
+                            when {
+                                matches(org.gemini.ui.forge.domain.ShortcutAction.UNDO) -> { viewModel.undo(); true }
+                                matches(org.gemini.ui.forge.domain.ShortcutAction.REDO) || (isCtrl && isShift && keyCode == Key.Z) -> { viewModel.redo(); true }
+                                matches(org.gemini.ui.forge.domain.ShortcutAction.SAVE) -> {
+                                    if (globalState.currentScreen == AppScreen.TEMPLATE_EDITOR || globalState.currentScreen == AppScreen.EDITOR) {
+                                        coroutineScope.launch { templateRepo.saveTemplate(state.projectName, state.project) }
+                                    }; true
+                                }
+                                matches(org.gemini.ui.forge.domain.ShortcutAction.DELETE) -> {
+                                    state.selectedBlockId?.let { viewModel.deleteBlock(it) }; true
+                                }
+                                else -> false
+                            }
+                        } else false
+                    }
+                    .focusRequester(focusRequester)
+                    .focusable()
+            ) {
+                // 内容分发
                 when (globalState.currentScreen) {
                     AppScreen.HOME -> {
                         HomeScreen(
@@ -143,7 +224,11 @@ fun App(typography: Typography? = null) {
                             onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
                             onExitGroupEdit = { viewModel.exitGroupEditMode() },
                             onAddBlock = { type -> viewModel.addBlock(type) },
+                            onAddCustomBlock = { id, type, w, h -> viewModel.addCustomBlock(id, type, w, h) },
                             onDeleteBlock = { id -> viewModel.deleteBlock(id) },
+                            onMoveBlock = { draggedId, targetId, dropPos -> viewModel.moveBlock(draggedId, targetId, dropPos) },
+                            onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },
+                            onRenameBlock = { oldId, newId -> viewModel.renameBlock(oldId, newId) },
                             onSaveTemplate = {
                                 coroutineScope.launch {
                                     templateRepo.saveTemplate(state.projectName, state.project)
@@ -161,7 +246,11 @@ fun App(typography: Typography? = null) {
                             onPromptChanged = { viewModel.onUserPromptChanged(it) },
                             onSwitchEditingLanguage = { viewModel.switchEditingLanguage(it) },
                             onGenerateRequested = { viewModel.onRequestGeneration(globalState.effectiveApiKey) },
-                            onImageSelected = { viewModel.onImageSelected(it) }
+                            onImageSelected = { viewModel.onImageSelected(it) },
+                            onMoveBlock = { draggedId, targetId, dropPos -> viewModel.moveBlock(draggedId, targetId, dropPos) },
+                            onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },
+                            onRenameBlock = { oldId, newId -> viewModel.renameBlock(oldId, newId) },
+                            onAddCustomBlock = { id, type, w, h -> viewModel.addCustomBlock(id, type, w, h) }
                         )
                     }
                     AppScreen.TEMPLATE_GENERATOR -> {

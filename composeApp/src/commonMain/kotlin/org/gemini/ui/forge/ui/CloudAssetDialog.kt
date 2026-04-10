@@ -26,6 +26,9 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import org.gemini.ui.forge.utils.rememberImagePicker
 import org.gemini.ui.forge.formatIsoTime
 
+import org.jetbrains.compose.resources.stringResource
+import geminiuiforge.composeapp.generated.resources.*
+
 @Composable
 fun CloudAssetDialog(
     cloudAssetManager: CloudAssetManager,
@@ -44,6 +47,8 @@ fun CloudAssetDialog(
     // 正在上传的任务列表：Map<FileName, Pair<Progress, Status>>
     val uploadingTasks = remember { mutableStateMapOf<String, Pair<Float, String>>() }
 
+    val uploadPrepStr = stringResource(Res.string.cloud_assets_uploading_prepare)
+    
     // 图片选择器逻辑：并发上传优化
     val imagePicker = rememberImagePicker { uris ->
         coroutineScope.launch {
@@ -57,14 +62,15 @@ fun CloudAssetDialog(
                             if (bytes != null) {
                                 val mimeType = org.gemini.ui.forge.utils.getMimeType(uri)
                                 // 初始化进度
-                                uploadingTasks[displayName] = 0f to "准备上传..."
+                                uploadingTasks[displayName] = 0f to uploadPrepStr
                                 
                                 cloudAssetManager.getOrUploadFile(displayName, bytes, mimeType) { progress, status ->
                                     uploadingTasks[displayName] = progress to status
                                 }
                             }
                         } catch (e: Exception) {
-                            uploadingTasks[displayName] = 0f to "上传失败: ${e.message}"
+                            val errorMsg = org.jetbrains.compose.resources.getString(Res.string.cloud_assets_upload_failed, e.message ?: "Unknown")
+                            uploadingTasks[displayName] = 0f to errorMsg
                         } finally {
                             // 上传成功或彻底失败后停留 1.5 秒再从“上传列表”移除，让用户看一眼结果
                             delay(1500L)
@@ -106,13 +112,13 @@ fun CloudAssetDialog(
                 ) {
                     Column {
                         Text(
-                            text = "云端资产管理器",
+                            text = stringResource(Res.string.cloud_assets_title),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
                         if (selectedFileNames.isNotEmpty()) {
                             Text(
-                                text = "已选中 ${selectedFileNames.size} 个文件",
+                                text = stringResource(Res.string.cloud_assets_selected, selectedFileNames.size),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -174,7 +180,7 @@ fun CloudAssetDialog(
                 // List
                 if (assets.isEmpty() && uploadingTasks.isEmpty()) {
                     Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("暂无云端资产", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(Res.string.cloud_assets_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
                     LazyColumn(
@@ -223,7 +229,7 @@ fun CloudAssetDialog(
                                         checked = selectedFileNames.size == assets.size && assets.isNotEmpty(),
                                         onCheckedChange = null
                                     )
-                                    Text("全选", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
+                                    Text(stringResource(Res.string.cloud_assets_select_all), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
                                 }
                             }
                         }
@@ -259,7 +265,7 @@ fun CloudAssetDialog(
                 // Footer
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss) {
-                        Text("关闭")
+                        Text(stringResource(Res.string.action_close))
                     }
                 }
             }
@@ -298,7 +304,7 @@ fun CloudAssetItem(
 
                     Column {
                         Text(
-                            text = asset.displayName ?: "未命名文件",
+                            text = asset.displayName ?: stringResource(Res.string.asset_unnamed),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -329,7 +335,7 @@ fun CloudAssetItem(
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "过期: ${org.gemini.ui.forge.formatIsoTime(asset.expirationTime)}",
+                                text = stringResource(Res.string.cloud_assets_expire, org.gemini.ui.forge.formatIsoTime(asset.expirationTime)),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

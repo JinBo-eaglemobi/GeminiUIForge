@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Gemini UI Forge</string>
     <string name="select_block_to_edit">请选择要编辑的功能块</string>
@@ -25,6 +25,7 @@
     <string name="menu_file">文件</string>
     <string name="menu_settings">设置</string>
     <string name="menu_help">帮助</string>
+    <string name="menu_cloud_assets">云端资产</string>
     <string name="settings_title">设置</string>
     <string name="settings_language">语言</string>
     <string name="language_english">English</string>
@@ -93,4 +94,72 @@
     <string name="prop_optimize_prompt">优化文案 (AI)</string>
     <string name="prop_save">保存</string>
     <string name="prop_cancel">取消</string>
+
+    <!-- App Settings Dialog -->
+    <string name="settings_app_title">应用设置</string>
+    <string name="settings_category_general">常规设置</string>
+    <string name="settings_category_ai">AI 引擎配置</string>
+    <string name="settings_category_shortcuts">快捷键设置</string>
+    <string name="settings_appearance_theme">外观主题</string>
+    <string name="settings_language_auto">跟随系统 (Auto)</string>
+    <string name="settings_storage_dir_title">项目存储目录</string>
+    <string name="settings_gemini_key_title">Gemini API Key</string>
+    <string name="settings_gemini_key_placeholder">在此粘贴您的 API Key</string>
+    <string name="settings_max_retries_title">请求重试次数</string>
+    <string name="settings_prompt_language">默认提示词语言</string>
+    <string name="settings_shortcuts_title">自定义快捷键</string>
+    <string name="shortcut_undo">撤销</string>
+    <string name="shortcut_redo">重做</string>
+    <string name="shortcut_save">保存项目</string>
+    <string name="shortcut_rename">重命名图层</string>
+    <string name="shortcut_delete">删除图层</string>
+
+    <!-- New Internationalized Strings (Chinese) -->
+    <string name="hierarchy_title">图层层级</string>
+    <string name="hierarchy_move_to_top">移至顶层</string>
+    <string name="dialog_add_layer_title">添加新图层</string>
+    <string name="dialog_rename_layer_title">重命名图层</string>
+    <string name="label_layer_name">图层名称/ID (可选)</string>
+    <string name="label_width">宽度</string>
+    <string name="label_height">高度</string>
+    <string name="action_add">添加</string>
+    <string name="action_confirm">确认</string>
+    <string name="editor_gen_settings">生成设置</string>
+    <string name="editor_prompt_lang">生成提示词语言</string>
+    <string name="editor_generating">正在生成...</string>
+    <string name="editor_start_gen">开始生成图片资源</string>
+    <string name="cloud_assets_title">云端资产管理器</string>
+    <string name="cloud_assets_empty">暂无云端资产</string>
+    <string name="cloud_assets_select_all">全选</string>
+    <string name="cloud_assets_selected">已选中 {0} 个文件</string>
+    <string name="cloud_assets_uploading_prepare">准备上传...</string>
+    <string name="cloud_assets_upload_failed">上传失败: {0}</string>
+    <string name="cloud_assets_expire">过期: {0}</string>
+    <string name="action_close">关闭</string>
+    <string name="asset_unnamed">未命名文件</string>
+    <string name="action_exit">退出</string>
+    <string name="group_editing_indicator">正在编辑组: {0}</string>
+    <string name="editor_tools_title">编辑工具</string>
+    <string name="action_refine_area">进入框选重塑</string>
+    <string name="label_refine_instruction">修正建议或功能描述</string>
+    <string name="dialog_edit_prompt_title">编辑详细描述</string>
+    <string name="label_description_content">描述内容</string>
+    <string name="action_ai_optimize">AI 优化</string>
+    <string name="action_done">完成</string>
+    <string name="label_x">X 坐标</string>
+    <string name="label_y">Y 坐标</string>
+    <string name="label_w">宽度</string>
+    <string name="label_h">高度</string>
+    <string name="action_delete_component">删除此组件</string>
+    <string name="refine_dialog_title">AI 视觉引导重塑工作间</string>
+    <string name="refine_logs_title">处理日志 (可滚动选择)</string>
+    <string name="refine_action_start">开始 AI 重塑</string>
+    <string name="refine_action_finished">分析完成，返回编辑器</string>
+    <string name="refine_logs_empty">暂无运行日志</string>
+    <string name="refine_analyzing">正在分析...</string>
+    <string name="refine_instruction_default_update">请基于我提供的局部高清图，重新识别并分析这个特定组件的细节。请务必将分析出的 UI 结构（子组件、样式、提示词）更新到我当前选定的这个模块中，不要创建冗余的新模块，也不要修改其他无关区域。</string>
+    <string name="refine_instruction_default_new">这段区域是你之前未能识别到的 UI 部分。请重新分析该区域中的视觉元素，提取出准确的 UI 功能组件，并将它们作为新模块正确添加到当前页面的布局结构中。</string>
+    <string name="template_name_hint_extended">模板名称 (留空则自动根据图片命名)</string>
+    <string name="action_ai_refine_component">AI 组件重塑</string>
+    <string name="label_new_id_name">新 ID/名称</string>
 </resources>

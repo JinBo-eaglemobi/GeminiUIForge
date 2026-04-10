@@ -1,5 +1,7 @@
 package org.gemini.ui.forge.viewmodel
 
+import org.gemini.ui.forge.domain.ShortcutAction
+
 /**
  * 应用中支持显示的屏幕枚举
  */
@@ -42,6 +44,7 @@ enum class ThemeMode {
  * @property effectiveApiKey 实际生效的密钥 (apiKey 或环境变量)
  * @property templateStorageDir 模板数据的存储目录
  * @property maxRetries API 请求的最大重试次数
+ * @property shortcuts 快捷键映射表 (Action -> 组合键描述)
  */
 data class AppGlobalState(
     val currentScreen: AppScreen = AppScreen.HOME,
@@ -51,5 +54,6 @@ data class AppGlobalState(
     val apiKey: String = "",
     val effectiveApiKey: String = "",
     val templateStorageDir: String = "",
-    val maxRetries: Int = 3
+    val maxRetries: Int = 3,
+    val shortcuts: Map<ShortcutAction, String> = ShortcutAction.entries.associate { it to it.defaultKey }
 )

@@ -13,6 +13,8 @@ import org.gemini.ui.forge.domain.SerialRect
 import org.gemini.ui.forge.domain.UIBlock
 import org.gemini.ui.forge.domain.UIBlockType
 import org.gemini.ui.forge.domain.UIPage
+import org.gemini.ui.forge.domain.DropPosition
+import org.gemini.ui.forge.domain.ShortcutAction
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.TemplateRepository
 import org.gemini.ui.forge.service.ConfigManager
@@ -20,6 +22,7 @@ import org.gemini.ui.forge.service.CloudAssetManager
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.calculateMd5
 import org.gemini.ui.forge.utils.getMimeType
+import kotlin.collections.ArrayDeque
 
 /**
  * 编辑器页面的 ViewModel，负责 UI 逻辑处理与状态管理
@@ -33,6 +36,67 @@ class EditorViewModel(
 
     private val _state = MutableStateFlow(EditorState())
     val state: StateFlow<EditorState> = _state.asStateFlow()
+    
+    private val undoStack = ArrayDeque<ProjectState>()
+    private val redoStack = ArrayDeque<ProjectState>()
+
+    fun saveSnapshot() {
+        val currentProject = _state.value.project
+        if (undoStack.lastOrNull() != currentProject) {
+            undoStack.addLast(currentProject)
+            if (undoStack.size > 50) undoStack.removeFirst()
+            redoStack.clear()
+        }
+    }
+
+    fun undo() {
+        if (undoStack.isNotEmpty()) {
+            val currentState = _state.value.project
+            redoStack.addLast(currentState)
+            val previousState = undoStack.removeLast()
+            _state.update { it.copy(project = previousState) }
+        }
+    }
+
+    fun redo() {
+        if (redoStack.isNotEmpty()) {
+            val currentState = _state.value.project
+            undoStack.addLast(currentState)
+            val nextState = redoStack.removeLast()
+            _state.update { it.copy(project = nextState) }
+        }
+    }
+
+    fun renameBlock(oldId: String, newId: String) {
+        if (oldId == newId || newId.isBlank()) return
+        saveSnapshot()
+        val pageId = _state.value.selectedPageId ?: return
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) {
+                    page.copy(blocks = updateBlockInList(page.blocks, oldId) { block ->
+                        block.copy(id = newId)
+                    })
+                } else page
+            }
+            currentState.copy(
+                project = currentState.project.copy(pages = updatedPages),
+                selectedBlockId = if (currentState.selectedBlockId == oldId) newId else currentState.selectedBlockId,
+                editingGroupId = if (currentState.editingGroupId == oldId) newId else currentState.editingGroupId
+            )
+        }
+    }
+
+    fun saveShortcut(action: ShortcutAction, keyChord: String) {
+        viewModelScope.launch {
+            configManager.saveKey("SHORTCUT_${action.name}", keyChord)
+            _state.update { currentState ->
+                val newShortcuts = currentState.globalState.shortcuts.toMutableMap()
+                newShortcuts[action] = keyChord
+                currentState.copy(globalState = currentState.globalState.copy(shortcuts = newShortcuts))
+            }
+        }
+    }
 
     init {
         loadBaseTemplate()
@@ -52,6 +116,11 @@ class EditorViewModel(
         val storageDir = templateRepo.getDataDir()
         val retriesStr = configManager.loadKey("API_MAX_RETRIES") ?: "3"
         val retries = retriesStr.toIntOrNull() ?: 3
+
+        val customShortcuts = ShortcutAction.entries.associate { action ->
+            val saved = configManager.loadKey("SHORTCUT_${action.name}")
+            action to (saved ?: action.defaultKey)
+        }
         
         _state.update { it.copy(
             globalState = it.globalState.copy(
@@ -60,7 +129,8 @@ class EditorViewModel(
                 templateStorageDir = storageDir,
                 languageCode = languageCode,
                 promptLangPref = promptLang,
-                maxRetries = retries
+                maxRetries = retries,
+                shortcuts = customShortcuts
             ),
             currentEditingPromptLang = if (promptLang == PromptLanguage.EN) PromptLanguage.EN else PromptLanguage.ZH
         ) }
@@ -195,12 +265,68 @@ class EditorViewModel(
     }
 
     fun addBlock(type: UIBlockType) {
+        saveSnapshot()
         val pageId = _state.value.selectedPageId ?: return
         val newBlockId = "block_${org.gemini.ui.forge.getCurrentTimeMillis()}"
-        val newBlock = UIBlock(newBlockId, type, SerialRect(100f, 100f, 400f, 300f))
         
         _state.update { currentState ->
+            val currentPage = currentState.currentPage ?: return@update currentState
             val editingGroupId = currentState.editingGroupId
+            
+            val width = 400f
+            val height = 300f
+            var left = (currentPage.width - width) / 2f
+            var top = (currentPage.height - height) / 2f
+            
+            if (editingGroupId != null) {
+                val groupBlock = findBlockById(currentPage.blocks, editingGroupId)
+                if (groupBlock != null) {
+                    left = (groupBlock.bounds.width - width) / 2f
+                    top = (groupBlock.bounds.height - height) / 2f
+                }
+            }
+            
+            val newBlock = UIBlock(newBlockId, type, SerialRect(left, top, left + width, top + height))
+
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) {
+                    if (editingGroupId != null) {
+                        page.copy(blocks = updateBlockInList(page.blocks, editingGroupId) { group ->
+                            group.copy(children = group.children + newBlock)
+                        })
+                    } else {
+                        page.copy(blocks = page.blocks + newBlock)
+                    }
+                } else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = newBlockId)
+        }
+    }
+
+    fun addCustomBlock(id: String, type: UIBlockType, width: Float, height: Float) {
+        saveSnapshot()
+        val pageId = _state.value.selectedPageId ?: return
+        val newBlockId = if (id.isBlank()) "block_${org.gemini.ui.forge.getCurrentTimeMillis()}" else id
+        
+        AppLogger.d("EditorViewModel", "Adding custom block: $newBlockId with size ${width}x${height}")
+
+        _state.update { currentState ->
+            val currentPage = currentState.currentPage ?: return@update currentState
+            val editingGroupId = currentState.editingGroupId
+            
+            var left = (currentPage.width - width) / 2f
+            var top = (currentPage.height - height) / 2f
+            
+            if (editingGroupId != null) {
+                val groupBlock = findBlockById(currentPage.blocks, editingGroupId)
+                if (groupBlock != null) {
+                    left = (groupBlock.bounds.width - width) / 2f
+                    top = (groupBlock.bounds.height - height) / 2f
+                }
+            }
+            
+            val newBlock = UIBlock(newBlockId, type, SerialRect(left, top, left + width, top + height))
+
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
                     if (editingGroupId != null) {
@@ -219,6 +345,7 @@ class EditorViewModel(
     /** 将多个组件打包成组 */
     fun groupBlocks(blockIds: Set<String>) {
         if (blockIds.isEmpty()) return
+        saveSnapshot()
         val pageId = _state.value.selectedPageId ?: return
         
         _state.update { currentState ->
@@ -226,8 +353,6 @@ class EditorViewModel(
             val allBlocks = currentPage.blocks
             val targetBlocks = mutableListOf<UIBlock>()
             
-            // 找出所有选中的组件（仅限同级，简单起见先处理顶层或同级）
-            // 这里的逻辑可以复杂，目前先实现从当前列表（顶层或 editingGroup 内）中提取
             val parentId = currentState.editingGroupId
             
             fun extractBlocks(blocks: List<UIBlock>): Pair<List<UIBlock>, List<UIBlock>> {
@@ -239,7 +364,6 @@ class EditorViewModel(
             }
 
             val (extracted, remainingBlocks) = if (parentId != null) {
-                // 如果在组内，则在组的 children 中操作
                 var ext = emptyList<UIBlock>()
                 val newAll = updateBlockInList(allBlocks, parentId) { group ->
                     val (e, r) = extractBlocks(group.children)
@@ -253,13 +377,11 @@ class EditorViewModel(
 
             if (extracted.isEmpty()) return@update currentState
 
-            // 计算组的 bounds (包围盒)
             val minL = extracted.minOf { it.bounds.left }
             val minT = extracted.minOf { it.bounds.top }
             val maxR = extracted.maxOf { it.bounds.right }
             val maxB = extracted.maxOf { it.bounds.bottom }
             
-            // 转换子组件坐标为相对坐标
             val childrenWithRelativeBounds = extracted.map { child ->
                 child.copy(bounds = SerialRect(
                     child.bounds.left - minL,
@@ -292,20 +414,150 @@ class EditorViewModel(
         }
     }
 
-    fun deleteBlock(blockId: String) {
+    fun moveBlockBy(blockId: String, dx: Float, dy: Float) {
         val pageId = _state.value.selectedPageId ?: return
         _state.update { currentState ->
-            fun removeRecursive(blocks: List<UIBlock>): List<UIBlock> {
-                return blocks.filterNot { it.id == blockId }.map { it.copy(children = removeRecursive(it.children)) }
-            }
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == pageId) page.copy(blocks = removeRecursive(page.blocks)) else page
+                if (page.id == pageId) {
+                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
+                        block.copy(
+                            bounds = SerialRect(
+                                left = block.bounds.left + dx,
+                                top = block.bounds.top + dy,
+                                right = block.bounds.right + dx,
+                                bottom = block.bounds.bottom + dy
+                            )
+                        )
+                    })
+                } else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+    }
+
+    fun deleteBlock(blockId: String) {
+        saveSnapshot()
+        val pageId = _state.value.selectedPageId ?: return
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) page.copy(blocks = removeBlockRecursive(page.blocks, blockId)) else page
             }
             currentState.copy(
                 project = currentState.project.copy(pages = updatedPages), 
                 selectedBlockId = if (currentState.selectedBlockId == blockId) null else currentState.selectedBlockId,
                 editingGroupId = if (currentState.editingGroupId == blockId) null else currentState.editingGroupId
             )
+        }
+    }
+
+    private fun removeBlockRecursive(blocks: List<UIBlock>, idToRemove: String): List<UIBlock> {
+        return blocks.filterNot { it.id == idToRemove }.map {
+            it.copy(children = removeBlockRecursive(it.children, idToRemove))
+        }
+    }
+
+    private fun getAbsoluteBounds(blocks: List<UIBlock>, targetId: String, currentOffsetX: Float = 0f, currentOffsetY: Float = 0f): SerialRect? {
+        for (block in blocks) {
+            val absL = currentOffsetX + block.bounds.left
+            val absT = currentOffsetY + block.bounds.top
+            if (block.id == targetId) {
+                return SerialRect(absL, absT, absL + block.bounds.width, absT + block.bounds.height)
+            }
+            val hit = getAbsoluteBounds(block.children, targetId, absL, absT)
+            if (hit != null) return hit
+        }
+        return null
+    }
+
+    private fun isDescendantOfBlock(targetId: String, currentBlock: UIBlock): Boolean {
+        if (currentBlock.id == targetId) return true
+        return currentBlock.children.any { isDescendantOfBlock(targetId, it) }
+    }
+
+    private fun getParentIdOf(blocks: List<UIBlock>, targetId: String, currentParentId: String? = null): String? {
+        for (block in blocks) {
+            if (block.id == targetId) return currentParentId
+            val p = getParentIdOf(block.children, targetId, block.id)
+            if (p != null) return p
+        }
+        return null
+    }
+
+    private fun insertBlockSibling(blocks: List<UIBlock>, targetId: String, blockToInsert: UIBlock, position: DropPosition): List<UIBlock> {
+        val result = mutableListOf<UIBlock>()
+        for (b in blocks) {
+            if (b.id == targetId) {
+                if (position == DropPosition.BEFORE) result.add(blockToInsert)
+                result.add(b)
+                if (position == DropPosition.AFTER) result.add(blockToInsert)
+            } else {
+                result.add(b.copy(children = insertBlockSibling(b.children, targetId, blockToInsert, position)))
+            }
+        }
+        return result
+    }
+
+    /**
+     * 将一个拖拽的图层移动到另一个图层，支持内部 (INSIDE)、前方 (BEFORE)、后方 (AFTER)
+     */
+    fun moveBlock(draggedBlockId: String, targetId: String?, dropPosition: DropPosition = DropPosition.INSIDE) {
+        if (draggedBlockId == targetId) return
+        saveSnapshot()
+        val pageId = _state.value.selectedPageId ?: return
+        
+        _state.update { currentState ->
+            val currentPage = currentState.currentPage ?: return@update currentState
+            val draggedBlock = findBlockById(currentPage.blocks, draggedBlockId) ?: return@update currentState
+            
+            if (targetId != null && isDescendantOfBlock(targetId, draggedBlock)) {
+                return@update currentState
+            }
+            
+            val draggedAbsBounds = getAbsoluteBounds(currentPage.blocks, draggedBlockId) ?: draggedBlock.bounds
+            var newBlocks = removeBlockRecursive(currentPage.blocks, draggedBlockId)
+            
+            val actualParentId = if (targetId == null) {
+                null
+            } else if (dropPosition == DropPosition.INSIDE) {
+                targetId
+            } else {
+                getParentIdOf(currentPage.blocks, targetId)
+            }
+            
+            val targetAbsBounds = if (actualParentId != null) getAbsoluteBounds(newBlocks, actualParentId) else null
+            
+            val newRelativeBounds = if (targetAbsBounds != null) {
+                SerialRect(
+                    left = draggedAbsBounds.left - targetAbsBounds.left,
+                    top = draggedAbsBounds.top - targetAbsBounds.top,
+                    right = (draggedAbsBounds.left - targetAbsBounds.left) + draggedAbsBounds.width,
+                    bottom = (draggedAbsBounds.top - targetAbsBounds.top) + draggedAbsBounds.height
+                )
+            } else {
+                draggedAbsBounds
+            }
+            
+            val updatedDraggedBlock = draggedBlock.copy(bounds = newRelativeBounds)
+            
+            if (targetId == null) {
+                newBlocks = newBlocks + updatedDraggedBlock
+            } else if (dropPosition == DropPosition.INSIDE) {
+                newBlocks = updateBlockInList(newBlocks, targetId) { targetGroup ->
+                    val newType = if (targetGroup.type == UIBlockType.GROUP || targetGroup.type == UIBlockType.PANEL) targetGroup.type else UIBlockType.GROUP
+                    targetGroup.copy(
+                        type = newType,
+                        children = targetGroup.children + updatedDraggedBlock
+                    )
+                }
+            } else {
+                newBlocks = insertBlockSibling(newBlocks, targetId, updatedDraggedBlock, dropPosition)
+            }
+            
+            val updatedPages = currentState.project.pages.map {
+                if (it.id == pageId) it.copy(blocks = newBlocks) else it
+            }
+            
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
     }
 
@@ -474,12 +726,10 @@ class EditorViewModel(
     fun setMaxRetries(count: Int) = viewModelScope.launch { configManager.saveKey("API_MAX_RETRIES", count.toString()); _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) } }
     fun switchEditingLanguage(lang: PromptLanguage) = _state.update { it.copy(currentEditingPromptLang = lang) }
     
-    /** 切换参考图显示模式 */
     fun setReferenceMode(mode: ReferenceDisplayMode) {
         _state.update { it.copy(referenceMode = mode) }
     }
 
-    /** 调整参考图透明度 */
     fun setReferenceOpacity(opacity: Float) {
         _state.update { it.copy(referenceOpacity = opacity) }
     }

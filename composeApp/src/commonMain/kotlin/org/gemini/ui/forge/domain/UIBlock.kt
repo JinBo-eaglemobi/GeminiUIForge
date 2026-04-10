@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.domain
 
 import kotlinx.serialization.Serializable
+import androidx.compose.runtime.Stable
 
 /**
  * 最小生成单元模型：UI 功能块 (UIBlock)
@@ -12,6 +13,7 @@ import kotlinx.serialization.Serializable
  * @property userPromptEn 详细的英文提示词 (High-quality English prompt for image generation, including style, material, and lighting)
  * @property userPromptZh 详细的中文提示词 (对应的详尽中文描述，包含组件功能、设计意图和视觉特征)
  */
+@Stable
 @Serializable
 data class UIBlock(
     val id: String,

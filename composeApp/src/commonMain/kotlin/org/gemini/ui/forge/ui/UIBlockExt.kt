@@ -16,6 +16,9 @@ import geminiuiforge.composeapp.generated.resources.block_text_area
 import geminiuiforge.composeapp.generated.resources.block_win_display
 import geminiuiforge.composeapp.generated.resources.block_group
 import org.jetbrains.compose.resources.StringResource
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 
 fun UIBlockType.getDisplayNameRes(): StringResource {
     return when (this) {
@@ -32,5 +35,23 @@ fun UIBlockType.getDisplayNameRes(): StringResource {
         UIBlockType.ICON -> Res.string.block_icon
         UIBlockType.DECORATION -> Res.string.block_decoration
         UIBlockType.GROUP -> Res.string.block_group
+    }
+}
+
+fun UIBlockType.getIcon(): ImageVector {
+    return when (this) {
+        UIBlockType.GROUP -> Icons.Default.Folder
+        UIBlockType.REEL -> Icons.Default.ViewColumn
+        UIBlockType.SPIN_BUTTON -> Icons.Default.PlayArrow
+        UIBlockType.WIN_DISPLAY -> Icons.Default.Star
+        UIBlockType.BACKGROUND -> Icons.Default.Image
+        UIBlockType.SYMBOL -> Icons.Default.AddCircle
+        UIBlockType.BUTTON -> Icons.Default.TouchApp
+        UIBlockType.PANEL -> Icons.Default.WebAsset
+        UIBlockType.HEADER -> Icons.Default.KeyboardArrowUp
+        UIBlockType.FOOTER -> Icons.Default.KeyboardArrowDown
+        UIBlockType.TEXT_AREA -> Icons.Default.Edit
+        UIBlockType.ICON -> Icons.Default.Face
+        UIBlockType.DECORATION -> Icons.Default.Favorite
     }
 }

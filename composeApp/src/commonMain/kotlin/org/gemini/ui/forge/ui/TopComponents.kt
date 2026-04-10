@@ -24,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 
+import org.gemini.ui.forge.domain.ShortcutAction
+
 @Composable
 fun AppTopBar(
     currentScreen: AppScreen,
@@ -42,7 +44,9 @@ fun AppTopBar(
     currentMaxRetries: Int = 3,
     onMaxRetriesSaved: (Int) -> Unit = {},
     currentPromptLang: PromptLanguage = PromptLanguage.AUTO,
-    onPromptLangChanged: (PromptLanguage) -> Unit = {}
+    onPromptLangChanged: (PromptLanguage) -> Unit = {},
+    shortcuts: Map<ShortcutAction, String> = emptyMap(),
+    onShortcutSaved: (ShortcutAction, String) -> Unit = { _, _ -> }
 ) {
     var showSettingsDialog by remember { mutableStateOf(false) }
     val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
@@ -106,7 +110,7 @@ fun AppTopBar(
                     ) {
                         Icon(Icons.Default.Cloud, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("云端资产", style = MaterialTheme.typography.labelLarge)
+                        Text(stringResource(Res.string.menu_cloud_assets), style = MaterialTheme.typography.labelLarge)
                     }
 
                     IconButton(onClick = { showSettingsDialog = true }) {
@@ -129,6 +133,7 @@ fun AppTopBar(
             currentStorageDir = currentStorageDir,
             currentMaxRetries = currentMaxRetries,
             currentPromptLang = currentPromptLang,
+            shortcuts = shortcuts,
             onDismiss = { showSettingsDialog = false },
             onLanguageSelected = { 
                 onLanguageChangeRequested(it)
@@ -144,7 +149,8 @@ fun AppTopBar(
                 onStorageDirChanged(it)
             },
             onMaxRetriesSaved = onMaxRetriesSaved,
-            onPromptLangSelected = onPromptLangChanged
+            onPromptLangSelected = onPromptLangChanged,
+            onShortcutSaved = onShortcutSaved
         )
     }
 }

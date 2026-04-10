@@ -50,13 +50,17 @@ fun TemplateEditorScreen(
     onBlockTypeChanged: (String, UIBlockType) -> Unit,
     onPromptChanged: (String, String) -> Unit,
     onOptimizePrompt: (String, (String) -> Unit) -> Unit,
-    onRefineArea: (String, SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit, // 增加了选区参数
+    onRefineArea: (String, SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit,
     onRefineCustomArea: (SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit,
     onSwitchEditingLanguage: (PromptLanguage) -> Unit,
     onBlockDoubleClicked: (String) -> Unit,
     onExitGroupEdit: () -> Unit,
     onAddBlock: (UIBlockType) -> Unit,
+    onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit,
     onDeleteBlock: (String) -> Unit,
+    onMoveBlock: (String, String?, org.gemini.ui.forge.domain.DropPosition) -> Unit,
+    onBlockDragged: (String, Float, Float) -> Unit,
+    onRenameBlock: (String, String) -> Unit,
     onSaveTemplate: () -> Unit
 ) {
     var showVisualRefine by remember { mutableStateOf(false) }
@@ -97,7 +101,7 @@ fun TemplateEditorScreen(
             Surface(modifier = Modifier.weight(leftWeight).fillMaxHeight(), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Column(modifier = Modifier.padding(8.dp)) {
-                        Text("编辑工具", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+                        Text(stringResource(Res.string.editor_tools_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
                         
                         Button(
                             onClick = { refineTargetId = null; showVisualRefine = true },
@@ -105,11 +109,11 @@ fun TemplateEditorScreen(
                         ) {
                             Icon(Icons.Default.Crop, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("进入框选重塑")
+                            Text(stringResource(Res.string.action_refine_area))
                         }
 
                         HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                        Text("页面列表:", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(Res.string.prop_pages), style = MaterialTheme.typography.labelMedium)
                         state.project.pages.forEach { page ->
                             val selected = state.selectedPageId == page.id
                             TextButton(onClick = { onPageSelected(page.id) }, modifier = Modifier.fillMaxWidth()) {
@@ -124,6 +128,9 @@ fun TemplateEditorScreen(
                         blocks = state.currentPage?.blocks ?: emptyList(),
                         selectedBlockId = state.selectedBlockId,
                         onBlockClicked = onBlockClicked,
+                        onMoveBlock = onMoveBlock,
+                        onAddCustomBlock = onAddCustomBlock,
+                        onRenameBlock = onRenameBlock,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -143,6 +150,7 @@ fun TemplateEditorScreen(
                     selectedBlockId = state.selectedBlockId,
                     onBlockClicked = onBlockClicked,
                     onBlockDoubleClicked = onBlockDoubleClicked,
+                    onBlockDragged = onBlockDragged,
                     editingGroupId = state.editingGroupId,
                     onExitGroupEdit = onExitGroupEdit,
                     referenceUri = state.currentPage?.sourceImageUri,
@@ -326,7 +334,6 @@ fun ImageSelector(
     val density = LocalDensity.current
 
     BoxWithConstraints(modifier = modifier) {
-        // ... (缩放换算逻辑保持不变)
         val imgWidth = bitmap.width.toFloat()
         val imgHeight = bitmap.height.toFloat()
         val scale = min(maxWidth.value / imgWidth, maxHeight.value / imgHeight)
@@ -336,7 +343,7 @@ fun ImageSelector(
         val offsetY = (maxHeight.value - drawHeight) / 2
 
         Canvas(modifier = Modifier.fillMaxSize().pointerInput(enabled) {
-            if (!enabled) return@pointerInput // 关键：禁用状态下不接收手势触发器
+            if (!enabled) return@pointerInput 
             
             detectDragGestures(
                 onDragStart = { startOffset = it },
@@ -345,7 +352,6 @@ fun ImageSelector(
                     currentOffset = change.position
                     change.consume()
                     
-                    // 实时换算为逻辑坐标
                     val start = startOffset
                     val end = currentOffset
                     if (start != null && end != null) {
@@ -370,14 +376,12 @@ fun ImageSelector(
                 onDragCancel = { startOffset = null; currentOffset = null }
             )
         }) {
-            // 绘制背景图
             drawImage(
                 image = bitmap,
                 dstOffset = androidx.compose.ui.unit.IntOffset((offsetX * density.density).toInt(), (offsetY * density.density).toInt()),
                 dstSize = androidx.compose.ui.unit.IntSize((drawWidth * density.density).toInt(), (drawHeight * density.density).toInt())
             )
 
-            // 绘制选区蒙层
             val start = startOffset
             val end = currentOffset
             if (start != null && end != null) {
@@ -386,7 +390,6 @@ fun ImageSelector(
                 val rectWidth = abs(end.x - start.x)
                 val rectHeight = abs(end.y - start.y)
                 
-                // 变色反馈：激活时为青色，冻结时为半透明灰色
                 val color = if (enabled) Color.Cyan else Color.LightGray.copy(alpha = 0.5f)
                 
                 drawRect(
@@ -513,8 +516,8 @@ private fun VerticalSplitter(onDrag: (Float) -> Unit) {
             .background(MaterialTheme.colorScheme.outlineVariant)
             .pointerHoverIcon(org.gemini.ui.forge.ResizeHorizontalIcon)
             .draggable(
-                state = rememberDraggableState { onDrag(it) },
-                orientation = Orientation.Horizontal
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { onDrag(it) }
             )
     )
 }

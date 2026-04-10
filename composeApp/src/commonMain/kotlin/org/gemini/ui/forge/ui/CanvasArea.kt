@@ -35,6 +35,7 @@ import org.gemini.ui.forge.domain.UIBlock
 import org.gemini.ui.forge.utils.decodeBase64ToBitmap
 import org.gemini.ui.forge.viewmodel.ReferenceDisplayMode
 import org.jetbrains.compose.resources.stringResource
+import geminiuiforge.composeapp.generated.resources.*
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -47,6 +48,9 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.unit.Density
+
 @Composable
 fun CanvasArea(
     pageWidth: Float,
@@ -55,6 +59,8 @@ fun CanvasArea(
     selectedBlockId: String?,
     onBlockClicked: (String) -> Unit,
     onBlockDoubleClicked: (String) -> Unit = {},
+    onBlockDragStart: (String) -> Unit = {},
+    onBlockDragged: (String, Float, Float) -> Unit = { _, _, _ -> },
     editingGroupId: String? = null,
     onExitGroupEdit: () -> Unit = {},
     
@@ -187,9 +193,13 @@ fun CanvasArea(
                                 parentY = offsetY,
                                 baseScale = baseScale,
                                 zoom = zoom,
+                                isSelected = block.id == selectedBlockId,
                                 selectedBlockId = selectedBlockId,
                                 editingGroupId = editingGroupId,
-                                isDimmed = shouldDim(block, editingGroupId)
+                                isDimmed = shouldDim(block, editingGroupId),
+                                density = density,
+                                onBlockClicked = onBlockClicked,
+                                onBlockDragged = onBlockDragged
                             )
                         }
                     }
@@ -206,10 +216,14 @@ fun CanvasArea(
                 shadowElevation = 4.dp
             ) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("正在编辑组: $editingGroupId", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary)
+                    Text(
+                        text = stringResource(Res.string.group_editing_indicator, editingGroupId), 
+                        style = MaterialTheme.typography.labelMedium, 
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "退出", 
+                        text = stringResource(Res.string.action_exit), 
                         style = MaterialTheme.typography.labelLarge, 
                         color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.clickable { onExitGroupEdit() }.padding(4.dp)
@@ -296,11 +310,14 @@ fun RenderBlock(
     parentY: Float,
     baseScale: Float,
     zoom: Float,
+    isSelected: Boolean,
+    isDimmed: Boolean,
+    density: Density,
+    onBlockClicked: (String) -> Unit,
+    onBlockDragged: (String, Float, Float) -> Unit,
     selectedBlockId: String?,
-    editingGroupId: String?,
-    isDimmed: Boolean
+    editingGroupId: String?
 ) {
-    val isSelected = block.id == selectedBlockId
     val imageBitmapState = produceState<ImageBitmap?>(null, block.currentImageUri) {
         value = block.currentImageUri?.decodeBase64ToBitmap()
     }
@@ -308,6 +325,13 @@ fun RenderBlock(
 
     val currentX = parentX + block.bounds.left * baseScale
     val currentY = parentY + block.bounds.top * baseScale
+
+    val currentBaseScale by rememberUpdatedState(baseScale)
+    val currentDensity by rememberUpdatedState(density.density)
+
+    val currentIsSelected by rememberUpdatedState(isSelected)
+    val currentOnBlockClicked by rememberUpdatedState(onBlockClicked)
+    val currentOnBlockDragged by rememberUpdatedState(onBlockDragged)
 
     Box(
         modifier = Modifier
@@ -324,7 +348,23 @@ fun RenderBlock(
             .border(
                 width = if (isSelected) (2.dp / zoom) else (1.dp / zoom),
                 color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) // 提高边框亮度
-            ),
+            )
+            .pointerInput(block.id, isDimmed) {
+                if (isDimmed) return@pointerInput
+                detectDragGestures(
+                    onDragStart = {
+                        if (!currentIsSelected) {
+                            currentOnBlockClicked(block.id)
+                        }
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        val logicalDx = dragAmount.x / currentDensity / currentBaseScale
+                        val logicalDy = dragAmount.y / currentDensity / currentBaseScale
+                        currentOnBlockDragged(block.id, logicalDx, logicalDy)
+                    }
+                )
+            },
         contentAlignment = Alignment.Center
     ) {
         if (imageBitmap != null) {
@@ -349,9 +389,13 @@ fun RenderBlock(
             parentY = currentY,
             baseScale = baseScale,
             zoom = zoom,
+            isSelected = child.id == selectedBlockId,
+            isDimmed = isDimmed, // 如果父组件被变暗，子组件也变暗
+            density = density,
+            onBlockClicked = onBlockClicked,
+            onBlockDragged = onBlockDragged,
             selectedBlockId = selectedBlockId,
-            editingGroupId = editingGroupId,
-            isDimmed = isDimmed // 如果父组件被变暗，子组件也变暗
+            editingGroupId = editingGroupId
         )
     }
 }
