@@ -4,9 +4,13 @@ import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class GeminiModelsGeneratorTest {
@@ -25,13 +29,13 @@ class GeminiModelsGeneratorTest {
         val response = client.get(url)
         val body = response.bodyAsText()
 
-        assertTrue(response.status.value == 200, "API 请求失败: $body")
+        assertEquals(response.status.value, 200, "API 请求失败: $body")
 
         val json = Json { ignoreUnknownKeys = true }
         val element = json.parseToJsonElement(body)
         val models = element.jsonObject["models"]?.jsonArray
 
-        assertTrue(models != null && models.isNotEmpty(), "未找到任何模型数据")
+        assertTrue(!models.isNullOrEmpty(), "未找到任何模型数据")
 
         // 构建新的 GeminiModel.kt 文件内容
         val sb = StringBuilder()

@@ -11,11 +11,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import org.gemini.ui.forge.domain.gemini.file.GeminiFile
-import org.gemini.ui.forge.domain.gemini.file.GeminiFileListResponse
-import org.gemini.ui.forge.domain.gemini.file.GeminiFileUploadResponse
-import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.calculateMd5
+import org.gemini.ui.forge.data.remote.ApiConfig
+import org.gemini.ui.forge.data.remote.NetworkClient
+import org.gemini.ui.forge.model.api.gemini.file.GeminiFile
+import org.gemini.ui.forge.model.api.gemini.file.GeminiFileListResponse
+import org.gemini.ui.forge.model.api.gemini.file.GeminiFileUploadResponse
+import org.gemini.ui.forge.utils.AppLogger
 
 /**
  * 云端资产管理器 (Cloud Asset Manager)

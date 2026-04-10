@@ -6,6 +6,7 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
+import org.gemini.ui.forge.model.ui.SerialRect
 
 actual fun ByteArray.toImageBitmap(): ImageBitmap {
     return org.jetbrains.skia.Image.makeFromEncoded(this).toComposeImageBitmap()
@@ -13,7 +14,7 @@ actual fun ByteArray.toImageBitmap(): ImageBitmap {
 
 actual suspend fun cropImage(
     imageSource: String, 
-    bounds: org.gemini.ui.forge.domain.SerialRect,
+    bounds: org.gemini.ui.forge.model.ui.SerialRect,
     logicalWidth: Float,
     logicalHeight: Float
 ): ByteArray? {

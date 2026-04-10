@@ -7,6 +7,7 @@ import org.w3c.dom.CanvasRenderingContext2D
 import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.HTMLImageElement
 import kotlinx.browser.document
+import org.gemini.ui.forge.model.ui.SerialRect
 
 actual fun ByteArray.toImageBitmap(): ImageBitmap {
     return org.jetbrains.skia.Image.makeFromEncoded(this).toComposeImageBitmap()
@@ -14,7 +15,7 @@ actual fun ByteArray.toImageBitmap(): ImageBitmap {
 
 actual suspend fun cropImage(
     imageSource: String, 
-    bounds: org.gemini.ui.forge.domain.SerialRect,
+    bounds: org.gemini.ui.forge.model.ui.SerialRect,
     logicalWidth: Float,
     logicalHeight: Float
 ): ByteArray? {

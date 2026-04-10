@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.utils
 
 import androidx.compose.ui.graphics.ImageBitmap
+import org.gemini.ui.forge.model.ui.SerialRect
 
 /**
  * 跨平台将字节数组转换为 ImageBitmap
@@ -17,7 +18,7 @@ expect fun ByteArray.toImageBitmap(): ImageBitmap
  */
 expect suspend fun cropImage(
     imageSource: String, 
-    bounds: org.gemini.ui.forge.domain.SerialRect,
+    bounds: org.gemini.ui.forge.model.ui.SerialRect,
     logicalWidth: Float,
     logicalHeight: Float
 ): ByteArray?

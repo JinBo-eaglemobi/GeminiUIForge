@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import java.io.ByteArrayOutputStream
+import org.gemini.ui.forge.model.ui.SerialRect
 
 actual fun ByteArray.toImageBitmap(): ImageBitmap {
     val bitmap = BitmapFactory.decodeByteArray(this, 0, this.size)
@@ -13,7 +14,7 @@ actual fun ByteArray.toImageBitmap(): ImageBitmap {
 
 actual suspend fun cropImage(
     imageSource: String, 
-    bounds: org.gemini.ui.forge.domain.SerialRect,
+    bounds: org.gemini.ui.forge.model.ui.SerialRect,
     logicalWidth: Float,
     logicalHeight: Float
 ): ByteArray? {

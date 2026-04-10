@@ -13,14 +13,12 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
-import org.gemini.ui.forge.domain.ProjectState
-import org.gemini.ui.forge.domain.SerialRect
-import org.gemini.ui.forge.domain.UIBlock
-import org.gemini.ui.forge.domain.UIBlockType
-import org.gemini.ui.forge.domain.UIPage
-import org.gemini.ui.forge.utils.AppLogger
 import org.jetbrains.compose.resources.InternalResourceApi
 import org.jetbrains.compose.resources.readResourceBytes
+import org.gemini.ui.forge.data.remote.ApiConfig
+import org.gemini.ui.forge.data.remote.NetworkClient
+import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.utils.AppLogger
 
 /**
  * AI 生成服务类，封装了与 Google Gemini 和 Imagen API 的交互逻辑

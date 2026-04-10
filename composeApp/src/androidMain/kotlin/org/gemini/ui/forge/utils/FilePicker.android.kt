@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import org.gemini.ui.forge.service.LocalFileStorage
 
 @Composable
 actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {

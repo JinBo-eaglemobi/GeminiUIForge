@@ -5,16 +5,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import org.gemini.ui.forge.ui.AppTopBar
-import org.gemini.ui.forge.ui.EditorScreen
-import org.gemini.ui.forge.ui.HomeScreen
-import org.gemini.ui.forge.ui.UIModule
-import org.gemini.ui.forge.ui.AppTheme
-import org.gemini.ui.forge.ui.TemplateGeneratorScreen
-import org.gemini.ui.forge.viewmodel.AppScreen
-import org.gemini.ui.forge.viewmodel.EditorViewModel
-import org.gemini.ui.forge.service.TemplateRepository
-import org.gemini.ui.forge.domain.UIBlockType
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 
@@ -28,6 +18,23 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.unit.dp
+import org.gemini.ui.forge.model.ui.DropPosition
+import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.model.app.AppScreen
+import org.gemini.ui.forge.model.app.ShortcutAction
+import org.gemini.ui.forge.model.app.UIModule
+import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.state.EditorViewModel
+import org.gemini.ui.forge.ui.feature.home.HomeScreen
+import org.gemini.ui.forge.ui.feature.home.ModuleCard
+import org.gemini.ui.forge.ui.feature.editor.EditorScreen
+import org.gemini.ui.forge.ui.feature.editor.TemplateEditorScreen
+import org.gemini.ui.forge.ui.feature.generator.TemplateGeneratorScreen
+import org.gemini.ui.forge.ui.component.AppTopBar
+import org.gemini.ui.forge.ui.dialog.CloudAssetDialog
+import org.gemini.ui.forge.ui.theme.AppTheme
+import org.gemini.ui.forge.utils.*
+import org.gemini.ui.forge.service.*
 
 private var originalSystemLanguage: String? = null
 
@@ -41,7 +48,7 @@ fun App(typography: Typography? = null) {
     val templateRepo = remember { TemplateRepository() }
     val focusRequester = remember { FocusRequester() }
     
-    var templatesList by remember { mutableStateOf(emptyList<Pair<String, org.gemini.ui.forge.domain.ProjectState>>()) }
+    var templatesList by remember { mutableStateOf(emptyList<Pair<String, org.gemini.ui.forge.model.ui.ProjectState>>()) }
 
     key(languageKey) {
         val viewModel: EditorViewModel = viewModel { EditorViewModel(templateRepo = templateRepo) }
@@ -85,7 +92,7 @@ fun App(typography: Typography? = null) {
             val coroutineScope = rememberCoroutineScope()
 
             if (showCloudAssetDialog) {
-                org.gemini.ui.forge.ui.CloudAssetDialog(
+                org.gemini.ui.forge.ui.dialog.CloudAssetDialog(
                     cloudAssetManager = viewModel.cloudAssetManager,
                     onDismiss = { showCloudAssetDialog = false }
                 )
@@ -142,7 +149,7 @@ fun App(typography: Typography? = null) {
                             val keyCode = event.key
                             val shortcutMap = globalState.shortcuts
                             
-                            fun matches(action: org.gemini.ui.forge.domain.ShortcutAction): Boolean {
+                            fun matches(action: org.gemini.ui.forge.model.app.ShortcutAction): Boolean {
                                 val chord = shortcutMap[action] ?: action.defaultKey
                                 val parts = chord.uppercase().split("+")
                                 val needsCtrl = "CTRL" in parts
@@ -161,14 +168,14 @@ fun App(typography: Typography? = null) {
                             }
 
                             when {
-                                matches(org.gemini.ui.forge.domain.ShortcutAction.UNDO) -> { viewModel.undo(); true }
-                                matches(org.gemini.ui.forge.domain.ShortcutAction.REDO) || (isCtrl && isShift && keyCode == Key.Z) -> { viewModel.redo(); true }
-                                matches(org.gemini.ui.forge.domain.ShortcutAction.SAVE) -> {
+                                matches(org.gemini.ui.forge.model.app.ShortcutAction.UNDO) -> { viewModel.undo(); true }
+                                matches(org.gemini.ui.forge.model.app.ShortcutAction.REDO) || (isCtrl && isShift && keyCode == Key.Z) -> { viewModel.redo(); true }
+                                matches(org.gemini.ui.forge.model.app.ShortcutAction.SAVE) -> {
                                     if (globalState.currentScreen == AppScreen.TEMPLATE_EDITOR || globalState.currentScreen == AppScreen.EDITOR) {
                                         coroutineScope.launch { templateRepo.saveTemplate(state.projectName, state.project) }
                                     }; true
                                 }
-                                matches(org.gemini.ui.forge.domain.ShortcutAction.DELETE) -> {
+                                matches(org.gemini.ui.forge.model.app.ShortcutAction.DELETE) -> {
                                     state.selectedBlockId?.let { viewModel.deleteBlock(it) }; true
                                 }
                                 else -> false
@@ -206,7 +213,7 @@ fun App(typography: Typography? = null) {
                         )
                     }
                     AppScreen.TEMPLATE_EDITOR -> {
-                        org.gemini.ui.forge.ui.TemplateEditorScreen(
+                        TemplateEditorScreen(
                             state = state,
                             onPageSelected = { viewModel.onPageSelected(it) },
                             onBlockClicked = { viewModel.onBlockClicked(it) },

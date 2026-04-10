@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.gemini.ui.forge.model.app.LogEvent
 
 /**
  * 提取各平台控制台的标准输出（如 Logcat、console.log）
