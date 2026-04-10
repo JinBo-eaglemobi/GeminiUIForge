@@ -7,20 +7,18 @@
     <string name="generate_ideas">生成创意</string>
     <string name="candidate">候选图</string>
     <string name="image_loaded">已加载图片</string>
-    
-    <string name="block_reel">转轴区域</string>
-    <string name="block_spin_button">旋转按钮</string>
-    <string name="block_win_display">赢分显示</string>
-    <string name="block_background">背景</string>
-    <string name="block_symbol">图标</string>
+    <!-- UI Block Types -->
+    <string name="block_reel">转轴网格</string>
+    <string name="block_spin_button">旋转主按钮</string>
+    <string name="block_win_display">赢分显示板</string>
+    <string name="block_background">游戏背景</string>
+    <string name="block_symbol">高光符号</string>
     <string name="block_button">按钮</string>
-    <string name="block_panel">面板</string>
-    <string name="block_header">顶部栏</string>
-    <string name="block_footer">底部栏</string>
-    <string name="block_text_area">文本区</string>
+    <string name="block_view">视图</string>
+    <string name="block_header">顶部导航栏</string>
+    <string name="block_footer">底部状态栏</string>
+    <string name="block_text_area">文本</string>
     <string name="block_icon">图标</string>
-    <string name="block_decoration">装饰物</string>
-    <string name="block_group">UI 组容器</string>
 
     <string name="menu_file">文件</string>
     <string name="menu_settings">设置</string>

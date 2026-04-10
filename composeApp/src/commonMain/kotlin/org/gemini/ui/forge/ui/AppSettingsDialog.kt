@@ -12,7 +12,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -24,12 +23,6 @@ import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.viewmodel.ThemeMode
 import org.gemini.ui.forge.viewmodel.PromptLanguage
 import org.gemini.ui.forge.domain.ShortcutAction
-
-enum class SettingCategory(val labelRes: org.jetbrains.compose.resources.StringResource, val icon: ImageVector) {
-    GENERAL(Res.string.settings_category_general, Icons.Default.Settings),
-    AI(Res.string.settings_category_ai, Icons.Default.AutoAwesome),
-    SHORTCUTS(Res.string.settings_category_shortcuts, Icons.Default.Keyboard)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

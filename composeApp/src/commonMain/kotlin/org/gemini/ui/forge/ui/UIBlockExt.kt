@@ -4,17 +4,15 @@ import org.gemini.ui.forge.domain.UIBlockType
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.block_background
 import geminiuiforge.composeapp.generated.resources.block_button
-import geminiuiforge.composeapp.generated.resources.block_decoration
 import geminiuiforge.composeapp.generated.resources.block_footer
 import geminiuiforge.composeapp.generated.resources.block_header
 import geminiuiforge.composeapp.generated.resources.block_icon
-import geminiuiforge.composeapp.generated.resources.block_panel
+import geminiuiforge.composeapp.generated.resources.block_view
 import geminiuiforge.composeapp.generated.resources.block_reel
 import geminiuiforge.composeapp.generated.resources.block_spin_button
 import geminiuiforge.composeapp.generated.resources.block_symbol
 import geminiuiforge.composeapp.generated.resources.block_text_area
 import geminiuiforge.composeapp.generated.resources.block_win_display
-import geminiuiforge.composeapp.generated.resources.block_group
 import org.jetbrains.compose.resources.StringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
@@ -28,30 +26,26 @@ fun UIBlockType.getDisplayNameRes(): StringResource {
         UIBlockType.BACKGROUND -> Res.string.block_background
         UIBlockType.SYMBOL -> Res.string.block_symbol
         UIBlockType.BUTTON -> Res.string.block_button
-        UIBlockType.PANEL -> Res.string.block_panel
+        UIBlockType.VIEW -> Res.string.block_view
         UIBlockType.HEADER -> Res.string.block_header
         UIBlockType.FOOTER -> Res.string.block_footer
         UIBlockType.TEXT_AREA -> Res.string.block_text_area
         UIBlockType.ICON -> Res.string.block_icon
-        UIBlockType.DECORATION -> Res.string.block_decoration
-        UIBlockType.GROUP -> Res.string.block_group
     }
 }
 
 fun UIBlockType.getIcon(): ImageVector {
     return when (this) {
-        UIBlockType.GROUP -> Icons.Default.Folder
         UIBlockType.REEL -> Icons.Default.ViewColumn
         UIBlockType.SPIN_BUTTON -> Icons.Default.PlayArrow
         UIBlockType.WIN_DISPLAY -> Icons.Default.Star
         UIBlockType.BACKGROUND -> Icons.Default.Image
         UIBlockType.SYMBOL -> Icons.Default.AddCircle
         UIBlockType.BUTTON -> Icons.Default.TouchApp
-        UIBlockType.PANEL -> Icons.Default.WebAsset
+        UIBlockType.VIEW -> Icons.Default.WebAsset
         UIBlockType.HEADER -> Icons.Default.KeyboardArrowUp
         UIBlockType.FOOTER -> Icons.Default.KeyboardArrowDown
         UIBlockType.TEXT_AREA -> Icons.Default.Edit
         UIBlockType.ICON -> Icons.Default.Face
-        UIBlockType.DECORATION -> Icons.Default.Favorite
     }
 }

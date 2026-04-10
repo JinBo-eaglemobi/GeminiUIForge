@@ -49,7 +49,12 @@ fun App(typography: Typography? = null) {
         val globalState = state.globalState
         
         LaunchedEffect(Unit) {
-            focusRequester.requestFocus()
+            kotlinx.coroutines.delay(100)
+            try {
+                focusRequester.requestFocus()
+            } catch (e: Exception) {
+                // Ignore focus error
+            }
         }
 
         LaunchedEffect(globalState.languageCode) {

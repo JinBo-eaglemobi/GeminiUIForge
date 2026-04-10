@@ -1,5 +1,7 @@
 package org.gemini.ui.forge.ui
 
+import org.gemini.ui.forge.utils.AppLogger
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -101,16 +103,19 @@ fun HierarchySidebar(
                 detectDragGesturesAfterLongPress(
                     onDragStart = { offset ->
                         val windowOffset = listCoordinates?.localToWindow(offset) ?: offset
-                        val hit = itemBounds.entries.find { it.value.contains(windowOffset) }
+                        // 反向遍历：优先匹配嵌套最深的子项（最后被添加到 Map 中的项）
+                        val hit = itemBounds.entries.toList().asReversed().find { it.value.contains(windowOffset) }
                         if (hit != null) {
                             draggedBlockId = hit.key
                             dragPosition = offset
+                            AppLogger.d("HierarchySidebar", "Drag started: id=${hit.key}")
                         }
                     },
                     onDrag = { change, _ ->
                         dragPosition = change.position
                         val windowOffset = listCoordinates?.localToWindow(change.position) ?: change.position
-                        val hit = itemBounds.entries.find { it.value.contains(windowOffset) }
+                        // 反向遍历匹配悬停目标
+                        val hit = itemBounds.entries.toList().asReversed().find { it.value.contains(windowOffset) }
                         if (hit != null) {
                             hoveredBlockId = hit.key
                             val rect = hit.value
@@ -126,9 +131,13 @@ fun HierarchySidebar(
                         }
                     },
                     onDragEnd = {
+                        AppLogger.d("HierarchySidebar", "Drag ended. draggedId=$draggedBlockId, hoveredId=$hoveredBlockId, pos=$dropPosition")
                         if (draggedBlockId != null) {
                             if (hoveredBlockId != draggedBlockId) {
+                                AppLogger.d("HierarchySidebar", "Calling onMoveBlock...")
                                 onMoveBlock(draggedBlockId!!, hoveredBlockId, dropPosition)
+                            } else {
+                                AppLogger.d("HierarchySidebar", "Hovered same as dragged, ignoring.")
                             }
                         }
                         draggedBlockId = null
@@ -136,6 +145,7 @@ fun HierarchySidebar(
                         dragPosition = null
                     },
                     onDragCancel = {
+                        AppLogger.d("HierarchySidebar", "Drag cancelled.")
                         draggedBlockId = null
                         hoveredBlockId = null
                         dragPosition = null
@@ -188,20 +198,22 @@ fun HierarchySidebar(
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
                     blocks.forEach { block ->
-                        HierarchyItem(
-                            block = block,
-                            depth = 0,
-                            isSelected = block.id == selectedBlockId,
-                            isDragged = block.id == draggedBlockId,
-                            isHovered = block.id == hoveredBlockId,
-                            selectedBlockId = selectedBlockId,
-                            draggedBlockId = draggedBlockId,
-                            hoveredBlockId = hoveredBlockId,
-                            dropPosition = dropPosition,
-                            locateTrigger = locateTrigger,
-                            onBlockClicked = onBlockClicked,
-                            onBoundsCalculated = { id, rect -> itemBounds[id] = rect }
-                        )
+                        key(block.id) {
+                            HierarchyItem(
+                                block = block,
+                                depth = 0,
+                                isSelected = block.id == selectedBlockId,
+                                isDragged = block.id == draggedBlockId,
+                                isHovered = block.id == hoveredBlockId,
+                                selectedBlockId = selectedBlockId,
+                                draggedBlockId = draggedBlockId,
+                                hoveredBlockId = hoveredBlockId,
+                                dropPosition = dropPosition,
+                                locateTrigger = locateTrigger,
+                                onBlockClicked = onBlockClicked,
+                                onBoundsCalculated = { id, rect -> itemBounds[id] = rect }
+                            )
+                        }
                     }
                 }
                 VerticalScrollbar(
@@ -295,17 +307,41 @@ private fun HierarchyItem(
         }
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        if (isHovered && isDragged.not() && draggedBlockId != null && dropPosition == org.gemini.ui.forge.domain.DropPosition.BEFORE) {
-            Box(modifier = Modifier.fillMaxWidth().height(2.dp).background(Color(0xFF03A9F4)))
-        }
+    val indicatorColor = Color(0xFF03A9F4)
 
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .bringIntoViewRequester(bringIntoViewRequester)
                 .onGloballyPositioned { coords ->
                     onBoundsCalculated(block.id, coords.boundsInWindow())
+                }
+                .drawWithContent {
+                    drawContent()
+                    if (isHovered && isDragged.not() && draggedBlockId != null) {
+                        when (dropPosition) {
+                            org.gemini.ui.forge.domain.DropPosition.BEFORE -> {
+                                drawLine(
+                                    color = indicatorColor,
+                                    start = Offset(0f, 0f),
+                                    end = Offset(size.width, 0f),
+                                    strokeWidth = 4f
+                                )
+                            }
+                            org.gemini.ui.forge.domain.DropPosition.AFTER -> {
+                                if (!hasChildren || !expanded) {
+                                    drawLine(
+                                        color = indicatorColor,
+                                        start = Offset(0f, size.height),
+                                        end = Offset(size.width, size.height),
+                                        strokeWidth = 4f
+                                    )
+                                }
+                            }
+                            else -> {}
+                        }
+                    }
                 }
                 .background(
                     when {
@@ -362,29 +398,38 @@ private fun HierarchyItem(
             }
         }
 
-        if (isHovered && isDragged.not() && draggedBlockId != null && dropPosition == org.gemini.ui.forge.domain.DropPosition.AFTER && (!hasChildren || !expanded)) {
-            Box(modifier = Modifier.fillMaxWidth().height(2.dp).background(Color(0xFF03A9F4)))
-        }
-
         if (hasChildren && expanded) {
-            block.children.forEach { child ->
-                HierarchyItem(
-                    block = child,
-                    depth = depth + 1,
-                    isSelected = child.id == selectedBlockId,
-                    isDragged = child.id == draggedBlockId,
-                    isHovered = child.id == hoveredBlockId,
-                    dropPosition = dropPosition,
-                    locateTrigger = locateTrigger,
-                    onBlockClicked = onBlockClicked,
-                    onBoundsCalculated = onBoundsCalculated,
-                    selectedBlockId = selectedBlockId,
-                    draggedBlockId = draggedBlockId,
-                    hoveredBlockId = hoveredBlockId
-                )
-            }
-            if (isHovered && isDragged.not() && draggedBlockId != null && dropPosition == org.gemini.ui.forge.domain.DropPosition.AFTER) {
-                Box(modifier = Modifier.fillMaxWidth().height(2.dp).background(Color(0xFF03A9F4)))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .drawWithContent {
+                        drawContent()
+                        if (isHovered && isDragged.not() && draggedBlockId != null && dropPosition == org.gemini.ui.forge.domain.DropPosition.AFTER) {
+                            drawLine(
+                                color = indicatorColor,
+                                start = Offset(0f, size.height),
+                                end = Offset(size.width, size.height),
+                                strokeWidth = 4f
+                            )
+                        }
+                    }
+            ) {
+                block.children.forEach { child ->
+                    HierarchyItem(
+                        block = child,
+                        depth = depth + 1,
+                        isSelected = child.id == selectedBlockId,
+                        isDragged = child.id == draggedBlockId,
+                        isHovered = child.id == hoveredBlockId,
+                        dropPosition = dropPosition,
+                        locateTrigger = locateTrigger,
+                        onBlockClicked = onBlockClicked,
+                        onBoundsCalculated = onBoundsCalculated,
+                        selectedBlockId = selectedBlockId,
+                        draggedBlockId = draggedBlockId,
+                        hoveredBlockId = hoveredBlockId
+                    )
+                }
             }
         }
     }
@@ -397,7 +442,7 @@ fun AddLayerDialog(
     onConfirm: (String, UIBlockType, Float, Float) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(UIBlockType.PANEL) }
+    var selectedType by remember { mutableStateOf(UIBlockType.VIEW) }
     var widthStr by remember { mutableStateOf("200") }
     var heightStr by remember { mutableStateOf("200") }
     var expandedType by remember { mutableStateOf(false) }

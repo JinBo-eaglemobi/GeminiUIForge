@@ -18,21 +18,12 @@ import coil3.compose.AsyncImage
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
-import org.gemini.ui.forge.domain.ProjectState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-
-data class UIModule(
-    val id: String,
-    val nameRes: org.jetbrains.compose.resources.StringResource? = null,
-    val nameStr: String? = null,
-    val projectState: ProjectState? = null,
-    val absolutePath: String? = null
-)
 
 @Composable
 fun HomeScreen(

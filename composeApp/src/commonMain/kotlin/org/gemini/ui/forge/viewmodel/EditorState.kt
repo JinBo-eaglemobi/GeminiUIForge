@@ -5,15 +5,6 @@ import org.gemini.ui.forge.domain.UIPage
 import org.gemini.ui.forge.domain.UIBlock
 
 /**
- * 参考图显示模式
- */
-enum class ReferenceDisplayMode {
-    HIDDEN,   // 隐藏参考图
-    SPLIT,    // 上下分屏对照
-    OVERLAY   // 重叠半透明对齐
-}
-
-/**
  * 编辑器页面的 UI 状态模型
  */
 data class EditorState(

@@ -7,20 +7,18 @@
     <string name="generate_ideas">Generate Ideas</string>
     <string name="candidate">Candidate</string>
     <string name="image_loaded">Image Loaded</string>
-    
-    <string name="block_reel">Reels Area</string>
+    <!-- UI Block Types -->
+    <string name="block_reel">Reel Grid</string>
     <string name="block_spin_button">Spin Button</string>
     <string name="block_win_display">Win Display</string>
     <string name="block_background">Background</string>
     <string name="block_symbol">Symbol</string>
     <string name="block_button">Button</string>
-    <string name="block_panel">Panel</string>
+    <string name="block_view">View</string>
     <string name="block_header">Header</string>
     <string name="block_footer">Footer</string>
-    <string name="block_text_area">Text Area</string>
+    <string name="block_text_area">Text</string>
     <string name="block_icon">Icon</string>
-    <string name="block_decoration">Decoration</string>
-    <string name="block_group">UI Group</string>
 
     <string name="menu_file">File</string>
     <string name="menu_settings">Settings</string>
@@ -115,8 +113,8 @@
     <string name="shortcut_delete">Delete Layer</string>
 
     <!-- New Internationalized Strings -->
-    <string name="hierarchy_title">Layers</string>
-    <string name="hierarchy_move_to_top">Move to Top</string>
+    <string name="hierarchy_title">图层</string>
+    <string name="hierarchy_move_to_top">移动到根层级</string>
     <string name="dialog_add_layer_title">Add New Layer</string>
     <string name="dialog_rename_layer_title">Rename Layer</string>
     <string name="label_layer_name">Layer Name/ID (Optional)</string>

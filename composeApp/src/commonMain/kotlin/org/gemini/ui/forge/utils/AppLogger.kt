@@ -12,17 +12,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 expect fun printToConsole(level: String, tag: String, message: String, throwable: Throwable?)
 
 /**
- * 日志载体实体：携带原始信息以供后续在各平台进行全量堆栈序列化
- */
-data class LogEvent(
-    val level: String, 
-    val tag: String, 
-    val message: String, 
-    val throwable: Throwable?,
-    val timestamp: Long = org.gemini.ui.forge.getCurrentTimeMillis()
-)
-
-/**
  * 全平台统一的异步高性能日志系统
  */
 object AppLogger {

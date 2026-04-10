@@ -166,10 +166,10 @@ class EditorViewModel(
     fun onPageSelected(pageId: String) = _state.update { it.copy(selectedPageId = pageId, selectedBlockId = null, editingGroupId = null, generatedCandidates = emptyList()) }
     fun onBlockClicked(blockId: String) = _state.update { it.copy(selectedBlockId = if (it.selectedBlockId == blockId) null else blockId) }
 
-    /** 双击组件逻辑：如果是组，则进入孤立编辑模式 */
+    /** 双击组件逻辑：只要包含子组件，则进入孤立编辑模式 */
     fun onBlockDoubleClicked(blockId: String) {
         val block = state.value.project.pages.flatMap { it.blocks }.let { findBlockById(it, blockId) }
-        if (block?.type == UIBlockType.GROUP) {
+        if (block != null && block.children.isNotEmpty()) {
             _state.update { it.copy(editingGroupId = blockId, selectedBlockId = null) }
         }
     }
@@ -342,77 +342,7 @@ class EditorViewModel(
         }
     }
 
-    /** 将多个组件打包成组 */
-    fun groupBlocks(blockIds: Set<String>) {
-        if (blockIds.isEmpty()) return
-        saveSnapshot()
-        val pageId = _state.value.selectedPageId ?: return
-        
-        _state.update { currentState ->
-            val currentPage = currentState.currentPage ?: return@update currentState
-            val allBlocks = currentPage.blocks
-            val targetBlocks = mutableListOf<UIBlock>()
-            
-            val parentId = currentState.editingGroupId
-            
-            fun extractBlocks(blocks: List<UIBlock>): Pair<List<UIBlock>, List<UIBlock>> {
-                val extracted = blocks.filter { it.id in blockIds }
-                val remaining = blocks.filterNot { it.id in blockIds }.map { 
-                    it.copy(children = extractBlocks(it.children).second) 
-                }
-                return extracted to remaining
-            }
-
-            val (extracted, remainingBlocks) = if (parentId != null) {
-                var ext = emptyList<UIBlock>()
-                val newAll = updateBlockInList(allBlocks, parentId) { group ->
-                    val (e, r) = extractBlocks(group.children)
-                    ext = e
-                    group.copy(children = r)
-                }
-                ext to newAll
-            } else {
-                extractBlocks(allBlocks)
-            }
-
-            if (extracted.isEmpty()) return@update currentState
-
-            val minL = extracted.minOf { it.bounds.left }
-            val minT = extracted.minOf { it.bounds.top }
-            val maxR = extracted.maxOf { it.bounds.right }
-            val maxB = extracted.maxOf { it.bounds.bottom }
-            
-            val childrenWithRelativeBounds = extracted.map { child ->
-                child.copy(bounds = SerialRect(
-                    child.bounds.left - minL,
-                    child.bounds.top - minT,
-                    child.bounds.right - minL,
-                    child.bounds.bottom - minT
-                ))
-            }
-
-            val newGroupId = "group_${org.gemini.ui.forge.getCurrentTimeMillis()}"
-            val newGroup = UIBlock(
-                id = newGroupId,
-                type = UIBlockType.GROUP,
-                bounds = SerialRect(minL, minT, maxR, maxB),
-                children = childrenWithRelativeBounds
-            )
-
-            val finalBlocks = if (parentId != null) {
-                updateBlockInList(remainingBlocks, parentId) { group ->
-                    group.copy(children = group.children + newGroup)
-                }
-            } else {
-                remainingBlocks + newGroup
-            }
-
-            val updatedPages = currentState.project.pages.map { 
-                if (it.id == pageId) it.copy(blocks = finalBlocks) else it 
-            }
-            currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = newGroupId)
-        }
-    }
+    // 组概念已被移除，统一使用嵌套组件
 
     fun moveBlockBy(blockId: String, dx: Float, dy: Float) {
         val pageId = _state.value.selectedPageId ?: return
@@ -485,13 +415,21 @@ class EditorViewModel(
 
     private fun insertBlockSibling(blocks: List<UIBlock>, targetId: String, blockToInsert: UIBlock, position: DropPosition): List<UIBlock> {
         val result = mutableListOf<UIBlock>()
+        var inserted = false
         for (b in blocks) {
             if (b.id == targetId) {
                 if (position == DropPosition.BEFORE) result.add(blockToInsert)
                 result.add(b)
                 if (position == DropPosition.AFTER) result.add(blockToInsert)
+                inserted = true
             } else {
-                result.add(b.copy(children = insertBlockSibling(b.children, targetId, blockToInsert, position)))
+                val newChildren = insertBlockSibling(b.children, targetId, blockToInsert, position)
+                if (newChildren.size != b.children.size) {
+                    inserted = true
+                    result.add(b.copy(children = newChildren))
+                } else {
+                    result.add(b)
+                }
             }
         }
         return result
@@ -501,17 +439,28 @@ class EditorViewModel(
      * 将一个拖拽的图层移动到另一个图层，支持内部 (INSIDE)、前方 (BEFORE)、后方 (AFTER)
      */
     fun moveBlock(draggedBlockId: String, targetId: String?, dropPosition: DropPosition = DropPosition.INSIDE) {
-        if (draggedBlockId == targetId) return
-        saveSnapshot()
+        AppLogger.d("EditorViewModel", "moveBlock requested: dragged=$draggedBlockId, target=$targetId, pos=$dropPosition")
+        if (draggedBlockId == targetId) {
+            AppLogger.d("EditorViewModel", "moveBlock ignored: dragged and target are same.")
+            return
+        }
+        
         val pageId = _state.value.selectedPageId ?: return
         
         _state.update { currentState ->
             val currentPage = currentState.currentPage ?: return@update currentState
-            val draggedBlock = findBlockById(currentPage.blocks, draggedBlockId) ?: return@update currentState
-            
-            if (targetId != null && isDescendantOfBlock(targetId, draggedBlock)) {
+            val draggedBlock = findBlockById(currentPage.blocks, draggedBlockId)
+            if (draggedBlock == null) {
+                AppLogger.d("EditorViewModel", "moveBlock failed: draggedBlock not found.")
                 return@update currentState
             }
+            
+            if (targetId != null && isDescendantOfBlock(targetId, draggedBlock)) {
+                AppLogger.d("EditorViewModel", "moveBlock failed: target is descendant of dragged block.")
+                return@update currentState
+            }
+
+            saveSnapshot() // 只有在确定要修改且合法时才保存快照
             
             val draggedAbsBounds = getAbsoluteBounds(currentPage.blocks, draggedBlockId) ?: draggedBlock.bounds
             var newBlocks = removeBlockRecursive(currentPage.blocks, draggedBlockId)
@@ -540,25 +489,32 @@ class EditorViewModel(
             val updatedDraggedBlock = draggedBlock.copy(bounds = newRelativeBounds)
             
             if (targetId == null) {
+                AppLogger.d("EditorViewModel", "moveBlock: appending to root.")
                 newBlocks = newBlocks + updatedDraggedBlock
             } else if (dropPosition == DropPosition.INSIDE) {
+                AppLogger.d("EditorViewModel", "moveBlock: inserting into target $targetId.")
                 newBlocks = updateBlockInList(newBlocks, targetId) { targetGroup ->
-                    val newType = if (targetGroup.type == UIBlockType.GROUP || targetGroup.type == UIBlockType.PANEL) targetGroup.type else UIBlockType.GROUP
                     targetGroup.copy(
-                        type = newType,
                         children = targetGroup.children + updatedDraggedBlock
                     )
                 }
             } else {
+                AppLogger.d("EditorViewModel", "moveBlock: inserting as sibling of $targetId at $dropPosition.")
                 newBlocks = insertBlockSibling(newBlocks, targetId, updatedDraggedBlock, dropPosition)
+                AppLogger.d("EditorViewModel", "moveBlock: insertBlockSibling finished. draggedBlock found? ${findBlockById(newBlocks, draggedBlockId) != null}")
             }
             
             val updatedPages = currentState.project.pages.map {
                 if (it.id == pageId) it.copy(blocks = newBlocks) else it
             }
             
-            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+            val newState = currentState.copy(
+                project = currentState.project.copy(pages = updatedPages, createdAt = org.gemini.ui.forge.getCurrentTimeMillis())
+            )
+            AppLogger.d("EditorViewModel", "moveBlock: updating state. are equal? ${newState == currentState}")
+            newState
         }
+        AppLogger.d("EditorViewModel", "moveBlock END: current blocks=${_state.value.currentPage?.blocks?.map { it.id }}")
     }
 
     /**
