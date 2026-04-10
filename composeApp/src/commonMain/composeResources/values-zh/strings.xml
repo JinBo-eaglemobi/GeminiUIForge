@@ -17,8 +17,15 @@
     <string name="block_view">视图</string>
     <string name="block_header">顶部导航栏</string>
     <string name="block_footer">底部状态栏</string>
-    <string name="block_text_area">文本</string>
-    <string name="block_icon">图标</string>
+    <string name="block_text">文本</string>
+    <string name="block_image">图片</string>
+    <string name="block_combo_box">下拉选择框</string>
+    <string name="block_progress_bar">进度条</string>
+    <string name="block_popup_menu">弹出菜单</string>
+    <string name="block_loader">动态加载器</string>
+    <string name="block_scroll_bar">滚动条</string>
+    <string name="block_slider">滑块控件</string>
+    <string name="block_input">输入框</string>
 
     <string name="menu_file">文件</string>
     <string name="menu_settings">设置</string>
@@ -115,6 +122,10 @@
     <!-- New Internationalized Strings (Chinese) -->
     <string name="hierarchy_title">图层层级</string>
     <string name="hierarchy_move_to_top">移至顶层</string>
+    <string name="screen_home">首页</string>
+    <string name="screen_template_asset_gen">资源生成模式</string>
+    <string name="screen_template_editor">布局编辑模式</string>
+    <string name="screen_template_generator">AI 模板分析模式</string>
     <string name="dialog_add_layer_title">添加新图层</string>
     <string name="dialog_rename_layer_title">重命名图层</string>
     <string name="label_layer_name">图层名称/ID (可选)</string>

@@ -1,4 +1,5 @@
 package org.gemini.ui.forge.ui.feature.editor
+
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,22 +43,23 @@ import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.ui.component.getIcon
+import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.AppLogger
 
 @Composable
 fun HierarchySidebar(
     blocks: List<UIBlock>,
     selectedBlockId: String?,
-    onBlockClicked: (String) -> Unit,
+    onBlockClicked: (String?) -> Unit,
     onMoveBlock: (String, String?, DropPosition) -> Unit = { _, _, _ -> },
     onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit = { _, _, _, _ -> },
     onRenameBlock: (String, String) -> Unit = { _, _ -> },
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isReadOnly: Boolean = false // 新增只读参数
 ) {
     var draggedBlockId by remember { mutableStateOf<String?>(null) }
     var hoveredBlockId by remember { mutableStateOf<String?>(null) }
     
-    // 抢先捕获：在按下瞬间记录目标，彻底杜绝长按期间坐标漂移
     var pressedBlockId by remember { mutableStateOf<String?>(null) }
     
     var dragShadowIcon by remember { mutableStateOf<androidx.compose.ui.graphics.vector.ImageVector?>(null) }
@@ -66,17 +68,18 @@ fun HierarchySidebar(
     var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val itemBounds = remember { mutableMapOf<String, Rect>() }
     
-    // 拖拽跟随状态
     var dragPosition by remember { mutableStateOf<Offset?>(null) }
     
-    // 功能栏状态
     var showAddDialog by remember { mutableStateOf(false) }
-    var locateTrigger by remember { mutableStateOf(0L) }
     var showRenameDialog by remember { mutableStateOf<String?>(null) }
+    
+    // 定位追踪逻辑
+    var isAutoTrackEnabled by remember { mutableStateOf(true) } 
+    var locateTrigger by remember { mutableStateOf(0L) }
 
-    // 自动滚动到选中项
-    LaunchedEffect(selectedBlockId) {
-        if (selectedBlockId != null) {
+    // 监听选中项变化：只有在自动追踪开启时，才触发定位
+    LaunchedEffect(selectedBlockId, isAutoTrackEnabled) {
+        if (isAutoTrackEnabled && selectedBlockId != null) {
             delay(100)
             locateTrigger = org.gemini.ui.forge.getCurrentTimeMillis()
         }
@@ -92,12 +95,12 @@ fun HierarchySidebar(
         )
     }
 
-    if (showRenameDialog != null) {
+    if (showRenameDialog != null && selectedBlockId != null) {
         RenameLayerDialog(
-            initialId = showRenameDialog!!,
+            initialId = selectedBlockId,
             onDismiss = { showRenameDialog = null },
             onConfirm = { newId ->
-                onRenameBlock(showRenameDialog!!, newId)
+                onRenameBlock(selectedBlockId, newId)
                 showRenameDialog = null
             }
         )
@@ -110,26 +113,25 @@ fun HierarchySidebar(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             .onGloballyPositioned { listCoordinates = it }
-            // 模块 1：抢占式记录按下位置
-            .pointerInput(blocks) {
+            // 模块 1：抢占式记录按下位置 (只读模式完全禁用)
+            .pointerInput(blocks, isReadOnly) {
+                if (isReadOnly) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val windowOffset = listCoordinates?.localToWindow(down.position) ?: down.position
-                    
                     val allIds = mutableSetOf<String>()
                     fun walk(l: List<UIBlock>) { l.forEach { walk(it.children); allIds.add(it.id) } }
                     walk(blocks)
-                    
                     val hit = itemBounds.entries.toList().asReversed()
                         .filter { it.key in allIds }
                         .find { it.value.contains(windowOffset) }
-                    
                     pressedBlockId = hit?.key
                     AppLogger.d("HierarchySidebar", "Down Event Locked Source: ${pressedBlockId ?: "None"}")
                 }
             }
-            // 模块 2：驱动长按拖拽
-            .pointerInput(blocks) {
+            // 模块 2：驱动长按拖拽 (只读模式完全禁用)
+            .pointerInput(blocks, isReadOnly) {
+                if (isReadOnly) return@pointerInput
                 detectDragGesturesAfterLongPress(
                     onDragStart = { offset ->
                         val sourceId = pressedBlockId
@@ -148,7 +150,6 @@ fun HierarchySidebar(
                         change.consume()
                         dragPosition = change.position
                         val windowOffset = listCoordinates?.localToWindow(change.position) ?: change.position
-                        
                         val hit = itemBounds.entries.toList().asReversed().find { it.value.contains(windowOffset) }
                         if (hit != null) {
                             hoveredBlockId = hit.key
@@ -195,20 +196,42 @@ fun HierarchySidebar(
                 
                 Spacer(Modifier.weight(1f))
                 
-                IconButton(onClick = { locateTrigger = org.gemini.ui.forge.getCurrentTimeMillis() }, modifier = Modifier.size(24.dp)) {
-                    Icon(Icons.Default.MyLocation, contentDescription = "Locate Layer", modifier = Modifier.size(16.dp))
+                // 追踪/定位按钮 (始终可用)
+                IconToggleButton(
+                    checked = isAutoTrackEnabled,
+                    onCheckedChange = { isAutoTrackEnabled = it },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isAutoTrackEnabled) Icons.Default.MyLocation else Icons.Default.LocationDisabled,
+                        contentDescription = "Auto Track Selection",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (isAutoTrackEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                Spacer(Modifier.width(4.dp))
-                IconButton(onClick = { showAddDialog = true }, modifier = Modifier.size(24.dp)) {
-                    Icon(Icons.Default.AddBox, contentDescription = "Add Layer", modifier = Modifier.size(16.dp))
-                }
-                Spacer(Modifier.width(4.dp))
-                IconButton(onClick = { showRenameDialog = selectedBlockId }, modifier = Modifier.size(24.dp), enabled = selectedBlockId != null) {
-                    Icon(Icons.Default.DriveFileRenameOutline, contentDescription = "Rename Layer", modifier = Modifier.size(16.dp))
+
+                if (!isReadOnly) { // 仅非只读模式显示修改功能
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(onClick = { showAddDialog = true }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.AddBox, contentDescription = "Add Layer", modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(
+                        onClick = { if (selectedBlockId != null) showRenameDialog = selectedBlockId }, 
+                        modifier = Modifier.size(28.dp), 
+                        enabled = selectedBlockId != null
+                    ) {
+                        Icon(
+                            Icons.Default.DriveFileRenameOutline, 
+                            contentDescription = "Rename Layer", 
+                            modifier = Modifier.size(18.dp),
+                            tint = if (selectedBlockId != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    }
                 }
             }
             
-            if (draggedBlockId != null && hoveredBlockId == null) {
+            if (!isReadOnly && draggedBlockId != null && hoveredBlockId == null) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -308,7 +331,7 @@ private fun HierarchyItem(
     isHovered: Boolean,
     dropPosition: org.gemini.ui.forge.model.ui.DropPosition,
     locateTrigger: Long,
-    onBlockClicked: (String) -> Unit,
+    onBlockClicked: (String?) -> Unit,
     onBoundsCalculated: (String, Rect) -> Unit,
     selectedBlockId: String?,
     draggedBlockId: String?,
@@ -450,7 +473,7 @@ private fun HierarchyItem(
                         dropPosition = dropPosition,
                         locateTrigger = locateTrigger,
                         onBlockClicked = onBlockClicked,
-                        onBoundsCalculated = onBoundsCalculated,
+                        onBoundsCalculated = { id, rect -> onBoundsCalculated(id, rect) },
                         selectedBlockId = selectedBlockId,
                         draggedBlockId = draggedBlockId,
                         hoveredBlockId = hoveredBlockId
@@ -482,7 +505,8 @@ fun AddLayerDialog(
                     value = name, 
                     onValueChange = { name = it }, 
                     label = { Text("图层名称/ID (可选)") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AppShapes.medium
                 )
                 
                 ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = { expandedType = !expandedType }) {
@@ -491,10 +515,24 @@ fun AddLayerDialog(
                         onValueChange = {}, readOnly = true,
                         label = { Text("模块类型") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        shape = AppShapes.medium
                     )
                     ExposedDropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
-                        UIBlockType.entries.forEach { type ->
+                        val commonTypes = listOf(
+                            UIBlockType.BUTTON, UIBlockType.VIEW, UIBlockType.TEXT, UIBlockType.IMAGE, 
+                            UIBlockType.COMBO_BOX, UIBlockType.PROGRESS_BAR, UIBlockType.POPUP_MENU, 
+                            UIBlockType.LOADER, UIBlockType.SCROLL_BAR, UIBlockType.SLIDER, UIBlockType.INPUT
+                        )
+                        val specialTypes = UIBlockType.entries.filter { it !in commonTypes }
+                        commonTypes.forEach { type ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(type.getDisplayNameRes())) },
+                                onClick = { selectedType = type; expandedType = false }
+                            )
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        specialTypes.forEach { type ->
                             DropdownMenuItem(
                                 text = { Text(stringResource(type.getDisplayNameRes())) },
                                 onClick = { selectedType = type; expandedType = false }
@@ -503,8 +541,8 @@ fun AddLayerDialog(
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = widthStr, onValueChange = { widthStr = it }, label = { Text("宽度") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = heightStr, onValueChange = { heightStr = it }, label = { Text("高度") }, modifier = Modifier.weight(1f))
+                    OutlinedTextField(value = widthStr, onValueChange = { widthStr = it }, label = { Text("宽度") }, modifier = Modifier.weight(1f), shape = AppShapes.medium)
+                    OutlinedTextField(value = heightStr, onValueChange = { heightStr = it }, label = { Text("高度") }, modifier = Modifier.weight(1f), shape = AppShapes.medium)
                 }
             }
         },
@@ -513,10 +551,10 @@ fun AddLayerDialog(
                 val w = widthStr.toFloatOrNull() ?: 200f
                 val h = heightStr.toFloatOrNull() ?: 200f
                 onConfirm(name, selectedType, w, h)
-            }) { Text("添加") }
+            }, shape = AppShapes.medium) { Text("添加") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss, shape = AppShapes.medium) { Text("取消") }
         }
     )
 }
@@ -538,14 +576,15 @@ fun RenameLayerDialog(
                 onValueChange = { newId = it },
                 label = { Text("新 ID/名称") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                shape = AppShapes.medium
             )
         },
         confirmButton = {
-            Button(onClick = { onConfirm(newId) }) { Text("确认") }
+            Button(onClick = { onConfirm(newId) }, shape = AppShapes.medium) { Text("确认") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss, shape = AppShapes.medium) { Text("取消") }
         }
     )
 }

@@ -17,8 +17,15 @@
     <string name="block_view">View</string>
     <string name="block_header">Header</string>
     <string name="block_footer">Footer</string>
-    <string name="block_text_area">Text</string>
-    <string name="block_icon">Icon</string>
+    <string name="block_text">Text</string>
+    <string name="block_image">Image</string>
+    <string name="block_combo_box">Combo Box</string>
+    <string name="block_progress_bar">Progress Bar</string>
+    <string name="block_popup_menu">Popup Menu</string>
+    <string name="block_loader">Image Loader</string>
+    <string name="block_scroll_bar">Scroll Bar</string>
+    <string name="block_slider">Slider</string>
+    <string name="block_input">Input Field</string>
 
     <string name="menu_file">File</string>
     <string name="menu_settings">Settings</string>
@@ -113,8 +120,12 @@
     <string name="shortcut_delete">Delete Layer</string>
 
     <!-- New Internationalized Strings -->
-    <string name="hierarchy_title">图层</string>
-    <string name="hierarchy_move_to_top">移动到根层级</string>
+    <string name="hierarchy_title">Hierarchy</string>
+    <string name="hierarchy_move_to_top">Move to Top</string>
+    <string name="screen_home">Home</string>
+    <string name="screen_template_asset_gen">Asset Generation</string>
+    <string name="screen_template_editor">Layout Design</string>
+    <string name="screen_template_generator">AI Analysis</string>
     <string name="dialog_add_layer_title">Add New Layer</string>
     <string name="dialog_rename_layer_title">Rename Layer</string>
     <string name="label_layer_name">Layer Name/ID (Optional)</string>

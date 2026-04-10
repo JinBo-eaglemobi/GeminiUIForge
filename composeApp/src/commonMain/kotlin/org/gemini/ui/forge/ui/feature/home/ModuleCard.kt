@@ -18,6 +18,7 @@ import org.jetbrains.compose.resources.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import org.gemini.ui.forge.model.app.UIModule
+import org.gemini.ui.forge.ui.theme.AppShapes
 
 @Composable
 fun ModuleCard(module: UIModule, onEditLayout: () -> Unit, onGenerateUI: () -> Unit, onDelete: () -> Unit) {
@@ -107,6 +108,7 @@ fun ModuleCard(module: UIModule, onEditLayout: () -> Unit, onGenerateUI: () -> U
                 Button(
                     onClick = onEditLayout,
                     modifier = Modifier.weight(1f).padding(end = 4.dp),
+                    shape = AppShapes.medium,
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
                     Text(stringResource(Res.string.action_edit_layout), maxLines = 1, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
@@ -115,6 +117,7 @@ fun ModuleCard(module: UIModule, onEditLayout: () -> Unit, onGenerateUI: () -> U
                 Button(
                     onClick = onGenerateUI,
                     modifier = Modifier.weight(1f).padding(start = 4.dp),
+                    shape = AppShapes.medium,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {

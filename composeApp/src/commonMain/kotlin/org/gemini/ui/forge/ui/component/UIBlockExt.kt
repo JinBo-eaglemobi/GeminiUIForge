@@ -1,16 +1,6 @@
 package org.gemini.ui.forge.ui.component
 import geminiuiforge.composeapp.generated.resources.Res
-import geminiuiforge.composeapp.generated.resources.block_background
-import geminiuiforge.composeapp.generated.resources.block_button
-import geminiuiforge.composeapp.generated.resources.block_footer
-import geminiuiforge.composeapp.generated.resources.block_header
-import geminiuiforge.composeapp.generated.resources.block_icon
-import geminiuiforge.composeapp.generated.resources.block_view
-import geminiuiforge.composeapp.generated.resources.block_reel
-import geminiuiforge.composeapp.generated.resources.block_spin_button
-import geminiuiforge.composeapp.generated.resources.block_symbol
-import geminiuiforge.composeapp.generated.resources.block_text_area
-import geminiuiforge.composeapp.generated.resources.block_win_display
+import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.StringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
@@ -28,8 +18,15 @@ fun UIBlockType.getDisplayNameRes(): StringResource {
         UIBlockType.VIEW -> Res.string.block_view
         UIBlockType.HEADER -> Res.string.block_header
         UIBlockType.FOOTER -> Res.string.block_footer
-        UIBlockType.TEXT_AREA -> Res.string.block_text_area
-        UIBlockType.ICON -> Res.string.block_icon
+        UIBlockType.TEXT -> Res.string.block_text
+        UIBlockType.IMAGE -> Res.string.block_image
+        UIBlockType.COMBO_BOX -> Res.string.block_combo_box
+        UIBlockType.PROGRESS_BAR -> Res.string.block_progress_bar
+        UIBlockType.POPUP_MENU -> Res.string.block_popup_menu
+        UIBlockType.LOADER -> Res.string.block_loader
+        UIBlockType.SCROLL_BAR -> Res.string.block_scroll_bar
+        UIBlockType.SLIDER -> Res.string.block_slider
+        UIBlockType.INPUT -> Res.string.block_input
     }
 }
 
@@ -44,7 +41,14 @@ fun UIBlockType.getIcon(): ImageVector {
         UIBlockType.VIEW -> Icons.Default.WebAsset
         UIBlockType.HEADER -> Icons.Default.KeyboardArrowUp
         UIBlockType.FOOTER -> Icons.Default.KeyboardArrowDown
-        UIBlockType.TEXT_AREA -> Icons.Default.Edit
-        UIBlockType.ICON -> Icons.Default.Face
+        UIBlockType.TEXT -> Icons.Default.Edit
+        UIBlockType.IMAGE -> Icons.Default.Image
+        UIBlockType.COMBO_BOX -> Icons.Default.List
+        UIBlockType.PROGRESS_BAR -> Icons.Default.LinearScale
+        UIBlockType.POPUP_MENU -> Icons.Default.MenuOpen
+        UIBlockType.LOADER -> Icons.Default.CloudDownload
+        UIBlockType.SCROLL_BAR -> Icons.Default.FormatLineSpacing
+        UIBlockType.SLIDER -> Icons.Default.Tune
+        UIBlockType.INPUT -> Icons.Default.Input
     }
 }

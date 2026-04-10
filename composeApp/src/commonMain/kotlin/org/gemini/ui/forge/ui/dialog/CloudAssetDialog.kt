@@ -28,6 +28,7 @@ import org.gemini.ui.forge.formatIsoTime
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.model.api.gemini.file.GeminiFile
+import org.gemini.ui.forge.ui.theme.AppShapes
 
 @Composable
 fun CloudAssetDialog(
@@ -264,7 +265,10 @@ fun CloudAssetDialog(
 
                 // Footer
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) {
+                    TextButton(
+                        onClick = onDismiss,
+                        shape = AppShapes.medium
+                    ) {
                         Text(stringResource(Res.string.action_close))
                     }
                 }

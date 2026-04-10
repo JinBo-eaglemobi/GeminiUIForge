@@ -30,7 +30,21 @@ enum class UIBlockType(val defaultPrompt: String) {
     /** 基础视图内容面板/底座：用于容纳文字或图标的半透明、实心底板框架 */
     VIEW("Content view or container box, semi-transparent or solid background, UI frame"),
     /** 纯文本显示区：易于阅读的文本底托板 */
-    TEXT_AREA("Text display area, readable background plate for typography"),
-    /** 独立小图标：无文字的小徽章或控制小控件 */
-    ICON("Small icon or badge, UI control element, crisp vector style")
+    TEXT("Text display area, readable background plate for typography"),
+    /** 独立图片/图标：静态图片、标志或装饰性图形 */
+    IMAGE("Graphic image or icon, visual asset, crisp vector or raster style"),
+    /** 下拉选择框：带有选项列表的交互组件 */
+    COMBO_BOX("Dropdown combo box, selection menu UI element, interactive list"),
+    /** 进度条：用于显示加载或进度的条形组件 */
+    PROGRESS_BAR("Progress bar, loading indicator, linear scale UI element"),
+    /** 弹出菜单：点击后出现的浮动菜单栏 */
+    POPUP_MENU("Popup menu, floating context menu, list of actions UI element"),
+    /** 动态加载器/占位符：表示该模块图片可被动态替换，通常带有装饰边框 */
+    LOADER("Dynamic image loader placeholder, media frame, interchangeable asset area"),
+    /** 滚动条：用于长内容导航的条状控件 */
+    SCROLL_BAR("Scrollbar, navigation slider for long content, sleek scroll track"),
+    /** 滑块：用于数值调节的交互组件 */
+    SLIDER("Interactive slider, adjustment knob, range selector UI element"),
+    /** 输入框：用于文本输入的编辑框 */
+    INPUT("Text input field, editable text box, entry area with cursor hint")
 }

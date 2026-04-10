@@ -5,8 +5,8 @@ Generate a comprehensive JSON structure representing this complete UI template b
 CRITICAL REQUIREMENT: 
 1. EVERY functional layer, background, content panel, or interactive element displayed in the image MUST have a corresponding distinct template (UIBlock) with accurate bounding coordinates.
 2. The `width` and `height` in `UIPage` MUST represent the total canvas size (resolution) of the analyzed image.
-3. HIERARCHY & GROUPING: When UI elements are visually grouped together (e.g., a top bar with a background containing several buttons, or a panel containing icons and text), you MUST create a parent UIBlock with type `GROUP` representing the container/background, and place the contained elements inside its `children` array. 
-4. COORDINATES: ALL top-level `UIBlock` coordinates (left, top, right, bottom) MUST be strictly absolute within the bounds of [0, width] and [0, height]. However, the `bounds` of any `children` inside a `GROUP` MUST be RELATIVE to their parent's top-left corner (e.g., if a parent is at absolute x:100, y:100, and a child is at absolute x:120, y:120, the child's relative bounds are left:20, top:20).
+3. HIERARCHY & GROUPING: When UI elements are visually grouped together (e.g., a top bar with a background containing several buttons, or a panel containing icons and text), you MUST create a parent UIBlock (usually type `VIEW` or `HEADER/FOOTER`) representing the container/background, and place the contained elements inside its `children` array. Any UIBlock can have children.
+4. COORDINATES: ALL top-level `UIBlock` coordinates (left, top, right, bottom) MUST be strictly absolute within the bounds of [0, width] and [0, height]. However, the `bounds` of any `children` inside a parent UIBlock MUST be RELATIVE to their parent's top-left corner (e.g., if a parent is at absolute x:100, y:100, and a child is at absolute x:120, y:120, the child's relative bounds are left:20, top:20).
 
 The JSON must strictly map to the following Kotlin classes (do NOT wrap in markdown blocks, return pure JSON):
 ProjectState(projectId: String, globalTheme: String, pages: List<UIPage>)
@@ -14,23 +14,28 @@ UIPage(id: String, nameStr: String, width: Float, height: Float, blocks: List<UI
 UIBlock(id: String, type: UIBlockType, bounds: SerialRect(left, top, right, bottom), userPromptEn: String, userPromptZh: String, children: List<UIBlock>)
 
 UIBlockType MUST be one of the following exact strings:
-- GROUP (UI Group container, holds multiple UI elements, background layer)
-- REEL (Slot machine reel area)
-- SPIN_BUTTON (Main spin button)
+- BUTTON (Generic interactive button)
+- VIEW (Basic content view, container box, or background frame)
+- TEXT (Plain text display area)
+- IMAGE (Static graphic, logo, or icon)
+- COMBO_BOX (Dropdown selection menu)
+- PROGRESS_BAR (Loading or progress indicator)
+- POPUP_MENU (Floating context menu)
+- LOADER (Dynamic asset placeholder/loader)
+- SCROLL_BAR (Scroll navigation control)
+- SLIDER (Range selection slider)
+- INPUT (Text input/edit field)
+- REEL (Slot machine reel area, grid layout)
+- SPIN_BUTTON (Main spin button, large circular button)
 - WIN_DISPLAY (Win score display box)
 - BACKGROUND (Full screen game background)
-- SYMBOL (Individual slot machine symbol)
-- BUTTON (Generic interactive button)
-- PANEL (Content panel or container box)
-- HEADER (Top header bar, title area)
-- FOOTER (Bottom footer bar, navigation)
-- TEXT_AREA (Text display area)
-- ICON (Small icon or badge)
-- DECORATION (Ornamental or decorative UI element)
+- SYMBOL (Individual slot machine symbol/icon)
+- HEADER (Top header bar, title area, asset display)
+- FOOTER (Bottom footer bar, navigation or status area)
 
 ASSET GENERATION & PROMPT REQUIREMENTS:
 1. For EACH `UIBlock`, you MUST provide two detailed and distinct fields: `userPromptEn` and `userPromptZh`.
 2. `userPromptEn`: A professional, high-quality English prompt optimized for AI image generation. It MUST explicitly detail materials (e.g., polished gold, frosted glass, carbon fiber), lighting effects (e.g., cinematic lighting, neon glow, sub-surface scattering), specific textures, and the overall artistic style (e.g., flat design, 3D skeuomorphic, cyberpunk). It MUST instruct the model to strictly follow the visual language of the reference image.
 3. `userPromptZh`: 对应的详尽中文描述。必须清晰说明该组件的功能、视觉特征、设计风格以及在游戏界面中的意图（例如：“这是一个具有科幻感的蓝色发光控制面板，边缘有金属拉丝质感，体现了高科技的交互氛围”）。
-4. For all interactive or standalone components (such as BUTTON, ICON, SYMBOL, PANEL, etc.), the `userPromptEn` MUST explicitly require a "SOLID CONTRAST COLOR BACKGROUND" (e.g., solid neon green or magenta) to facilitate automated background removal.
+4. For all interactive or standalone components (such as BUTTON, IMAGE, SYMBOL, VIEW, etc.), the `userPromptEn` MUST explicitly require a "SOLID CONTRAST COLOR BACKGROUND" (e.g., solid neon green or magenta) to facilitate automated background removal.
 5. Each prompt MUST be self-contained and of the highest fidelity to ensure accurate recreation of the specific UI module.

@@ -36,6 +36,7 @@ import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.service.ConfigManager
 import org.gemini.ui.forge.ui.dialog.CloudAssetDialog
+import org.gemini.ui.forge.ui.theme.AppShapes
 
 @Composable
 fun TemplateGeneratorScreen(
@@ -119,7 +120,11 @@ fun TemplateGeneratorScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            OutlinedButton(onClick = { imagePicker() }, enabled = !isAnalyzing) {
+            OutlinedButton(
+                onClick = { imagePicker() },
+                enabled = !isAnalyzing,
+                shape = AppShapes.medium
+            ) {
                 Text(stringResource(Res.string.template_gen_pick_local))
             }
 
@@ -192,12 +197,16 @@ fun TemplateGeneratorScreen(
                         isAnalyzing = false
                     }
                 },
-                enabled = inputUris.isNotBlank() && !isAnalyzing
+                enabled = inputUris.isNotBlank() && !isAnalyzing,
+                shape = AppShapes.medium,
+                modifier = Modifier.widthIn(min = 120.dp) // 设定最小宽度防止跳变
             ) {
-                if (isAnalyzing) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
-                } else {
-                    Text(stringResource(Res.string.template_gen_analyze))
+                Box(contentAlignment = Alignment.Center) {
+                    if (isAnalyzing) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                    } else {
+                        Text(stringResource(Res.string.template_gen_analyze))
+                    }
                 }
             }
         }

@@ -21,7 +21,8 @@ data class UIBlock(
     val currentImageUri: String? = null,
     val userPromptEn: String = "",
     val userPromptZh: String = "",
-    val children: List<UIBlock> = emptyList()
+    val children: List<UIBlock> = emptyList(),
+    val selectedImageUri: String? = null // 新增：记录当前选中的生成资源路径
 ) {
     /** 自动拼接基础类别描述与英文自定义描述，形成最终发给生图模型的完整 Prompt */
     val fullPrompt: String

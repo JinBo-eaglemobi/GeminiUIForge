@@ -11,10 +11,10 @@ CRITICAL CONSTRAINTS:
 2. INCREMENTAL UPDATE: 
    - DO NOT change IDs or coordinates of UIBlocks that are OUTSIDE the cropped area.
    - For the area inside the cropped image, you may DELETE incorrect blocks, MODIFY existing ones, or ADD new granular blocks.
-3. GRANULARITY & HIERARCHY: Break down the UI into functional components. If elements are visually grouped (e.g., buttons inside a panel or background), use a parent UIBlock with type `GROUP` and place the elements inside its `children` array.
-4. COORDINATES: All coordinates for top-level blocks must be absolute relative to the original image canvas [0, width] and [0, height]. For blocks inside a `GROUP`'s `children` array, the coordinates MUST be relative to the parent `GROUP`'s top-left corner.
+3. GRANULARITY & HIERARCHY: Break down the UI into functional components. If elements are visually grouped (e.g., buttons inside a panel or background), use a parent UIBlock (usually type `VIEW` or `HEADER/FOOTER`) and place the elements inside its `children` array. Any UIBlock can have children.
+4. COORDINATES: All coordinates for top-level blocks must be absolute relative to the original image canvas [0, width] and [0, height]. For blocks inside a parent's `children` array, the coordinates MUST be relative to the parent's top-left corner.
 5. EXACT TYPE MATCH: The `type` field of ANY new or modified `UIBlock` MUST strictly be one of the following strings. Do NOT invent types like 'TITLE' or 'LABEL'. Use these exact strings:
-   - GROUP, REEL, SPIN_BUTTON, WIN_DISPLAY, BACKGROUND, SYMBOL, BUTTON, PANEL, HEADER, FOOTER, TEXT_AREA, ICON, DECORATION
+   - BUTTON, VIEW, TEXT, IMAGE, COMBO_BOX, PROGRESS_BAR, POPUP_MENU, LOADER, SCROLL_BAR, SLIDER, INPUT, REEL, SPIN_BUTTON, WIN_DISPLAY, BACKGROUND, SYMBOL, HEADER, FOOTER
 6. OUTPUT FORMAT: Return the ENTIRE updated ProjectState as a single JSON object. Do NOT wrap in markdown blocks. Ensure the updated JSON correctly parses into: `ProjectState(projectId, globalTheme, pages: List<UIPage>)` where each `UIPage` contains a `blocks` array of `UIBlock(id, type, bounds: SerialRect(left, top, right, bottom), userPromptEn, userPromptZh, children: List<UIBlock>)`.
 
 Ensure the `width` and `height` of the `UIPage` remain consistent with the original analysis. 

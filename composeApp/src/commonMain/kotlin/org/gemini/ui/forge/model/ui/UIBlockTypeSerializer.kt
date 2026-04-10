@@ -18,10 +18,15 @@ object UIBlockTypeSerializer : KSerializer<UIBlockType> {
 
     override fun deserialize(decoder: Decoder): UIBlockType {
         val name = decoder.decodeString()
-        return try {
-            UIBlockType.valueOf(name)
-        } catch (e: Exception) {
-            UIBlockType.VIEW // 未知类型统一降级为 VIEW
+        return when (name) {
+            "TEXT_AREA" -> UIBlockType.TEXT
+            "ICON" -> UIBlockType.IMAGE
+            "PANEL", "GROUP", "DECORATION" -> UIBlockType.VIEW
+            else -> try {
+                UIBlockType.valueOf(name)
+            } catch (e: Exception) {
+                UIBlockType.VIEW // 未知类型统一降级为 VIEW
+            }
         }
     }
 }

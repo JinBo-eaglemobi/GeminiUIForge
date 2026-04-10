@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.gemini.ui.forge.model.app.UIModule
+import org.gemini.ui.forge.ui.theme.AppShapes
 
 @Composable
 fun HomeScreen(
@@ -61,16 +62,22 @@ fun HomeScreen(
             title = { Text(stringResource(Res.string.dialog_delete_title)) },
             text = { Text("${stringResource(Res.string.dialog_delete_message)}\n($title)") },
             confirmButton = {
-                TextButton(onClick = { 
-                    onDeleteModule(module.id)
-                    moduleToDelete = null 
-                }) { 
-                    Text(stringResource(Res.string.dialog_action_delete), color = MaterialTheme.colorScheme.error) 
+                TextButton(
+                    onClick = {
+                        onDeleteModule(module.id)
+                        moduleToDelete = null
+                    },
+                    shape = AppShapes.medium
+                ) {
+                    Text(stringResource(Res.string.dialog_action_delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { moduleToDelete = null }) { 
-                    Text(stringResource(Res.string.dialog_action_cancel)) 
+                TextButton(
+                    onClick = { moduleToDelete = null },
+                    shape = AppShapes.medium
+                ) {
+                    Text(stringResource(Res.string.dialog_action_cancel))
                 }
             }
         )

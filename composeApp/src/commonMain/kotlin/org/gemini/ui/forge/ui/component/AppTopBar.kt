@@ -1,4 +1,5 @@
 package org.gemini.ui.forge.ui.component
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,7 +25,7 @@ import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.app.ShortcutAction
 import org.gemini.ui.forge.model.app.ThemeMode
 import org.gemini.ui.forge.ui.dialog.AppSettingsDialog
-
+import org.gemini.ui.forge.ui.theme.AppShapes
 
 @Composable
 fun AppTopBar(
@@ -87,6 +88,27 @@ fun AppTopBar(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
+
+                // 当前模式标识
+                val modeNameRes = when (currentScreen) {
+                    AppScreen.HOME -> Res.string.screen_home
+                    AppScreen.TEMPLATE_ASSET_GEN -> Res.string.screen_template_asset_gen
+                    AppScreen.TEMPLATE_EDITOR -> Res.string.screen_template_editor
+                    AppScreen.TEMPLATE_GENERATOR -> Res.string.screen_template_generator
+                }
+                
+                Surface(
+                    modifier = Modifier.padding(start = 12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                    shape = AppShapes.small
+                ) {
+                    Text(
+                        text = stringResource(modeNameRes),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
             }
 
             // 右侧功能按钮
@@ -97,7 +119,8 @@ fun AppTopBar(
                 if (currentScreen == AppScreen.HOME) {
                     TextButton(
                         onClick = onGenerateTemplateClicked,
-                        contentPadding = PaddingValues(horizontal = 8.dp)
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        shape = AppShapes.medium
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
@@ -106,7 +129,8 @@ fun AppTopBar(
 
                     TextButton(
                         onClick = onCloudAssetManagerClicked,
-                        contentPadding = PaddingValues(horizontal = 8.dp)
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        shape = AppShapes.medium
                     ) {
                         Icon(Icons.Default.Cloud, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
@@ -116,7 +140,7 @@ fun AppTopBar(
                     IconButton(onClick = { showSettingsDialog = true }) {
                         Icon(Icons.Default.Settings, contentDescription = stringResource(Res.string.menu_settings))
                     }
-                } else if (currentScreen == AppScreen.TEMPLATE_EDITOR || currentScreen == AppScreen.EDITOR) {
+                } else if (currentScreen == AppScreen.TEMPLATE_EDITOR || currentScreen == AppScreen.TEMPLATE_ASSET_GEN) {
                     IconButton(onClick = onSaveClicked) {
                         Icon(Icons.Default.Save, contentDescription = "Save Layout", tint = MaterialTheme.colorScheme.primary)
                     }

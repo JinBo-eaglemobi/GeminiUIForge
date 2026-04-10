@@ -167,7 +167,9 @@ class EditorViewModel(
     }
 
     fun onPageSelected(pageId: String) = _state.update { it.copy(selectedPageId = pageId, selectedBlockId = null, editingGroupId = null, generatedCandidates = emptyList()) }
-    fun onBlockClicked(blockId: String) = _state.update { it.copy(selectedBlockId = if (it.selectedBlockId == blockId) null else blockId) }
+    fun onBlockClicked(blockId: String?) = _state.update { 
+        it.copy(selectedBlockId = if (blockId == null) null else if (it.selectedBlockId == blockId) null else blockId) 
+    }
 
     /** 双击组件逻辑：只要包含子组件，则进入孤立编辑模式 */
     fun onBlockDoubleClicked(blockId: String) {
@@ -679,26 +681,87 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * 将生成的图片资源绑定到具体的 Block 上
+     */
     fun onImageSelected(imageUri: String) {
         val pageId = _state.value.selectedPageId ?: return
         val blockId = _state.value.selectedBlockId ?: return
         val projectName = _state.value.projectName
+        
         viewModelScope.launch {
-            val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(imageUri) ?: return@launch
-            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-            val base64Data = "data:image/jpeg;base64," + kotlin.io.encoding.Base64.Default.encode(bytes)
-            val localImagePath = templateRepo.saveResource(projectName, blockId, base64Data)
+            // 注意：这里由于是在资源生成模式，图片可能已经是本地路径（如果是从缓存/历史加载）
+            // 如果是 AI 刚生成的临时路径，则执行迁移，否则直接绑定。
+            val finalPath = if (imageUri.contains("cache")) {
+                val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(imageUri) ?: return@launch
+                @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                val base64Data = "data:image/jpeg;base64," + kotlin.io.encoding.Base64.Default.encode(bytes)
+                templateRepo.saveResource(projectName, blockId, base64Data)
+            } else {
+                imageUri
+            }
+
             _state.update { currentState ->
                 val updatedPages = currentState.project.pages.map { page ->
                     if (page.id == pageId) {
                         page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
-                            block.copy(currentImageUri = localImagePath)
+                            block.copy(selectedImageUri = finalPath)
                         })
                     } else page
                 }
-                currentState.copy(project = currentState.project.copy(pages = updatedPages), generatedCandidates = emptyList())
+                currentState.copy(
+                    project = currentState.project.copy(pages = updatedPages), 
+                    generatedCandidates = emptyList() // 选中后清空当前候选
+                )
             }
             templateRepo.saveTemplate(projectName, _state.value.project)
+        }
+    }
+
+    /**
+     * 清空当前 Block 选中的图片（但不删除历史文件）
+     */
+    fun clearSelectedImage(blockId: String) {
+        saveSnapshot()
+        _state.update { currentState ->
+            val pageId = currentState.selectedPageId ?: return@update currentState
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) {
+                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { 
+                        it.copy(selectedImageUri = null) 
+                    })
+                } else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+        viewModelScope.launch {
+            templateRepo.saveTemplate(_state.value.projectName, _state.value.project)
+        }
+    }
+
+    /**
+     * 放弃当前生成的候选图
+     */
+    fun clearCandidates() {
+        _state.update { it.copy(generatedCandidates = emptyList()) }
+    }
+
+    /**
+     * 加载当前选定 Block 的所有历史生成图片
+     */
+    suspend fun loadBlockHistoricalImages(blockId: String): List<String> {
+        return try {
+            val rootDir = templateRepo.getDataDir()
+            val templateDir = "$rootDir/${_state.value.projectName.replace(" ", "_")}"
+            val allFiles = org.gemini.ui.forge.utils.listFilesInLocalDirectory(templateDir)
+            // 过滤出以 blockId 开头且是图片的文件
+            allFiles.filter { filePath ->
+                val fileName = filePath.substringAfterLast("/").substringAfterLast("\\")
+                fileName.startsWith(blockId) && (fileName.endsWith(".png") || fileName.endsWith(".jpg"))
+            }
+        } catch (e: Exception) {
+            AppLogger.e("EditorViewModel", "加载历史图片失败: $blockId", e)
+            emptyList()
         }
     }
 

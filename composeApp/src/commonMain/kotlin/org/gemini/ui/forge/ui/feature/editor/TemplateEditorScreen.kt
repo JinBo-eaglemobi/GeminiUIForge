@@ -41,12 +41,14 @@ import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.EditorState
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
+import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.ui.component.VerticalSplitter
 
 @Composable
 fun TemplateEditorScreen(
     state: EditorState,
     onPageSelected: (String) -> Unit,
-    onBlockClicked: (String) -> Unit,
+    onBlockClicked: (String?) -> Unit,
     onBlockBoundsChanged: (String, Float, Float, Float, Float) -> Unit,
     onBlockTypeChanged: (String, UIBlockType) -> Unit,
     onPromptChanged: (String, String) -> Unit,
@@ -106,7 +108,8 @@ fun TemplateEditorScreen(
                         
                         Button(
                             onClick = { refineTargetId = null; showVisualRefine = true },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = AppShapes.medium
                         ) {
                             Icon(Icons.Default.Crop, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
@@ -117,7 +120,11 @@ fun TemplateEditorScreen(
                         Text(stringResource(Res.string.prop_pages), style = MaterialTheme.typography.labelMedium)
                         state.project.pages.forEach { page ->
                             val selected = state.selectedPageId == page.id
-                            TextButton(onClick = { onPageSelected(page.id) }, modifier = Modifier.fillMaxWidth()) {
+                            TextButton(
+                                onClick = { onPageSelected(page.id) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = AppShapes.medium
+                            ) {
                                 Text(page.nameStr, color = if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                             }
                         }
@@ -179,6 +186,7 @@ fun TemplateEditorScreen(
                             onSwitchEditingLang = onSwitchEditingLanguage,
                             onBoundsChanged = onBlockBoundsChanged,
                             onTypeChanged = { onBlockTypeChanged(block.id, it) },
+                            onRename = { onRenameBlock(block.id, it) },
                             onPromptChanged = { onPromptChanged(block.id, it) },
                             onOptimizePrompt = { onOptimizePrompt(block.id, it) },
                             onOpenRefine = { refineTargetId = block.id; showVisualRefine = true },
@@ -288,7 +296,11 @@ fun VisualRefineDialog(
                     Spacer(Modifier.width(16.dp))
 
                     if (isDone) {
-                        Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)) {
+                        Button(
+                            onClick = { onDismiss() },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                            shape = AppShapes.medium
+                        ) {
                             Text("分析完成，返回编辑器")
                         }
                     } else {
@@ -304,7 +316,8 @@ fun VisualRefineDialog(
                                     }
                                 }
                             },
-                            enabled = selectionRect != null && instruction.isNotBlank() && !isProcessing
+                            enabled = selectionRect != null && instruction.isNotBlank() && !isProcessing,
+                            shape = AppShapes.medium
                         ) {
                             if (isProcessing) {
                                 CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
@@ -437,6 +450,7 @@ private fun BlockPropertiesEditor(
     onSwitchEditingLang: (PromptLanguage) -> Unit,
     onBoundsChanged: (String, Float, Float, Float, Float) -> Unit,
     onTypeChanged: (UIBlockType) -> Unit,
+    onRename: (String) -> Unit, // 修改为接收单参数（新 ID）
     onPromptChanged: (String) -> Unit,
     onOptimizePrompt: ((String) -> Unit) -> Unit,
     onOpenRefine: () -> Unit,
@@ -445,16 +459,54 @@ private fun BlockPropertiesEditor(
     var expandedType by remember { mutableStateOf(false) }
     var showPromptDialog by remember { mutableStateOf(false) }
 
-    OutlinedTextField(value = block.id, onValueChange = {}, readOnly = true, label = { Text(stringResource(Res.string.prop_block_id)) }, modifier = Modifier.fillMaxWidth())
+    // ID 修改逻辑
+    var tempId by remember(block.id) { mutableStateOf(block.id) }
+    OutlinedTextField(
+        value = tempId, 
+        onValueChange = { 
+            tempId = it
+            if (it.isNotBlank() && it != block.id) onRename(it) 
+        }, 
+        label = { Text(stringResource(Res.string.prop_block_id)) }, 
+        modifier = Modifier.fillMaxWidth()
+    )
+
     Spacer(Modifier.height(16.dp))
 
     ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = { expandedType = !expandedType }) {
-        OutlinedTextField(value = stringResource(block.type.getDisplayNameRes()), onValueChange = {}, readOnly = true, label = { Text(stringResource(Res.string.prop_type)) }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) }, modifier = Modifier.fillMaxWidth().menuAnchor())
+        OutlinedTextField(
+            value = stringResource(block.type.getDisplayNameRes()), 
+            onValueChange = {}, readOnly = true, 
+            label = { Text(stringResource(Res.string.prop_type)) }, 
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) }, 
+            modifier = Modifier.fillMaxWidth().menuAnchor()
+        )
         ExposedDropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
-            UIBlockType.entries.forEach { DropdownMenuItem(text = { Text(stringResource(it.getDisplayNameRes())) }, onClick = { onTypeChanged(it); expandedType = false }) }
+            // 类型排序：Common 优先
+            val commonTypes = listOf(
+                UIBlockType.BUTTON, UIBlockType.VIEW, UIBlockType.TEXT, UIBlockType.IMAGE, 
+                UIBlockType.COMBO_BOX, UIBlockType.PROGRESS_BAR, UIBlockType.POPUP_MENU, 
+                UIBlockType.LOADER, UIBlockType.SCROLL_BAR, UIBlockType.SLIDER, UIBlockType.INPUT
+            )
+            val specialTypes = UIBlockType.entries.filter { it !in commonTypes }
+
+            commonTypes.forEach { type ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(type.getDisplayNameRes())) },
+                    onClick = { onTypeChanged(type); expandedType = false }
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            specialTypes.forEach { type ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(type.getDisplayNameRes())) },
+                    onClick = { onTypeChanged(type); expandedType = false }
+                )
+            }
         }
     }
-
     Spacer(Modifier.height(16.dp))
 
     val displayPrompt = if (currentEditingLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
@@ -471,7 +523,24 @@ private fun BlockPropertiesEditor(
             onDismissRequest = { showPromptDialog = false },
             title = { Column { Text("编辑详细描述"); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp)) { PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { i, l -> SegmentedButton(currentEditingLang == l, { onSwitchEditingLang(l) }, SegmentedButtonDefaults.itemShape(i, 2)) { Text(l.displayName) } } } } },
             text = { OutlinedTextField(tempPrompt, { tempPrompt = it; onPromptChanged(it) }, label = { Text("描述内容") }, modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp), enabled = !isOptimizing) },
-            confirmButton = { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { TextButton({ isOptimizing = true; onPromptChanged(tempPrompt); onOptimizePrompt { tempPrompt = it; isOptimizing = false } }, enabled = !isOptimizing && tempPrompt.isNotBlank()) { if (isOptimizing) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Text("AI 优化") }; Button({ showPromptDialog = false }) { Text("完成") } } }
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        { isOptimizing = true; onPromptChanged(tempPrompt); onOptimizePrompt { tempPrompt = it; isOptimizing = false } },
+                        enabled = !isOptimizing && tempPrompt.isNotBlank(),
+                        shape = AppShapes.medium
+                    ) {
+                        if (isOptimizing) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Text("AI 优化")
+                    }
+                    Button(
+                        { showPromptDialog = false },
+                        shape = AppShapes.medium
+                    ) {
+                        Text("完成")
+                    }
+                }
+            }
         )
     }
 
@@ -499,26 +568,23 @@ private fun BlockPropertiesEditor(
     }
 
     Spacer(Modifier.height(24.dp))
-    OutlinedButton(onClick = onOpenRefine, Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)) {
-        Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp)); Text("AI 组件重塑")
+    OutlinedButton(
+        onClick = onOpenRefine,
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppShapes.medium,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)
+    ) {
+        Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
+        Text("AI 组件重塑")
     }
     Spacer(Modifier.height(8.dp))
-    Button(onDelete, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error), modifier = Modifier.fillMaxWidth()) {
-        Icon(Icons.Default.Delete, null, Modifier.size(18.dp)); Text("删除此组件")
+    Button(
+        onClick = onDelete,
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppShapes.medium
+    ) {
+        Icon(Icons.Default.Delete, null, Modifier.size(18.dp))
+        Text("删除此组件")
     }
-}
-
-@Composable
-private fun VerticalSplitter(onDrag: (Float) -> Unit) {
-    Box(
-        Modifier
-            .width(4.dp)
-            .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.outlineVariant)
-            .pointerHoverIcon(org.gemini.ui.forge.ResizeHorizontalIcon)
-            .draggable(
-                orientation = Orientation.Horizontal,
-                state = rememberDraggableState { onDrag(it) }
-            )
-    )
 }
