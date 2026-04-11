@@ -21,7 +21,8 @@ data class UIBlock(
     val currentImageUri: String? = null, // 统一图片资源路径（包含分析裁剪图和用户生成图）
     val userPromptEn: String = "",
     val userPromptZh: String = "",
-    val children: List<UIBlock> = emptyList()
+    val children: List<UIBlock> = emptyList(),
+    val isVisible: Boolean = true // 新增：图层是否可见
 ) {
     /** 自动拼接基础类别描述与英文自定义描述，形成最终发给生图模型的完整 Prompt */
     val fullPrompt: String

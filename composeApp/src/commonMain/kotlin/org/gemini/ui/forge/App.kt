@@ -265,15 +265,16 @@ fun App(typography: Typography? = null) {
                                     )
                                 },
                                 onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },
-                                onRenameBlock = { oldId, newId -> viewModel.renameBlock(oldId, newId) },
+                                onRenameBlock = { oldId, newId -> viewModel.renameBlock(oldId, newId) },        
+                                onToggleVisibility = { id, isVisible -> viewModel.toggleBlockVisibility(id, isVisible) },
+                                onToggleAllVisibility = { isVisible -> viewModel.toggleAllBlocksVisibility(isVisible) },
                                 onSaveTemplate = {
                                     coroutineScope.launch {
                                         templateRepo.saveTemplate(state.projectName, state.project)
                                     }
                                 }
-                            )
-                        }
-
+                                )
+                                }
                         AppScreen.TEMPLATE_ASSET_GEN -> {
                             TemplateAssetGenScreen(
                                 state = state,
@@ -290,11 +291,12 @@ fun App(typography: Typography? = null) {
                                 onLoadHistoricalImages = { viewModel.loadBlockHistoricalImages(it) },
                                 onMoveBlock = { draggedId, targetId, dropPos -> viewModel.moveBlock(draggedId, targetId, dropPos) },
                                 onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },
-                                onRenameBlock = { oldId, newId -> viewModel.renameBlock(oldId, newId) },
-                                onAddCustomBlock = { id, type, w, h -> viewModel.addCustomBlock(id, type, w, h) }
-                            )
-                        }
-                        AppScreen.TEMPLATE_GENERATOR -> {
+                                onRenameBlock = { oldId, newId -> viewModel.renameBlock(oldId, newId) },        
+                                onAddCustomBlock = { id, type, w, h -> viewModel.addCustomBlock(id, type, w, h) },
+                                onToggleVisibility = { id, isVisible -> viewModel.toggleBlockVisibility(id, isVisible) },
+                                onToggleAllVisibility = { isVisible -> viewModel.toggleAllBlocksVisibility(isVisible) }
+                                )
+                                }                        AppScreen.TEMPLATE_GENERATOR -> {
                             TemplateGeneratorScreen(
                                 onNavigateBack = { viewModel.navigateTo(AppScreen.HOME) },
                                 onTemplateSaved = { name, projectState ->

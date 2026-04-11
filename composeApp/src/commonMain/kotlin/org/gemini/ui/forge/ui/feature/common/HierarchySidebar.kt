@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
@@ -38,8 +39,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.ui.graphics.vector.ImageVector
-import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
@@ -56,6 +55,8 @@ fun HierarchySidebar(
     onMoveBlock: (String, String?, DropPosition) -> Unit = { _, _, _ -> },
     onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit = { _, _, _, _ -> },
     onRenameBlock: (String, String) -> Unit = { _, _ -> },
+    onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> }, // 新增单项可见性切换
+    onToggleAllVisibility: (Boolean) -> Unit = {}, // 新增全域可见性切换
     modifier: Modifier = Modifier,
     isReadOnly: Boolean = false // 新增只读参数
 ) {
@@ -83,7 +84,7 @@ fun HierarchySidebar(
     LaunchedEffect(selectedBlockId, isAutoTrackEnabled) {
         if (isAutoTrackEnabled && selectedBlockId != null) {
             delay(100)
-            locateTrigger = getCurrentTimeMillis()
+            locateTrigger = org.gemini.ui.forge.getCurrentTimeMillis()
         }
     }
 
@@ -128,7 +129,6 @@ fun HierarchySidebar(
                         .filter { it.key in allIds }
                         .find { it.value.contains(windowOffset) }
                     pressedBlockId = hit?.key
-                    AppLogger.d("HierarchySidebar", "Down Event Locked Source: ${pressedBlockId ?: "None"}")
                 }
             }
             // 模块 2：驱动长按拖拽 (只读模式完全禁用)
@@ -143,7 +143,6 @@ fun HierarchySidebar(
                             if (blockObj != null) {
                                 dragShadowIcon = blockObj.type.getIcon()
                                 dragShadowLabel = blockObj.id
-                                AppLogger.d("HierarchySidebar", "Drag Shadow Fixed to: $sourceId")
                             }
                             dragPosition = offset
                         }
@@ -212,6 +211,27 @@ fun HierarchySidebar(
                     )
                 }
 
+                Spacer(Modifier.width(4.dp))
+                // 全局显示/隐藏按钮 (始终可用)
+                fun checkAllVisible(list: List<UIBlock>): Boolean {
+                    return list.all { it.isVisible && checkAllVisible(it.children) }
+                }
+                val allVisible = blocks.isNotEmpty() && checkAllVisible(blocks)
+                IconButton(
+                    onClick = { 
+                        AppLogger.d("HierarchySidebar", "Toggle All Visibility clicked. Current allVisible=$allVisible, target=${!allVisible}")
+                        onToggleAllVisibility(!allVisible) 
+                    }, 
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = if (allVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        contentDescription = "Toggle All Visibility",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (allVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 if (!isReadOnly) { // 仅非只读模式显示修改功能
                     Spacer(Modifier.width(4.dp))
                     IconButton(onClick = { showAddDialog = true }, modifier = Modifier.size(28.dp)) {
@@ -264,7 +284,8 @@ fun HierarchySidebar(
                                 dropPosition = dropPosition,
                                 locateTrigger = locateTrigger,
                                 onBlockClicked = onBlockClicked,
-                                onBoundsCalculated = { id, rect -> itemBounds[id] = rect }
+                                onBoundsCalculated = { id, rect -> itemBounds[id] = rect },
+                                onToggleVisibility = onToggleVisibility
                             )
                         }
                     }
@@ -337,7 +358,8 @@ private fun HierarchyItem(
     onBoundsCalculated: (String, Rect) -> Unit,
     selectedBlockId: String?,
     draggedBlockId: String?,
-    hoveredBlockId: String?
+    hoveredBlockId: String?,
+    onToggleVisibility: (String, Boolean) -> Unit
 ) {
     var expanded by remember { mutableStateOf(true) }
     val hasChildren = block.children.isNotEmpty()
@@ -396,7 +418,7 @@ private fun HierarchyItem(
                 }
                 .background(
                     when {
-                        isHovered && draggedBlockId != null && dropPosition == DropPosition.INSIDE ->
+                        isHovered && draggedBlockId != null && dropPosition == DropPosition.INSIDE -> 
                             MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)
                         isDragged -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f)
                         isSelected -> MaterialTheme.colorScheme.primaryContainer
@@ -433,7 +455,7 @@ private fun HierarchyItem(
             
             Spacer(Modifier.width(6.dp))
 
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(block.type.getDisplayNameRes()),
                     style = MaterialTheme.typography.bodyMedium,
@@ -445,6 +467,19 @@ private fun HierarchyItem(
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+
+            // 单个图层可见性按钮
+            IconButton(
+                onClick = { onToggleVisibility(block.id, !block.isVisible) },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = if (block.isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                    contentDescription = "Toggle Visibility",
+                    modifier = Modifier.size(16.dp),
+                    tint = if (block.isVisible) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                 )
             }
         }
@@ -475,10 +510,11 @@ private fun HierarchyItem(
                         dropPosition = dropPosition,
                         locateTrigger = locateTrigger,
                         onBlockClicked = onBlockClicked,
-                        onBoundsCalculated = { id, rect -> onBoundsCalculated(id, rect) },
+                        onBoundsCalculated = onBoundsCalculated,
                         selectedBlockId = selectedBlockId,
                         draggedBlockId = draggedBlockId,
-                        hoveredBlockId = hoveredBlockId
+                        hoveredBlockId = hoveredBlockId,
+                        onToggleVisibility = onToggleVisibility
                     )
                 }
             }

@@ -47,7 +47,9 @@ fun TemplateAssetGenScreen(
     onMoveBlock: (String, String?, DropPosition) -> Unit,
     onBlockDragged: (String, Float, Float) -> Unit,
     onRenameBlock: (String, String) -> Unit,
-    onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit
+    onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit,
+    onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> },
+    onToggleAllVisibility: (Boolean) -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     var showHistoricalDialog by remember { mutableStateOf(false) }
@@ -118,6 +120,8 @@ fun TemplateAssetGenScreen(
                 onMoveBlock = onMoveBlock,
                 onAddCustomBlock = onAddCustomBlock,
                 onRenameBlock = onRenameBlock,
+                onToggleVisibility = onToggleVisibility,
+                onToggleAllVisibility = onToggleAllVisibility,
                 modifier = Modifier.weight(leftWeight).fillMaxHeight(),
                 isReadOnly = true
             )

@@ -267,6 +267,8 @@ fun RenderBlock(
     selectedBlockId: String?,
     editingGroupId: String?
 ) {
+    if (!block.isVisible) return
+    
     // 统一使用 currentImageUri
     val imageBitmapState = produceState<ImageBitmap?>(null, block.currentImageUri) {
         value = block.currentImageUri?.decodeBase64ToBitmap()
@@ -334,6 +336,8 @@ fun RenderBlock(
 private fun findHitBlock(blocks: List<UIBlock>, lx: Float, ly: Float, parentLx: Float, parentLy: Float, editingGroupId: String?, isInsideEditingGroup: Boolean = false): UIBlock? {
     for (i in blocks.indices.reversed()) {
         val block = blocks[i]
+        if (!block.isVisible) continue
+        
         val absL = parentLx + block.bounds.left
         val absT = parentLy + block.bounds.top
         val absR = parentLx + block.bounds.right

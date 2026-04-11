@@ -814,6 +814,41 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * 切换指定图层的可见性
+     */
+    fun toggleBlockVisibility(blockId: String, isVisible: Boolean) {
+        val pageId = _state.value.selectedPageId ?: return
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) {
+                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { 
+                        it.copy(isVisible = isVisible) 
+                    })
+                } else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+    }
+
+    /**
+     * 切换当前页面所有图层的可见性
+     */
+    fun toggleAllBlocksVisibility(isVisible: Boolean) {
+        val pageId = _state.value.selectedPageId ?: return
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) {
+                    fun updateVisibility(list: List<UIBlock>): List<UIBlock> {
+                        return list.map { it.copy(isVisible = isVisible, children = updateVisibility(it.children)) }
+                    }
+                    page.copy(blocks = updateVisibility(page.blocks))
+                } else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+    }
+
     fun navigateTo(screen: AppScreen) = _state.update { it.copy(globalState = it.globalState.copy(currentScreen = screen)) }
     fun setThemeMode(mode: ThemeMode) = _state.update { it.copy(globalState = it.globalState.copy(themeMode = mode)) }
     fun saveApiKey(newKey: String) = viewModelScope.launch { configManager.saveKey("GEMINI_API_KEY", newKey); val globalKey = configManager.loadGlobalGeminiKey() ?: ""; val effectiveKey = newKey.ifBlank { globalKey }; _state.update { it.copy(globalState = it.globalState.copy(apiKey = newKey, effectiveApiKey = effectiveKey)) } }

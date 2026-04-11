@@ -62,11 +62,13 @@ fun TemplateEditorScreen(
     onAddBlock: (UIBlockType) -> Unit,
     onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit,
     onDeleteBlock: (String) -> Unit,
-    onMoveBlock: (String, String?, DropPosition) -> Unit,
+    onMoveBlock: (String, String?, org.gemini.ui.forge.model.ui.DropPosition) -> Unit,
     onBlockDragged: (String, Float, Float) -> Unit,
     onRenameBlock: (String, String) -> Unit,
+    onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> },
+    onToggleAllVisibility: (Boolean) -> Unit = {},
     onSaveTemplate: () -> Unit
-) {
+    ) {
     var showVisualRefine by remember { mutableStateOf(false) }
     var refineTargetId by remember { mutableStateOf<String?>(null) } // 如果为 null 代表是自由框选
 
@@ -140,6 +142,8 @@ fun TemplateEditorScreen(
                         onMoveBlock = onMoveBlock,
                         onAddCustomBlock = onAddCustomBlock,
                         onRenameBlock = onRenameBlock,
+                        onToggleVisibility = onToggleVisibility,
+                        onToggleAllVisibility = onToggleAllVisibility,
                         modifier = Modifier.weight(1f)
                     )
                 }
