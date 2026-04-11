@@ -42,6 +42,18 @@ expect fun ByteArray.calculateMd5(): String
 expect suspend fun isFileExists(filePath: String): Boolean
 
 /**
+ * 跨平台执行系统命令并捕获日志。
+ * @param command 命令 (如 "python")
+ * @param args 参数列表
+ * @param onLog 日志回调
+ */
+expect suspend fun executeSystemCommand(
+    command: String,
+    args: List<String>,
+    onLog: (String) -> Unit
+): Boolean
+
+/**
  * 根据文件路径或 URI 后缀名推断准确的 MIME 类型。
  * 确保 Gemini API 能接收到正确的媒体格式描述，从而提高识别准确度。
  */

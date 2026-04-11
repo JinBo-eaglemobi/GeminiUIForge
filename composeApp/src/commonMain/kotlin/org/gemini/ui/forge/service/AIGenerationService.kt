@@ -72,12 +72,19 @@ class AIGenerationService(
         apiKey: String = "",
         maxRetries: Int = 3,
         targetWidth: Float? = null,
-        targetHeight: Float? = null
+        targetHeight: Float? = null,
+        isPng: Boolean = false // 新增参数
     ): List<String> {
         if (apiKey.isBlank()) throw Exception("API 密钥未配置")
         val url = ApiConfig.getImagenEndpoint(apiKey)
         val client = NetworkClient.shared
-        val fullPrompt = "Game UI asset for a Slot game. Type: $blockType. Style requirements: $userPrompt"
+        
+        // 核心优化：如果请求 PNG，自动追加易于抠图的 Prompt 指令
+        val transparentRequirements = if (isPng) {
+            ", on a clean, solid, high-contrast flat white background. The background should be completely plain and simple to facilitate background removal. Ensure the main object's edges and any gradients or glows are clean and preserved."
+        } else ""
+        
+        val fullPrompt = "Game UI asset for a Slot game. Type: $blockType. Style requirements: $userPrompt $transparentRequirements"
 
         // 计算最接近的标准比例
         val aspectRatio = if (targetWidth != null && targetHeight != null && targetHeight > 0) {
@@ -101,7 +108,7 @@ class AIGenerationService(
             put("parameters", buildJsonObject {
                 put("sampleCount", count.coerceIn(1, 4))
                 put("aspectRatio", aspectRatio)
-                put("outputOptions", buildJsonObject { put("mimeType", "image/jpeg") })
+                put("outputOptions", buildJsonObject { put("mimeType", if (isPng) "image/png" else "image/jpeg") })
             })
         }.toString()
 
@@ -116,7 +123,7 @@ class AIGenerationService(
                     val jsonResponse = jsonConfig.parseToJsonElement(response.bodyAsText())
                     return jsonResponse.jsonObject["predictions"]?.jsonArray?.mapNotNull {
                         val base64 = it.jsonObject["bytesBase64Encoded"]?.jsonPrimitive?.content
-                        if (base64 != null) "data:image/jpeg;base64,$base64" else null
+                        if (base64 != null) "data:${if (isPng) "image/png" else "image/jpeg"};base64,$base64" else null
                     } ?: emptyList()
                 } else throw Exception("API 错误: ${response.status}")
             } catch (e: Exception) {
@@ -125,6 +132,77 @@ class AIGenerationService(
             }
         }
         throw lastException ?: Exception("生成图片未知错误")
+    }
+
+    /**
+     * 调用云端 API 执行背景去除 (Vertex AI / Imagen 4 标准版)
+     */
+    suspend fun removeBackgroundCloud(
+        imageBytes: ByteArray,
+        apiKey: String
+    ): ByteArray? {
+        if (apiKey.isBlank()) {
+            AppLogger.e(TAG, "Cloud BG removal failed: API Key is empty")
+            return null
+        }
+        
+        val url = ApiConfig.getImagenEndpoint(apiKey) 
+        val client = NetworkClient.shared
+
+        AppLogger.i(TAG, "Cloud BG removal starting... Image size: ${imageBytes.size / 1024} KB")
+
+        @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+        val base64Image = kotlin.io.encoding.Base64.Default.encode(imageBytes)
+
+        val requestBody = buildJsonObject {
+            put("instances", buildJsonArray {
+                add(buildJsonObject {
+                    put("image", buildJsonObject {
+                        put("bytesBase64Encoded", base64Image)
+                    })
+                    put("prompt", "remove the background and make it transparent, keep only the main object")
+                })
+            })
+            put("parameters", buildJsonObject {
+                put("editConfig", buildJsonObject {
+                    put("editMode", "background_removal") 
+                })
+                put("outputOptions", buildJsonObject {
+                    put("mimeType", "image/png")
+                })
+            })
+        }.toString()
+
+        val startTime = org.gemini.ui.forge.getCurrentTimeMillis()
+        return try {
+            val response = client.post(url) {
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+            }
+            val duration = org.gemini.ui.forge.getCurrentTimeMillis() - startTime
+            
+            if (response.status.isSuccess()) {
+                val responseText = response.bodyAsText()
+                val jsonResponse = jsonConfig.parseToJsonElement(responseText)
+                val resultBase64 = jsonResponse.jsonObject["predictions"]?.jsonArray?.firstOrNull()?.jsonObject?.get("bytesBase64Encoded")?.jsonPrimitive?.content
+                
+                if (resultBase64 != null) {
+                    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                    val resultBytes = kotlin.io.encoding.Base64.Default.decode(resultBase64)
+                    AppLogger.i(TAG, "Cloud BG removal success! Duration: ${duration}ms, Output size: ${resultBytes.size / 1024} KB")
+                    resultBytes
+                } else {
+                    AppLogger.e(TAG, "Cloud BG removal failed: No image data in response. Full body: $responseText")
+                    null
+                }
+            } else {
+                AppLogger.e(TAG, "Cloud BG removal failed with status ${response.status}. Body: ${response.bodyAsText()}")
+                null
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Cloud BG removal exception after ${org.gemini.ui.forge.getCurrentTimeMillis() - startTime}ms", e)
+            null
+        }
     }
 
     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)

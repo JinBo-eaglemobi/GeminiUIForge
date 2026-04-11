@@ -48,6 +48,8 @@ fun TemplateAssetGenScreen(
     onBlockDragged: (String, Float, Float) -> Unit,
     onRenameBlock: (String, String) -> Unit,
     onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit,
+    onToggleTransparent: (Boolean) -> Unit = {},
+    onTogglePrioritizeCloud: (Boolean) -> Unit = {}, // 新增
     onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> },
     onToggleAllVisibility: (Boolean) -> Unit = {}
 ) {
@@ -225,6 +227,10 @@ fun TemplateAssetGenScreen(
                     PropertyPanel(
                         selectedBlock = state.selectedBlock,
                         currentEditingLang = state.currentEditingPromptLang,
+                        isGenerateTransparent = state.isGenerateTransparent,
+                        isPrioritizeCloud = state.isPrioritizeCloudRemoval,
+                        onToggleTransparent = onToggleTransparent,
+                        onTogglePrioritizeCloud = onTogglePrioritizeCloud,
                         onSwitchEditingLang = onSwitchEditingLanguage,
                         isGenerating = state.isGenerating,
                         onPromptChanged = onPromptChanged,
@@ -250,6 +256,10 @@ fun TemplateAssetGenScreen(
 private fun PropertyPanel(
     selectedBlock: org.gemini.ui.forge.model.ui.UIBlock?,
     currentEditingLang: PromptLanguage,
+    isGenerateTransparent: Boolean,
+    isPrioritizeCloud: Boolean,
+    onToggleTransparent: (Boolean) -> Unit,
+    onTogglePrioritizeCloud: (Boolean) -> Unit,
     onSwitchEditingLang: (PromptLanguage) -> Unit,
     isGenerating: Boolean,
     onPromptChanged: (String) -> Unit,
@@ -350,6 +360,42 @@ private fun PropertyPanel(
                 maxLines = 8,
                 enabled = !isGenerating
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 1. 透明背景开关
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = isGenerateTransparent,
+                    onCheckedChange = { onToggleTransparent(it) },
+                    enabled = !isGenerating
+                )
+                Column(modifier = Modifier.padding(start = 8.dp)) {
+                    Text("生成透明背景 (PNG)", style = MaterialTheme.typography.bodyMedium)
+                    Text("开启后将自动处理背景", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            // 2. 优先云端抠图开关 (仅在开启透明背景时显示)
+            if (isGenerateTransparent) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = isPrioritizeCloud,
+                        onCheckedChange = { onTogglePrioritizeCloud(it) },
+                        enabled = !isGenerating
+                    )
+                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                        Text("优先使用 Vertex AI 云端抠图", style = MaterialTheme.typography.bodyMedium)
+                        Text("失败时将自动回退到本地脚本", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

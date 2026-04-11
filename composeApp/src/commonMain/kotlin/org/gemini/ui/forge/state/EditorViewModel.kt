@@ -663,18 +663,13 @@ class EditorViewModel(
         val currentLang = _state.value.currentEditingPromptLang
         val submitPrompt = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
         val projectName = _state.value.projectName
+        val isTransparent = _state.value.isGenerateTransparent
+        val prioritizeCloud = _state.value.isPrioritizeCloudRemoval
         
-        // 提取宽高并附加到提示词中
-        val width = block.bounds.width.toInt()
-        val height = block.bounds.height.toInt()
-        val promptWithDimensions = if (currentLang == PromptLanguage.EN) {
-            "$submitPrompt. Target image dimensions: ${width}x${height} pixels."
-        } else {
-            "$submitPrompt (图片的生成比例应符合宽:${width}像素, 高:${height}像素)"
-        }
-
         viewModelScope.launch {
             _state.update { it.copy(isGenerating = true, generatedCandidates = emptyList()) }
+            AppLogger.i("EditorViewModel", ">>> START GENERATION FOR BLOCK [${block.id}] <<<")
+            
             try {
                 val candidatesBase64 = aiService.generateImages(
                     blockType = block.type.name, 
@@ -682,17 +677,85 @@ class EditorViewModel(
                     apiKey = apiKey, 
                     maxRetries = _state.value.globalState.maxRetries,
                     targetWidth = block.bounds.width,
-                    targetHeight = block.bounds.height
+                    targetHeight = block.bounds.height,
+                    isPng = isTransparent
                 )
+                
+                AppLogger.i("EditorViewModel", "AI generated ${candidatesBase64.size} candidate(s). Processing...")
+
                 val candidatePaths = candidatesBase64.mapIndexed { index, base64 ->
                     val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
                     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
                     val bytes = kotlin.io.encoding.Base64.Default.decode(pure)
-                    // 核心修改：不再存入 cache，直接存入 assets/blockId/
-                    templateRepo.saveBlockResource(projectName, block.id, "gen", bytes)
+                    
+                    val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
+                    val originalUri = templateRepo.saveBlockResource(projectName, block.id, "gen_${index}_$timestamp", bytes)
+                    AppLogger.d("EditorViewModel", "Saved original candidate: $originalUri")
+                    
+                    if (isTransparent) {
+                        var finalProcessedBytes: ByteArray? = null
+                        var methodUsed = "NONE"
+                        
+                        // 1. 优先尝试云端 (Vertex AI 模式)
+                        if (prioritizeCloud) {
+                            AppLogger.i("EditorViewModel", "[Cloud Process] Requesting background removal via Cloud API...")
+                            val cloudStartTime = org.gemini.ui.forge.getCurrentTimeMillis()
+                            finalProcessedBytes = aiService.removeBackgroundCloud(bytes, apiKey)
+                            if (finalProcessedBytes != null) {
+                                AppLogger.i("EditorViewModel", "[Cloud Process] SUCCESS in ${org.gemini.ui.forge.getCurrentTimeMillis() - cloudStartTime}ms")
+                                methodUsed = "CLOUD"
+                            } else {
+                                AppLogger.e("EditorViewModel", "[Cloud Process] FAILED. Falling back to local script.")
+                            }
+                        }
+
+                        // 2. 如果云端未开启或失败，执行本地脚本
+                        if (finalProcessedBytes == null) {
+                            AppLogger.i("EditorViewModel", "[Local Process] Executing Python script [remove_bg.py]...")
+                            val outputUri = originalUri.replace("gen_", "local_trans_").replace(".jpg", ".png").replace(".jpeg", ".png")
+                            
+                            // 自动寻找脚本路径：尝试 ./scripts 或 ./composeApp/scripts
+                            val possiblePaths = listOf("scripts/remove_bg.py", "composeApp/scripts/remove_bg.py")
+                            var actualScriptPath: String? = null
+                            for (p in possiblePaths) {
+                                if (org.gemini.ui.forge.utils.isFileExists(p)) {
+                                    actualScriptPath = p
+                                    break
+                                }
+                            }
+
+                            if (actualScriptPath != null) {
+                                val success = org.gemini.ui.forge.utils.executeSystemCommand(
+                                    "python", listOf(actualScriptPath, originalUri, outputUri),
+                                    onLog = { AppLogger.d("PythonScript", it) }
+                                )
+                                
+                                if (success && org.gemini.ui.forge.utils.isFileExists(outputUri)) {
+                                    AppLogger.i("EditorViewModel", "[Local Process] SUCCESS. Saved to $outputUri")
+                                    return@mapIndexed outputUri
+                                } else {
+                                    AppLogger.e("EditorViewModel", "[Local Process] FAILED execution. Using original.")
+                                    return@mapIndexed originalUri
+                                }
+                            } else {
+                                AppLogger.e("EditorViewModel", "[Local Process] FAILED: Could not find remove_bg.py in $possiblePaths")
+                                return@mapIndexed originalUri
+                            }
+                        } else {
+                            // 云端成功的处理
+                            val cloudUri = originalUri.replace("gen_", "cloud_trans_").replace(".jpg", ".png").replace(".jpeg", ".png")
+                            val savedCloudUri = templateRepo.saveBlockResource(projectName, block.id, cloudUri.substringAfterLast("/").substringBeforeLast("."), finalProcessedBytes)
+                            AppLogger.i("EditorViewModel", "Cloud-processed image saved: $savedCloudUri")
+                            return@mapIndexed savedCloudUri
+                        }
+                    } else {
+                        originalUri
+                    }
                 }
                 _state.update { it.copy(generatedCandidates = candidatePaths, isGenerating = false) }
+                AppLogger.i("EditorViewModel", "<<< GENERATION & PROCESSING COMPLETE >>>")
             } catch (e: Exception) {
+                AppLogger.e("EditorViewModel", "CRITICAL ERROR during generation/processing", e)
                 _state.update { it.copy(isGenerating = false) }
             }
         }
@@ -910,6 +973,14 @@ class EditorViewModel(
     fun updateStorageDir(newPath: String) = viewModelScope.launch { if (templateRepo.updateStorageDir(newPath)) _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) } }
     fun setMaxRetries(count: Int) = viewModelScope.launch { configManager.saveKey("API_MAX_RETRIES", count.toString()); _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) } }
     fun switchEditingLanguage(lang: PromptLanguage) = _state.update { it.copy(currentEditingPromptLang = lang) }
+
+    fun setGenerateTransparent(enabled: Boolean) {
+        _state.update { it.copy(isGenerateTransparent = enabled) }
+    }
+
+    fun setPrioritizeCloudRemoval(enabled: Boolean) {
+        _state.update { it.copy(isPrioritizeCloudRemoval = enabled) }
+    }
 
     fun setReferenceMode(mode: ReferenceDisplayMode) {
         _state.update { it.copy(referenceMode = mode) }

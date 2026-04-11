@@ -21,26 +21,33 @@ object AppLogger {
     
     init {
         loggerScope.launch {
-            val fullLogBuffer = StringBuilder()
-            val errorLogBuffer = StringBuilder()
+            val debugLogBuffer = StringBuilder() // 全部日志
+            val infoLogBuffer = StringBuilder()  // 仅 INFO 和 ERROR
+            val errorLogBuffer = StringBuilder() // 仅 ERROR
             var lastFlushTime = org.gemini.ui.forge.getCurrentTimeMillis()
             
             while (true) {
-                val event = withTimeoutOrNull(1000L) {
+                val event = withTimeoutOrNull(500L) {
                     logChannel.receive()
                 }
 
                 if (event != null) {
                     val formatted = formatForFile(event)
-                    fullLogBuffer.append(formatted).append("\n")
+                    // 所有日志进 debug.log
+                    debugLogBuffer.append(formatted).append("\n")
+                    
+                    if (event.level == "INFO" || event.level == "ERROR") {
+                        infoLogBuffer.append(formatted).append("\n")
+                    }
                     if (event.level == "ERROR") {
                         errorLogBuffer.append(formatted).append("\n")
                     }
                 }
 
                 val now = org.gemini.ui.forge.getCurrentTimeMillis()
-                if (fullLogBuffer.length > 8000 || (now - lastFlushTime >= 1000 && fullLogBuffer.isNotEmpty())) {
-                    flushToDisk(fullLogBuffer, errorLogBuffer)
+                // 当缓存足够大或者时间超过 1 秒时刷入磁盘
+                if (debugLogBuffer.length > 5000 || (now - lastFlushTime >= 1000 && debugLogBuffer.isNotEmpty())) {
+                    flushToDisk(debugLogBuffer, infoLogBuffer, errorLogBuffer)
                     lastFlushTime = now
                 }
             }
@@ -62,19 +69,23 @@ object AppLogger {
         }
     }
 
-    private suspend fun flushToDisk(fullBuf: StringBuilder, errorBuf: StringBuilder) {
+    private suspend fun flushToDisk(debugBuf: StringBuilder, infoBuf: StringBuilder, errorBuf: StringBuilder) {
         val logDir = getPlatformLogDirectory()
         if (logDir.isNotEmpty()) {
-            if (fullBuf.isNotEmpty()) {
-                appendToLocalFile("$logDir/app_full.log", fullBuf.toString())
-                fullBuf.clear()
+            if (debugBuf.isNotEmpty()) {
+                appendToLocalFile("$logDir/app_debug.log", debugBuf.toString())
+                debugBuf.clear()
+            }
+            if (infoBuf.isNotEmpty()) {
+                appendToLocalFile("$logDir/app_info.log", infoBuf.toString())
+                infoBuf.clear()
             }
             if (errorBuf.isNotEmpty()) {
                 appendToLocalFile("$logDir/app_error.log", errorBuf.toString())
                 errorBuf.clear()
             }
         } else {
-            fullBuf.clear(); errorBuf.clear()
+            debugBuf.clear(); infoBuf.clear(); errorBuf.clear()
         }
     }
 

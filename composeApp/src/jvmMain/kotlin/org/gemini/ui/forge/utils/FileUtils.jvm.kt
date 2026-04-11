@@ -52,3 +52,30 @@ actual fun ByteArray.calculateMd5(): String {
     val digest = md.digest(this)
     return digest.joinToString("") { "%02x".format(it) }
 }
+
+actual suspend fun executeSystemCommand(
+    command: String,
+    args: List<String>,
+    onLog: (String) -> Unit
+): Boolean {
+    val fullCmd = listOf(command) + args
+    AppLogger.i("SystemCommand", "[RAW COMMAND EXEC] ${fullCmd.joinToString(" ")}")
+    return try {
+        val process = ProcessBuilder(fullCmd)
+            .redirectErrorStream(true)
+            .start()
+        
+        process.inputStream.bufferedReader().useLines { lines ->
+            lines.forEach { onLog(it) }
+        }
+        
+        val exitCode = process.waitFor()
+        if (exitCode != 0) {
+            onLog("Process exited with non-zero code: $exitCode")
+        }
+        exitCode == 0
+    } catch (e: Exception) {
+        onLog("Failed to execute command: ${e.message}")
+        false
+    }
+}

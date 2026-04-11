@@ -63,3 +63,12 @@ actual fun ByteArray.calculateMd5(): String {
     // 鉴于这是一个辅助功能，我们先实现一个基础的快速哈希占位，或调用平台 CC_MD5
     return this.contentHashCode().toString(16)
 }
+
+actual suspend fun executeSystemCommand(
+    command: String,
+    args: List<String>,
+    onLog: (String) -> Unit
+): Boolean {
+    onLog("System command execution is not supported on iOS.")
+    return false
+}

@@ -17,6 +17,8 @@ data class EditorState(
     val selectedBlockId: String? = null,
     val currentEditingPromptLang: PromptLanguage = PromptLanguage.ZH,
     val isGenerating: Boolean = false,
+    val isGenerateTransparent: Boolean = false, // 是否生成透明背景
+    val isPrioritizeCloudRemoval: Boolean = false, // 新增：是否优先云端抠图
     val generatedCandidates: List<String> = emptyList(),
     
     // 视觉对照相关状态

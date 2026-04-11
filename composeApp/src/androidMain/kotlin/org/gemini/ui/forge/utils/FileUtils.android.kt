@@ -52,3 +52,13 @@ actual fun ByteArray.calculateMd5(): String {
     val digest = md.digest(this)
     return digest.joinToString("") { "%02x".format(it) }
 }
+
+actual suspend fun executeSystemCommand(
+    command: String,
+    args: List<String>,
+    onLog: (String) -> Unit
+): Boolean {
+    // Android 通常不通过这种方式执行外部脚本，返回 false
+    onLog("System command execution is not supported on Android.")
+    return false
+}

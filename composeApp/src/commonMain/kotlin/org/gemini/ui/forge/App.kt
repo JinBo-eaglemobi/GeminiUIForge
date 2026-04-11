@@ -301,6 +301,8 @@ fun App(typography: Typography? = null) {
                                 onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },
                                 onRenameBlock = { oldId, newId -> viewModel.renameBlock(oldId, newId) },        
                                 onAddCustomBlock = { id, type, w, h -> viewModel.addCustomBlock(id, type, w, h) },
+                                onToggleTransparent = { viewModel.setGenerateTransparent(it) },
+                                onTogglePrioritizeCloud = { viewModel.setPrioritizeCloudRemoval(it) }, // 新增
                                 onToggleVisibility = { id, isVisible -> viewModel.toggleBlockVisibility(id, isVisible) },
                                 onToggleAllVisibility = { isVisible -> viewModel.toggleAllBlocksVisibility(isVisible) }
                                 )

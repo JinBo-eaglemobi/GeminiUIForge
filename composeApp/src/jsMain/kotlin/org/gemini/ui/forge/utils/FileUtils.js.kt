@@ -58,3 +58,12 @@ actual fun ByteArray.calculateMd5(): String {
     }
     return hash.toString(16)
 }
+
+actual suspend fun executeSystemCommand(
+    command: String,
+    args: List<String>,
+    onLog: (String) -> Unit
+): Boolean {
+    onLog("System command execution is not supported on Browser/JS.")
+    return false
+}
