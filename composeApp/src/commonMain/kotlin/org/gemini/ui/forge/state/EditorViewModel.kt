@@ -678,9 +678,11 @@ class EditorViewModel(
             try {
                 val candidatesBase64 = aiService.generateImages(
                     blockType = block.type.name, 
-                    userPrompt = promptWithDimensions, 
+                    userPrompt = submitPrompt, 
                     apiKey = apiKey, 
-                    maxRetries = _state.value.globalState.maxRetries
+                    maxRetries = _state.value.globalState.maxRetries,
+                    targetWidth = block.bounds.width,
+                    targetHeight = block.bounds.height
                 )
                 val candidatePaths = candidatesBase64.mapIndexed { index, base64 ->
                     val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
@@ -692,6 +694,58 @@ class EditorViewModel(
                 _state.update { it.copy(generatedCandidates = candidatePaths, isGenerating = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(isGenerating = false) }
+            }
+        }
+    }
+
+    /**
+     * 执行物理裁剪并保存新资源，同时更新 Block 引用
+     */
+    fun performCropAndApply(blockId: String, sourceUri: String, cropRect: SerialRect) {
+        val projectName = _state.value.projectName
+        val block = state.value.project.pages.flatMap { it.blocks }.let { findBlockById(it, blockId) } ?: return
+        
+        viewModelScope.launch {
+            try {
+                // 执行裁剪。注意：AssetCropDialog 传回的是归一化 [0..1] 的 SerialRect
+                // 现有的 ImageUtils.cropImage 接收的是逻辑画布坐标。
+                // 我需要一个新的 cropImageNormalized 或者是转换一下。
+                
+                val imageSize = org.gemini.ui.forge.utils.getImageSize(sourceUri) ?: return@launch
+                val physicalRect = SerialRect(
+                    left = cropRect.left * imageSize.first,
+                    top = cropRect.top * imageSize.second,
+                    right = cropRect.right * imageSize.first,
+                    bottom = cropRect.bottom * imageSize.second
+                )
+                
+                // 借用现有的 cropImage，传入图片实际尺寸作为“逻辑画布”
+                val croppedBytes = org.gemini.ui.forge.utils.cropImage(
+                    imageSource = sourceUri,
+                    bounds = physicalRect,
+                    logicalWidth = imageSize.first.toFloat(),
+                    logicalHeight = imageSize.second.toFloat()
+                ) ?: throw Exception("裁剪执行失败")
+                
+                // 保存新资源
+                val newUri = templateRepo.saveBlockResource(projectName, blockId, "crop_${org.gemini.ui.forge.getCurrentTimeMillis()}", croppedBytes)
+                
+                // 更新状态
+                _state.update { currentState ->
+                    val pageId = currentState.selectedPageId ?: return@update currentState
+                    val updatedPages = currentState.project.pages.map { page ->
+                        if (page.id == pageId) {
+                            page.copy(blocks = updateBlockInList(page.blocks, blockId) { b ->
+                                b.copy(currentImageUri = newUri, cropRect = cropRect)
+                            })
+                        } else page
+                    }
+                    currentState.copy(project = currentState.project.copy(pages = updatedPages))
+                }
+                templateRepo.saveTemplate(projectName, _state.value.project)
+                AppLogger.d("EditorViewModel", "Crop applied: $newUri for $blockId")
+            } catch (e: Exception) {
+                AppLogger.e("EditorViewModel", "执行裁剪保存失败", e)
             }
         }
     }

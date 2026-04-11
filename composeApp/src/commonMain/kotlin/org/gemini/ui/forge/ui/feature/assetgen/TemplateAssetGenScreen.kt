@@ -39,7 +39,7 @@ fun TemplateAssetGenScreen(
     onPromptChanged: (String) -> Unit,
     onSwitchEditingLanguage: (PromptLanguage) -> Unit,
     onGenerateRequested: () -> Unit,
-    onImageSelected: (String) -> Unit,
+    onImageSelected: (String, org.gemini.ui.forge.model.ui.SerialRect?) -> Unit,
     onDeleteImages: (List<String>) -> Unit,
     onClearHistoricalCandidates: () -> Unit, // 清除本次生成的候选
     onClearSelectedImage: (String) -> Unit, // 解除绑定
@@ -56,6 +56,9 @@ fun TemplateAssetGenScreen(
     var historicalImages by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoadingHistory by remember { mutableStateOf(false) }
 
+    // 裁剪管理状态
+    var pendingCropUri by remember { mutableStateOf<String?>(null) }
+
     // 处理 AI 刚生成完毕的弹窗展示
     var showCurrentGenerationResults by remember { mutableStateOf(false) }
     LaunchedEffect(state.isGenerating, state.generatedCandidates) {
@@ -64,13 +67,35 @@ fun TemplateAssetGenScreen(
         }
     }
 
+    if (pendingCropUri != null) {
+        AssetCropDialog(
+            imageUri = pendingCropUri!!,
+            targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
+            targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
+            onConfirm = { rect ->
+                state.selectedBlockId?.let { id ->
+                    // 通过 ViewModel 执行裁剪
+                    (onImageSelected as? (String, org.gemini.ui.forge.model.ui.SerialRect) -> Unit)?.invoke(pendingCropUri!!, rect)
+                }
+                pendingCropUri = null
+            },
+            onDismiss = { pendingCropUri = null }
+        )
+    }
+
     if (showCurrentGenerationResults) {
         AssetSelectionDialog(
             title = "AI 生成资源预览",
             candidates = state.generatedCandidates,
             initialSelectedUri = state.selectedBlock?.currentImageUri,
+            targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
+            targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
             onImageSelected = { 
-                onImageSelected(it)
+                onImageSelected(it, null)
+                showCurrentGenerationResults = false
+            },
+            onCropRequested = { 
+                pendingCropUri = it
                 showCurrentGenerationResults = false
             },
             onDeleteImages = { uris ->
@@ -90,8 +115,14 @@ fun TemplateAssetGenScreen(
             title = "历史资源列表",
             candidates = historicalImages,
             initialSelectedUri = state.selectedBlock?.currentImageUri,
+            targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
+            targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
             onImageSelected = {
-                onImageSelected(it)
+                onImageSelected(it, null)
+                showHistoricalDialog = false
+            },
+            onCropRequested = {
+                pendingCropUri = it
                 showHistoricalDialog = false
             },
             onDeleteImages = { uris ->

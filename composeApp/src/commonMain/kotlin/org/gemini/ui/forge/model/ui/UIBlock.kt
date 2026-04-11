@@ -19,6 +19,7 @@ data class UIBlock(
     val type: UIBlockType,
     val bounds: SerialRect,
     val currentImageUri: String? = null, // 统一图片资源路径（包含分析裁剪图和用户生成图）
+    val cropRect: SerialRect? = null, // 新增：相对于原始图片的裁剪区域 [0..1] 或绝对像素
     val userPromptEn: String = "",
     val userPromptZh: String = "",
     val children: List<UIBlock> = emptyList(),

@@ -33,7 +33,10 @@ fun AssetSelectionDialog(
     title: String,
     candidates: List<String>,
     initialSelectedUri: String? = null,
+    targetWidth: Float = 0f,
+    targetHeight: Float = 0f,
     onImageSelected: (String) -> Unit,
+    onCropRequested: (String) -> Unit = {}, // 新增：请求裁剪
     onDeleteImages: (List<String>) -> Unit,
     onClearAll: () -> Unit,
     onDismiss: () -> Unit
@@ -41,6 +44,21 @@ fun AssetSelectionDialog(
     // 基础状态
     var tempSelectedUri by remember { mutableStateOf(initialSelectedUri) }
     
+    // 目标比例
+    val targetRatio = if (targetHeight > 0) targetWidth / targetHeight else 1f
+
+    // 辅助：获取带尺寸信息的候选列表并排序
+    var sortedCandidates by remember { mutableStateOf<List<Pair<String, Pair<Int, Int>?>>>(emptyList()) }
+    LaunchedEffect(candidates) {
+        val withSize = candidates.map { it to org.gemini.ui.forge.utils.getImageSize(it) }
+        sortedCandidates = withSize.sortedBy { (_, size) ->
+            if (size == null) 2f else {
+                val ratio = size.first.toFloat() / size.second
+                kotlin.math.abs(ratio - targetRatio)
+            }
+        }
+    }
+
     // 多选管理状态
     var isMultiSelectMode by remember { mutableStateOf(false) }
     val multiSelectedUris = remember { mutableStateListOf<String>() }
@@ -71,11 +89,19 @@ fun AssetSelectionDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = if (isMultiSelectMode) "批量管理 (${multiSelectedUris.size})" else title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = if (isMultiSelectMode) "批量管理 (${multiSelectedUris.size})" else title,
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                        if (!isMultiSelectMode && targetWidth > 0) {
+                            Text(
+                                "目标尺寸: ${targetWidth.toInt()}x${targetHeight.toInt()} (比例: ${String.format("%.2f", targetRatio)})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
 
                     if (isMultiSelectMode) {
                         IconButton(onClick = { 
@@ -115,7 +141,7 @@ fun AssetSelectionDialog(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(candidates) { uri ->
+                            items(sortedCandidates) { (uri, size) ->
                                 val isChosenInMulti = multiSelectedUris.contains(uri)
                                 val isSelectedInSingle = !isMultiSelectMode && tempSelectedUri == uri
                                 
@@ -123,6 +149,12 @@ fun AssetSelectionDialog(
                                     value = uri.decodeBase64ToBitmap()
                                 }
                                 val bitmap = imageBitmapState.value
+
+                                // 比例匹配检查
+                                val isAdapted = if (size == null) false else {
+                                    val ratio = size.first.toFloat() / size.second
+                                    kotlin.math.abs(ratio - targetRatio) < 0.05
+                                }
 
                                 Card(
                                     modifier = Modifier
@@ -135,6 +167,22 @@ fun AssetSelectionDialog(
                                                     tempSelectedUri = if (isSelectedInSingle) null else uri
                                                 }
                                             },
+                                            onDoubleClick = {
+                                                if (!isMultiSelectMode) {
+                                                    tempSelectedUri = uri
+                                                    val isAdapted = if (size == null) false else {
+                                                        val ratio = size.first.toFloat() / size.second
+                                                        kotlin.math.abs(ratio - targetRatio) < 0.05
+                                                    }
+
+                                                    if (isAdapted && size?.first == targetWidth.toInt() && size?.second == targetHeight.toInt()) {
+                                                        onImageSelected(uri)
+                                                        onDismiss()
+                                                    } else {
+                                                        onCropRequested(uri)
+                                                    }
+                                                }
+                                            },
                                             onLongClick = {
                                                 if (!isMultiSelectMode) {
                                                     isMultiSelectMode = true
@@ -143,8 +191,12 @@ fun AssetSelectionDialog(
                                             }
                                         )
                                         .border(
-                                            width = if (isChosenInMulti || isSelectedInSingle) 3.dp else 0.dp,
-                                            color = if (isChosenInMulti) MaterialTheme.colorScheme.error else if (isSelectedInSingle) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                            width = if (isChosenInMulti || isSelectedInSingle) 3.dp else if (isSelectedInSingle) 1.dp else 0.dp,
+                                            color = when {
+                                                isChosenInMulti -> MaterialTheme.colorScheme.error
+                                                isSelectedInSingle -> MaterialTheme.colorScheme.primary
+                                                else -> Color.Transparent
+                                            },
                                             shape = AppShapes.medium
                                         ),
                                     shape = AppShapes.medium,
@@ -160,6 +212,21 @@ fun AssetSelectionDialog(
                                                 alpha = if (isChosenInMulti || isSelectedInSingle || !isMultiSelectMode) 1.0f else 0.5f
                                             )
                                             
+                                            // 右下角尺寸信息叠加
+                                            Surface(
+                                                color = Color.Black.copy(alpha = 0.6f),
+                                                modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
+                                                shape = RoundedCornerShape(2.dp)
+                                            ) {
+                                                val format = if (uri.contains(".png", ignoreCase = true)) "PNG" else "JPG"
+                                                Text(
+                                                    text = if (size != null) "${size.first}x${size.second} ($format)" else "未知尺寸",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                                    color = if (isAdapted) Color.Green else Color.White
+                                                )
+                                            }
+
                                             if (uri == initialSelectedUri) {
                                                 Surface(
                                                     color = MaterialTheme.colorScheme.primary,
@@ -175,7 +242,7 @@ fun AssetSelectionDialog(
                                                     imageVector = if (isMultiSelectMode) Icons.Default.DeleteSweep else Icons.Default.CheckCircle,
                                                     contentDescription = null,
                                                     tint = if (isMultiSelectMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(24.dp)
+                                                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(24.dp)
                                                 )
                                             }
                                         } else {
@@ -253,9 +320,22 @@ fun AssetSelectionDialog(
 
                         Button(
                             onClick = {
-                                onImageSelected(tempSelectedUri ?: "")
-                                onDismiss()
+                                val uri = tempSelectedUri ?: return@Button
+                                val size = sortedCandidates.find { it.first == uri }?.second
+                                val isAdapted = if (size == null) false else {
+                                    val ratio = size.first.toFloat() / size.second
+                                    kotlin.math.abs(ratio - targetRatio) < 0.05
+                                }
+
+                                if (isAdapted && size?.first == targetWidth.toInt() && size?.second == targetHeight.toInt()) {
+                                    onImageSelected(uri)
+                                    onDismiss()
+                                } else {
+                                    // 需要裁剪适配
+                                    onCropRequested(uri)
+                                }
                             },
+                            enabled = tempSelectedUri != null,
                             shape = AppShapes.medium
                         ) {
                             Text("应用选择")

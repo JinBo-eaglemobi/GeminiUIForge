@@ -70,17 +70,37 @@ class AIGenerationService(
         userPrompt: String,
         count: Int = 4,
         apiKey: String = "",
-        maxRetries: Int = 3
+        maxRetries: Int = 3,
+        targetWidth: Float? = null,
+        targetHeight: Float? = null
     ): List<String> {
         if (apiKey.isBlank()) throw Exception("API 密钥未配置")
         val url = ApiConfig.getImagenEndpoint(apiKey)
         val client = NetworkClient.shared
         val fullPrompt = "Game UI asset for a Slot game. Type: $blockType. Style requirements: $userPrompt"
 
+        // 计算最接近的标准比例
+        val aspectRatio = if (targetWidth != null && targetHeight != null && targetHeight > 0) {
+            val ratio = targetWidth / targetHeight
+            val options = mapOf(
+                "1:1" to 1.0f,
+                "4:3" to 1.333f,
+                "3:4" to 0.75f,
+                "16:9" to 1.777f,
+                "9:16" to 0.562f
+            )
+            options.minByOrNull { kotlin.math.abs(it.value - ratio) }?.key ?: "1:1"
+        } else {
+            "1:1"
+        }
+
+        AppLogger.d(TAG, "Generating images for $blockType. Calculated AspectRatio: $aspectRatio (target: ${targetWidth}x${targetHeight})")
+
         val requestBody = buildJsonObject {
             put("instances", buildJsonArray { add(buildJsonObject { put("prompt", fullPrompt) }) })
             put("parameters", buildJsonObject {
                 put("sampleCount", count.coerceIn(1, 4))
+                put("aspectRatio", aspectRatio)
                 put("outputOptions", buildJsonObject { put("mimeType", "image/jpeg") })
             })
         }.toString()

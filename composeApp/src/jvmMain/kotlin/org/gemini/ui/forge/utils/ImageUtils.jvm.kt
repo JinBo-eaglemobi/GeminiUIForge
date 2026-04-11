@@ -61,3 +61,20 @@ actual suspend fun cropImage(
         null
     }
 }
+
+actual suspend fun getImageSize(uri: String): Pair<Int, Int>? {
+    return try {
+        val bytes = if (uri.startsWith("data:image")) {
+            val pureBase64 = if (uri.contains(",")) uri.substringAfter(",") else uri
+            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+            kotlin.io.encoding.Base64.Default.decode(pureBase64)
+        } else {
+            readLocalFileBytes(uri)
+        } ?: return null
+        
+        val image = ImageIO.read(ByteArrayInputStream(bytes)) ?: return null
+        Pair(image.width, image.height)
+    } catch (e: Exception) {
+        null
+    }
+}

@@ -285,7 +285,15 @@ fun App(typography: Typography? = null) {
                                 onPromptChanged = { viewModel.onUserPromptChanged(it) },
                                 onSwitchEditingLanguage = { viewModel.switchEditingLanguage(it) },
                                 onGenerateRequested = { viewModel.onRequestGeneration(globalState.effectiveApiKey) },
-                                onImageSelected = { viewModel.onImageSelected(it) },
+                                onImageSelected = { uri, cropRect ->
+                                    if (cropRect != null) {
+                                        state.selectedBlockId?.let { id ->
+                                            viewModel.performCropAndApply(id, uri, cropRect)
+                                        }
+                                    } else {
+                                        viewModel.onImageSelected(uri)
+                                    }
+                                },
                                 onDeleteImages = { viewModel.deleteImages(it) }, // 新增
                                 onClearHistoricalCandidates = { viewModel.clearCandidates() },                                onClearSelectedImage = { viewModel.clearSelectedImage(it) },
                                 onLoadHistoricalImages = { viewModel.loadBlockHistoricalImages(it) },

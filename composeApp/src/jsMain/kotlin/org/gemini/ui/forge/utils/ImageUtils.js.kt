@@ -79,3 +79,17 @@ actual suspend fun cropImage(
         null
     }
 }
+
+actual suspend fun getImageSize(uri: String): Pair<Int, Int>? {
+    return try {
+        val deferred = CompletableDeferred<HTMLImageElement>()
+        val img = document.createElement("img") as HTMLImageElement
+        img.onload = { deferred.complete(img) }
+        img.onerror = { _, _, _, _, _ -> deferred.completeExceptionally(Exception("Image load failed")) }
+        img.src = uri
+        val loaded = deferred.await()
+        Pair(loaded.width, loaded.height)
+    } catch (e: Exception) {
+        null
+    }
+}

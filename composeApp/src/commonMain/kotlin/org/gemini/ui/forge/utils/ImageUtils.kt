@@ -24,6 +24,11 @@ expect suspend fun cropImage(
 ): ByteArray?
 
 /**
+ * 跨平台获取图片尺寸
+ */
+expect suspend fun getImageSize(uri: String): Pair<Int, Int>?
+
+/**
  * 处理各种图片源：Base64 字符串、HTTP 链接或本地物理文件路径。
  */
 @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
