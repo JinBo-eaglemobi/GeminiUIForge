@@ -30,7 +30,11 @@ data class EditorState(
     val referenceOpacity: Float = 0.4f,
 
     // 层级与分组状态
-    val editingGroupId: String? = null
+    val editingGroupId: String? = null,
+
+    // AI 提示词状态
+    val defaultRefineInstructionUpdate: String = "",
+    val defaultRefineInstructionNew: String = ""
 ) {
     /** 获取当前选中的页面对象 */
     val currentPage: UIPage?

@@ -94,9 +94,9 @@ fun TemplateEditorScreen(
 
     if (showVisualRefine) {
         val defaultInstruction = if (refineTargetId != null) {
-            "请基于我提供的局部高清图，重新识别并分析这个特定组件的细节。请务必将分析出的 UI 结构（子组件、样式、提示词）更新到我当前选定的这个模块中，不要创建冗余的新模块，也不要修改其他无关区域。"
+            state.defaultRefineInstructionUpdate
         } else {
-            "这段区域是你之前未能识别到的 UI 部分。请重新分析该区域中的视觉元素，提取出准确的 UI 功能组件，并将它们作为新模块正确添加到当前页面的布局结构中。"
+            state.defaultRefineInstructionNew
         }
 
         VisualRefineDialog(

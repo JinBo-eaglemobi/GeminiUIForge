@@ -105,6 +105,14 @@ class EditorViewModel(
         loadBaseTemplate()
         viewModelScope.launch {
             loadSettings()
+            
+            // 加载 AI Refine 提示词
+            val updateInstruction = aiService.promptManager.getPrompt("refine_instruction_update")
+            val newInstruction = aiService.promptManager.getPrompt("refine_instruction_new")
+            _state.update { it.copy(
+                defaultRefineInstructionUpdate = updateInstruction,
+                defaultRefineInstructionNew = newInstruction
+            ) }
         }
     }
 
@@ -557,7 +565,11 @@ class EditorViewModel(
             _state.update { it.copy(isGenerating = true, generationLogs = emptyList(), showAITaskDialog = true) }
             addGenLog(">>> 开始智能优化提示词 [${block.id}] <<<")
             try {
-                val systemInstruction = if (currentLang == PromptLanguage.EN) "Please optimize and polish the following English image generation prompt. Make it highly descriptive, artistic, and technical (lighting, texture, style). Keep it in English: " else "请优化并润色以下关于 UI 组件的中文描述，使其更具设计感、更详尽且生动。请保持使用中文回答： "
+                val systemInstruction = if (currentLang == PromptLanguage.EN) {
+                    aiService.promptManager.getPrompt("optimize_instruction_en")
+                } else {
+                    aiService.promptManager.getPrompt("optimize_instruction_zh")
+                }
                 addGenLog("正在连接 Gemini AI 模型进行润色...")
                 val optimized = aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, _state.value.globalState.maxRetries)
                 onUserPromptChanged(optimized, currentLang)

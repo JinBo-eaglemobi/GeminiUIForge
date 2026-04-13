@@ -1,0 +1,1 @@
+remove the background and make it transparent, keep only the main object

@@ -1,0 +1,1 @@
+Game UI asset for a Slot game. Type: {0}. Style requirements: {1} {2}

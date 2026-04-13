@@ -31,6 +31,9 @@ class AIGenerationService(
         ignoreUnknownKeys = true
         prettyPrint = true
     }
+    
+    // 初始化 Prompt 管理器
+    val promptManager = PromptManager(LocalFileStorage())
 
     /**
      * 内部辅助方法：同步将日志发送到 UI 回调和磁盘日志系统。
@@ -81,10 +84,14 @@ class AIGenerationService(
         
         // 核心优化：如果请求 PNG，自动追加易于抠图的 Prompt 指令
         val transparentRequirements = if (isPng) {
-            ", on a clean, solid, high-contrast flat white background. The background should be completely plain and simple to facilitate background removal. Ensure the main object's edges and any gradients or glows are clean and preserved."
+            promptManager.getPrompt("image_gen_transparent")
         } else ""
         
-        val fullPrompt = "Game UI asset for a Slot game. Type: $blockType. Style requirements: $userPrompt $transparentRequirements"
+        val fullPromptTemplate = promptManager.getPrompt("image_gen_full_prompt")
+        val fullPrompt = fullPromptTemplate
+            .replace("{0}", blockType)
+            .replace("{1}", userPrompt)
+            .replace("{2}", transparentRequirements)
 
         // 计算最接近的标准比例
         val aspectRatio = if (targetWidth != null && targetHeight != null && targetHeight > 0) {
@@ -154,13 +161,15 @@ class AIGenerationService(
         @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
         val base64Image = kotlin.io.encoding.Base64.Default.encode(imageBytes)
 
+        val prompt = promptManager.getPrompt("cloud_bg_removal")
+
         val requestBody = buildJsonObject {
             put("instances", buildJsonArray {
                 add(buildJsonObject {
                     put("image", buildJsonObject {
                         put("bytesBase64Encoded", base64Image)
                     })
-                    put("prompt", "remove the background and make it transparent, keep only the main object")
+                    put("prompt", prompt)
                 })
             })
             put("parameters", buildJsonObject {
@@ -220,12 +229,7 @@ class AIGenerationService(
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
         val client = NetworkClient.shared
 
-        val promptText = try {
-            @OptIn(InternalResourceApi::class)
-            readResourceBytes("prompts/analyze_template.txt").decodeToString()
-        } catch (e: Exception) {
-            "Analyze UI template..."
-        }
+        val promptText = promptManager.getPrompt("analyze_template")
 
         syncLog("🚀 正在同步参考资源 (并发模式)...", onLog)
 
@@ -358,12 +362,7 @@ class AIGenerationService(
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
         val client = NetworkClient.shared
 
-        val promptTemplate = try {
-            @OptIn(InternalResourceApi::class)
-            readResourceBytes("prompts/refine_template.txt").decodeToString()
-        } catch (e: Exception) {
-            "Please refine..."
-        }
+        val promptTemplate = promptManager.getPrompt("refine_template")
 
         val fullPrompt = promptTemplate.replace($$"${USER_INSTRUCTION}", userInstruction)
 
@@ -463,6 +462,10 @@ class AIGenerationService(
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
         val url = ApiConfig.getGenerateContentEndpoint(apiKey)
         val client = NetworkClient.shared
+
+        val promptTemplate = promptManager.getPrompt("ai_optimize_prompt")
+        val fullPrompt = promptTemplate.replace("{0}", originalPrompt)
+
         val requestBody = buildJsonObject {
             put("contents", buildJsonArray {
                 add(buildJsonObject {
@@ -473,7 +476,7 @@ class AIGenerationService(
                             add(buildJsonObject {
                                 put(
                                     "text",
-                                    "Please translate and optimize: $originalPrompt"
+                                    fullPrompt
                                 )
                             })
                         })
@@ -499,3 +502,4 @@ class AIGenerationService(
         throw lastException ?: Exception("优化未知错误")
     }
 }
+

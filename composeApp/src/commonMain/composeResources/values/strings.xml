@@ -166,8 +166,6 @@
     <string name="refine_action_finished">Analysis finished, back to editor</string>
     <string name="refine_logs_empty">No logs available</string>
     <string name="refine_analyzing">Analyzing...</string>
-    <string name="refine_instruction_default_update">Please re-identify and analyze the details of this specific component based on the local high-res image I provided. Ensure the extracted UI structure (sub-components, styles, prompts) is updated to my currently selected module. Do not create redundant new modules or modify unrelated areas.</string>
-    <string name="refine_instruction_default_new">This area is a UI part you failed to recognize previously. Please re-analyze the visual elements in this area, extract accurate UI functional components, and add them correctly to the current page\'s layout structure as a new module.</string>
     <string name="template_name_hint_extended">Template Name (Leave blank to auto-name)</string>
     <string name="action_ai_refine_component">AI Component Refine</string>
     <string name="label_new_id_name">New ID/Name</string>

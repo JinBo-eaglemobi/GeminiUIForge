@@ -166,8 +166,6 @@
     <string name="refine_action_finished">分析完成，返回编辑器</string>
     <string name="refine_logs_empty">暂无运行日志</string>
     <string name="refine_analyzing">正在分析...</string>
-    <string name="refine_instruction_default_update">请基于我提供的局部高清图，重新识别并分析这个特定组件的细节。请务必将分析出的 UI 结构（子组件、样式、提示词）更新到我当前选定的这个模块中，不要创建冗余的新模块，也不要修改其他无关区域。</string>
-    <string name="refine_instruction_default_new">这段区域是你之前未能识别到的 UI 部分。请重新分析该区域中的视觉元素，提取出准确的 UI 功能组件，并将它们作为新模块正确添加到当前页面的布局结构中。</string>
     <string name="template_name_hint_extended">模板名称 (留空则自动根据图片命名)</string>
     <string name="action_ai_refine_component">AI 组件重塑</string>
     <string name="label_new_id_name">新 ID/名称</string>
