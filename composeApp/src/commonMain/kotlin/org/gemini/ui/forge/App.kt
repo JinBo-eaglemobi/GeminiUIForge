@@ -52,9 +52,7 @@ fun App(typography: Typography? = null) {
             kotlinx.coroutines.delay(100)
             try {
                 focusRequester.requestFocus()
-            } catch (e: Exception) {
-                // Ignore focus error
-            }
+            } catch (e: Exception) { }
         }
 
         LaunchedEffect(globalState.languageCode) {
@@ -73,9 +71,7 @@ fun App(typography: Typography? = null) {
 
         val availableModules = buildList {
             templatesList.forEach { (name, projectState) ->
-                // 使用 TemplateRepository 的机制查找物理路径并传递给 module 以启用删除按钮显示
-                val path = "TODO: Fix sync path" // Fix this later if getFilePath needs to be async or remove it
-                add(UIModule(id = name, nameStr = name, projectState = projectState, absolutePath = path))
+                add(UIModule(id = name, nameStr = name, projectState = projectState, absolutePath = ""))
             }
         }
 
@@ -99,11 +95,17 @@ fun App(typography: Typography? = null) {
                 topBar = {
                     AppTopBar(
                         currentScreen = globalState.currentScreen,
-                        onNavigateHome = { viewModel.navigateTo(AppScreen.HOME) },
+                        onNavigateHome = { 
+                            if (state.isGenerating) {
+                                AppLogger.e("App", "资源生成中，请勿退出当前界面")
+                            } else {
+                                viewModel.navigateTo(AppScreen.HOME) 
+                            }
+                        },
                         onLanguageChangeRequested = { languageCode ->
+                            if (state.isGenerating) return@AppTopBar
                             val effectiveLang = if (languageCode == "auto") {
-                                val sysLang =
-                                    originalSystemLanguage ?: androidx.compose.ui.text.intl.Locale.current.language
+                                val sysLang = originalSystemLanguage ?: androidx.compose.ui.text.intl.Locale.current.language
                                 if (sysLang.lowercase().startsWith("zh")) "zh" else "en"
                             } else languageCode
                             setAppLanguage(effectiveLang)
@@ -113,13 +115,11 @@ fun App(typography: Typography? = null) {
                         currentTheme = globalState.themeMode,
                         currentLanguage = globalState.languageCode,
                         onThemeChangeRequested = { viewModel.setThemeMode(it) },
-                        onGenerateTemplateClicked = { viewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
+                        onGenerateTemplateClicked = { if (!state.isGenerating) viewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
                         onCloudAssetManagerClicked = { showCloudAssetDialog = true },
                         onSaveClicked = {
                             if (globalState.currentScreen == AppScreen.TEMPLATE_EDITOR || globalState.currentScreen == AppScreen.TEMPLATE_ASSET_GEN) {
-                                coroutineScope.launch {
-                                    templateRepo.saveTemplate(state.projectName, state.project)
-                                }
+                                coroutineScope.launch { templateRepo.saveTemplate(state.projectName, state.project) }
                             }
                         },
                         currentApiKey = globalState.apiKey,
@@ -145,7 +145,6 @@ fun App(typography: Typography? = null) {
                                 val isShift = event.isShiftPressed
                                 val keyCode = event.key
                                 val shortcutMap = globalState.shortcuts
-
                                 fun matches(action: ShortcutAction): Boolean {
                                     val chord = shortcutMap[action] ?: action.defaultKey
                                     val parts = chord.uppercase().split("+")
@@ -163,31 +162,11 @@ fun App(typography: Typography? = null) {
                                         else -> false
                                     }
                                 }
-
                                 when {
-                                    matches(ShortcutAction.UNDO) -> {
-                                        viewModel.undo(); true
-                                    }
-
-                                    matches(ShortcutAction.REDO) || (isCtrl && isShift && keyCode == Key.Z) -> {
-                                        viewModel.redo(); true
-                                    }
-
-                                    matches(ShortcutAction.SAVE) -> {
-                                        if (globalState.currentScreen == AppScreen.TEMPLATE_EDITOR || globalState.currentScreen == AppScreen.TEMPLATE_ASSET_GEN) {
-                                            coroutineScope.launch {
-                                                templateRepo.saveTemplate(
-                                                    state.projectName,
-                                                    state.project
-                                                )
-                                            }
-                                        }; true
-                                    }
-
-                                    matches(ShortcutAction.DELETE) -> {
-                                        state.selectedBlockId?.let { viewModel.deleteBlock(it) }; true
-                                    }
-
+                                    matches(ShortcutAction.UNDO) -> { viewModel.undo(); true }
+                                    matches(ShortcutAction.REDO) || (isCtrl && isShift && keyCode == Key.Z) -> { viewModel.redo(); true }
+                                    matches(ShortcutAction.SAVE) -> { if (globalState.currentScreen == AppScreen.TEMPLATE_EDITOR || globalState.currentScreen == AppScreen.TEMPLATE_ASSET_GEN) { coroutineScope.launch { templateRepo.saveTemplate(state.projectName, state.project) } }; true }
+                                    matches(ShortcutAction.DELETE) -> { state.selectedBlockId?.let { viewModel.deleteBlock(it) }; true }
                                     else -> false
                                 }
                             } else false
@@ -195,31 +174,21 @@ fun App(typography: Typography? = null) {
                         .focusRequester(focusRequester)
                         .focusable()
                 ) {
-                    // 内容分发
                     when (globalState.currentScreen) {
                         AppScreen.HOME -> {
                             HomeScreen(
                                 modules = availableModules,
                                 onEditLayout = { moduleId ->
                                     val module = availableModules.find { it.id == moduleId }
-                                    if (module?.projectState != null) {
-                                        viewModel.loadProject(module.nameStr ?: moduleId, module.projectState)
-                                    }
+                                    if (module?.projectState != null) viewModel.loadProject(module.nameStr ?: moduleId, module.projectState)
                                     viewModel.navigateTo(AppScreen.TEMPLATE_EDITOR)
                                 },
                                 onGenerateUI = { moduleId ->
                                     val module = availableModules.find { it.id == moduleId }
-                                    if (module?.projectState != null) {
-                                        viewModel.loadProject(module.nameStr ?: moduleId, module.projectState)
-                                    }
+                                    if (module?.projectState != null) viewModel.loadProject(module.nameStr ?: moduleId, module.projectState)
                                     viewModel.navigateTo(AppScreen.TEMPLATE_ASSET_GEN)
                                 },
-                                onDeleteModule = { moduleId ->
-                                    coroutineScope.launch {
-                                        templateRepo.deleteTemplate(moduleId)
-                                        templatesList = templateRepo.getTemplates()
-                                    }
-                                }
+                                onDeleteModule = { moduleId -> coroutineScope.launch { templateRepo.deleteTemplate(moduleId); templatesList = templateRepo.getTemplates() } }
                             )
                         }
 
@@ -228,57 +197,34 @@ fun App(typography: Typography? = null) {
                                 state = state,
                                 onPageSelected = { viewModel.onPageSelected(it) },
                                 onBlockClicked = { viewModel.onBlockClicked(it) },
-                                onBlockBoundsChanged = { id, l, t, r, b ->
-                                    viewModel.updateBlockBounds(
-                                        id,
-                                        l,
-                                        t,
-                                        r,
-                                        b
-                                    )
-                                },
+                                onBlockBoundsChanged = { id, l, t, r, b -> viewModel.updateBlockBounds(id, l, t, r, b) },
                                 onBlockTypeChanged = { id, type -> viewModel.updateBlockType(id, type) },
-                                onPromptChanged = { id, prompt ->
-                                    viewModel.onBlockClicked(id)
-                                    viewModel.onUserPromptChanged(prompt)
-                                },
-                                onOptimizePrompt = { id, onComplete ->
-                                    viewModel.optimizePrompt(id, globalState.effectiveApiKey, onComplete)
-                                },
-                                onRefineArea = { id, bounds, instruction, onLog, onChunk, onComplete ->
-                                    viewModel.onRefineArea(id, bounds, instruction, onLog, onChunk, onComplete)
-                                },
-                                onRefineCustomArea = { bounds, instruction, onLog, onChunk, onComplete ->
-                                    viewModel.onRefineCustomArea(bounds, instruction, onLog, onChunk, onComplete)
-                                },
+                                onPromptChanged = { id, prompt -> viewModel.onBlockClicked(id); viewModel.onUserPromptChanged(prompt) },
+                                onOptimizePrompt = { id, onComplete -> viewModel.optimizePrompt(id, globalState.effectiveApiKey, onComplete) },
+                                onRefineArea = { id, bounds, instruction, onLog, onChunk, onComplete -> viewModel.onRefineArea(id, bounds, instruction, onLog, onChunk, onComplete) },
+                                onRefineCustomArea = { bounds, instruction, onLog, onChunk, onComplete -> viewModel.onRefineCustomArea(bounds, instruction, onLog, onChunk, onComplete) },
                                 onSwitchEditingLanguage = { viewModel.switchEditingLanguage(it) },
                                 onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
                                 onExitGroupEdit = { viewModel.exitGroupEditMode() },
                                 onAddBlock = { type -> viewModel.addBlock(type) },
                                 onAddCustomBlock = { id, type, w, h -> viewModel.addCustomBlock(id, type, w, h) },
                                 onDeleteBlock = { id -> viewModel.deleteBlock(id) },
-                                onMoveBlock = { draggedId, targetId, dropPos ->
-                                    viewModel.moveBlock(
-                                        draggedId,
-                                        targetId,
-                                        dropPos
-                                    )
-                                },
+                                onMoveBlock = { d, t, p -> viewModel.moveBlock(d, t, p) },
                                 onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },
-                                onRenameBlock = { oldId, newId -> viewModel.renameBlock(oldId, newId) },        
+                                onRenameBlock = { old, new -> viewModel.renameBlock(old, new) },        
                                 onToggleVisibility = { id, isVisible -> viewModel.toggleBlockVisibility(id, isVisible) },
                                 onToggleAllVisibility = { isVisible -> viewModel.toggleAllBlocksVisibility(isVisible) },
-                                onSaveTemplate = {
-                                    coroutineScope.launch {
-                                        templateRepo.saveTemplate(state.projectName, state.project)
-                                    }
-                                }
+                                onCancelAITask = { viewModel.cancelGeneration() },
+                                onToggleAILog = { viewModel.toggleGenerationLogVisibility() },
+                                onCloseAITaskDialog = { viewModel.closeAITaskDialog() },
+                                onSaveTemplate = { coroutineScope.launch { templateRepo.saveTemplate(state.projectName, state.project) } }
                                 )
                                 }
+
                         AppScreen.TEMPLATE_ASSET_GEN -> {
                             TemplateAssetGenScreen(
                                 state = state,
-                                onPageSelected = { viewModel.onPageSelected(it) },
+                                onPageSelected = { if (!state.isGenerating) viewModel.onPageSelected(it) },
                                 onBlockClicked = { viewModel.onBlockClicked(it) },
                                 onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
                                 onExitGroupEdit = { viewModel.exitGroupEditMode() },
@@ -286,33 +232,32 @@ fun App(typography: Typography? = null) {
                                 onSwitchEditingLanguage = { viewModel.switchEditingLanguage(it) },
                                 onGenerateRequested = { viewModel.onRequestGeneration(globalState.effectiveApiKey) },
                                 onImageSelected = { uri, cropRect ->
-                                    if (cropRect != null) {
-                                        state.selectedBlockId?.let { id ->
-                                            viewModel.performCropAndApply(id, uri, cropRect)
-                                        }
-                                    } else {
-                                        viewModel.onImageSelected(uri)
-                                    }
+                                    if (cropRect != null) state.selectedBlockId?.let { id -> viewModel.performCropAndApply(id, uri, cropRect) }
+                                    else viewModel.onImageSelected(uri)
                                 },
-                                onDeleteImages = { viewModel.deleteImages(it) }, // 新增
-                                onClearHistoricalCandidates = { viewModel.clearCandidates() },                                onClearSelectedImage = { viewModel.clearSelectedImage(it) },
+                                onDeleteImages = { viewModel.deleteImages(it) },
+                                onClearHistoricalCandidates = { viewModel.clearCandidates() },
+                                onClearSelectedImage = { viewModel.clearSelectedImage(it) },
                                 onLoadHistoricalImages = { viewModel.loadBlockHistoricalImages(it) },
-                                onMoveBlock = { draggedId, targetId, dropPos -> viewModel.moveBlock(draggedId, targetId, dropPos) },
+                                onMoveBlock = { d, t, p -> viewModel.moveBlock(d, t, p) },
                                 onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },
-                                onRenameBlock = { oldId, newId -> viewModel.renameBlock(oldId, newId) },        
+                                onRenameBlock = { old, new -> viewModel.renameBlock(old, new) },        
                                 onAddCustomBlock = { id, type, w, h -> viewModel.addCustomBlock(id, type, w, h) },
                                 onToggleTransparent = { viewModel.setGenerateTransparent(it) },
-                                onTogglePrioritizeCloud = { viewModel.setPrioritizeCloudRemoval(it) }, // 新增
-                                onToggleVisibility = { id, isVisible -> viewModel.toggleBlockVisibility(id, isVisible) },
-                                onToggleAllVisibility = { isVisible -> viewModel.toggleAllBlocksVisibility(isVisible) }
+                                onTogglePrioritizeCloud = { viewModel.setPrioritizeCloudRemoval(it) },
+                                onCancelGeneration = { viewModel.cancelGeneration() },
+                                onToggleGenerationLog = { viewModel.toggleGenerationLogVisibility() },
+                                onCloseAITaskDialog = { viewModel.closeAITaskDialog() },
+                                isVisualMode = state.isVisualMode,
+                                onToggleVisualMode = { viewModel.toggleVisualMode() },
+                                onToggleVisibility = { id, vis -> viewModel.toggleBlockVisibility(id, vis) },
+                                onToggleAllVisibility = { vis -> viewModel.toggleAllBlocksVisibility(vis) }
                                 )
-                                }                        AppScreen.TEMPLATE_GENERATOR -> {
+                                }
+                        AppScreen.TEMPLATE_GENERATOR -> {
                             TemplateGeneratorScreen(
                                 onNavigateBack = { viewModel.navigateTo(AppScreen.HOME) },
-                                onTemplateSaved = { name, projectState ->
-                                    viewModel.loadProject(name, projectState)
-                                    viewModel.navigateTo(AppScreen.TEMPLATE_EDITOR)
-                                },
+                                onTemplateSaved = { name, projectState -> viewModel.loadProject(name, projectState); viewModel.navigateTo(AppScreen.TEMPLATE_EDITOR) },
                                 templateRepo = templateRepo,
                                 apiKey = globalState.effectiveApiKey,
                                 maxRetries = globalState.maxRetries

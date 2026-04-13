@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.utils
 
 import androidx.compose.ui.graphics.ImageBitmap
+import org.gemini.ui.forge.model.ui.SerialRect
 
 actual fun ByteArray.toImageBitmap(): ImageBitmap {
     throw UnsupportedOperationException("toImageBitmap is not implemented on iOS")
@@ -8,10 +9,17 @@ actual fun ByteArray.toImageBitmap(): ImageBitmap {
 
 actual suspend fun cropImage(
     imageSource: String, 
-    bounds: org.gemini.ui.forge.model.ui.SerialRect,
+    bounds: SerialRect,
     logicalWidth: Float,
-    logicalHeight: Float
+    logicalHeight: Float,
+    isPng: Boolean,
+    forceWidth: Int?,
+    forceHeight: Int?
 ): ByteArray? {
+    return null
+}
+
+actual suspend fun trimTransparency(imageSource: String): ByteArray? {
     return null
 }
 

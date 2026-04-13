@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.launch
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.AppLogger
@@ -39,7 +41,7 @@ import kotlin.math.roundToInt
 
 /**
  * 资源二次裁剪对话框 (弹窗 B)
- * 支持基于模块比例的等比缩放裁剪。
+ * 支持基于模块比例的等比缩放裁剪，以及一键去透明背景功能。
  */
 @Composable
 fun AssetCropDialog(
@@ -49,18 +51,23 @@ fun AssetCropDialog(
     onConfirm: (SerialRect) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val imageBitmapState = produceState<ImageBitmap?>(null, imageUri) {
-        value = imageUri.decodeBase64ToBitmap()
-    }
-    val imageBitmap = imageBitmapState.value
+    val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
 
+    // 核心改进：内部管理当前显示的图片 URI，支持在弹窗内“进化”图片
+    var currentDisplayUri by remember { mutableStateOf(imageUri) }
+
+    val imageBitmapState = produceState<ImageBitmap?>(null, currentDisplayUri) {
+        value = currentDisplayUri.decodeBase64ToBitmap()
+    }
+    val imageBitmap = imageBitmapState.value
+
     var imageSize by remember { mutableStateOf<IntSize?>(null) }
-    LaunchedEffect(imageUri) {
-        imageSize = getImageSize(imageUri)?.let { IntSize(it.first, it.second) }
+    LaunchedEffect(currentDisplayUri) {
+        imageSize = getImageSize(currentDisplayUri)?.let { IntSize(it.first, it.second) }
     }
 
-    // 状态记录 (全部使用物理像素 px)
+    // 状态记录 (物理像素 px)
     var containerSize by remember { mutableStateOf(Size.Zero) }
     var cropOffset by remember { mutableStateOf(Offset.Zero) }
     var cropSize by remember { mutableStateOf(Size.Zero) }
@@ -68,7 +75,7 @@ fun AssetCropDialog(
 
     val targetRatio = targetWidth / targetHeight
 
-    // 当容器大小或图片大小确定后，计算图片的实际显示区域并初始化裁剪框
+    // 当容器、图片尺寸或图片源变化时，重新初始化布局
     LaunchedEffect(containerSize, imageSize) {
         val img = imageSize ?: return@LaunchedEffect
         if (containerSize.width <= 0 || containerSize.height <= 0) return@LaunchedEffect
@@ -91,14 +98,14 @@ fun AssetCropDialog(
         val newDisplayRect = Rect(left, top, left + displayW, top + displayH)
         imageDisplayRect = newDisplayRect
 
-        // 初始选择框：在图片区域内取最大可能的 targetRatio 矩形
+        // 初始选择框
         val initialW: Float
         val initialH: Float
         if (displayW / displayH > targetRatio) {
-            initialH = displayH * 0.8f
+            initialH = displayH * 0.85f
             initialW = initialH * targetRatio
         } else {
-            initialW = displayW * 0.8f
+            initialW = displayW * 0.85f
             initialH = initialW / targetRatio
         }
         
@@ -121,7 +128,7 @@ fun AssetCropDialog(
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                 Text("适配裁剪区域", style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    "目标比例: ${String.format("%.2f", targetRatio)} | 图片: ${imageSize?.width ?: 0}x${imageSize?.height ?: 0}",
+                    "目标比例: ${String.format("%.2f", targetRatio)} | 当前底图: ${imageSize?.width ?: 0}x${imageSize?.height ?: 0}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -136,10 +143,9 @@ fun AssetCropDialog(
                         .background(Color.Black.copy(alpha = 0.1f))
                         .clipToBounds()
                         .onGloballyPositioned { containerSize = it.size.toSize() },
-                    contentAlignment = Alignment.TopStart // 必须 TopStart，否则 offset 会乱
+                    contentAlignment = Alignment.TopStart
                 ) {
                     if (imageBitmap != null) {
-                        // 底图 (始终居中 Fit)
                         Image(
                             bitmap = imageBitmap,
                             contentDescription = null,
@@ -147,7 +153,6 @@ fun AssetCropDialog(
                             contentScale = ContentScale.Fit
                         )
 
-                        // 裁剪框 (仅在 imageDisplayRect 准备好后显示)
                         if (imageDisplayRect != Rect.Zero && cropSize.width > 0) {
                             Box(
                                 modifier = Modifier
@@ -173,7 +178,6 @@ fun AssetCropDialog(
                                         }
                                     }
                             ) {
-                                // 右下角缩放手柄
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
@@ -182,13 +186,10 @@ fun AssetCropDialog(
                                         .pointerInput(imageDisplayRect, cropOffset) {
                                             detectDragGestures { change, dragAmount ->
                                                 change.consume()
-                                                // 限制放大不能超过图片右侧和底侧边界
                                                 val maxW = imageDisplayRect.right - cropOffset.x
                                                 val maxH = imageDisplayRect.bottom - cropOffset.y
-                                                
                                                 var deltaX = dragAmount.x
                                                 var deltaY = deltaX / targetRatio
-                                                
                                                 if (cropSize.width + deltaX > maxW) {
                                                     deltaX = maxW - cropSize.width
                                                     deltaY = deltaX / targetRatio
@@ -197,20 +198,13 @@ fun AssetCropDialog(
                                                     deltaY = maxH - cropSize.height
                                                     deltaX = deltaY * targetRatio
                                                 }
-                                                
                                                 val finalW = (cropSize.width + deltaX).coerceAtLeast(40f)
                                                 val finalH = finalW / targetRatio
-                                                
                                                 cropSize = Size(finalW, finalH)
                                             }
                                         }
                                 ) {
-                                    Icon(
-                                        Icons.Default.AspectRatio, 
-                                        null, 
-                                        modifier = Modifier.size(18.dp).align(Alignment.Center), 
-                                        tint = Color.White
-                                    )
+                                    Icon(Icons.Default.AspectRatio, null, modifier = Modifier.size(18.dp).align(Alignment.Center), tint = Color.White)
                                 }
                             }
                         }
@@ -221,26 +215,54 @@ fun AssetCropDialog(
 
                 Spacer(Modifier.height(16.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss, shape = AppShapes.medium) {
-                        Text("取消")
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    AppLogger.i("AssetCropDialog", "Executing Trim Transparency on: $currentDisplayUri")
+                                    val trimmed = org.gemini.ui.forge.utils.trimTransparency(currentDisplayUri)
+                                    if (trimmed != null) {
+                                        val newUri = org.gemini.ui.forge.service.LocalFileStorage().saveBytesToFile(
+                                            "cache/trimmed_${org.gemini.ui.forge.getCurrentTimeMillis()}.png", 
+                                            trimmed
+                                        )
+                                        // 关键修改：仅更新内部图片源，不退出，不调用 onConfirm
+                                        currentDisplayUri = newUri
+                                        AppLogger.i("AssetCropDialog", "Trimmed image loaded as new source: $newUri")
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                            shape = AppShapes.medium
+                        ) {
+                            Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("一键去空白")
+                        }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Button(
-                        onClick = {
-                            // 最终映射到图片的 0..1 归一化坐标
-                            val relX = (cropOffset.x - imageDisplayRect.left) / imageDisplayRect.width
-                            val relY = (cropOffset.y - imageDisplayRect.top) / imageDisplayRect.height
-                            val relW = cropSize.width / imageDisplayRect.width
-                            val relH = cropSize.height / imageDisplayRect.height
-                            
-                            onConfirm(SerialRect(relX, relY, relX + relW, relY + relH))
-                        },
-                        shape = AppShapes.medium
-                    ) {
-                        Icon(Icons.Default.Check, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("确定裁剪并应用")
+
+                    Row {
+                        TextButton(onClick = onDismiss, shape = AppShapes.medium) {
+                            Text("取消")
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Button(
+                            onClick = {
+                                val relX = (cropOffset.x - imageDisplayRect.left) / imageDisplayRect.width
+                                val relY = (cropOffset.y - imageDisplayRect.top) / imageDisplayRect.height
+                                val relW = cropSize.width / imageDisplayRect.width
+                                val relH = cropSize.height / imageDisplayRect.height
+                                
+                                // 提交时传递 internalImageUri，确保裁剪的是处理后的图
+                                onConfirm(SerialRect(relX, relY, relX + relW, relY + relH))
+                            },
+                            shape = AppShapes.medium
+                        ) {
+                            Icon(Icons.Default.Check, null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("确定裁剪并应用")
+                        }
                     }
                 }
             }

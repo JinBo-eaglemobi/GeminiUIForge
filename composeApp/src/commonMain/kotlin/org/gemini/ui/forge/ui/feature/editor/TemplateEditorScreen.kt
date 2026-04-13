@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.IntOffset
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil3.compose.AsyncImage
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.utils.decodeBase64ToBitmap
@@ -42,6 +44,7 @@ import org.gemini.ui.forge.state.EditorState
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.component.VerticalSplitter
+import org.gemini.ui.forge.ui.component.AITaskProgressDialog
 import org.gemini.ui.forge.ui.feature.common.CanvasArea
 import org.gemini.ui.forge.ui.feature.common.HierarchySidebar
 
@@ -67,12 +70,28 @@ fun TemplateEditorScreen(
     onRenameBlock: (String, String) -> Unit,
     onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> },
     onToggleAllVisibility: (Boolean) -> Unit = {},
+    onCancelAITask: () -> Unit = {},
+    onToggleAILog: () -> Unit = {},
+    onCloseAITaskDialog: () -> Unit = {},
     onSaveTemplate: () -> Unit
-    ) {
+) {
     var showVisualRefine by remember { mutableStateOf(false) }
-    var refineTargetId by remember { mutableStateOf<String?>(null) } // 如果为 null 代表是自由框选
+    var refineTargetId by remember { mutableStateOf<String?>(null) } 
 
-    // 视觉选择重塑对话框
+    if (state.showAITaskDialog) {
+        AITaskProgressDialog(
+            title = if (state.generationLogs.any { it.contains("优化") || it.contains("润色") }) "智能优化提示词中..." else "正在执行区域重构...",
+            logs = state.generationLogs,
+            isProcessing = state.isGenerating,
+            isLogVisible = state.isGenerationLogVisible,
+            onToggleLogVisibility = onToggleAILog,
+            onActionClick = {
+                if (state.isGenerating) onCancelAITask() else onCloseAITaskDialog()
+            },
+            onDismiss = onCloseAITaskDialog
+        )
+    }
+
     if (showVisualRefine) {
         val defaultInstruction = if (refineTargetId != null) {
             "请基于我提供的局部高清图，重新识别并分析这个特定组件的细节。请务必将分析出的 UI 结构（子组件、样式、提示词）更新到我当前选定的这个模块中，不要创建冗余的新模块，也不要修改其他无关区域。"
@@ -87,6 +106,7 @@ fun TemplateEditorScreen(
             initialInstruction = defaultInstruction,
             onDismiss = { showVisualRefine = false },
             onConfirm = { rect, instruction, onLog, onChunk, onDone ->
+                showVisualRefine = false
                 if (refineTargetId != null) {
                     onRefineArea(refineTargetId!!, rect, instruction, onLog, onChunk, onDone)
                 } else {
@@ -103,7 +123,6 @@ fun TemplateEditorScreen(
         var rightWeight by remember { mutableStateOf(0.25f) }
 
         Row(modifier = Modifier.fillMaxSize()) {
-            // 工具栏
             Surface(modifier = Modifier.weight(leftWeight).fillMaxHeight(), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Column(modifier = Modifier.padding(8.dp)) {
@@ -134,7 +153,6 @@ fun TemplateEditorScreen(
                         HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     }
 
-                    // 层级列表
                     HierarchySidebar(
                         blocks = state.currentPage?.blocks ?: emptyList(),
                         selectedBlockId = state.selectedBlockId,
@@ -151,10 +169,12 @@ fun TemplateEditorScreen(
 
             VerticalSplitter(onDrag = { delta ->
                 val dw = delta / totalWidthPx
-                if (leftWeight + dw in 0.15f..0.3f) { leftWeight += dw; centerWeight -= dw }
+                if (leftWeight + dw in 0.1f..0.3f) {
+                    leftWeight += dw
+                    centerWeight -= dw
+                }
             })
 
-            // 画布
             Box(modifier = Modifier.weight(centerWeight).fillMaxHeight()) {
                 CanvasArea(
                     pageWidth = state.currentPage?.width ?: 1080f,
@@ -163,44 +183,176 @@ fun TemplateEditorScreen(
                     selectedBlockId = state.selectedBlockId,
                     onBlockClicked = onBlockClicked,
                     onBlockDoubleClicked = onBlockDoubleClicked,
-                    onBlockDragged = onBlockDragged,
+                    onBlockDragged = { id, dx, dy -> onBlockBoundsChanged(id, dx, dy, 0f, 0f) },
                     editingGroupId = state.editingGroupId,
                     onExitGroupEdit = onExitGroupEdit,
                     referenceUri = state.currentPage?.sourceImageUri,
                     modifier = Modifier.fillMaxSize()
                 )
+                
+                SmallFloatingActionButton(
+                    onClick = onSaveTemplate,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Icon(Icons.Default.Save, null)
+                }
             }
-
+            
             VerticalSplitter(onDrag = { delta ->
                 val dw = delta / totalWidthPx
-                if (rightWeight - dw in 0.2f..0.4f) { rightWeight -= dw; centerWeight += dw }
+                if (rightWeight - dw in 0.2f..0.4f) {
+                    rightWeight -= dw
+                    centerWeight += dw
+                }
             })
 
-            // 属性面板
             Surface(modifier = Modifier.weight(rightWeight).fillMaxHeight(), color = MaterialTheme.colorScheme.surface) {
-                Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-                    Text(stringResource(Res.string.editor_properties), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
-                    
-                    val block = state.selectedBlock
-                    if (block == null) {
-                        Text(stringResource(Res.string.prop_select_block), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        BlockPropertiesEditor(
-                            block = block,
-                            currentEditingLang = state.currentEditingPromptLang,
-                            onSwitchEditingLang = onSwitchEditingLanguage,
-                            onBoundsChanged = onBlockBoundsChanged,
-                            onTypeChanged = { onBlockTypeChanged(block.id, it) },
-                            onRename = { onRenameBlock(block.id, it) },
-                            onPromptChanged = { onPromptChanged(block.id, it) },
-                            onOptimizePrompt = { onOptimizePrompt(block.id, it) },
-                            onOpenRefine = { refineTargetId = block.id; showVisualRefine = true },
-                            onDelete = { onDeleteBlock(block.id) }
+                PropertyPanel(
+                    selectedBlock = state.selectedBlock,
+                    currentLang = state.currentEditingPromptLang,
+                    onSwitchLang = onSwitchEditingLanguage,
+                    onBlockTypeChanged = onBlockTypeChanged,
+                    onPromptChanged = onPromptChanged,
+                    onOptimizePrompt = onOptimizePrompt,
+                    onRefineClick = { id -> refineTargetId = id; showVisualRefine = true },
+                    onDeleteBlock = onDeleteBlock,
+                    isGenerating = state.isGenerating
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PropertyPanel(
+    selectedBlock: UIBlock?,
+    currentLang: PromptLanguage,
+    onSwitchLang: (PromptLanguage) -> Unit,
+    onBlockTypeChanged: (String, UIBlockType) -> Unit,
+    onPromptChanged: (String, String) -> Unit,
+    onOptimizePrompt: (String, (String) -> Unit) -> Unit,
+    onRefineClick: (String) -> Unit,
+    onDeleteBlock: (String) -> Unit,
+    isGenerating: Boolean
+) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+        Text(stringResource(Res.string.editor_properties), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+
+        if (selectedBlock == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(stringResource(Res.string.prop_select_block), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = AppShapes.small,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            ) {
+                Column(Modifier.padding(8.dp)) {
+                    Text("模块 ID: ${selectedBlock.id}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        InfoItem("X", selectedBlock.bounds.left.toInt().toString(), Modifier.weight(1f))
+                        InfoItem("Y", selectedBlock.bounds.top.toInt().toString(), Modifier.weight(1f))
+                        InfoItem("W", selectedBlock.bounds.width.toInt().toString(), Modifier.weight(1f))
+                        InfoItem("H", selectedBlock.bounds.height.toInt().toString(), Modifier.weight(1f))
+                    }
+                }
+            }
+
+            var expanded by remember { mutableStateOf(false) }
+            Text(stringResource(Res.string.prop_type), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 4.dp))
+            ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                OutlinedTextField(
+                    value = stringResource(selectedBlock.type.getDisplayNameRes()),
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    shape = AppShapes.medium,
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
+                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    UIBlockType.entries.forEach { type ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(type.getDisplayNameRes())) },
+                            onClick = { onBlockTypeChanged(selectedBlock.id, type); expanded = false }
                         )
                     }
                 }
             }
+
+            Text(text = stringResource(Res.string.editor_prompt_lang), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 4.dp))
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang ->
+                    SegmentedButton(
+                        selected = currentLang == lang,
+                        onClick = { onSwitchLang(lang) },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+                        label = { Text(lang.displayName) }
+                    )
+                }
+            }
+
+            val displayPrompt = if (currentLang == PromptLanguage.EN) selectedBlock.userPromptEn else selectedBlock.userPromptZh
+            OutlinedTextField(
+                value = displayPrompt,
+                onValueChange = { onPromptChanged(selectedBlock.id, it) },
+                label = { Text("${stringResource(Res.string.label_description_content)} (${currentLang.displayName})") },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
+                maxLines = 10,
+                enabled = !isGenerating,
+                shape = AppShapes.medium
+            )
+
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { onOptimizePrompt(selectedBlock.id) {} },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isGenerating && displayPrompt.isNotBlank(),
+                    shape = AppShapes.medium
+                ) {
+                    Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(Res.string.prop_optimize_prompt))
+                }
+                
+                OutlinedButton(
+                    onClick = { onRefineClick(selectedBlock.id) },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isGenerating,
+                    shape = AppShapes.medium
+                ) {
+                    Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(Res.string.action_refine_area))
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            
+            Button(
+                onClick = { onDeleteBlock(selectedBlock.id) },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppShapes.medium,
+                enabled = !isGenerating
+            ) {
+                Icon(Icons.Default.Delete, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(Res.string.action_delete_block))
+            }
         }
+    }
+}
+
+@Composable
+private fun InfoItem(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -214,382 +366,73 @@ fun VisualRefineDialog(
     onConfirm: (SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit
 ) {
     var instruction by remember { mutableStateOf(initialInstruction) }
-    var selectionRect by remember { mutableStateOf<SerialRect?>(null) }
-    var isProcessing by remember { mutableStateOf(false) }
-    var isDone by remember { mutableStateOf(false) }
-    var showLogs by remember { mutableStateOf(true) } // 默认开启日志侧边栏
-    val logs = remember { mutableStateListOf<String>() }
-    var streamText by remember { mutableStateOf("") }
+    var selectedRect by remember { mutableStateOf<SerialRect?>(null) }
+    val density = LocalDensity.current
 
-    val imageBitmapState = produceState<ImageBitmap?>(null, imageUri) {
-        value = imageUri.decodeBase64ToBitmap()
-    }
-    val imageBitmap = imageBitmapState.value
-
-    Dialog(
-        onDismissRequest = { if (!isProcessing) onDismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(0.98f).fillMaxHeight(0.95f),
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surface
-        ) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxWidth(0.95f).fillMaxHeight(0.95f), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                // 顶栏
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(8.dp))
-                    Text("AI 视觉引导重塑工作间", style = MaterialTheme.typography.headlineSmall)
-                    Spacer(Modifier.weight(1f))
-                    
-                    // 日志开关
-                    FilledTonalIconToggleButton(checked = showLogs, onCheckedChange = { showLogs = it }) {
-                        Icon(Icons.Default.Terminal, null)
-                    }
-                    
-                    Spacer(Modifier.width(12.dp))
-                    IconButton(onClick = onDismiss, enabled = !isProcessing) { Icon(Icons.Default.Close, null) }
-                }
-
+                Text(stringResource(Res.string.action_refine_area), style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(16.dp))
 
-                // 核心工作区：左侧图片选区，右侧大控制台
-                Row(modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // 左侧：图片选区
-                    Box(modifier = Modifier.weight(0.6f).fillMaxHeight().clip(RoundedCornerShape(8.dp)).background(Color.Black)) {
-                        if (imageBitmap != null) {
-                            ImageSelector(
-                                bitmap = imageBitmap,
-                                logicalWidth = pageWidth,
-                                logicalHeight = pageHeight,
-                                enabled = !isProcessing && !isDone, // 正在处理或已完成时冻结
-                                onSelectionChanged = { selectionRect = it },
-                                modifier = Modifier.fillMaxSize()
-                            )
+                Box(modifier = Modifier.weight(1f).fillMaxWidth().background(Color.Black.copy(alpha = 0.05f)).clip(RoundedCornerShape(8.dp))) {
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        val containerW = maxWidth
+                        val containerH = maxHeight
+                        val imageAspectRatio = pageWidth / pageHeight
+                        val containerAspectRatio = containerW.value / containerH.value
+
+                        val displayW: Float
+                        val displayH: Float
+                        if (imageAspectRatio > containerAspectRatio) {
+                            displayW = containerW.value
+                            displayH = displayW / imageAspectRatio
                         } else {
-                            CircularProgressIndicator(Modifier.align(Alignment.Center))
+                            displayH = containerH.value
+                            displayW = displayH * imageAspectRatio
                         }
-                    }
 
-                    // 右侧：持久化日志控制台
-                    if (showLogs) {
-                        Column(modifier = Modifier.weight(0.4f).fillMaxHeight()) {
-                            Text("处理日志 (可滚动选择)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(4.dp))
-                            LogTerminal(
-                                logs = logs, 
-                                streamText = streamText, 
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                    }
-                }
+                        val offsetX = (containerW.value - displayW) / 2
+                        val offsetY = (containerH.value - displayH) / 2
 
-                Spacer(Modifier.height(16.dp))
+                        AsyncImage(model = imageUri, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
 
-                // 指令与操作区
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = instruction,
-                        onValueChange = { instruction = it },
-                        label = { Text("修正建议或功能描述") },
-                        modifier = Modifier.weight(1f),
-                        enabled = !isProcessing && !isDone
-                    )
-
-                    Spacer(Modifier.width(16.dp))
-
-                    if (isDone) {
-                        Button(
-                            onClick = { onDismiss() },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
-                            shape = AppShapes.medium
-                        ) {
-                            Text("分析完成，返回编辑器")
-                        }
-                    } else {
-                        Button(
-                            onClick = {
-                                if (selectionRect != null) {
-                                    isProcessing = true
-                                    logs.clear()
-                                    streamText = ""
-                                    onConfirm(selectionRect!!, instruction, { logs.add(it) }, { streamText += it }) { success ->
-                                        isProcessing = false
-                                        if (success) isDone = true
-                                    }
+                        Canvas(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    val lx = ((offset.x - with(density) { offsetX.dp.toPx() }) / with(density) { displayW.dp.toPx() }) * pageWidth
+                                    val ly = ((offset.y - with(density) { offsetY.dp.toPx() }) / with(density) { displayH.dp.toPx() }) * pageHeight
+                                    selectedRect = SerialRect(lx, ly, lx, ly)
+                                },
+                                onDrag = { change, _ ->
+                                    val lx = ((change.position.x - with(density) { offsetX.dp.toPx() }) / with(density) { displayW.dp.toPx() }) * pageWidth
+                                    val ly = ((change.position.y - with(density) { offsetY.dp.toPx() }) / with(density) { displayH.dp.toPx() }) * pageHeight
+                                    selectedRect = selectedRect?.copy(right = lx, bottom = ly)
                                 }
-                            },
-                            enabled = selectionRect != null && instruction.isNotBlank() && !isProcessing,
-                            shape = AppShapes.medium
-                        ) {
-                            if (isProcessing) {
-                                CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                                Spacer(Modifier.width(8.dp))
-                                Text("正在分析...")
-                            } else {
-                                Text("开始 AI 重塑")
+                            )
+                        }) {
+                            selectedRect?.let { rect ->
+                                val left = with(density) { (offsetX + (rect.left / pageWidth) * displayW).dp.toPx() }
+                                val top = with(density) { (offsetY + (rect.top / pageHeight) * displayH).dp.toPx() }
+                                val right = with(density) { (offsetX + (rect.right / pageWidth) * displayW).dp.toPx() }
+                                val bottom = with(density) { (offsetY + (rect.bottom / pageHeight) * displayH).dp.toPx() }
+                                drawRect(color = Color.Cyan, topLeft = Offset(left, top), size = Size(right - left, bottom - top), style = Stroke(width = 2.dp.toPx()))
+                                drawRect(color = Color.Cyan.copy(alpha = 0.2f), topLeft = Offset(left, top), size = Size(right - left, bottom - top))
                             }
                         }
                     }
                 }
-            }
-        }
-    }
-}
 
-@Composable
-fun ImageSelector(
-    bitmap: ImageBitmap,
-    logicalWidth: Float,
-    logicalHeight: Float,
-    enabled: Boolean = true,
-    onSelectionChanged: (SerialRect?) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var startOffset by remember { mutableStateOf<Offset?>(null) }
-    var currentOffset by remember { mutableStateOf<Offset?>(null) }
-    val density = LocalDensity.current
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(value = instruction, onValueChange = { instruction = it }, label = { Text("重塑指令 (例如：优化细节、增加阴影、重新识别结构)") }, modifier = Modifier.fillMaxWidth().height(100.dp), shape = AppShapes.medium)
+                Spacer(Modifier.height(16.dp))
 
-    BoxWithConstraints(modifier = modifier) {
-        val imgWidth = bitmap.width.toFloat()
-        val imgHeight = bitmap.height.toFloat()
-        val scale = min(maxWidth.value / imgWidth, maxHeight.value / imgHeight)
-        val drawWidth = imgWidth * scale
-        val drawHeight = imgHeight * scale
-        val offsetX = (maxWidth.value - drawWidth) / 2
-        val offsetY = (maxHeight.value - drawHeight) / 2
-
-        Canvas(modifier = Modifier.fillMaxSize().pointerInput(enabled) {
-            if (!enabled) return@pointerInput 
-            
-            detectDragGestures(
-                onDragStart = { startOffset = it },
-                onDrag = { change, _ ->
-                    if (!enabled) return@detectDragGestures
-                    currentOffset = change.position
-                    change.consume()
-                    
-                    val start = startOffset
-                    val end = currentOffset
-                    if (start != null && end != null) {
-                        fun toLogical(o: Offset): Offset {
-                            val px = (o.x / density.density - offsetX) / scale
-                            val py = (o.y / density.density - offsetY) / scale
-                            val lx = (px / imgWidth) * logicalWidth
-                            val ly = (py / imgHeight) * logicalHeight
-                            return Offset(lx.coerceIn(0f, logicalWidth), ly.coerceIn(0f, logicalHeight))
-                        }
-                        val l1 = toLogical(start)
-                        val l2 = toLogical(end)
-                        onSelectionChanged(SerialRect(
-                            left = min(l1.x, l2.x),
-                            top = min(l1.y, l2.y),
-                            right = maxOf(l1.x, l2.x),
-                            bottom = maxOf(l1.y, l2.y)
-                        ))
-                    }
-                },
-                onDragEnd = {},
-                onDragCancel = { startOffset = null; currentOffset = null }
-            )
-        }) {
-            drawImage(
-                image = bitmap,
-                dstOffset = IntOffset((offsetX * density.density).toInt(), (offsetY * density.density).toInt()),
-                dstSize = IntSize((drawWidth * density.density).toInt(), (drawHeight * density.density).toInt())
-            )
-
-            val start = startOffset
-            val end = currentOffset
-            if (start != null && end != null) {
-                val rectLeft = min(start.x, end.x)
-                val rectTop = min(start.y, end.y)
-                val rectWidth = abs(end.x - start.x)
-                val rectHeight = abs(end.y - start.y)
-                
-                val color = if (enabled) Color.Cyan else Color.LightGray.copy(alpha = 0.5f)
-                
-                drawRect(
-                    color = color.copy(alpha = 0.3f),
-                    topLeft = Offset(rectLeft, rectTop),
-                    size = Size(rectWidth, rectHeight)
-                )
-                drawRect(
-                    color = color,
-                    topLeft = Offset(rectLeft, rectTop),
-                    size = Size(rectWidth, rectHeight),
-                    style = Stroke(width = 2.dp.toPx())
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LogTerminal(logs: List<String>, streamText: String, modifier: Modifier = Modifier) {
-    Surface(modifier = modifier, color = Color.Black.copy(alpha = 0.85f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color.Green.copy(alpha = 0.5f))) {
-        SelectionContainer {
-            Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                val listState = rememberLazyListState()
-                LaunchedEffect(logs.size) { if(logs.isNotEmpty()) listState.animateScrollToItem(logs.size) }
-                
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    items(logs) { Text(it, color = Color.Green, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace) }
-                    if (streamText.isNotEmpty()) {
-                        item { Text("[流] 当前长度: ${streamText.length}", color = Color.Cyan, style = MaterialTheme.typography.bodySmall) }
-                    }
-                }
-                VerticalScrollbar(modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(), adapter = rememberScrollbarAdapter(listState))
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun BlockPropertiesEditor(
-    block: UIBlock,
-    currentEditingLang: PromptLanguage,
-    onSwitchEditingLang: (PromptLanguage) -> Unit,
-    onBoundsChanged: (String, Float, Float, Float, Float) -> Unit,
-    onTypeChanged: (UIBlockType) -> Unit,
-    onRename: (String) -> Unit, // 修改为接收单参数（新 ID）
-    onPromptChanged: (String) -> Unit,
-    onOptimizePrompt: ((String) -> Unit) -> Unit,
-    onOpenRefine: () -> Unit,
-    onDelete: () -> Unit
-) {
-    var expandedType by remember { mutableStateOf(false) }
-    var showPromptDialog by remember { mutableStateOf(false) }
-
-    // ID 修改逻辑
-    var tempId by remember(block.id) { mutableStateOf(block.id) }
-    OutlinedTextField(
-        value = tempId, 
-        onValueChange = { 
-            tempId = it
-            if (it.isNotBlank() && it != block.id) onRename(it) 
-        }, 
-        label = { Text(stringResource(Res.string.prop_block_id)) }, 
-        modifier = Modifier.fillMaxWidth()
-    )
-
-    Spacer(Modifier.height(16.dp))
-
-    ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = { expandedType = !expandedType }) {
-        OutlinedTextField(
-            value = stringResource(block.type.getDisplayNameRes()), 
-            onValueChange = {}, readOnly = true, 
-            label = { Text(stringResource(Res.string.prop_type)) }, 
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) }, 
-            modifier = Modifier.fillMaxWidth().menuAnchor()
-        )
-        ExposedDropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
-            // 类型排序：Common 优先
-            val commonTypes = listOf(
-                UIBlockType.BUTTON, UIBlockType.VIEW, UIBlockType.TEXT, UIBlockType.IMAGE, 
-                UIBlockType.COMBO_BOX, UIBlockType.PROGRESS_BAR, UIBlockType.POPUP_MENU, 
-                UIBlockType.LOADER, UIBlockType.SCROLL_BAR, UIBlockType.SLIDER, UIBlockType.INPUT
-            )
-            val specialTypes = UIBlockType.entries.filter { it !in commonTypes }
-
-            commonTypes.forEach { type ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(type.getDisplayNameRes())) },
-                    onClick = { onTypeChanged(type); expandedType = false }
-                )
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-            specialTypes.forEach { type ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(type.getDisplayNameRes())) },
-                    onClick = { onTypeChanged(type); expandedType = false }
-                )
-            }
-        }
-    }
-    Spacer(Modifier.height(16.dp))
-
-    val displayPrompt = if (currentEditingLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
-    Box(Modifier.fillMaxWidth()) {
-        OutlinedTextField(value = displayPrompt, onValueChange = {}, readOnly = true, label = { Text("提示词 (${currentEditingLang.displayName})") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
-        Box(Modifier.matchParentSize().clickable { showPromptDialog = true })
-    }
-
-    if (showPromptDialog) {
-        var tempPrompt by remember { mutableStateOf(displayPrompt) }
-        var isOptimizing by remember { mutableStateOf(false) }
-        LaunchedEffect(currentEditingLang, block) { tempPrompt = if (currentEditingLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh }
-        AlertDialog(
-            onDismissRequest = { showPromptDialog = false },
-            title = { Column { Text("编辑详细描述"); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp)) { PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { i, l -> SegmentedButton(currentEditingLang == l, { onSwitchEditingLang(l) }, SegmentedButtonDefaults.itemShape(i, 2)) { Text(l.displayName) } } } } },
-            text = { OutlinedTextField(tempPrompt, { tempPrompt = it; onPromptChanged(it) }, label = { Text("描述内容") }, modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp), enabled = !isOptimizing) },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        { isOptimizing = true; onPromptChanged(tempPrompt); onOptimizePrompt { tempPrompt = it; isOptimizing = false } },
-                        enabled = !isOptimizing && tempPrompt.isNotBlank(),
-                        shape = AppShapes.medium
-                    ) {
-                        if (isOptimizing) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Text("AI 优化")
-                    }
-                    Button(
-                        { showPromptDialog = false },
-                        shape = AppShapes.medium
-                    ) {
-                        Text("完成")
-                    }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("取消") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = { selectedRect?.let { onConfirm(it, instruction, {}, {}, {}) } }, enabled = selectedRect != null, shape = AppShapes.medium) { Text("确认重塑") }
                 }
             }
-        )
-    }
-
-    Spacer(Modifier.height(16.dp))
-    var xStr by remember(block.id, block.bounds.left) { mutableStateOf(block.bounds.left.toInt().toString()) }
-    var yStr by remember(block.id, block.bounds.top) { mutableStateOf(block.bounds.top.toInt().toString()) }
-    var wStr by remember(block.id, block.bounds.width) { mutableStateOf(block.bounds.width.toInt().toString()) }
-    var hStr by remember(block.id, block.bounds.height) { mutableStateOf(block.bounds.height.toInt().toString()) }
-
-    fun sub() {
-        val x = xStr.toFloatOrNull() ?: block.bounds.left
-        val y = yStr.toFloatOrNull() ?: block.bounds.top
-        val w = wStr.toFloatOrNull()?.coerceAtLeast(10f) ?: block.bounds.width
-        val h = hStr.toFloatOrNull()?.coerceAtLeast(10f) ?: block.bounds.height
-        onBoundsChanged(block.id, x, y, x + w, y + h)
-    }
-
-    Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(xStr, { xStr = it; sub() }, label = { Text("X") }, modifier = Modifier.weight(1f))
-        OutlinedTextField(yStr, { yStr = it; sub() }, label = { Text("Y") }, modifier = Modifier.weight(1f))
-    }
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(wStr, { wStr = it; sub() }, label = { Text("宽") }, modifier = Modifier.weight(1f))
-        OutlinedTextField(hStr, { hStr = it; sub() }, label = { Text("高") }, modifier = Modifier.weight(1f))
-    }
-
-    Spacer(Modifier.height(24.dp))
-    OutlinedButton(
-        onClick = onOpenRefine,
-        modifier = Modifier.fillMaxWidth(),
-        shape = AppShapes.medium,
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)
-    ) {
-        Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
-        Text("AI 组件重塑")
-    }
-    Spacer(Modifier.height(8.dp))
-    Button(
-        onClick = onDelete,
-        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-        modifier = Modifier.fillMaxWidth(),
-        shape = AppShapes.medium
-    ) {
-        Icon(Icons.Default.Delete, null, Modifier.size(18.dp))
-        Text("删除此组件")
+        }
     }
 }

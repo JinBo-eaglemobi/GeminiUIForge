@@ -228,28 +228,6 @@ class EditorViewModel(
         }
     }
 
-    fun optimizePrompt(blockId: String, apiKey: String, onComplete: (String) -> Unit) {
-        val block = state.value.project.pages.flatMap { it.blocks }.let { findBlockById(it, blockId) } ?: return
-        val currentLang = _state.value.currentEditingPromptLang
-        val textToOptimize = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
-        if (textToOptimize.isBlank()) return
-
-        viewModelScope.launch {
-            try {
-                val systemInstruction = if (currentLang == PromptLanguage.EN) {
-                    "Please optimize and polish the following English image generation prompt. Make it highly descriptive, artistic, and technical (lighting, texture, style). Keep it in English: "
-                } else {
-                    "请优化并润色以下关于 UI 组件的中文描述，使其更具设计感、更详尽且生动。请保持使用中文回答： "
-                }
-                val optimized = aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, _state.value.globalState.maxRetries)
-                onUserPromptChanged(optimized, currentLang)
-                onComplete(optimized)
-            } catch (e: Exception) {
-                AppLogger.e("EditorViewModel", "Failed to optimize prompt", e)
-            }
-        }
-    }
-
     fun updateBlockBounds(blockId: String, left: Float, top: Float, right: Float, bottom: Float) {
         val pageId = _state.value.selectedPageId ?: return
         _state.update { currentState ->
@@ -356,8 +334,6 @@ class EditorViewModel(
         }
     }
 
-    // 组概念已被移除，统一使用嵌套组件
-
     fun moveBlockBy(blockId: String, dx: Float, dy: Float) {
         val pageId = _state.value.selectedPageId ?: return
         _state.update { currentState ->
@@ -428,7 +404,6 @@ class EditorViewModel(
     }
 
     private fun insertBlockSibling(blocks: List<UIBlock>, targetId: String, blockToInsert: UIBlock, position: DropPosition): List<UIBlock> {
-        // 先检查当前层级是否包含目标
         val index = blocks.indexOfFirst { it.id == targetId }
         if (index != -1) {
             val result = blocks.toMutableList()
@@ -440,7 +415,6 @@ class EditorViewModel(
             return result
         }
         
-        // 递归检查子层级
         var changed = false
         val newBlocks = blocks.map { b ->
             val newChildren = insertBlockSibling(b.children, targetId, blockToInsert, position)
@@ -454,46 +428,20 @@ class EditorViewModel(
         return if (changed) newBlocks else blocks
     }
 
-    /**
-     * 将一个拖拽的图层移动到另一个图层，支持内部 (INSIDE)、前方 (BEFORE)、后方 (AFTER)
-     */
     fun moveBlock(draggedBlockId: String, targetId: String?, dropPosition: DropPosition = DropPosition.INSIDE) {
-        AppLogger.d("EditorViewModel", "moveBlock requested: dragged=$draggedBlockId, target=$targetId, pos=$dropPosition")
-        if (draggedBlockId == targetId) {
-            AppLogger.d("EditorViewModel", "moveBlock ignored: dragged and target are same.")
-            return
-        }
-        
+        if (draggedBlockId == targetId) return
         val pageId = _state.value.selectedPageId ?: return
         
         _state.update { currentState ->
             val currentPage = currentState.currentPage ?: return@update currentState
             val draggedBlock = findBlockById(currentPage.blocks, draggedBlockId)
-            if (draggedBlock == null) {
-                AppLogger.d("EditorViewModel", "moveBlock failed: draggedBlock not found.")
-                return@update currentState
-            }
+            if (draggedBlock == null) return@update currentState
             
-            if (targetId != null && isDescendantOfBlock(targetId, draggedBlock)) {
-                AppLogger.d("EditorViewModel", "moveBlock failed: target is descendant of dragged block.")
-                return@update currentState
-            }
+            if (targetId != null && isDescendantOfBlock(targetId, draggedBlock)) return@update currentState
 
-            // 获取绝对坐标以保持位置不变（如果需要）
             val draggedAbsBounds = getAbsoluteBounds(currentPage.blocks, draggedBlockId) ?: draggedBlock.bounds
-            
-            // 执行移除操作
             var newBlocks = removeBlockRecursive(currentPage.blocks, draggedBlockId)
-            
-            // 计算新的父级
-            val actualParentId = if (targetId == null) {
-                null
-            } else if (dropPosition == DropPosition.INSIDE) {
-                targetId
-            } else {
-                getParentIdOf(currentPage.blocks, targetId)
-            }
-            
+            val actualParentId = if (targetId == null) null else if (dropPosition == DropPosition.INSIDE) targetId else getParentIdOf(currentPage.blocks, targetId)
             val targetAbsBounds = if (actualParentId != null) getAbsoluteBounds(newBlocks, actualParentId) else null
             
             val newRelativeBounds = if (targetAbsBounds != null) {
@@ -503,61 +451,25 @@ class EditorViewModel(
                     right = (draggedAbsBounds.left - targetAbsBounds.left) + draggedAbsBounds.width,
                     bottom = (draggedAbsBounds.top - targetAbsBounds.top) + draggedAbsBounds.height
                 )
-            } else {
-                draggedAbsBounds
-            }
+            } else draggedAbsBounds
             
             val updatedDraggedBlock = draggedBlock.copy(bounds = newRelativeBounds)
-            
-            val resultBlocks = if (targetId == null) {
-                AppLogger.d("EditorViewModel", "moveBlock: appending to root.")
-                newBlocks + updatedDraggedBlock
-            } else if (dropPosition == DropPosition.INSIDE) {
-                AppLogger.d("EditorViewModel", "moveBlock: inserting into target $targetId.")
+            val resultBlocks = if (targetId == null) newBlocks + updatedDraggedBlock
+            else if (dropPosition == DropPosition.INSIDE) {
                 updateBlockInList(newBlocks, targetId) { targetGroup ->
-                    targetGroup.copy(
-                        children = targetGroup.children + updatedDraggedBlock
-                    )
+                    targetGroup.copy(children = targetGroup.children + updatedDraggedBlock)
                 }
-            } else {
-                AppLogger.d("EditorViewModel", "moveBlock: inserting as sibling of $targetId at $dropPosition.")
-                insertBlockSibling(newBlocks, targetId, updatedDraggedBlock, dropPosition)
-            }
+            } else insertBlockSibling(newBlocks, targetId, updatedDraggedBlock, dropPosition)
             
-            // 验证数据是否真实变更（忽略 createdAt）
-            val isContentChanged = resultBlocks != removeBlockRecursive(currentPage.blocks, draggedBlockId) || updatedDraggedBlock.bounds != draggedBlock.bounds
-            
-            if (!isContentChanged) {
-                AppLogger.d("EditorViewModel", "moveBlock: No content change detected, skipping update.")
-                return@update currentState
-            }
+            if (resultBlocks == removeBlockRecursive(currentPage.blocks, draggedBlockId) && updatedDraggedBlock.bounds == draggedBlock.bounds) return@update currentState
 
-            saveSnapshot() // 只有在确定有变化时才保存快照
-
-            val updatedPages = currentState.project.pages.map {
-                if (it.id == pageId) it.copy(blocks = resultBlocks) else it
-            }
-            
-            val newState = currentState.copy(
-                project = currentState.project.copy(pages = updatedPages, createdAt = org.gemini.ui.forge.getCurrentTimeMillis())
-            )
-            AppLogger.d("EditorViewModel", "moveBlock: state updated. New blocks size: ${resultBlocks.size}")
-            newState
+            saveSnapshot()
+            val updatedPages = currentState.project.pages.map { if (it.id == pageId) it.copy(blocks = resultBlocks) else it }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages, createdAt = org.gemini.ui.forge.getCurrentTimeMillis()))
         }
-        AppLogger.d("EditorViewModel", "moveBlock END: current blocks=${_state.value.currentPage?.blocks?.map { it.id }}")
     }
 
-    /**
-     * 针对选定区域调用 AI 进行结构重塑 (基于视觉选择生成的 Rect)
-     */
-    fun onRefineArea(
-        blockId: String, 
-        bounds: SerialRect,
-        userInstruction: String, 
-        onLog: (String) -> Unit = {},
-        onChunk: (String) -> Unit = {},
-        onComplete: (Boolean) -> Unit
-    ) {
+    fun onRefineArea(blockId: String, bounds: SerialRect, userInstruction: String, onLog: (String) -> Unit = {}, onChunk: (String) -> Unit = {}, onComplete: (Boolean) -> Unit) {
         val currentState = _state.value
         val currentPage = currentState.currentPage
         val originalImage = currentPage?.sourceImageUri ?: throw Exception("找不到当前页面的原始参考图")
@@ -566,20 +478,13 @@ class EditorViewModel(
         viewModelScope.launch {
             try {
                 onLog("正在准备局部细节裁剪...")
-                val croppedBytes = org.gemini.ui.forge.utils.cropImage(
-                    imageSource = originalImage, 
-                    bounds = bounds,
-                    logicalWidth = currentPage.width,
-                    logicalHeight = currentPage.height
-                ) ?: throw Exception("图像裁剪失败")
-
+                val croppedBytes = org.gemini.ui.forge.utils.cropImage(imageSource = originalImage, bounds = bounds, logicalWidth = currentPage.width, logicalHeight = currentPage.height) ?: throw Exception("图像裁剪失败")
                 val cachePath = templateRepo.saveCacheImage(currentState.projectName, "refine_crop_${blockId}", croppedBytes)
                 onLog("📸 局部裁剪图已暂存至本地: $cachePath")
 
                 onLog("正在分析原图指纹以同步云端上下文...")
                 val originalBytes = org.gemini.ui.forge.utils.readLocalFileBytes(originalImage) ?: throw Exception("无法读取原图")
                 val fingerprint = originalBytes.calculateMd5()
-                
                 var originalFileUri = cloudAssetManager.assets.value.find { (it.displayName?.contains(fingerprint) == true) && it.state == "ACTIVE" }?.uri ?: ""
 
                 if (originalFileUri.isBlank()) {
@@ -603,16 +508,7 @@ class EditorViewModel(
         }
     }
 
-    /**
-     * 针对手动框选区域调用 AI 进行结构重塑
-     */
-    fun onRefineCustomArea(
-        bounds: SerialRect, 
-        userInstruction: String, 
-        onLog: (String) -> Unit = {},
-        onChunk: (String) -> Unit = {},
-        onComplete: (Boolean) -> Unit
-    ) {
+    fun onRefineCustomArea(bounds: SerialRect, userInstruction: String, onLog: (String) -> Unit = {}, onChunk: (String) -> Unit = {}, onComplete: (Boolean) -> Unit) {
         val currentState = _state.value
         val currentPage = currentState.currentPage
         val originalImage = currentPage?.sourceImageUri ?: throw Exception("找不到当前页面的原始参考图")
@@ -621,20 +517,13 @@ class EditorViewModel(
         viewModelScope.launch {
             try {
                 onLog("正在导出选区细节...")
-                val croppedBytes = org.gemini.ui.forge.utils.cropImage(
-                    imageSource = originalImage, 
-                    bounds = bounds,
-                    logicalWidth = currentPage.width,
-                    logicalHeight = currentPage.height
-                ) ?: throw Exception("图像裁剪失败")
-
+                val croppedBytes = org.gemini.ui.forge.utils.cropImage(imageSource = originalImage, bounds = bounds, logicalWidth = currentPage.width, logicalHeight = currentPage.height) ?: throw Exception("图像裁剪失败")
                 val cachePath = templateRepo.saveCacheImage(currentState.projectName, "custom_refine_crop", croppedBytes)
                 onLog("📸 框选裁剪图已暂存至本地: $cachePath")
 
                 onLog("正在分析原图指纹以同步云端上下文...")
                 val originalBytes = org.gemini.ui.forge.utils.readLocalFileBytes(originalImage) ?: throw Exception("无法读取原图")
                 val fingerprint = originalBytes.calculateMd5()
-                
                 var originalFileUri = cloudAssetManager.assets.value.find { (it.displayName?.contains(fingerprint) == true) && it.state == "ACTIVE" }?.uri ?: ""
 
                 if (originalFileUri.isBlank()) {
@@ -658,6 +547,32 @@ class EditorViewModel(
         }
     }
 
+    fun optimizePrompt(blockId: String, apiKey: String, onComplete: (String) -> Unit) {
+        val block = state.value.project.pages.flatMap { it.blocks }.let { findBlockById(it, blockId) } ?: return
+        val currentLang = _state.value.currentEditingPromptLang
+        val textToOptimize = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
+        if (textToOptimize.isBlank()) return
+
+        generationJob = viewModelScope.launch {
+            _state.update { it.copy(isGenerating = true, generationLogs = emptyList(), showAITaskDialog = true) }
+            addGenLog(">>> 开始智能优化提示词 [${block.id}] <<<")
+            try {
+                val systemInstruction = if (currentLang == PromptLanguage.EN) "Please optimize and polish the following English image generation prompt. Make it highly descriptive, artistic, and technical (lighting, texture, style). Keep it in English: " else "请优化并润色以下关于 UI 组件的中文描述，使其更具设计感、更详尽且生动。请保持使用中文回答： "
+                addGenLog("正在连接 Gemini AI 模型进行润色...")
+                val optimized = aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, _state.value.globalState.maxRetries)
+                onUserPromptChanged(optimized, currentLang)
+                addGenLog("优化完成！已应用到描述框。")
+                onComplete(optimized)
+            } catch (e: Exception) {
+                addGenLog(">>> 优化失败: ${e.message} <<<")
+                AppLogger.e("EditorViewModel", "Failed to optimize prompt", e)
+            } finally {
+                _state.update { it.copy(isGenerating = false) }
+                generationJob = null
+            }
+        }
+    }
+
     fun onRequestGeneration(apiKey: String) {
         val block = state.value.selectedBlock ?: return
         val currentLang = _state.value.currentEditingPromptLang
@@ -666,300 +581,187 @@ class EditorViewModel(
         val isTransparent = _state.value.isGenerateTransparent
         val prioritizeCloud = _state.value.isPrioritizeCloudRemoval
         
-        viewModelScope.launch {
-            _state.update { it.copy(isGenerating = true, generatedCandidates = emptyList()) }
-            AppLogger.i("EditorViewModel", ">>> START GENERATION FOR BLOCK [${block.id}] <<<")
-            
+        generationJob = viewModelScope.launch {
+            _state.update { it.copy(isGenerating = true, generationLogs = emptyList(), showAITaskDialog = true) }
+            addGenLog(">>> 开始为模块 [${block.id}] 生成资源 <<<")
             try {
-                val candidatesBase64 = aiService.generateImages(
-                    blockType = block.type.name, 
-                    userPrompt = submitPrompt, 
-                    apiKey = apiKey, 
-                    maxRetries = _state.value.globalState.maxRetries,
-                    targetWidth = block.bounds.width,
-                    targetHeight = block.bounds.height,
-                    isPng = isTransparent
-                )
-                
-                AppLogger.i("EditorViewModel", "AI generated ${candidatesBase64.size} candidate(s). Processing...")
+                addGenLog("正在连接 AI 生图模型 (Imagen)...")
+                val candidatesBase64 = aiService.generateImages(blockType = block.type.name, userPrompt = submitPrompt, apiKey = apiKey, maxRetries = _state.value.globalState.maxRetries, targetWidth = block.bounds.width, targetHeight = block.bounds.height, isPng = isTransparent)
+                addGenLog("模型生成成功，获得 ${candidatesBase64.size} 张候选图。开始预处理...")
 
                 val candidatePaths = candidatesBase64.mapIndexed { index, base64 ->
                     val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
                     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
                     val bytes = kotlin.io.encoding.Base64.Default.decode(pure)
-                    
                     val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
                     val originalUri = templateRepo.saveBlockResource(projectName, block.id, "gen_${index}_$timestamp", bytes)
-                    AppLogger.d("EditorViewModel", "Saved original candidate: $originalUri")
+                    addGenLog("[候选图 ${index + 1}] 已缓存至本地。")
                     
                     if (isTransparent) {
                         var finalProcessedBytes: ByteArray? = null
-                        var methodUsed = "NONE"
-                        
-                        // 1. 优先尝试云端 (Vertex AI 模式)
                         if (prioritizeCloud) {
-                            AppLogger.i("EditorViewModel", "[Cloud Process] Requesting background removal via Cloud API...")
-                            val cloudStartTime = org.gemini.ui.forge.getCurrentTimeMillis()
+                            addGenLog("[候选图 ${index + 1}] 正在调用云端 Vertex AI 执行背景移除...")
                             finalProcessedBytes = aiService.removeBackgroundCloud(bytes, apiKey)
-                            if (finalProcessedBytes != null) {
-                                AppLogger.i("EditorViewModel", "[Cloud Process] SUCCESS in ${org.gemini.ui.forge.getCurrentTimeMillis() - cloudStartTime}ms")
-                                methodUsed = "CLOUD"
-                            } else {
-                                AppLogger.e("EditorViewModel", "[Cloud Process] FAILED. Falling back to local script.")
-                            }
+                            if (finalProcessedBytes != null) addGenLog("[候选图 ${index + 1}] 云端抠图成功！")
+                            else addGenLog("[候选图 ${index + 1}] 云端处理失败，准备回退到本地处理...")
                         }
 
-                        // 2. 如果云端未开启或失败，执行本地脚本
                         if (finalProcessedBytes == null) {
-                            AppLogger.i("EditorViewModel", "[Local Process] Executing Python script [remove_bg.py]...")
+                            addGenLog("[候选图 ${index + 1}] 正在执行本地 Python 脚本抠图 (rembg)...")
                             val outputUri = originalUri.replace("gen_", "local_trans_").replace(".jpg", ".png").replace(".jpeg", ".png")
-                            
-                            // 自动寻找脚本路径：尝试 ./scripts 或 ./composeApp/scripts
-                            val possiblePaths = listOf("scripts/remove_bg.py", "composeApp/scripts/remove_bg.py")
-                            var actualScriptPath: String? = null
-                            for (p in possiblePaths) {
-                                if (org.gemini.ui.forge.utils.isFileExists(p)) {
-                                    actualScriptPath = p
-                                    break
+                            val localFileStorage = org.gemini.ui.forge.service.LocalFileStorage()
+                            val scriptCacheName = "scripts/remove_bg.py"
+                            try {
+                                if (!localFileStorage.exists(scriptCacheName)) {
+                                    @OptIn(org.jetbrains.compose.resources.InternalResourceApi::class)
+                                    val scriptBytes = org.jetbrains.compose.resources.readResourceBytes("scripts/remove_bg.py")
+                                    localFileStorage.saveBytesToFile(scriptCacheName, scriptBytes)
                                 }
-                            }
-
-                            if (actualScriptPath != null) {
-                                val success = org.gemini.ui.forge.utils.executeSystemCommand(
-                                    "python", listOf(actualScriptPath, originalUri, outputUri),
-                                    onLog = { AppLogger.d("PythonScript", it) }
-                                )
-                                
+                                val actualScriptPath = localFileStorage.getFilePath(scriptCacheName)
+                                val success = org.gemini.ui.forge.utils.executeSystemCommand("python", listOf(actualScriptPath, originalUri, outputUri), onLog = { addGenLog(" > $it") })
                                 if (success && org.gemini.ui.forge.utils.isFileExists(outputUri)) {
-                                    AppLogger.i("EditorViewModel", "[Local Process] SUCCESS. Saved to $outputUri")
+                                    addGenLog("[候选图 ${index + 1}] 本地扣图成功：$outputUri")
                                     return@mapIndexed outputUri
                                 } else {
-                                    AppLogger.e("EditorViewModel", "[Local Process] FAILED execution. Using original.")
+                                    addGenLog("[候选图 ${index + 1}] 本地扣图失败，保留原图。")
                                     return@mapIndexed originalUri
                                 }
-                            } else {
-                                AppLogger.e("EditorViewModel", "[Local Process] FAILED: Could not find remove_bg.py in $possiblePaths")
+                            } catch (e: Exception) {
+                                addGenLog("[错误] 处理过程异常: ${e.message}")
                                 return@mapIndexed originalUri
                             }
                         } else {
-                            // 云端成功的处理
                             val cloudUri = originalUri.replace("gen_", "cloud_trans_").replace(".jpg", ".png").replace(".jpeg", ".png")
-                            val savedCloudUri = templateRepo.saveBlockResource(projectName, block.id, cloudUri.substringAfterLast("/").substringBeforeLast("."), finalProcessedBytes)
-                            AppLogger.i("EditorViewModel", "Cloud-processed image saved: $savedCloudUri")
-                            return@mapIndexed savedCloudUri
+                            return@mapIndexed templateRepo.saveBlockResource(projectName, block.id, cloudUri.substringAfterLast("/").substringBeforeLast("."), finalProcessedBytes)
                         }
-                    } else {
-                        originalUri
-                    }
+                    } else originalUri
                 }
-                _state.update { it.copy(generatedCandidates = candidatePaths, isGenerating = false) }
-                AppLogger.i("EditorViewModel", "<<< GENERATION & PROCESSING COMPLETE >>>")
-            } catch (e: Exception) {
-                AppLogger.e("EditorViewModel", "CRITICAL ERROR during generation/processing", e)
-                _state.update { it.copy(isGenerating = false) }
-            }
+                _state.update { it.copy(generatedCandidates = candidatePaths) }
+                addGenLog(">>> 资源处理全部完成 <<<")
+            } catch (e: Exception) { addGenLog(">>> 生成失败: ${e.message} <<<") }
+            finally { _state.update { it.copy(isGenerating = false) }; generationJob = null }
         }
     }
 
-    /**
-     * 执行物理裁剪并保存新资源，同时更新 Block 引用
-     */
     fun performCropAndApply(blockId: String, sourceUri: String, cropRect: SerialRect) {
         val projectName = _state.value.projectName
         val block = state.value.project.pages.flatMap { it.blocks }.let { findBlockById(it, blockId) } ?: return
+        val isPngSource = sourceUri.endsWith(".png", ignoreCase = true)
         
         viewModelScope.launch {
             try {
-                // 执行裁剪。注意：AssetCropDialog 传回的是归一化 [0..1] 的 SerialRect
-                // 现有的 ImageUtils.cropImage 接收的是逻辑画布坐标。
-                // 我需要一个新的 cropImageNormalized 或者是转换一下。
-                
                 val imageSize = org.gemini.ui.forge.utils.getImageSize(sourceUri) ?: return@launch
-                val physicalRect = SerialRect(
-                    left = cropRect.left * imageSize.first,
-                    top = cropRect.top * imageSize.second,
-                    right = cropRect.right * imageSize.first,
-                    bottom = cropRect.bottom * imageSize.second
-                )
+                val physicalRect = SerialRect(left = cropRect.left * imageSize.first, top = cropRect.top * imageSize.second, right = cropRect.right * imageSize.first, bottom = cropRect.bottom * imageSize.second)
                 
-                // 借用现有的 cropImage，传入图片实际尺寸作为“逻辑画布”
+                // 执行裁剪并强制高质量缩放至模块物理大小
                 val croppedBytes = org.gemini.ui.forge.utils.cropImage(
-                    imageSource = sourceUri,
-                    bounds = physicalRect,
-                    logicalWidth = imageSize.first.toFloat(),
-                    logicalHeight = imageSize.second.toFloat()
+                    imageSource = sourceUri, 
+                    bounds = physicalRect, 
+                    logicalWidth = imageSize.first.toFloat(), 
+                    logicalHeight = imageSize.second.toFloat(), 
+                    isPng = isPngSource,
+                    forceWidth = block.bounds.width.toInt(),
+                    forceHeight = block.bounds.height.toInt()
                 ) ?: throw Exception("裁剪执行失败")
                 
-                // 保存新资源
-                val newUri = templateRepo.saveBlockResource(projectName, blockId, "crop_${org.gemini.ui.forge.getCurrentTimeMillis()}", croppedBytes)
+                val ext = if (isPngSource) "png" else "jpg"
+                val newUri = templateRepo.saveBlockResource(projectName, blockId, "crop_${org.gemini.ui.forge.getCurrentTimeMillis()}.$ext", croppedBytes)
                 
-                // 更新状态
                 _state.update { currentState ->
                     val pageId = currentState.selectedPageId ?: return@update currentState
                     val updatedPages = currentState.project.pages.map { page ->
-                        if (page.id == pageId) {
-                            page.copy(blocks = updateBlockInList(page.blocks, blockId) { b ->
-                                b.copy(currentImageUri = newUri, cropRect = cropRect)
-                            })
-                        } else page
+                        if (page.id == pageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) { b -> b.copy(currentImageUri = newUri, cropRect = cropRect) })
+                        else page
                     }
                     currentState.copy(project = currentState.project.copy(pages = updatedPages))
                 }
                 templateRepo.saveTemplate(projectName, _state.value.project)
-                AppLogger.d("EditorViewModel", "Crop applied: $newUri for $blockId")
-            } catch (e: Exception) {
-                AppLogger.e("EditorViewModel", "执行裁剪保存失败", e)
-            }
+                AppLogger.i("EditorViewModel", "Crop Applied: $newUri (Scaled to ${block.bounds.width.toInt()}x${block.bounds.height.toInt()})")
+            } catch (e: Exception) { AppLogger.e("EditorViewModel", "执行裁剪保存失败", e) }
         }
     }
 
-    /**
-     * 将生成的图片资源绑定到具体的 Block 上
-     */
     fun onImageSelected(imageUri: String) {
         val pageId = _state.value.selectedPageId ?: return
         val blockId = _state.value.selectedBlockId ?: return
         val projectName = _state.value.projectName
-        
         viewModelScope.launch {
-            // 现在的逻辑：生成的图片已经在对应的 assets/blockId 目录下了
-            // 我们只需要更新引用即可
             _state.update { currentState ->
                 val updatedPages = currentState.project.pages.map { page ->
-                    if (page.id == pageId) {
-                        page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
-                            block.copy(currentImageUri = imageUri)
-                        })
-                    } else page
+                    if (page.id == pageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) { block -> block.copy(currentImageUri = imageUri) })
+                    else page
                 }
-                currentState.copy(
-                    project = currentState.project.copy(pages = updatedPages), 
-                    generatedCandidates = emptyList()
-                )
+                currentState.copy(project = currentState.project.copy(pages = updatedPages), generatedCandidates = emptyList())
             }
             templateRepo.saveTemplate(projectName, _state.value.project)
         }
     }
 
-    /**
-     * 清空当前 Block 选中的图片（但不删除历史文件）
-     */
     fun clearSelectedImage(blockId: String) {
         saveSnapshot()
         _state.update { currentState ->
             val pageId = currentState.selectedPageId ?: return@update currentState
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == pageId) {
-                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { 
-                        it.copy(currentImageUri = null) 
-                    })
-                } else page
+                if (page.id == pageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) { it.copy(currentImageUri = null) })
+                else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
-        viewModelScope.launch {
-            templateRepo.saveTemplate(_state.value.projectName, _state.value.project)
-        }
+        viewModelScope.launch { templateRepo.saveTemplate(_state.value.projectName, _state.value.project) }
     }
 
-    /**
-     * 批量删除图片资源并同步状态
-     */
     fun deleteImages(uris: List<String>) {
         if (uris.isEmpty()) return
         val blockId = _state.value.selectedBlockId ?: return
         val projectName = _state.value.projectName
-        
         viewModelScope.launch {
-            // 1. 物理删除文件
             uris.forEach { org.gemini.ui.forge.utils.deleteLocalFile(it) }
-            
-            // 2. 检查并同步 state
             _state.update { currentState ->
                 val pageId = currentState.selectedPageId ?: return@update currentState
                 var needsUpdate = false
-                
-                // 清理绑定引用
                 val updatedPages = currentState.project.pages.map { page ->
                     if (page.id == pageId) {
                         page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
-                            if (block.currentImageUri in uris) {
-                                needsUpdate = true
-                                block.copy(currentImageUri = null)
-                            } else block
+                            if (block.currentImageUri in uris) { needsUpdate = true; block.copy(currentImageUri = null) } else block
                         })
                     } else page
                 }
-
-                // 清理本次生成的候选列表（如果有）
                 val filteredCandidates = currentState.generatedCandidates.filter { it !in uris }
                 if (filteredCandidates.size != currentState.generatedCandidates.size) needsUpdate = true
-
-                if (needsUpdate) {
-                    currentState.copy(
-                        project = currentState.project.copy(pages = updatedPages),
-                        generatedCandidates = filteredCandidates
-                    )
-                } else currentState
+                if (needsUpdate) currentState.copy(project = currentState.project.copy(pages = updatedPages), generatedCandidates = filteredCandidates) else currentState
             }
-            
-            // 3. 始终持久化一次，防止 JSON 里的旧路径变成死链
             templateRepo.saveTemplate(projectName, _state.value.project)
-            AppLogger.d("EditorViewModel", "Batch deleted ${uris.size} images for $blockId")
         }
     }
 
-    /**
-     * 放弃当前生成的候选图
-     */
-    fun clearCandidates() {
-        _state.update { it.copy(generatedCandidates = emptyList()) }
-    }
+    fun clearCandidates() { _state.update { it.copy(generatedCandidates = emptyList()) } }
 
-    /**
-     * 加载当前选定 Block 的所有历史生成图片
-     */
     suspend fun loadBlockHistoricalImages(blockId: String): List<String> {
         return try {
             val rootDir = templateRepo.getDataDir()
             val templateDir = "$rootDir/${_state.value.projectName.replace(" ", "_")}/assets/$blockId"
-            val allFiles = org.gemini.ui.forge.utils.listFilesInLocalDirectory(templateDir)
-            allFiles.filter { it.endsWith(".png") || it.endsWith(".jpg") }
-        } catch (e: Exception) {
-            AppLogger.e("EditorViewModel", "加载历史图片失败: $blockId", e)
-            emptyList()
-        }
+            org.gemini.ui.forge.utils.listFilesInLocalDirectory(templateDir).filter { it.endsWith(".png") || it.endsWith(".jpg") }
+        } catch (e: Exception) { emptyList() }
     }
 
-    /**
-     * 切换指定图层的可见性
-     */
     fun toggleBlockVisibility(blockId: String, isVisible: Boolean) {
         val pageId = _state.value.selectedPageId ?: return
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == pageId) {
-                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { 
-                        it.copy(isVisible = isVisible) 
-                    })
-                } else page
+                if (page.id == pageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) { it.copy(isVisible = isVisible) })
+                else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
     }
 
-    /**
-     * 切换当前页面所有图层的可见性
-     */
     fun toggleAllBlocksVisibility(isVisible: Boolean) {
         val pageId = _state.value.selectedPageId ?: return
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
-                    fun updateVisibility(list: List<UIBlock>): List<UIBlock> {
-                        return list.map { it.copy(isVisible = isVisible, children = updateVisibility(it.children)) }
-                    }
-                    page.copy(blocks = updateVisibility(page.blocks))
+                    fun updateVis(list: List<UIBlock>): List<UIBlock> = list.map { it.copy(isVisible = isVisible, children = updateVis(it.children)) }
+                    page.copy(blocks = updateVis(page.blocks))
                 } else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
@@ -973,22 +775,15 @@ class EditorViewModel(
     fun updateStorageDir(newPath: String) = viewModelScope.launch { if (templateRepo.updateStorageDir(newPath)) _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) } }
     fun setMaxRetries(count: Int) = viewModelScope.launch { configManager.saveKey("API_MAX_RETRIES", count.toString()); _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) } }
     fun switchEditingLanguage(lang: PromptLanguage) = _state.update { it.copy(currentEditingPromptLang = lang) }
-
-    fun setGenerateTransparent(enabled: Boolean) {
-        _state.update { it.copy(isGenerateTransparent = enabled) }
-    }
-
-    fun setPrioritizeCloudRemoval(enabled: Boolean) {
-        _state.update { it.copy(isPrioritizeCloudRemoval = enabled) }
-    }
-
-    fun setReferenceMode(mode: ReferenceDisplayMode) {
-        _state.update { it.copy(referenceMode = mode) }
-    }
-
-    fun setReferenceOpacity(opacity: Float) {
-        _state.update { it.copy(referenceOpacity = opacity) }
-    }
-
+    fun toggleGenerationLogVisibility() { _state.update { it.copy(isGenerationLogVisible = !it.isGenerationLogVisible) } }
+    fun closeAITaskDialog() { _state.update { it.copy(showAITaskDialog = false, generationLogs = emptyList()) } }
+    private fun addGenLog(msg: String) { AppLogger.i("EditorViewModel", msg); _state.update { it.copy(generationLogs = it.generationLogs + msg, showAITaskDialog = true) } }
+    private var generationJob: kotlinx.coroutines.Job? = null
+    fun cancelGeneration() { generationJob?.cancel(); generationJob = null; _state.update { it.copy(isGenerating = false, generationLogs = it.generationLogs + ">>> 用户已手动中断处理 <<<") } }
+    fun setGenerateTransparent(enabled: Boolean) { _state.update { it.copy(isGenerateTransparent = enabled) } }
+    fun setPrioritizeCloudRemoval(enabled: Boolean) { _state.update { it.copy(isPrioritizeCloudRemoval = enabled) } }
+    fun toggleVisualMode() { _state.update { it.copy(isVisualMode = !it.isVisualMode) } }
+    fun setReferenceMode(mode: ReferenceDisplayMode) { _state.update { it.copy(referenceMode = mode) } }
+    fun setReferenceOpacity(opacity: Float) { _state.update { it.copy(referenceOpacity = opacity) } }
     fun setPromptLanguagePref(pref: PromptLanguage) = viewModelScope.launch { configManager.saveKey("PROMPT_LANGUAGE_PREF", pref.name); _state.update { it.copy(globalState = it.globalState.copy(promptLangPref = pref), currentEditingPromptLang = if (pref == PromptLanguage.EN) PromptLanguage.EN else PromptLanguage.ZH) } }
 }

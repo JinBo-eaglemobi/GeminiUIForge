@@ -9,19 +9,22 @@ import org.gemini.ui.forge.model.ui.SerialRect
 expect fun ByteArray.toImageBitmap(): ImageBitmap
 
 /**
- * 跨平台根据坐标区域裁剪图片。
- * @param imageSource 图片源（本地路径、Base64 或 URL）
- * @param bounds 裁剪区域（基于逻辑画布的绝对坐标）
- * @param logicalWidth 逻辑画布的总宽度
- * @param logicalHeight 逻辑画布的总高度
- * @return 裁剪后的图片字节数组，如果失败则返回 null
+ * 跨平台根据坐标区域裁剪图片，并可选进行强制等比缩放。
  */
 expect suspend fun cropImage(
     imageSource: String, 
-    bounds: org.gemini.ui.forge.model.ui.SerialRect,
+    bounds: SerialRect,
     logicalWidth: Float,
-    logicalHeight: Float
+    logicalHeight: Float,
+    isPng: Boolean = false,
+    forceWidth: Int? = null,
+    forceHeight: Int? = null
 ): ByteArray?
+
+/**
+ * 一键去除图片四周的透明空白区域
+ */
+expect suspend fun trimTransparency(imageSource: String): ByteArray?
 
 /**
  * 跨平台获取图片尺寸
@@ -39,10 +42,8 @@ suspend fun String.decodeBase64ToBitmap(): ImageBitmap? {
             val bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
             bytes.toImageBitmap()
         } else if (this.startsWith("http")) {
-            // Http 链接由 AsyncImage 处理
             null 
         } else {
-            // 是一个本地绝对路径
             val bytes = readLocalFileBytes(this)
             bytes?.toImageBitmap()
         }

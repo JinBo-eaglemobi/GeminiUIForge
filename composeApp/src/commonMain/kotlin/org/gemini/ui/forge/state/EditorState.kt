@@ -17,8 +17,12 @@ data class EditorState(
     val selectedBlockId: String? = null,
     val currentEditingPromptLang: PromptLanguage = PromptLanguage.ZH,
     val isGenerating: Boolean = false,
+    val showAITaskDialog: Boolean = false, // 新增：是否显示 AI 任务弹窗 (支持手动关闭)
+    val generationLogs: List<String> = emptyList(), // 生图日志流
+    val isGenerationLogVisible: Boolean = true, // 新增：日志面板可见性
     val isGenerateTransparent: Boolean = false, // 是否生成透明背景
-    val isPrioritizeCloudRemoval: Boolean = false, // 新增：是否优先云端抠图
+    val isVisualMode: Boolean = false, // 新增：是否开启纯净视觉模式 (隐藏边框和占位)
+    val isPrioritizeCloudRemoval: Boolean = false, // 是否优先云端抠图
     val generatedCandidates: List<String> = emptyList(),
     
     // 视觉对照相关状态

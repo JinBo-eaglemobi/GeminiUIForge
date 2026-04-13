@@ -2,21 +2,25 @@ package org.gemini.ui.forge.utils
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Rect
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import java.io.ByteArrayOutputStream
 import org.gemini.ui.forge.model.ui.SerialRect
 
 actual fun ByteArray.toImageBitmap(): ImageBitmap {
-    val bitmap = BitmapFactory.decodeByteArray(this, 0, this.size)
-    return bitmap.asImageBitmap()
+    return BitmapFactory.decodeByteArray(this, 0, this.size).asImageBitmap()
 }
 
 actual suspend fun cropImage(
     imageSource: String, 
-    bounds: org.gemini.ui.forge.model.ui.SerialRect,
+    bounds: SerialRect,
     logicalWidth: Float,
-    logicalHeight: Float
+    logicalHeight: Float,
+    isPng: Boolean,
+    forceWidth: Int?,
+    forceHeight: Int?
 ): ByteArray? {
     return try {
         val fullBytes = if (imageSource.startsWith("data:image")) {
@@ -29,7 +33,6 @@ actual suspend fun cropImage(
 
         val original = BitmapFactory.decodeByteArray(fullBytes, 0, fullBytes.size) ?: return null
         
-        // 关键修复：计算逻辑坐标到物理像素的缩放比
         val scaleX = original.width.toFloat() / logicalWidth
         val scaleY = original.height.toFloat() / logicalHeight
 
@@ -38,26 +41,59 @@ actual suspend fun cropImage(
         var width = (bounds.width * scaleX).toInt().coerceAtLeast(1)
         var height = (bounds.height * scaleY).toInt().coerceAtLeast(1)
 
-        AppLogger.d("ImageUtils", """
-            [Android Crop Debug]
-            - Physical Size: ${original.width} x ${original.height}
-            - Logical Canvas: $logicalWidth x $logicalHeight
-            - Scale: X=$scaleX, Y=$scaleY
-            - Target Logical Rect: L=${bounds.left}, T=${bounds.top}, W=${bounds.width}, H=${bounds.height}
-            - Mapped Physical Rect: L=$left, T=$top, W=$width, H=$height
-        """.trimIndent())
-
-        // 越界防护
         if (left + width > original.width) width = original.width - left
         if (top + height > original.height) height = original.height - top
 
-        val croppedBitmap = Bitmap.createBitmap(original, left, top, width, height)
+        var croppedBitmap = Bitmap.createBitmap(original, left, top, width, height)
+
+        if (forceWidth != null && forceHeight != null) {
+            croppedBitmap = Bitmap.createScaledBitmap(croppedBitmap, forceWidth, forceHeight, true)
+        }
         
         val out = ByteArrayOutputStream()
-        croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+        val format = if (isPng) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+        croppedBitmap.compress(format, 90, out)
         out.toByteArray()
     } catch (e: Exception) {
-        org.gemini.ui.forge.utils.AppLogger.e("ImageUtils", "Android 裁剪失败: ${e.message}", e)
+        org.gemini.ui.forge.utils.AppLogger.e("ImageUtils", "Android 裁剪缩放失败", e)
+        null
+    }
+}
+
+actual suspend fun trimTransparency(imageSource: String): ByteArray? {
+    return try {
+        val bytes = if (imageSource.startsWith("data:image")) {
+            val pureBase64 = if (imageSource.contains(",")) imageSource.substringAfter(",") else imageSource
+            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+            kotlin.io.encoding.Base64.Default.decode(pureBase64)
+        } else {
+            readLocalFileBytes(imageSource)
+        } ?: return null
+
+        val original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+        val width = original.width
+        val height = original.height
+        
+        var left = width; var top = height; var right = -1; var bottom = -1
+
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                if (((original.getPixel(x, y) shr 24) and 0xff) > 5) {
+                    if (x < left) left = x
+                    if (x > right) right = x
+                    if (y < top) top = y
+                    if (y > bottom) bottom = y
+                }
+            }
+        }
+
+        if (right < left || bottom < top) return bytes
+
+        val cropped = Bitmap.createBitmap(original, left, top, right - left + 1, bottom - top + 1)
+        val out = ByteArrayOutputStream()
+        cropped.compress(Bitmap.CompressFormat.PNG, 100, out)
+        out.toByteArray()
+    } catch (e: Exception) {
         null
     }
 }
@@ -75,7 +111,5 @@ actual suspend fun getImageSize(uri: String): Pair<Int, Int>? {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
         Pair(options.outWidth, options.outHeight)
-    } catch (e: Exception) {
-        null
-    }
+    } catch (e: Exception) { null }
 }

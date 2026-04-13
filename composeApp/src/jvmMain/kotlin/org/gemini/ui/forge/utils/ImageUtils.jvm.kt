@@ -6,17 +6,24 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
+import java.awt.Graphics2D
+import java.awt.RenderingHints
+import java.awt.Image
 import org.gemini.ui.forge.model.ui.SerialRect
 
 actual fun ByteArray.toImageBitmap(): ImageBitmap {
-    return org.jetbrains.skia.Image.makeFromEncoded(this).toComposeImageBitmap()
+    val image = ImageIO.read(ByteArrayInputStream(this))
+    return image.toComposeImageBitmap()
 }
 
 actual suspend fun cropImage(
     imageSource: String, 
-    bounds: org.gemini.ui.forge.model.ui.SerialRect,
+    bounds: SerialRect,
     logicalWidth: Float,
-    logicalHeight: Float
+    logicalHeight: Float,
+    isPng: Boolean,
+    forceWidth: Int?,
+    forceHeight: Int?
 ): ByteArray? {
     return try {
         val fullBytes = if (imageSource.startsWith("data:image")) {
@@ -29,7 +36,6 @@ actual suspend fun cropImage(
 
         val original: BufferedImage = ImageIO.read(ByteArrayInputStream(fullBytes)) ?: return null
 
-        // 关键修复：基于传入的逻辑画布尺寸，分别计算横纵缩放比
         val scaleX = original.width.toFloat() / logicalWidth
         val scaleY = original.height.toFloat() / logicalHeight
 
@@ -37,27 +43,76 @@ actual suspend fun cropImage(
         val top = (bounds.top * scaleY).toInt().coerceIn(0, original.height - 1)
         var width = (bounds.width * scaleX).toInt().coerceAtLeast(1)
         var height = (bounds.height * scaleY).toInt().coerceAtLeast(1)
-        
-        AppLogger.d("ImageUtils", """
-            [JVM Crop Debug]
-            - Physical Size: ${original.width} x ${original.height}
-            - Logical Canvas: $logicalWidth x $logicalHeight
-            - Scale: X=$scaleX, Y=$scaleY
-            - Target Logical Rect: L=${bounds.left}, T=${bounds.top}, W=${bounds.width}, H=${bounds.height}
-            - Mapped Physical Rect: L=$left, T=$top, W=$width, H=$height
-        """.trimIndent())
 
-        // 确保不超出物理边界
         if (left + width > original.width) width = original.width - left
         if (top + height > original.height) height = original.height - top
 
-        val cropped = original.getSubimage(left, top, width, height)
+        var resultImage = original.getSubimage(left, top, width, height)
+
+        if (forceWidth != null && forceHeight != null) {
+            // 使用高质量的多步平滑缩放
+            val type = if (isPng) BufferedImage.TYPE_INT_ARGB else BufferedImage.TYPE_INT_RGB
+            val scaled = BufferedImage(forceWidth, forceHeight, type)
+            val g2d = scaled.createGraphics()
+            
+            // 关键优化：针对缩小操作使用更好的插值算法
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+            g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            
+            // 使用底层高质量缩放
+            val tmp = resultImage.getScaledInstance(forceWidth, forceHeight, Image.SCALE_SMOOTH)
+            g2d.drawImage(tmp, 0, 0, null)
+            g2d.dispose()
+            resultImage = scaled
+        }
 
         val out = ByteArrayOutputStream()
-        ImageIO.write(cropped, "jpg", out)
+        val format = if (isPng) "png" else "jpg"
+        ImageIO.write(resultImage, format, out)
         out.toByteArray()
     } catch (e: Exception) {
-        org.gemini.ui.forge.utils.AppLogger.e("ImageUtils", "JVM 裁剪失败: ${e.message}", e)
+        org.gemini.ui.forge.utils.AppLogger.e("ImageUtils", "JVM 裁剪缩放失败", e)
+        null
+    }
+}
+
+actual suspend fun trimTransparency(imageSource: String): ByteArray? {
+    return try {
+        val bytes = if (imageSource.startsWith("data:image")) {
+            val pureBase64 = if (imageSource.contains(",")) imageSource.substringAfter(",") else imageSource
+            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+            kotlin.io.encoding.Base64.Default.decode(pureBase64)
+        } else {
+            readLocalFileBytes(imageSource)
+        } ?: return null
+
+        val img = ImageIO.read(ByteArrayInputStream(bytes)) ?: return null
+        val width = img.width
+        val height = img.height
+        
+        var minX = width; var minY = height; var maxX = -1; var maxY = -1
+
+        // 像素级扫描寻找非透明边界
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val alpha = (img.getRGB(x, y) shr 24) and 0xff
+                if (alpha > 5) { // 阈值，过滤掉极其微弱的杂色
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+            }
+        }
+
+        if (maxX < minX || maxY < minY) return bytes // 全透明图片返回原样
+
+        val cropped = img.getSubimage(minX, minY, maxX - minX + 1, maxY - minY + 1)
+        val out = ByteArrayOutputStream()
+        ImageIO.write(cropped, "png", out)
+        out.toByteArray()
+    } catch (e: Exception) {
         null
     }
 }
@@ -71,10 +126,7 @@ actual suspend fun getImageSize(uri: String): Pair<Int, Int>? {
         } else {
             readLocalFileBytes(uri)
         } ?: return null
-        
         val image = ImageIO.read(ByteArrayInputStream(bytes)) ?: return null
         Pair(image.width, image.height)
-    } catch (e: Exception) {
-        null
-    }
+    } catch (e: Exception) { null }
 }
