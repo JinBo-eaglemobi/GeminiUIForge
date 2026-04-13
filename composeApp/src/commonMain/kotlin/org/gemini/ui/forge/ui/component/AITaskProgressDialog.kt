@@ -44,13 +44,13 @@ fun AITaskProgressDialog(
         )
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth(0.85f).wrapContentHeight(),
+            modifier = Modifier.fillMaxWidth(0.85f).height(400.dp),
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 8.dp
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(24.dp).fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // 1. 状态标题
@@ -88,30 +88,35 @@ fun AITaskProgressDialog(
                 }
 
                 // 3. 日志显示区
-                AnimatedVisibility(visible = isLogVisible) {
-                    val listState = rememberLazyListState()
-                    LaunchedEffect(logs.size) { if (logs.isNotEmpty()) listState.animateScrollToItem(logs.size - 1) }
-
-                    Box(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)
-                            .background(Color.Black.copy(alpha = 0.05f), AppShapes.medium).padding(8.dp)
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = isLogVisible,
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        LazyColumn(state = listState) {
-                            items(logs) { log ->
-                                Text(
-                                    text = log,
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 11.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = when {
-                                        log.contains("错误", true) || log.contains("FAIL", true) -> MaterialTheme.colorScheme.error
-                                        log.startsWith(">>>") -> MaterialTheme.colorScheme.primary
-                                        else -> MaterialTheme.colorScheme.onSurface
-                                    }
-                                )
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.Black.copy(alpha = 0.02f))
+                        val listState = rememberLazyListState()
+                        LaunchedEffect(logs.size) { if (logs.isNotEmpty()) listState.animateScrollToItem(logs.size - 1) }
+
+                        Box(
+                            modifier = Modifier.fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.05f), AppShapes.medium).padding(8.dp)
+                        ) {
+                            LazyColumn(state = listState) {
+                                items(logs) { log ->
+                                    Text(
+                                        text = log,
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 11.sp,
+                                            lineHeight = 16.sp
+                                        ),
+                                        color = when {
+                                            log.contains("错误", true) || log.contains("FAIL", true) -> MaterialTheme.colorScheme.error
+                                            log.startsWith(">>>") -> MaterialTheme.colorScheme.primary
+                                            else -> MaterialTheme.colorScheme.onSurface
+                                        }
+                                    )
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.Black.copy(alpha = 0.02f))
+                                }
                             }
                         }
                     }

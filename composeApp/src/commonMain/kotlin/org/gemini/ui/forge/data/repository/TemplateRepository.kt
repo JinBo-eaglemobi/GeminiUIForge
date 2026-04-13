@@ -31,7 +31,9 @@ class TemplateRepository(
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
         // 存储规范：项目名/assets/模块名/前缀_时间戳.jpg
         val fileName = "$sanitizedName/assets/$blockId/${fileNamePrefix}_$timestamp.jpg"
-        return fileStorage.saveBytesToFile(fileName, bytes)
+        val savedPath = fileStorage.saveBytesToFile(fileName, bytes)
+        AppLogger.i("TemplateRepository", "✅ Block 资源已保存: $savedPath (${bytes.size / 1024} KB)")
+        return savedPath
     }
 
     /**
@@ -41,7 +43,9 @@ class TemplateRepository(
         val sanitizedName = templateName.replace(" ", "_")
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
         val fileName = "$sanitizedName/cache/${fileNamePrefix}_$timestamp.jpg"
-        return fileStorage.saveBytesToFile(fileName, bytes)
+        val savedPath = fileStorage.saveBytesToFile(fileName, bytes)
+        AppLogger.d("TemplateRepository", "📦 缓存图片已保存: $savedPath (${bytes.size / 1024} KB)")
+        return savedPath
     }
 
     /**
@@ -50,6 +54,7 @@ class TemplateRepository(
     suspend fun cleanupExpiredCache(templateName: String) {
         val sanitizedName = templateName.replace(" ", "_")
         val cacheDirName = "$sanitizedName/cache"
+        AppLogger.i("TemplateRepository", "🧹 开始清理过期缓存: $sanitizedName")
         try {
             val rootDir = fileStorage.getDataDir()
             val fullCacheDir = "$rootDir/$cacheDirName"
@@ -57,15 +62,18 @@ class TemplateRepository(
             val now = org.gemini.ui.forge.getCurrentTimeMillis()
             val oneDay = 24 * 60 * 60 * 1000L
 
+            var count = 0
             files.forEach { filePath ->
                 val lastMod = getLocalFileLastModified(filePath)
                 if (now - lastMod > oneDay) {
                     deleteLocalFile(filePath)
-                    AppLogger.d("TemplateRepository", "已清理过期缓存文件: $filePath")
+                    count++
+                    AppLogger.d("TemplateRepository", "🗑️ 已清理过期缓存文件: $filePath")
                 }
             }
+            AppLogger.i("TemplateRepository", "✅ 缓存清理完成，共移除 $count 个文件")
         } catch (e: Exception) {
-            AppLogger.e("TemplateRepository", "清理缓存异常", e)
+            AppLogger.e("TemplateRepository", "❌ 清理缓存异常", e)
         }
     }
 
@@ -74,6 +82,7 @@ class TemplateRepository(
      */
     suspend fun saveTemplate(templateName: String, projectState: ProjectState) {
         val sanitizedName = templateName.replace(" ", "_")
+        AppLogger.i("TemplateRepository", "💾 开始保存模板: $templateName")
         
         val pathMapping = mutableMapOf<String, String>()
         val updatedReferenceImages = mutableListOf<String>()
@@ -85,6 +94,7 @@ class TemplateRepository(
 
                 when {
                     originalPath.startsWith("http") -> {
+                        AppLogger.d("TemplateRepository", "🌐 正在下载远程参考图: $originalPath")
                         val response = httpClient.get(originalPath)
                         if (response.status.value == 200) {
                             bytes = response.readRawBytes()
@@ -92,6 +102,7 @@ class TemplateRepository(
                         }
                     }
                     originalPath.startsWith("data:image") -> {
+                        AppLogger.d("TemplateRepository", "🖼️ 正在解码 Base64 参考图")
                         val pureBase64 = if (originalPath.contains(",")) originalPath.substringAfter(",") else originalPath
                         @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
                         bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
@@ -108,12 +119,13 @@ class TemplateRepository(
                     val savedPath = fileStorage.saveBytesToFile(archivedFileName, bytes)
                     updatedReferenceImages.add(savedPath)
                     pathMapping[originalPath] = savedPath
+                    AppLogger.d("TemplateRepository", "📑 参考图归档成功: $savedPath")
                 } else if (originalPath.contains(sanitizedName) && originalPath.contains("assets")) {
                     updatedReferenceImages.add(originalPath)
                     pathMapping[originalPath] = originalPath
                 }
             } catch (e: Exception) {
-                AppLogger.e("TemplateRepository", "归档参考图失败: $originalPath", e)
+                AppLogger.e("TemplateRepository", "❌ 归档参考图失败: $originalPath", e)
             }
         }
 
@@ -130,6 +142,7 @@ class TemplateRepository(
         val fileName = "$sanitizedName/template.json"
         val content = json.encodeToString(updatedState)
         fileStorage.saveToFile(fileName, content)
+        AppLogger.i("TemplateRepository", "✅ 模板 JSON 已更新: $fileName (${content.length / 1024} KB)")
     }
 
     /**
@@ -137,6 +150,7 @@ class TemplateRepository(
      */
     suspend fun deleteTemplate(templateName: String) {
         val sanitizedName = templateName.replace(" ", "_")
+        AppLogger.i("TemplateRepository", "🗑️ 正在删除模板目录: $sanitizedName")
         fileStorage.deleteDirectory(sanitizedName)
     }
 
@@ -148,10 +162,13 @@ class TemplateRepository(
 
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
         val resourceName = "$sanitizedName/assets/$blockId/manual_$timestamp.png"
-        return fileStorage.saveBytesToFile(resourceName, bytes)
+        val savedPath = fileStorage.saveBytesToFile(resourceName, bytes)
+        AppLogger.i("TemplateRepository", "✅ 手动保存资源成功: $savedPath")
+        return savedPath
     }
 
     suspend fun getTemplates(): List<Pair<String, ProjectState>> {
+        AppLogger.d("TemplateRepository", "🔍 正在扫描本地模板列表...")
         val dirs = fileStorage.listDirectories()
         return dirs.mapNotNull { dirName ->
             val content = fileStorage.readFromFile("$dirName/template.json")
@@ -159,8 +176,10 @@ class TemplateRepository(
                 try {
                     val state = json.decodeFromString<ProjectState>(content)
                     val title = dirName.replace("_", " ")
+                    AppLogger.d("TemplateRepository", "📖 已加载模板: $title")
                     title to state
                 } catch (e: Exception) {
+                    AppLogger.e("TemplateRepository", "❌ 解析模板 JSON 失败: $dirName", e)
                     null
                 }
             } else null

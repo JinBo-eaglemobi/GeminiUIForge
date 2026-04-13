@@ -49,6 +49,7 @@ class EditorViewModel(
             undoStack.addLast(currentProject)
             if (undoStack.size > 50) undoStack.removeFirst()
             redoStack.clear()
+            AppLogger.d("EditorViewModel", "📸 快照已保存 (Undo栈大小: ${undoStack.size})")
         }
     }
 
@@ -58,6 +59,7 @@ class EditorViewModel(
             redoStack.addLast(currentState)
             val previousState = undoStack.removeLast()
             _state.update { it.copy(project = previousState) }
+            AppLogger.i("EditorViewModel", "↩️ 执行撤销操作")
         }
     }
 
@@ -67,6 +69,7 @@ class EditorViewModel(
             undoStack.addLast(currentState)
             val nextState = redoStack.removeLast()
             _state.update { it.copy(project = nextState) }
+            AppLogger.i("EditorViewModel", "↪️ 执行重做操作")
         }
     }
 

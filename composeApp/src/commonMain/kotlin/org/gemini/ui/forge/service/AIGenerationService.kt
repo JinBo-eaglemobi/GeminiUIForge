@@ -88,10 +88,16 @@ class AIGenerationService(
         } else ""
         
         val fullPromptTemplate = promptManager.getPrompt("image_gen_full_prompt")
+        
+        val widthStr = targetWidth?.toInt()?.toString() ?: "auto"
+        val heightStr = targetHeight?.toInt()?.toString() ?: "auto"
+        
         val fullPrompt = fullPromptTemplate
             .replace("{0}", blockType)
             .replace("{1}", userPrompt)
             .replace("{2}", transparentRequirements)
+            .replace("{3}", widthStr)
+            .replace("{4}", heightStr)
 
         // 计算最接近的标准比例
         val aspectRatio = if (targetWidth != null && targetHeight != null && targetHeight > 0) {

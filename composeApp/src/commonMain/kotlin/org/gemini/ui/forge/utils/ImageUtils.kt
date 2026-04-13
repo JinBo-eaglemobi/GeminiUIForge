@@ -40,14 +40,23 @@ suspend fun String.decodeBase64ToBitmap(): ImageBitmap? {
         if (this.startsWith("data:image")) {
             val pureBase64 = if (this.contains(",")) this.substringAfter(",") else this
             val bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
+            AppLogger.d("ImageUtils", "🖼️ 已从 Base64 解码图片 (${bytes.size / 1024} KB)")
             bytes.toImageBitmap()
         } else if (this.startsWith("http")) {
+            AppLogger.d("ImageUtils", "🌐 正在跳过 HTTP 链接的同步解码: $this")
             null 
         } else {
             val bytes = readLocalFileBytes(this)
-            bytes?.toImageBitmap()
+            if (bytes != null) {
+                AppLogger.d("ImageUtils", "📁 已从本地文件加载图片: $this (${bytes.size / 1024} KB)")
+                bytes.toImageBitmap()
+            } else {
+                AppLogger.e("ImageUtils", "❌ 无法读取本地图片文件: $this")
+                null
+            }
         }
     } catch (e: Exception) {
+        AppLogger.e("ImageUtils", "❌ 图片解码失败", e)
         null
     }
 }

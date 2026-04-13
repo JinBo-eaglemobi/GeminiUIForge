@@ -5,12 +5,15 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+import org.gemini.ui.forge.utils.AppLogger
+
 actual class LocalFileStorage {
     private var dataDir = File(System.getProperty("user.home"), ".geminiuiforge/templates")
 
     init {
         if (!dataDir.exists()) {
             dataDir.mkdirs()
+            AppLogger.i("LocalFileStorage", "📂 初始化数据目录: ${dataDir.absolutePath}")
         }
     }
 
@@ -18,6 +21,7 @@ actual class LocalFileStorage {
         val newDir = File(newPath)
         if (newDir.absolutePath == dataDir.absolutePath) return@withContext true
         
+        AppLogger.i("LocalFileStorage", "🔄 正在迁移数据目录至: $newPath")
         try {
             if (!newDir.exists()) newDir.mkdirs()
             if (dataDir.exists()) {
@@ -26,8 +30,10 @@ actual class LocalFileStorage {
                 }
             }
             dataDir = newDir
+            AppLogger.i("LocalFileStorage", "✅ 目录迁移成功")
             return@withContext true
         } catch (e: Exception) {
+            AppLogger.e("LocalFileStorage", "❌ 目录迁移失败", e)
             return@withContext false
         }
     }
@@ -38,7 +44,7 @@ actual class LocalFileStorage {
         val target = File(dataDir, fileName)
         target.parentFile.mkdirs()
         target.writeText(content)
-        println("【已保存文本】: ${target.absolutePath}")
+        AppLogger.d("LocalFileStorage", "📝 文本已保存: ${target.absolutePath} (${content.length} chars)")
         return@withContext target.absolutePath
     }
 
@@ -46,13 +52,15 @@ actual class LocalFileStorage {
         val target = File(dataDir, fileName)
         target.parentFile.mkdirs()
         target.writeBytes(bytes)
-        println("【已保存资源】: ${target.absolutePath}")
+        AppLogger.d("LocalFileStorage", "🎨 资源已保存: ${target.absolutePath} (${bytes.size / 1024} KB)")
         return@withContext target.absolutePath
     }
 
     actual suspend fun readFromFile(fileName: String): String? = withContext(Dispatchers.IO) {
         val file = File(dataDir, fileName)
-        return@withContext if (file.exists()) file.readText() else null
+        val exists = file.exists()
+        if (!exists) AppLogger.d("LocalFileStorage", "🔍 读取文件不存在: $fileName")
+        return@withContext if (exists) file.readText() else null
     }
 
     actual suspend fun readBytesFromFile(fileName: String): ByteArray? = withContext(Dispatchers.IO) {
@@ -70,12 +78,16 @@ actual class LocalFileStorage {
 
     actual suspend fun deleteFile(fileName: String): Boolean = withContext(Dispatchers.IO) {
         val file = File(dataDir, fileName)
-        return@withContext if (file.exists()) file.delete() else false
+        val success = if (file.exists()) file.delete() else false
+        if (success) AppLogger.d("LocalFileStorage", "🗑️ 文件已删除: $fileName")
+        return@withContext success
     }
 
     actual suspend fun deleteDirectory(dirName: String): Boolean = withContext(Dispatchers.IO) {
         val dir = File(dataDir, dirName)
-        return@withContext dir.deleteRecursively()
+        val success = dir.deleteRecursively()
+        if (success) AppLogger.i("LocalFileStorage", "🗑️ 目录已递归删除: $dirName")
+        return@withContext success
     }
 
     actual suspend fun exists(fileName: String): Boolean = withContext(Dispatchers.IO) {
@@ -83,7 +95,6 @@ actual class LocalFileStorage {
     }
 
     actual suspend fun getFilePath(fileName: String): String = withContext(Dispatchers.IO) {
-
         return@withContext File(dataDir, fileName).absolutePath
     }
 }
