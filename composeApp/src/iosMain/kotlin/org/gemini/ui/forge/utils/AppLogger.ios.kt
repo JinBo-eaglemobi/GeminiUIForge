@@ -1,5 +1,6 @@
 package org.gemini.ui.forge.utils
 
+import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.*
 
 actual fun printToConsole(level: String, tag: String, message: String, throwable: Throwable?) {
@@ -16,6 +17,7 @@ actual fun printToConsole(level: String, tag: String, message: String, throwable
     }
 }
 
+@OptIn(ExperimentalForeignApi::class)
 actual fun getPlatformLogDirectory(): String {
     val paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
     val documentsDirectory = paths.firstOrNull() as? String ?: return ""

@@ -6,6 +6,7 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import platform.posix.memcpy
 
+@OptIn(ExperimentalForeignApi::class)
 actual class LocalFileStorage {
     
     private val fileManager = NSFileManager.defaultManager

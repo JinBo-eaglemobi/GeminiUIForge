@@ -3,11 +3,14 @@ package org.gemini.ui.forge.utils
 import platform.Foundation.*
 import kotlinx.cinterop.*
 import org.gemini.ui.forge.service.LocalFileStorage
+import kotlin.experimental.ExperimentalNativeApi
 
+@OptIn(ExperimentalNativeApi::class)
 actual fun Throwable.getPlatformStackTrace(): String {
     return this.getStackTrace().joinToString("\n")
 }
 
+@OptIn(ExperimentalForeignApi::class)
 actual suspend fun getLocalFileLastModified(filePath: String): Long {
     val fileManager = NSFileManager.defaultManager
     val attributes = fileManager.attributesOfItemAtPath(filePath, error = null)
@@ -15,10 +18,12 @@ actual suspend fun getLocalFileLastModified(filePath: String): Long {
     return (date?.timeIntervalSince1970 ?: 0.0).toLong() * 1000L
 }
 
+@OptIn(ExperimentalForeignApi::class)
 actual suspend fun deleteLocalFile(filePath: String): Boolean {
     return NSFileManager.defaultManager.removeItemAtPath(filePath, error = null)
 }
 
+@OptIn(ExperimentalForeignApi::class)
 actual suspend fun listFilesInLocalDirectory(dirPath: String): List<String> {
     val fileManager = NSFileManager.defaultManager
     val contents = fileManager.contentsOfDirectoryAtPath(dirPath, error = null) as? List<String>
