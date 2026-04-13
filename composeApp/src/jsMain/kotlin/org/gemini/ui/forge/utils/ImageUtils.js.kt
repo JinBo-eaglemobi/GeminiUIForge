@@ -43,3 +43,5 @@ actual suspend fun getImageSize(uri: String): Pair<Int, Int>? {
         null
     }
 }
+
+actual suspend fun getNonTransparentBounds(imageSource: String): SerialRect? = null

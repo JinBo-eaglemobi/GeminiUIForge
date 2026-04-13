@@ -113,3 +113,5 @@ actual suspend fun getImageSize(uri: String): Pair<Int, Int>? {
         Pair(options.outWidth, options.outHeight)
     } catch (e: Exception) { null }
 }
+
+actual suspend fun getNonTransparentBounds(imageSource: String): SerialRect? = null

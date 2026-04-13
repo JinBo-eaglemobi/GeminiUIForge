@@ -61,6 +61,22 @@ fun CanvasArea(
     var pan by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
+    // 计算缩放补偿的方法
+    fun updateZoom(newZoom: Float, centroid: Offset) {
+        val oldZoom = zoom
+        val nextZoom = newZoom.coerceIn(0.1f, 5f)
+        if (oldZoom == nextZoom) return
+
+        // 核心公式：为了让 centroid 点在缩放前后视觉位置不变
+        // newPan = centroid - (centroid - oldPan) * (nextZoom / oldZoom)
+        val zoomFactor = nextZoom / oldZoom
+        pan = Offset(
+            x = centroid.x - (centroid.x - pan.x) * zoomFactor,
+            y = centroid.y - (centroid.y - pan.y) * zoomFactor
+        )
+        zoom = nextZoom
+    }
+
     var internalReferenceMode by remember { mutableStateOf(referenceMode) }
     LaunchedEffect(referenceMode) { internalReferenceMode = referenceMode }
     var internalReferenceOpacity by remember { mutableStateOf(referenceOpacity) }
@@ -73,6 +89,8 @@ fun CanvasArea(
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val totalHeightPx = with(density) { maxHeight.toPx() }
+        val containerWidthPx = with(density) { maxWidth.toPx() }
+        val containerHeightPx = with(density) { maxHeight.toPx() }
 
         Column(modifier = Modifier.fillMaxSize()) {
             if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) {
@@ -95,15 +113,14 @@ fun CanvasArea(
                             .pointerInput(blocks, zoom, pan, offsetX, offsetY, baseScale) {
                                 detectTapGestures(
                                     onDoubleTap = { offset ->
-                                        // 核心修正：考虑 transformOrigin=(0,0) 的点击坐标逆推
-                                        val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
-                                        val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
+                                        val lx = (offset.x - pan.x) / (baseScale * zoom) - offsetX / baseScale
+                                        val ly = (offset.y - pan.y) / (baseScale * zoom) - offsetY / baseScale
                                         val hitBlock = findHitBlock(blocks, lx, ly, 0f, 0f, editingGroupId)
                                         if (hitBlock != null) onBlockDoubleClicked(hitBlock.id)
                                     },
                                     onTap = { offset ->
-                                        val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
-                                        val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
+                                        val lx = (offset.x - pan.x) / (baseScale * zoom) - offsetX / baseScale
+                                        val ly = (offset.y - pan.y) / (baseScale * zoom) - offsetY / baseScale
                                         val hitBlock = findHitBlock(blocks, lx, ly, 0f, 0f, editingGroupId)
                                         onBlockClicked(hitBlock?.id)
                                     }
@@ -113,8 +130,8 @@ fun CanvasArea(
                                 var dragTargetId: String? = null
                                 detectDragGestures(
                                     onDragStart = { offset ->
-                                        val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
-                                        val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
+                                        val lx = (offset.x - pan.x) / (baseScale * zoom) - offsetX / baseScale
+                                        val ly = (offset.y - pan.y) / (baseScale * zoom) - offsetY / baseScale
                                         val hitBlock = findHitBlock(blocks, lx, ly, 0f, 0f, editingGroupId)
                                         if (hitBlock != null && !shouldDim(hitBlock, editingGroupId)) {
                                             dragTargetId = hitBlock.id
@@ -125,22 +142,68 @@ fun CanvasArea(
                                     onDrag = { change, dragAmount ->
                                         val tid = dragTargetId ?: return@detectDragGestures
                                         change.consume()
-                                        val logicalDx = dragAmount.x / density.density / (baseScale * zoom)
-                                        val logicalDy = dragAmount.y / density.density / (baseScale * zoom)
+                                        val logicalDx = dragAmount.x / (baseScale * zoom)
+                                        val logicalDy = dragAmount.y / (baseScale * zoom)
                                         onBlockDragged(tid, logicalDx, logicalDy)
                                     },
                                     onDragEnd = { dragTargetId = null },
                                     onDragCancel = { dragTargetId = null }
                                 )
                             }
-                            .pointerInput(Unit) { detectTransformGestures { _, panChange, zoomChange, _ -> zoom = (zoom * zoomChange).coerceIn(0.1f, 5f); pan += panChange } }
-                            .pointerInput(Unit) { awaitPointerEventScope { while (true) { val event = awaitPointerEvent(); if (event.type == PointerEventType.Scroll) { val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f; if (delta != 0f) zoom = (zoom * (if (delta > 0) 0.9f else 1.1f)).coerceIn(0.1f, 5f); event.changes.forEach { it.consume() } } } } }
+                            .pointerInput(blocks, zoom, pan, offsetX, offsetY, baseScale) { 
+                                detectTransformGestures { centroid, panChange, zoomChange, _ -> 
+                                    // 判定缩放中心是否在图片范围内
+                                    val imgLPx = with(density) { offsetX.dp.toPx() } * zoom + pan.x
+                                    val imgTPx = with(density) { offsetY.dp.toPx() } * zoom + pan.y
+                                    val imgRPx = with(density) { (offsetX + pageWidth * baseScale).dp.toPx() } * zoom + pan.x
+                                    val imgBPx = with(density) { (offsetY + pageHeight * baseScale).dp.toPx() } * zoom + pan.y
+
+                                    val effectiveCentroid = if (centroid.x in imgLPx..imgRPx && centroid.y in imgTPx..imgBPx) {
+                                        centroid
+                                    } else {
+                                        Offset(containerWidthPx / 2f, containerHeightPx / 2f)
+                                    }
+
+                                    updateZoom(zoom * zoomChange, effectiveCentroid)
+                                    pan += panChange 
+                                } 
+                            }
+                            .pointerInput(blocks, zoom, pan, offsetX, offsetY, baseScale) { 
+                                awaitPointerEventScope { 
+                                    while (true) { 
+                                        val event = awaitPointerEvent()
+                                        if (event.type == PointerEventType.Scroll) { 
+                                            val change = event.changes.firstOrNull() ?: continue
+                                            val delta = change.scrollDelta.y
+                                            if (delta != 0f) {
+                                                val multiplier = if (delta > 0) 0.9f else 1.1f
+                                                val mousePos = change.position
+                                                
+                                                // 判定鼠标是否在图片范围内
+                                                val imgLPx = with(density) { offsetX.dp.toPx() } * zoom + pan.x
+                                                val imgTPx = with(density) { offsetY.dp.toPx() } * zoom + pan.y
+                                                val imgRPx = with(density) { (offsetX + pageWidth * baseScale).dp.toPx() } * zoom + pan.x
+                                                val imgBPx = with(density) { (offsetY + pageHeight * baseScale).dp.toPx() } * zoom + pan.y
+
+                                                val effectiveCentroid = if (mousePos.x in imgLPx..imgRPx && mousePos.y in imgTPx..imgBPx) {
+                                                    mousePos
+                                                } else {
+                                                    Offset(containerWidthPx / 2f, containerHeightPx / 2f)
+                                                }
+
+                                                updateZoom(zoom * multiplier, effectiveCentroid)
+                                            }
+                                            event.changes.forEach { it.consume() } 
+                                        } 
+                                    } 
+                                } 
+                            }
                             .graphicsLayer {
                                 scaleX = zoom
                                 scaleY = zoom
                                 translationX = pan.x
                                 translationY = pan.y
-                                transformOrigin = TransformOrigin(0f, 0f) // 强制 (0,0) 为原点，简化数学推导
+                                transformOrigin = TransformOrigin(0f, 0f)
                             }
                     ) {
                         if (internalReferenceMode == ReferenceDisplayMode.OVERLAY && refBitmap != null) {
@@ -179,9 +242,13 @@ fun CanvasArea(
 
         Surface(modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceVariant, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)), shadowElevation = 6.dp) {
             Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { zoom = (zoom - 0.2f).coerceAtLeast(0.1f) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Remove, contentDescription = "-", modifier = Modifier.size(16.dp)) }
+                val viewCenterX = containerWidthPx / 2f
+                val viewCenterY = containerHeightPx / 2f
+                val centerOffset = Offset(viewCenterX, viewCenterY)
+
+                IconButton(onClick = { updateZoom(zoom - 0.2f, centerOffset) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Remove, contentDescription = "-", modifier = Modifier.size(16.dp)) }
                 Box(modifier = Modifier.height(28.dp).width(42.dp), contentAlignment = Alignment.Center) { Text("${(zoom * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center) }
-                IconButton(onClick = { zoom = (zoom + 0.2f).coerceAtMost(5f) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Add, contentDescription = "+", modifier = Modifier.size(16.dp)) }
+                IconButton(onClick = { updateZoom(zoom + 0.2f, centerOffset) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Add, contentDescription = "+", modifier = Modifier.size(16.dp)) }
                 VerticalDivider(modifier = Modifier.height(16.dp))
                 IconButton(onClick = { zoom = 1f; pan = Offset.Zero }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Refresh, contentDescription = "Reset", modifier = Modifier.size(18.dp)) }
                 

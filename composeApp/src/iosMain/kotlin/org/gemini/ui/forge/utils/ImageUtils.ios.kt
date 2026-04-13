@@ -26,3 +26,5 @@ actual suspend fun trimTransparency(imageSource: String): ByteArray? {
 actual suspend fun getImageSize(uri: String): Pair<Int, Int>? {
     return null
 }
+
+actual suspend fun getNonTransparentBounds(imageSource: String): SerialRect? = null

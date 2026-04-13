@@ -119,6 +119,42 @@ actual suspend fun trimTransparency(imageSource: String): ByteArray? = withConte
     }
 }
 
+actual suspend fun getNonTransparentBounds(imageSource: String): SerialRect? = withContext(Dispatchers.IO) {
+    return@withContext try {
+        val bytes = if (imageSource.startsWith("data:image")) {
+            val pureBase64 = if (imageSource.contains(",")) imageSource.substringAfter(",") else imageSource
+            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+            kotlin.io.encoding.Base64.Default.decode(pureBase64)
+        } else {
+            readLocalFileBytes(imageSource)
+        } ?: return@withContext null
+
+        val img = ImageIO.read(ByteArrayInputStream(bytes)) ?: return@withContext null
+        val width = img.width
+        val height = img.height
+
+        var minX = width; var minY = height; var maxX = -1; var maxY = -1
+
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val alpha = (img.getRGB(x, y) shr 24) and 0xff
+                if (alpha > 5) {
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+            }
+        }
+
+        if (maxX < minX || maxY < minY) return@withContext null
+
+        SerialRect(minX.toFloat(), minY.toFloat(), maxX.toFloat(), maxY.toFloat())
+    } catch (e: Exception) {
+        null
+    }
+}
+
 actual suspend fun getImageSize(uri: String): Pair<Int, Int>? = withContext(Dispatchers.IO) {
     return@withContext try {
         val bytes = if (uri.startsWith("data:image")) {

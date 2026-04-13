@@ -33,17 +33,17 @@ kotlin {
 
     jvm()
 
-//    js {
-//        browser {
-//            commonWebpackConfig {
-//                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {
-//
-//                }
-//                showProgress
-//            }
-//        }
-//        binaries.executable()
-//    }
+    js(IR) {
+        browser {
+            commonWebpackConfig {
+                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {
+
+                }
+                showProgress
+            }
+        }
+        binaries.executable()
+    }
 
     sourceSets {
 
@@ -59,9 +59,9 @@ kotlin {
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
         }
-//        jsMain.dependencies {
-//            implementation(libs.ktor.client.js)
-//        }
+        jsMain.dependencies {
+            implementation(libs.ktor.client.js)
+        }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)

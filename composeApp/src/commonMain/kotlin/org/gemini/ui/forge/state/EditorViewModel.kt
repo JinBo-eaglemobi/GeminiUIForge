@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.state
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,7 @@ import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIPage
 import org.gemini.ui.forge.service.ConfigManager
 import org.gemini.ui.forge.utils.AppLogger
+import org.jetbrains.compose.resources.readResourceBytes
 
 /**
  * 编辑器页面的 ViewModel，负责 UI 逻辑处理与状态管理
@@ -501,7 +503,7 @@ class EditorViewModel(
                 if (originalFileUri.isBlank()) {
                     onLog("🚀 云端未命中指纹，正在针对当前页面自动重传参考图...")
                     val displayName = originalImage.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "reference.jpg" }
-                    val mimeType = org.gemini.ui.forge.utils.getMimeType(originalImage)
+                    val mimeType = getMimeType(originalImage)
                     originalFileUri = cloudAssetManager.getOrUploadFile(displayName, originalBytes, mimeType) { _, status -> onLog("[$status]") } ?: ""
                 }
 
@@ -540,7 +542,7 @@ class EditorViewModel(
                 if (originalFileUri.isBlank()) {
                     onLog("🚀 云端未命中指纹，正在针对当前页面自动重传参考图...")
                     val displayName = originalImage.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "reference.jpg" }
-                    val mimeType = org.gemini.ui.forge.utils.getMimeType(originalImage)
+                    val mimeType = getMimeType(originalImage)
                     originalFileUri = cloudAssetManager.getOrUploadFile(displayName, originalBytes, mimeType) { _, status -> onLog("[$status]") } ?: ""
                 }
 
@@ -604,48 +606,48 @@ class EditorViewModel(
                 val candidatesBase64 = aiService.generateImages(blockType = block.type.name, userPrompt = submitPrompt, apiKey = apiKey, maxRetries = _state.value.globalState.maxRetries, targetWidth = block.bounds.width, targetHeight = block.bounds.height, isPng = isTransparent)
                 addGenLog("模型生成成功，获得 ${candidatesBase64.size} 张候选图。开始预处理...")
 
-                val candidatePaths = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val candidatePaths = kotlinx.coroutines.withContext(Dispatchers.Default) {
                     candidatesBase64.mapIndexed { index, base64 ->
                         val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
                         @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-                        val bytes = kotlin.io.encoding.Base64.Default.decode(pure)
+                        val bytes = kotlin.io.encoding.Base64.decode(pure)
                         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
                         val originalUri = templateRepo.saveBlockResource(projectName, block.id, "gen_${index}_$timestamp", bytes)
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 已缓存至本地。") }
+                        kotlinx.coroutines.withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 已缓存至本地。") }
                         
                         if (isTransparent) {
                             var finalProcessedBytes: ByteArray? = null
                             if (prioritizeCloud) {
-                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 正在调用云端 Vertex AI 执行背景移除...") }
+                                kotlinx.coroutines.withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 正在调用云端 Vertex AI 执行背景移除...") }
                                 finalProcessedBytes = aiService.removeBackgroundCloud(bytes, apiKey)
-                                if (finalProcessedBytes != null) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 云端抠图成功！") }
-                                else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 云端处理失败，准备回退到本地处理...") }
+                                if (finalProcessedBytes != null) kotlinx.coroutines.withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 云端抠图成功！") }
+                                else kotlinx.coroutines.withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 云端处理失败，准备回退到本地处理...") }
                             }
 
                             if (finalProcessedBytes == null) {
-                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 正在执行本地 Python 脚本抠图 (rembg)...") }
+                                kotlinx.coroutines.withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 正在执行本地 Python 脚本抠图 (rembg)...") }
                                 val outputUri = originalUri.replace("gen_", "local_trans_").replace(".jpg", ".png").replace(".jpeg", ".png")
                                 val localFileStorage = org.gemini.ui.forge.service.LocalFileStorage()
                                 val scriptCacheName = "scripts/remove_bg.py"
                                 try {
                                     if (!localFileStorage.exists(scriptCacheName)) {
                                         @OptIn(org.jetbrains.compose.resources.InternalResourceApi::class)
-                                        val scriptBytes = org.jetbrains.compose.resources.readResourceBytes("scripts/remove_bg.py")
+                                        val scriptBytes = readResourceBytes("scripts/remove_bg.py")
                                         localFileStorage.saveBytesToFile(scriptCacheName, scriptBytes)
                                     }
                                     val actualScriptPath = localFileStorage.getFilePath(scriptCacheName)
                                     val success = org.gemini.ui.forge.utils.executeSystemCommand("python", listOf(actualScriptPath, originalUri, outputUri), onLog = { 
-                                        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) { addGenLog(" > $it") } 
+                                        launch(Dispatchers.Main) { addGenLog(" > $it") }
                                     })
                                     if (success && org.gemini.ui.forge.utils.isFileExists(outputUri)) {
-                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 本地扣图成功：$outputUri") }
+                                        kotlinx.coroutines.withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 本地扣图成功：$outputUri") }
                                         return@mapIndexed outputUri
                                     } else {
-                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 本地扣图失败，保留原图。") }
+                                        kotlinx.coroutines.withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 本地扣图失败，保留原图。") }
                                         return@mapIndexed originalUri
                                     }
                                 } catch (e: Exception) {
-                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { addGenLog("[错误] 处理过程异常: ${e.message}") }
+                                    kotlinx.coroutines.withContext(Dispatchers.Main) { addGenLog("[错误] 处理过程异常: ${e.message}") }
                                     return@mapIndexed originalUri
                                 }
                             } else {

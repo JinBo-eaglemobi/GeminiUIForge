@@ -220,16 +220,56 @@ fun AssetCropDialog(
                         Button(
                             onClick = {
                                 coroutineScope.launch {
-                                    AppLogger.i("AssetCropDialog", "Executing Trim Transparency on: $currentDisplayUri")
-                                    val trimmed = org.gemini.ui.forge.utils.trimTransparency(currentDisplayUri)
-                                    if (trimmed != null) {
-                                        val newUri = org.gemini.ui.forge.service.LocalFileStorage().saveBytesToFile(
-                                            "cache/trimmed_${org.gemini.ui.forge.getCurrentTimeMillis()}.png", 
-                                            trimmed
-                                        )
-                                        // 关键修改：仅更新内部图片源，不退出，不调用 onConfirm
-                                        currentDisplayUri = newUri
-                                        AppLogger.i("AssetCropDialog", "Trimmed image loaded as new source: $newUri")
+                                    val bounds = org.gemini.ui.forge.utils.getNonTransparentBounds(currentDisplayUri)
+                                    val imgSize = imageSize
+                                    if (bounds != null && imgSize != null && imageDisplayRect != Rect.Zero) {
+                                        val scaleX = imageDisplayRect.width / imgSize.width.toFloat()
+                                        val scaleY = imageDisplayRect.height / imgSize.height.toFloat()
+
+                                        val subjLeft = imageDisplayRect.left + bounds.left * scaleX
+                                        val subjTop = imageDisplayRect.top + bounds.top * scaleY
+                                        val subjWidth = (bounds.right - bounds.left) * scaleX
+                                        val subjHeight = (bounds.bottom - bounds.top) * scaleY
+
+                                        val subjCenterX = subjLeft + subjWidth / 2f
+                                        val subjCenterY = subjTop + subjHeight / 2f
+
+                                        var newCropW: Float
+                                        var newCropH: Float
+
+                                        if (subjWidth / subjHeight > targetRatio) {
+                                            newCropW = subjWidth
+                                            newCropH = subjWidth / targetRatio
+                                        } else {
+                                            newCropH = subjHeight
+                                            newCropW = subjHeight * targetRatio
+                                        }
+
+                                        // 增加微小的呼吸边距 (例如 5%)
+                                        newCropW *= 1.05f
+                                        newCropH *= 1.05f
+
+                                        // 限制在显示图片框内
+                                        if (newCropW > imageDisplayRect.width) {
+                                            newCropW = imageDisplayRect.width
+                                            newCropH = newCropW / targetRatio
+                                        }
+                                        if (newCropH > imageDisplayRect.height) {
+                                            newCropH = imageDisplayRect.height
+                                            newCropW = newCropH * targetRatio
+                                        }
+
+                                        var newOffX = subjCenterX - newCropW / 2f
+                                        var newOffY = subjCenterY - newCropH / 2f
+
+                                        // 防止越界
+                                        if (newOffX < imageDisplayRect.left) newOffX = imageDisplayRect.left
+                                        if (newOffY < imageDisplayRect.top) newOffY = imageDisplayRect.top
+                                        if (newOffX + newCropW > imageDisplayRect.right) newOffX = imageDisplayRect.right - newCropW
+                                        if (newOffY + newCropH > imageDisplayRect.bottom) newOffY = imageDisplayRect.bottom - newCropH
+
+                                        cropSize = Size(newCropW, newCropH)
+                                        cropOffset = Offset(newOffX, newOffY)
                                     }
                                 }
                             },
@@ -238,7 +278,7 @@ fun AssetCropDialog(
                         ) {
                             Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("一键去空白")
+                            Text("自动适配")
                         }
                     }
 

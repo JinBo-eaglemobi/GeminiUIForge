@@ -208,7 +208,7 @@ fun AssetSelectionDialog(
                                                 bitmap = bitmap,
                                                 contentDescription = null,
                                                 modifier = Modifier.fillMaxSize(),
-                                                contentScale = ContentScale.Crop,
+                                                contentScale = ContentScale.Fit,
                                                 alpha = if (isChosenInMulti || isSelectedInSingle || !isMultiSelectMode) 1.0f else 0.5f
                                             )
                                             

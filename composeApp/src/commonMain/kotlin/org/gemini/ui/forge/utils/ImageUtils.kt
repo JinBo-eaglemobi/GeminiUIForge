@@ -27,6 +27,11 @@ expect suspend fun cropImage(
 expect suspend fun trimTransparency(imageSource: String): ByteArray?
 
 /**
+ * 扫描图片非透明区域的物理包围盒，返回 (left, top, right, bottom)
+ */
+expect suspend fun getNonTransparentBounds(imageSource: String): SerialRect?
+
+/**
  * 跨平台获取图片尺寸
  */
 expect suspend fun getImageSize(uri: String): Pair<Int, Int>?

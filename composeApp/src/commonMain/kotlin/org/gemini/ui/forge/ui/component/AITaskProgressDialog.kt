@@ -44,7 +44,7 @@ fun AITaskProgressDialog(
         )
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth(0.85f).height(400.dp),
+            modifier = Modifier.fillMaxWidth(0.85f).height(600.dp),
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 8.dp
