@@ -113,14 +113,14 @@ fun CanvasArea(
                             .pointerInput(blocks, zoom, pan, offsetX, offsetY, baseScale) {
                                 detectTapGestures(
                                     onDoubleTap = { offset ->
-                                        val lx = (offset.x - pan.x) / (baseScale * zoom) - offsetX / baseScale
-                                        val ly = (offset.y - pan.y) / (baseScale * zoom) - offsetY / baseScale
+                                        val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
+                                        val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
                                         val hitBlock = findHitBlock(blocks, lx, ly, 0f, 0f, editingGroupId)
                                         if (hitBlock != null) onBlockDoubleClicked(hitBlock.id)
                                     },
                                     onTap = { offset ->
-                                        val lx = (offset.x - pan.x) / (baseScale * zoom) - offsetX / baseScale
-                                        val ly = (offset.y - pan.y) / (baseScale * zoom) - offsetY / baseScale
+                                        val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
+                                        val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
                                         val hitBlock = findHitBlock(blocks, lx, ly, 0f, 0f, editingGroupId)
                                         onBlockClicked(hitBlock?.id)
                                     }
@@ -130,8 +130,8 @@ fun CanvasArea(
                                 var dragTargetId: String? = null
                                 detectDragGestures(
                                     onDragStart = { offset ->
-                                        val lx = (offset.x - pan.x) / (baseScale * zoom) - offsetX / baseScale
-                                        val ly = (offset.y - pan.y) / (baseScale * zoom) - offsetY / baseScale
+                                        val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
+                                        val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
                                         val hitBlock = findHitBlock(blocks, lx, ly, 0f, 0f, editingGroupId)
                                         if (hitBlock != null && !shouldDim(hitBlock, editingGroupId)) {
                                             dragTargetId = hitBlock.id
@@ -142,8 +142,8 @@ fun CanvasArea(
                                     onDrag = { change, dragAmount ->
                                         val tid = dragTargetId ?: return@detectDragGestures
                                         change.consume()
-                                        val logicalDx = dragAmount.x / (baseScale * zoom)
-                                        val logicalDy = dragAmount.y / (baseScale * zoom)
+                                        val logicalDx = dragAmount.x / density.density / (baseScale * zoom)
+                                        val logicalDy = dragAmount.y / density.density / (baseScale * zoom)
                                         onBlockDragged(tid, logicalDx, logicalDy)
                                     },
                                     onDragEnd = { dragTargetId = null },
