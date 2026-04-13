@@ -41,10 +41,11 @@ expect class LocalFileStorage() {
     suspend fun listFiles(): List<String>
 
     /**
-     * 列出当前存储根目录下的所有子目录名称
+     * 列出指定路径下的所有子目录名称
+     * @param parentDir 相对于根目录的路径，为 null 则列出根目录
      * @return 目录名称列表
      */
-    suspend fun listDirectories(): List<String>
+    suspend fun listDirectories(parentDir: String? = null): List<String>
 
     /**
      * 判断指定的文件或目录是否存在

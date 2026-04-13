@@ -9,6 +9,8 @@ import javax.imageio.ImageIO
 import java.awt.Graphics2D
 import java.awt.RenderingHints
 import java.awt.Image
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.model.ui.SerialRect
 
 actual fun ByteArray.toImageBitmap(): ImageBitmap {
@@ -24,17 +26,17 @@ actual suspend fun cropImage(
     isPng: Boolean,
     forceWidth: Int?,
     forceHeight: Int?
-): ByteArray? {
-    return try {
+): ByteArray? = withContext(Dispatchers.IO) {
+    return@withContext try {
         val fullBytes = if (imageSource.startsWith("data:image")) {
             val pureBase64 = if (imageSource.contains(",")) imageSource.substringAfter(",") else imageSource
             @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
             kotlin.io.encoding.Base64.Default.decode(pureBase64)
         } else {
             readLocalFileBytes(imageSource)
-        } ?: return null
+        } ?: return@withContext null
 
-        val original: BufferedImage = ImageIO.read(ByteArrayInputStream(fullBytes)) ?: return null
+        val original: BufferedImage = ImageIO.read(ByteArrayInputStream(fullBytes)) ?: return@withContext null
 
         val scaleX = original.width.toFloat() / logicalWidth
         val scaleY = original.height.toFloat() / logicalHeight
@@ -77,17 +79,17 @@ actual suspend fun cropImage(
     }
 }
 
-actual suspend fun trimTransparency(imageSource: String): ByteArray? {
-    return try {
+actual suspend fun trimTransparency(imageSource: String): ByteArray? = withContext(Dispatchers.IO) {
+    return@withContext try {
         val bytes = if (imageSource.startsWith("data:image")) {
             val pureBase64 = if (imageSource.contains(",")) imageSource.substringAfter(",") else imageSource
             @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
             kotlin.io.encoding.Base64.Default.decode(pureBase64)
         } else {
             readLocalFileBytes(imageSource)
-        } ?: return null
+        } ?: return@withContext null
 
-        val img = ImageIO.read(ByteArrayInputStream(bytes)) ?: return null
+        val img = ImageIO.read(ByteArrayInputStream(bytes)) ?: return@withContext null
         val width = img.width
         val height = img.height
         
@@ -106,7 +108,7 @@ actual suspend fun trimTransparency(imageSource: String): ByteArray? {
             }
         }
 
-        if (maxX < minX || maxY < minY) return bytes // 全透明图片返回原样
+        if (maxX < minX || maxY < minY) return@withContext bytes // 全透明图片返回原样
 
         val cropped = img.getSubimage(minX, minY, maxX - minX + 1, maxY - minY + 1)
         val out = ByteArrayOutputStream()
@@ -117,16 +119,16 @@ actual suspend fun trimTransparency(imageSource: String): ByteArray? {
     }
 }
 
-actual suspend fun getImageSize(uri: String): Pair<Int, Int>? {
-    return try {
+actual suspend fun getImageSize(uri: String): Pair<Int, Int>? = withContext(Dispatchers.IO) {
+    return@withContext try {
         val bytes = if (uri.startsWith("data:image")) {
             val pureBase64 = if (uri.contains(",")) uri.substringAfter(",") else uri
             @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
             kotlin.io.encoding.Base64.Default.decode(pureBase64)
         } else {
             readLocalFileBytes(uri)
-        } ?: return null
-        val image = ImageIO.read(ByteArrayInputStream(bytes)) ?: return null
+        } ?: return@withContext null
+        val image = ImageIO.read(ByteArrayInputStream(bytes)) ?: return@withContext null
         Pair(image.width, image.height)
     } catch (e: Exception) { null }
 }

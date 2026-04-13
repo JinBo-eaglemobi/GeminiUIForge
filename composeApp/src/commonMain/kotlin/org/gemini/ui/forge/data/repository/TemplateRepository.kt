@@ -21,16 +21,17 @@ class TemplateRepository(
 ) {
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
+    private val PROJECTS_DIR = "templates"
 
     /**
      * 将生成的资源保存到模块专用的资产目录下
-     * 路径：$templateName/assets/$blockId/
+     * 路径：templates/$templateName/assets/$blockId/
      */
     suspend fun saveBlockResource(templateName: String, blockId: String, fileNamePrefix: String, bytes: ByteArray): String {
         val sanitizedName = templateName.replace(" ", "_")
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
-        // 存储规范：项目名/assets/模块名/前缀_时间戳.jpg
-        val fileName = "$sanitizedName/assets/$blockId/${fileNamePrefix}_$timestamp.jpg"
+        // 存储规范：templates/项目名/assets/模块名/前缀_时间戳.jpg
+        val fileName = "$PROJECTS_DIR/$sanitizedName/assets/$blockId/${fileNamePrefix}_$timestamp.jpg"
         val savedPath = fileStorage.saveBytesToFile(fileName, bytes)
         AppLogger.i("TemplateRepository", "✅ Block 资源已保存: $savedPath (${bytes.size / 1024} KB)")
         return savedPath
@@ -42,7 +43,7 @@ class TemplateRepository(
     suspend fun saveCacheImage(templateName: String, fileNamePrefix: String, bytes: ByteArray): String {
         val sanitizedName = templateName.replace(" ", "_")
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
-        val fileName = "$sanitizedName/cache/${fileNamePrefix}_$timestamp.jpg"
+        val fileName = "$PROJECTS_DIR/$sanitizedName/cache/${fileNamePrefix}_$timestamp.jpg"
         val savedPath = fileStorage.saveBytesToFile(fileName, bytes)
         AppLogger.d("TemplateRepository", "📦 缓存图片已保存: $savedPath (${bytes.size / 1024} KB)")
         return savedPath
@@ -53,7 +54,7 @@ class TemplateRepository(
      */
     suspend fun cleanupExpiredCache(templateName: String) {
         val sanitizedName = templateName.replace(" ", "_")
-        val cacheDirName = "$sanitizedName/cache"
+        val cacheDirName = "$PROJECTS_DIR/$sanitizedName/cache"
         AppLogger.i("TemplateRepository", "🧹 开始清理过期缓存: $sanitizedName")
         try {
             val rootDir = fileStorage.getDataDir()
@@ -115,7 +116,7 @@ class TemplateRepository(
                 }
 
                 if (bytes != null) {
-                    val archivedFileName = "$sanitizedName/assets/reference_$index.$ext"
+                    val archivedFileName = "$PROJECTS_DIR/$sanitizedName/assets/reference_$index.$ext"
                     val savedPath = fileStorage.saveBytesToFile(archivedFileName, bytes)
                     updatedReferenceImages.add(savedPath)
                     pathMapping[originalPath] = savedPath
@@ -139,7 +140,7 @@ class TemplateRepository(
             pages = updatedPages
         )
 
-        val fileName = "$sanitizedName/template.json"
+        val fileName = "$PROJECTS_DIR/$sanitizedName/template.json"
         val content = json.encodeToString(updatedState)
         fileStorage.saveToFile(fileName, content)
         AppLogger.i("TemplateRepository", "✅ 模板 JSON 已更新: $fileName (${content.length / 1024} KB)")
@@ -151,7 +152,7 @@ class TemplateRepository(
     suspend fun deleteTemplate(templateName: String) {
         val sanitizedName = templateName.replace(" ", "_")
         AppLogger.i("TemplateRepository", "🗑️ 正在删除模板目录: $sanitizedName")
-        fileStorage.deleteDirectory(sanitizedName)
+        fileStorage.deleteDirectory("$PROJECTS_DIR/$sanitizedName")
     }
 
     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
@@ -161,7 +162,7 @@ class TemplateRepository(
         val bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
 
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
-        val resourceName = "$sanitizedName/assets/$blockId/manual_$timestamp.png"
+        val resourceName = "$PROJECTS_DIR/$sanitizedName/assets/$blockId/manual_$timestamp.png"
         val savedPath = fileStorage.saveBytesToFile(resourceName, bytes)
         AppLogger.i("TemplateRepository", "✅ 手动保存资源成功: $savedPath")
         return savedPath
@@ -169,9 +170,11 @@ class TemplateRepository(
 
     suspend fun getTemplates(): List<Pair<String, ProjectState>> {
         AppLogger.d("TemplateRepository", "🔍 正在扫描本地模板列表...")
-        val dirs = fileStorage.listDirectories()
+        // 关键点：扫描 templates 子目录下的项目
+        val dirs = fileStorage.listDirectories(PROJECTS_DIR)
         return dirs.mapNotNull { dirName ->
-            val content = fileStorage.readFromFile("$dirName/template.json")
+            val relativePath = "$PROJECTS_DIR/$dirName"
+            val content = fileStorage.readFromFile("$relativePath/template.json")
             if (content != null) {
                 try {
                     val state = json.decodeFromString<ProjectState>(content)

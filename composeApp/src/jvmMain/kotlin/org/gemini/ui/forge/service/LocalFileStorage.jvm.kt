@@ -8,12 +8,39 @@ import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.utils.AppLogger
 
 actual class LocalFileStorage {
-    private var dataDir = File(System.getProperty("user.home"), ".geminiuiforge/templates")
+    private var dataDir = File(System.getProperty("user.home"), ".geminiuiforge")
 
     init {
         if (!dataDir.exists()) {
             dataDir.mkdirs()
-            AppLogger.i("LocalFileStorage", "📂 初始化数据目录: ${dataDir.absolutePath}")
+            AppLogger.i("LocalFileStorage", "📂 初始化应用根目录: ${dataDir.absolutePath}")
+        }
+        
+        // 确保 templates 目录存在
+        val templatesDir = File(dataDir, "templates")
+        if (!templatesDir.exists()) templatesDir.mkdirs()
+
+        // 迁移逻辑：如果旧的 scripts 或 prompts 还在 templates 内部，则移动出来
+        migrateInternalDir("templates/scripts", "scripts")
+        migrateInternalDir("templates/prompts", "prompts")
+    }
+
+    private fun migrateInternalDir(oldRelativePath: String, newRelativePath: String) {
+        val oldDir = File(dataDir, oldRelativePath)
+        val newDir = File(dataDir, newRelativePath)
+        if (oldDir.exists() && oldDir.isDirectory) {
+            if (!newDir.exists()) {
+                val success = oldDir.renameTo(newDir)
+                AppLogger.i("LocalFileStorage", "🚚 迁移目录: $oldRelativePath -> $newRelativePath (成功: $success)")
+            } else {
+                // 如果新目录已存在，尝试合并文件
+                oldDir.listFiles()?.forEach { file ->
+                    val targetFile = File(newDir, file.name)
+                    if (!targetFile.exists()) file.renameTo(targetFile)
+                }
+                oldDir.delete()
+                AppLogger.i("LocalFileStorage", "🔗 合并并清理旧目录: $oldRelativePath")
+            }
         }
     }
 
@@ -72,8 +99,9 @@ actual class LocalFileStorage {
         return@withContext dataDir.listFiles()?.filter { it.isFile && it.name.endsWith(".json") }?.map { it.name } ?: emptyList()
     }
 
-    actual suspend fun listDirectories(): List<String> = withContext(Dispatchers.IO) {
-        return@withContext dataDir.listFiles()?.filter { it.isDirectory }?.map { it.name } ?: emptyList()
+    actual suspend fun listDirectories(parentDir: String?): List<String> = withContext(Dispatchers.IO) {
+        val base = if (parentDir != null) File(dataDir, parentDir) else dataDir
+        return@withContext base.listFiles()?.filter { it.isDirectory }?.map { it.name } ?: emptyList()
     }
 
     actual suspend fun deleteFile(fileName: String): Boolean = withContext(Dispatchers.IO) {

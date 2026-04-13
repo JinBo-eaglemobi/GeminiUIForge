@@ -2,27 +2,29 @@ package org.gemini.ui.forge.utils
 
 import java.io.File
 import java.security.MessageDigest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 actual fun Throwable.getPlatformStackTrace(): String {
     return this.stackTraceToString()
 }
 
-actual suspend fun getLocalFileLastModified(filePath: String): Long {
-    return File(filePath).lastModified()
+actual suspend fun getLocalFileLastModified(filePath: String): Long = withContext(Dispatchers.IO) {
+    return@withContext File(filePath).lastModified()
 }
 
-actual suspend fun deleteLocalFile(filePath: String): Boolean {
-    return File(filePath).delete()
+actual suspend fun deleteLocalFile(filePath: String): Boolean = withContext(Dispatchers.IO) {
+    return@withContext File(filePath).delete()
 }
 
-actual suspend fun listFilesInLocalDirectory(dirPath: String): List<String> {
+actual suspend fun listFilesInLocalDirectory(dirPath: String): List<String> = withContext(Dispatchers.IO) {
     val dir = File(dirPath)
-    if (!dir.exists() || !dir.isDirectory) return emptyList()
-    return dir.listFiles()?.filter { it.isFile }?.map { it.absolutePath } ?: emptyList()
+    if (!dir.exists() || !dir.isDirectory) return@withContext emptyList()
+    return@withContext dir.listFiles()?.filter { it.isFile }?.map { it.absolutePath } ?: emptyList()
 }
 
-actual suspend fun readLocalFileBytes(filePath: String): ByteArray? {
-    return try {
+actual suspend fun readLocalFileBytes(filePath: String): ByteArray? = withContext(Dispatchers.IO) {
+    return@withContext try {
         val file = File(filePath)
         if (file.exists()) file.readBytes() else null
     } catch (e: Exception) {
@@ -30,16 +32,16 @@ actual suspend fun readLocalFileBytes(filePath: String): ByteArray? {
     }
 }
 
-actual suspend fun isFileExists(filePath: String): Boolean {
-    return try {
+actual suspend fun isFileExists(filePath: String): Boolean = withContext(Dispatchers.IO) {
+    return@withContext try {
         File(filePath).exists()
     } catch (e: Exception) {
         false
     }
 }
 
-actual suspend fun appendToLocalFile(filePath: String, content: String): Boolean {
-    return try {
+actual suspend fun appendToLocalFile(filePath: String, content: String): Boolean = withContext(Dispatchers.IO) {
+    return@withContext try {
         File(filePath).appendText(content)
         true
     } catch (e: Exception) {
@@ -57,25 +59,28 @@ actual suspend fun executeSystemCommand(
     command: String,
     args: List<String>,
     onLog: (String) -> Unit
-): Boolean {
+): Boolean = withContext(Dispatchers.IO) {
     val fullCmd = listOf(command) + args
     AppLogger.i("SystemCommand", "[RAW COMMAND EXEC] ${fullCmd.joinToString(" ")}")
-    return try {
+    return@withContext try {
         val process = ProcessBuilder(fullCmd)
             .redirectErrorStream(true)
             .start()
         
         process.inputStream.bufferedReader().useLines { lines ->
-            lines.forEach { onLog(it) }
+            lines.forEach { 
+                // 确保在主线程上调用 UI 回调
+                withContext(Dispatchers.Main) { onLog(it) }
+            }
         }
         
         val exitCode = process.waitFor()
         if (exitCode != 0) {
-            onLog("Process exited with non-zero code: $exitCode")
+            withContext(Dispatchers.Main) { onLog("Process exited with non-zero code: $exitCode") }
         }
         exitCode == 0
     } catch (e: Exception) {
-        onLog("Failed to execute command: ${e.message}")
+        withContext(Dispatchers.Main) { onLog("Failed to execute command: ${e.message}") }
         false
     }
 }
