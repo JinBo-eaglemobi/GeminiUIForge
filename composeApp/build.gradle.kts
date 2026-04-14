@@ -21,23 +21,22 @@ kotlin {
         }
     }
 
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "ComposeApp"
-            isStatic = true
-        }
-    }
+//    listOf(
+//        iosArm64(),
+//        iosSimulatorArm64()
+//    ).forEach { iosTarget ->
+//        iosTarget.binaries.framework {
+//            baseName = "ComposeApp"
+//            isStatic = true
+//        }
+//    }
 
     jvm()
 
-    js(IR) {
+    js {
         browser {
             commonWebpackConfig {
                 devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {
-
                 }
                 showProgress
             }
@@ -75,20 +74,19 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
 
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.serialization.core)
             implementation(libs.kotlinx.coroutines.core)
             // Source: https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-datetime
-            api(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.datetime)
 
             // https://mvnrepository.com/artifact/io.ktor/ktor-client-core
             implementation(libs.ktor.client.core)
             // https://mvnrepository.com/artifact/io.ktor/ktor-client-auth
             implementation(libs.ktor.client.auth)
-            // https://mvnrepository.com/artifact/io.ktor/ktor-client-json
-            implementation(libs.ktor.client.json)
-            // https://mvnrepository.com/artifact/io.ktor/ktor-client-serialization
-            implementation(libs.ktor.client.serialization)
             // https://mvnrepository.com/artifact/io.ktor/ktor-http
             implementation(libs.ktor.http)
+            // https://mvnrepository.com/artifact/io.ktor/ktor-io
+            implementation(libs.ktor.io)
             // Source: https://mvnrepository.com/artifact/io.ktor/ktor-utils
             implementation(libs.ktor.utils)
             // https://mvnrepository.com/artifact/io.ktor/ktor-client-content-negotiation

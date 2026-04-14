@@ -96,7 +96,7 @@ fun AssetSelectionDialog(
                         )
                         if (!isMultiSelectMode && targetWidth > 0) {
                             Text(
-                                "目标尺寸: ${targetWidth.toInt()}x${targetHeight.toInt()} (比例: ${String.format("%.2f", targetRatio)})",
+                                "目标尺寸: ${targetWidth.toInt()}x${targetHeight.toInt()} (比例: ${((targetRatio * 100).toInt() / 100f)})",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -175,7 +175,7 @@ fun AssetSelectionDialog(
                                                         kotlin.math.abs(ratio - targetRatio) < 0.05
                                                     }
 
-                                                    if (isAdapted && size?.first == targetWidth.toInt() && size?.second == targetHeight.toInt()) {
+                                                    if (isAdapted && size?.first == targetWidth.toInt() && size.second == targetHeight.toInt()) {
                                                         onImageSelected(uri)
                                                         onDismiss()
                                                     } else {
@@ -327,7 +327,7 @@ fun AssetSelectionDialog(
                                     kotlin.math.abs(ratio - targetRatio) < 0.05
                                 }
 
-                                if (isAdapted && size?.first == targetWidth.toInt() && size?.second == targetHeight.toInt()) {
+                                if (isAdapted && size?.first == targetWidth.toInt() && size.second == targetHeight.toInt()) {
                                     onImageSelected(uri)
                                     onDismiss()
                                 } else {

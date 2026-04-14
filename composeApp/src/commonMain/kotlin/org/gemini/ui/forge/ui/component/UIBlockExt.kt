@@ -4,6 +4,9 @@ import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.StringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Input
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.*
 import org.gemini.ui.forge.model.ui.UIBlockType
 
@@ -43,12 +46,12 @@ fun UIBlockType.getIcon(): ImageVector {
         UIBlockType.FOOTER -> Icons.Default.KeyboardArrowDown
         UIBlockType.TEXT -> Icons.Default.Edit
         UIBlockType.IMAGE -> Icons.Default.Image
-        UIBlockType.COMBO_BOX -> Icons.Default.List
+        UIBlockType.COMBO_BOX -> Icons.AutoMirrored.Filled.List
         UIBlockType.PROGRESS_BAR -> Icons.Default.LinearScale
-        UIBlockType.POPUP_MENU -> Icons.Default.MenuOpen
+        UIBlockType.POPUP_MENU -> Icons.AutoMirrored.Filled.MenuOpen
         UIBlockType.LOADER -> Icons.Default.CloudDownload
         UIBlockType.SCROLL_BAR -> Icons.Default.FormatLineSpacing
         UIBlockType.SLIDER -> Icons.Default.Tune
-        UIBlockType.INPUT -> Icons.Default.Input
+        UIBlockType.INPUT -> Icons.AutoMirrored.Filled.Input
     }
 }

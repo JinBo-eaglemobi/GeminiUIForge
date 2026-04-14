@@ -4,6 +4,7 @@ import platform.Foundation.*
 import kotlinx.cinterop.*
 import org.gemini.ui.forge.service.LocalFileStorage
 import kotlin.experimental.ExperimentalNativeApi
+import kotlin.math.sin
 
 @OptIn(ExperimentalNativeApi::class)
 actual fun Throwable.getPlatformStackTrace(): String {
@@ -63,10 +64,77 @@ actual suspend fun appendToLocalFile(filePath: String, content: String): Boolean
     }
 }
 
+/**
+ * 手动实现 MD5 以保持跨平台一致性，避免对平台 Crypto 库的过度依赖
+ */
 actual fun ByteArray.calculateMd5(): String {
-    // 简化实现：iOS 平台通常使用 CommonCrypto 进行 MD5 计算
-    // 鉴于这是一个辅助功能，我们先实现一个基础的快速哈希占位，或调用平台 CC_MD5
-    return this.contentHashCode().toString(16)
+    val x = IntArray(this.size + 9 shr 6 add 1 shl 4)
+    for (i in this.indices) {
+        x[i shr 2] = x[i shr 2] or (this[i].toInt() and 0xFF shl (i and 3 shl 3))
+    }
+    x[this.size shr 2] = x[this.size shr 2] or (0x80 shl (this.size and 3 shl 3))
+    x[x.size - 2] = this.size shl 3
+    
+    var a = 0x67452301
+    var b = -0x10325477
+    var c = -0x67452302
+    var d = 0x10325476
+    
+    val s = intArrayOf(
+        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+        5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+        4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+        6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+    )
+    
+    val k = IntArray(64) { i -> ((kotlin.math.abs(sin(i + 1.0)) * 4294967296.0).toLong() and 0xFFFFFFFFL).toInt() }
+    
+    for (i in 0 until x.size step 16) {
+        val oldA = a
+        val oldB = b
+        val oldC = c
+        val oldD = d
+        
+        for (j in 0 until 64) {
+            var f: Int
+            var g: Int
+            if (j < 16) {
+                f = (b and c) or (b.inv() and d)
+                g = j
+            } else if (j < 32) {
+                f = (d and b) or (d.inv() and c)
+                g = (5 * j + 1) % 16
+            } else if (j < 48) {
+                f = b xor c xor d
+                g = (3 * j + 5) % 16
+            } else {
+                f = c xor (b or d.inv())
+                g = (7 * j) % 16
+            }
+            val temp = d
+            d = c
+            c = b
+            b = b + rotateLeft(a + f + k[j] + x[i + g], s[j])
+            a = temp
+        }
+        a += oldA
+        b += oldB
+        c += oldC
+        d += oldD
+    }
+    
+    return toHexString(a) + toHexString(b) + toHexString(c) + toHexString(d)
+}
+
+private fun rotateLeft(x: Int, n: Int): Int = (x shl n) or (x ushr (32 - n))
+
+private fun toHexString(n: Int): String {
+    var s = ""
+    for (i in 0 until 4) {
+        val v = (n shr (i * 8)) and 0xFF
+        s += v.toString(16).padStart(2, '0')
+    }
+    return s
 }
 
 actual suspend fun executeSystemCommand(
@@ -77,3 +145,5 @@ actual suspend fun executeSystemCommand(
     onLog("System command execution is not supported on iOS.")
     return false
 }
+
+private infix fun Int.add(other: Int): Int = this + other

@@ -1,11 +1,8 @@
 package org.gemini.ui.forge.service
 
-import io.ktor.client.*
 import io.ktor.client.plugins.*
-import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
-import io.ktor.client.statement.readRawBytes
 import io.ktor.http.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.async
@@ -13,8 +10,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
-import org.jetbrains.compose.resources.InternalResourceApi
-import org.jetbrains.compose.resources.readResourceBytes
 import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.data.remote.NetworkClient
 import org.gemini.ui.forge.model.ui.ProjectState
@@ -245,8 +240,11 @@ class AIGenerationService(
                 val deferredParts = imageUris.mapIndexed { index, localUri ->
                     async {
                         try {
-                            val bytes = if (localUri.startsWith("http")) client.get(localUri)
-                                .readRawBytes() else org.gemini.ui.forge.utils.readLocalFileBytes(localUri)
+                            val bytes = if (localUri.startsWith("http") && !localUri.startsWith("data:")) {
+                                client.get(localUri).readRawBytes()
+                            } else {
+                                org.gemini.ui.forge.utils.readLocalFileBytes(localUri)
+                            }
                             if (bytes == null) {
                                 syncLog("❌ 无法读取图 ${index + 1}", onLog)
                                 return@async null

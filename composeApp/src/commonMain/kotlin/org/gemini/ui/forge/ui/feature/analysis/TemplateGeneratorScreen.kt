@@ -73,8 +73,8 @@ fun TemplateGeneratorScreen(
     val imagePicker = rememberImagePicker { uris ->
         if (uris.isNotEmpty()) {
             val current = inputUris.trim()
-            val newUris = uris.joinToString(",")
-            inputUris = if (current.isEmpty()) newUris else "$current,$newUris"
+            val newUris = uris.joinToString("\n")
+            inputUris = if (current.isEmpty()) newUris else "$current\n$newUris"
         }
     }
 
@@ -141,7 +141,7 @@ fun TemplateGeneratorScreen(
                         
                         // 1. 确定最终模板名称
                         val finalTemplateName = if (templateName.isBlank()) {
-                            inputUris.split(",")
+                            inputUris.split("\n")
                                 .firstOrNull { it.isNotBlank() }
                                 ?.substringAfterLast("/")
                                 ?.substringAfterLast("\\")
@@ -152,7 +152,7 @@ fun TemplateGeneratorScreen(
                         }
 
                         logs.add("[${formatTimestamp(getCurrentTimeMillis())}] 🔍 正在预验证图片资源有效性...")
-                        val allImageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                        val allImageUris = inputUris.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
                         
                         // 执行预验证 (URL 连通性、Base64 格式、本地文件存在性)
                         val validationError = aiService.validateImageUris(allImageUris)
@@ -168,7 +168,7 @@ fun TemplateGeneratorScreen(
                         try {
                             // 2. 执行 AI 分析
                             val resultState = aiService.analyzeImagesForTemplate(
-                                imageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                                imageUris = inputUris.split("\n").map { it.trim() }.filter { it.isNotEmpty() },
                                 apiKey = apiKey,
                                 maxRetries = maxRetries,
                                 onLog = { logMsg -> logs.add("[${formatTimestamp(getCurrentTimeMillis())}] $logMsg") },
@@ -180,7 +180,7 @@ fun TemplateGeneratorScreen(
 
                             // 3. 立即自动保存到本地缓存目录 (包含全量参考图归档)
                             logs.add("[${formatTimestamp(getCurrentTimeMillis())}] 💾 正在自动归档参考图并保存模板...")
-                            val allImageUris = inputUris.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                            val allImageUris = inputUris.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
                             
                             val stateToSave = resultState.copy(
                                 createdAt = getCurrentTimeMillis(),

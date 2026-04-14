@@ -1,5 +1,7 @@
 package org.gemini.ui.forge
 
+import kotlinx.browser.document
+
 actual fun setAppLanguage(languageCode: String) {
-    // JavaScript environment
+    document.documentElement?.setAttribute("lang", languageCode)
 }

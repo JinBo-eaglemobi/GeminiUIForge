@@ -1,6 +1,9 @@
 package org.gemini.ui.forge
 
+import platform.Foundation.NSUserDefaults
+
 actual fun setAppLanguage(languageCode: String) {
-    // Basic implementation for iOS. To fully support iOS language dynamic switching,
-    // we would need NSUserDefaults manipulation, but for now we skip to avoid build errors.
+    val defaults = NSUserDefaults.standardUserDefaults
+    defaults.setObject(listOf(languageCode), forKey = "AppleLanguages")
+    defaults.synchronize()
 }

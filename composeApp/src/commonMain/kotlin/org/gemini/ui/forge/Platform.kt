@@ -1,9 +1,9 @@
 package org.gemini.ui.forge
 
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Instant
 
 /**
  * 跨平台标识接口，提供当前运行环境的基础信息
@@ -48,8 +48,8 @@ fun formatTimestamp(timeMillis: Long, format: String = "yyyy-MM-dd HH:mm:ss"): S
     
     // 手动拼接以实现 yyyy-MM-dd HH:mm:ss 格式 (由于 kotlinx-datetime 原生格式化受限)
     val year = localDateTime.year
-    val month = localDateTime.monthNumber.toString().padStart(2, '0')
-    val day = localDateTime.dayOfMonth.toString().padStart(2, '0')
+    val month = localDateTime.month.number.toString().padStart(2, '0')
+    val day = localDateTime.day.toString().padStart(2, '0')
     val hour = localDateTime.hour.toString().padStart(2, '0')
     val minute = localDateTime.minute.toString().padStart(2, '0')
     val second = localDateTime.second.toString().padStart(2, '0')

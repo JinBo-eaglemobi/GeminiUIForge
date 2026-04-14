@@ -90,13 +90,19 @@ actual class LocalFileStorage {
         return files.filter { it.endsWith(".json") }
     }
 
-    actual suspend fun listDirectories(): List<String> {
-        val items = fileManager.contentsOfDirectoryAtPath(dataDir, error = null) as? List<String> ?: emptyList()
+    actual suspend fun listDirectories(parentDir: String?): List<String> {
+        val targetDir = if (parentDir == null) dataDir else "$dataDir/$parentDir"
+        val items = fileManager.contentsOfDirectoryAtPath(targetDir, error = null) as? List<String> ?: emptyList()
         return items.filter { item ->
-            val fullPath = "$dataDir/$item"
+            val fullPath = "$targetDir/$item"
             var isDir = BooleanArray(1)
             fileManager.fileExistsAtPath(fullPath, isDir.refTo(0)) && isDir[0]
         }
+    }
+
+    actual suspend fun exists(fileName: String): Boolean {
+        val targetPath = "$dataDir/$fileName"
+        return fileManager.fileExistsAtPath(targetPath)
     }
 
     actual suspend fun deleteFile(fileName: String): Boolean {

@@ -11,15 +11,21 @@ actual class LocalFileStorage {
      * 因为 OPFS 不支持直接带斜杠的多级目录（比如 "dir/file.txt" ），
      * 需要我们递归创建并获取正确的 fileHandle 或 directoryHandle。
      */
-    private suspend fun getTargetDirectoryHandle(path: String): dynamic {
-        val navigatorStorage = window.navigator.asDynamic().storage ?: return null
-        var currentHandle = navigatorStorage.getDirectory().unsafeCast<kotlin.js.Promise<dynamic>>().await()
-        
-        val parts = path.split("/").filter { it.isNotEmpty() }
-        for (part in parts) {
-            currentHandle = currentHandle.getDirectoryHandle(part, js("{ create: true }")).unsafeCast<kotlin.js.Promise<dynamic>>().await()
+    private suspend fun getTargetDirectoryHandle(path: String, createIfNotExists: Boolean = true): dynamic {
+        try {
+            val navigatorStorage = window.navigator.asDynamic().storage ?: return null
+            var currentHandle = navigatorStorage.getDirectory().unsafeCast<kotlin.js.Promise<dynamic>>().await()
+            
+            val parts = path.split("/").filter { it.isNotEmpty() }
+            for (part in parts) {
+                val options = if (createIfNotExists) js("{ create: true }") else js("{ create: false }")
+                currentHandle = currentHandle.getDirectoryHandle(part, options).unsafeCast<kotlin.js.Promise<dynamic>>().await()
+            }
+            return currentHandle
+        } catch (e: Throwable) {
+            // 当 createIfNotExists 为 false 且目录不存在时，抛出 NotFoundError 是正常的预期行为。
+            return null
         }
-        return currentHandle
     }
 
     private fun getParentPathAndName(fullPath: String): Pair<String, String> {
@@ -107,32 +113,67 @@ actual class LocalFileStorage {
     }
 
     actual suspend fun listFiles(): List<String> {
-        // 由于我们的模板通常存储在类似 "Name/template.json" 结构中，
-        // 这里只是为了满足接口，简单获取根目录的 .json。通常在 OPFS 中我们较少使用。
-        return emptyList()
-    }
-
-    actual suspend fun listDirectories(): List<String> {
-        val dirs = mutableListOf<String>()
+        val files = mutableListOf<String>()
         try {
             val navigatorStorage = window.navigator.asDynamic().storage ?: return emptyList()
             val rootHandle = navigatorStorage.getDirectory().unsafeCast<kotlin.js.Promise<dynamic>>().await()
-            
             val iterator = rootHandle.values().unsafeCast<dynamic>()
             
             while (true) {
                 val nextResult = iterator.next().unsafeCast<kotlin.js.Promise<dynamic>>().await()
-                val done = nextResult.done.unsafeCast<Boolean?>() ?: true
-                if (done) break
-                
+                if (nextResult.done.unsafeCast<Boolean?>() ?: true) break
+                val value = nextResult.value
+                if (value != null && value.kind == "file") {
+                    files.add(value.name.unsafeCast<String>())
+                }
+            }
+        } catch (e: Exception) {}
+        return files
+    }
+
+    suspend fun listFilesRecursive(dirPath: String): List<String> {
+        val files = mutableListOf<String>()
+        try {
+            val dirHandle = getTargetDirectoryHandle(dirPath, createIfNotExists = false) ?: return emptyList()
+            val iterator = dirHandle.values().unsafeCast<dynamic>()
+            while (true) {
+                val nextResult = iterator.next().unsafeCast<kotlin.js.Promise<dynamic>>().await()
+                if (nextResult.done.unsafeCast<Boolean?>() ?: true) break
+                val value = nextResult.value
+                if (value != null) {
+                    val name = value.name.unsafeCast<String>()
+                    val fullPath = if (dirPath.isEmpty()) name else "$dirPath/$name"
+                    if (value.kind == "file") {
+                        files.add(fullPath)
+                    } else if (value.kind == "directory") {
+                        files.addAll(listFilesRecursive(fullPath))
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+        return files
+    }
+
+    actual suspend fun listDirectories(parentDir: String?): List<String> {
+        val dirs = mutableListOf<String>()
+        try {
+            val dirHandle = if (parentDir == null) {
+                val navigatorStorage = window.navigator.asDynamic().storage ?: return emptyList()
+                navigatorStorage.getDirectory().unsafeCast<kotlin.js.Promise<dynamic>>().await()
+            } else {
+                getTargetDirectoryHandle(parentDir, createIfNotExists = false) ?: return emptyList()
+            }
+            
+            val iterator = dirHandle.values().unsafeCast<dynamic>()
+            while (true) {
+                val nextResult = iterator.next().unsafeCast<kotlin.js.Promise<dynamic>>().await()
+                if (nextResult.done.unsafeCast<Boolean?>() ?: true) break
                 val value = nextResult.value
                 if (value != null && value.kind == "directory") {
                     dirs.add(value.name.unsafeCast<String>())
                 }
             }
-        } catch (e: Exception) {
-            // ignore
-        }
+        } catch (e: Exception) {}
         return dirs
     }
 

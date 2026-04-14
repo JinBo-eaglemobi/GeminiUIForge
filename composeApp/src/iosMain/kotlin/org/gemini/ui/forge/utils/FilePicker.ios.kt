@@ -1,19 +1,84 @@
 package org.gemini.ui.forge.utils
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import platform.UIKit.*
+import platform.PhotosUI.*
+import platform.Foundation.*
+import platform.UniformTypeIdentifiers.*
+import kotlinx.cinterop.*
+import platform.darwin.NSObject
 
 @Composable
 actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
+    val delegate = remember {
+        object : NSObject(), PHPickerViewControllerDelegateProtocol {
+            override fun picker(picker: PHPickerViewController, didFinishPicking: List<*>) {
+                picker.dismissViewControllerAnimated(true, null)
+                val results = mutableListOf<String>()
+                val dispatchGroup = dispatch_group_create()
+
+                didFinishPicking.forEach { result ->
+                    val pickerResult = result as PHPickerResult
+                    val itemProvider = pickerResult.itemProvider
+                    if (itemProvider.canLoadObjectOfClass(UIImage.asDynamic())) {
+                        dispatch_group_enter(dispatchGroup)
+                        itemProvider.loadObjectOfClass(UIImage.asDynamic()) { image, error ->
+                            if (image != null && image is UIImage) {
+                                // 在 iOS 上，我们通常将图片保存到临时目录并返回路径
+                                val data = UIImagePNGRepresentation(image)
+                                if (data != null) {
+                                    val tempDir = NSTemporaryDirectory()
+                                    val fileName = NSUUID().UUIDString() + ".png"
+                                    val filePath = tempDir + fileName
+                                    data.writeToFile(filePath, true)
+                                    results.add(filePath)
+                                }
+                            }
+                            dispatch_group_leave(dispatchGroup)
+                        }
+                    }
+                }
+
+                dispatch_group_notify(dispatchGroup, dispatch_get_main_queue()) {
+                    onResult(results)
+                }
+            }
+        }
+    }
+
     return {
-        // Stub for iOS
-        onResult(emptyList())
+        val pickerConfig = PHPickerConfiguration()
+        pickerConfig.selectionLimit = 0 // 0 means multiselect
+        pickerConfig.filter = PHPickerFilter.imagesFilter()
+        val picker = PHPickerViewController(pickerConfig)
+        picker.delegate = delegate
+        
+        val rootVC = UIApplication.sharedApplication.keyWindow?.rootViewController
+        rootVC?.presentViewController(picker, animated = true, completion = null)
     }
 }
 
 @Composable
 actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): () -> Unit {
+    val delegate = remember {
+        object : NSObject(), UIDocumentPickerDelegateProtocol {
+            override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
+                val url = didPickDocumentsAtURLs.firstOrNull() as? NSURL
+                onResult(url?.path)
+            }
+
+            override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) {
+                onResult(null)
+            }
+        }
+    }
+
     return {
-        // Stub for iOS directory picker
-        onResult(null)
+        val picker = UIDocumentPickerViewController(forOpeningContentTypes = listOf(UTTypeFolder), asCopy = false)
+        picker.delegate = delegate
+        
+        val rootVC = UIApplication.sharedApplication.keyWindow?.rootViewController
+        rootVC?.presentViewController(picker, animated = true, completion = null)
     }
 }

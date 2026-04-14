@@ -128,7 +128,7 @@ fun AssetCropDialog(
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                 Text("适配裁剪区域", style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    "目标比例: ${String.format("%.2f", targetRatio)} | 当前底图: ${imageSize?.width ?: 0}x${imageSize?.height ?: 0}",
+                    "目标比例: ${((targetRatio * 100).toInt() / 100f)} | 当前底图: ${imageSize?.width ?: 0}x${imageSize?.height ?: 0}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
