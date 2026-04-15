@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import kotlinx.coroutines.delay
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.model.app.AppScreen
 import org.gemini.ui.forge.model.app.ShortcutAction
@@ -28,6 +29,7 @@ import org.gemini.ui.forge.ui.component.AppTopBar
 import org.gemini.ui.forge.ui.theme.AppTheme
 import org.gemini.ui.forge.utils.*
 import org.gemini.ui.forge.service.*
+import kotlin.time.Duration.Companion.milliseconds
 
 private var originalSystemLanguage: String? = null
 
@@ -49,7 +51,7 @@ fun App(typography: Typography? = null) {
         val globalState = state.globalState
 
         LaunchedEffect(Unit) {
-            kotlinx.coroutines.delay(100)
+            delay(100.milliseconds)
             try {
                 focusRequester.requestFocus()
             } catch (e: Exception) { }
