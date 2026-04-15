@@ -187,9 +187,19 @@ compose.desktop {
         mainClass = "org.gemini.ui.forge.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "org.gemini.ui.forge"
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe)
+            packageName = "GeminiUIForge"
             packageVersion = "1.0.0"
+            description = "Gemini UI Forge - 便携版"
+            copyright = "© 2026 Gemini"
+
+
+            // 针对 Windows 的配置
+            windows {
+                shortcut = true // 是否创建桌面快捷方式
+                menu = true     // 是否加入开始菜单
+//                upgradeUuid = "..." // 固定的 UUID 方便后续覆盖更新
+            }
         }
     }
 }
