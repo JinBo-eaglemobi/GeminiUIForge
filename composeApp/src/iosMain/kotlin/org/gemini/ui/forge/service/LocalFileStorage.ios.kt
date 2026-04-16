@@ -1,9 +1,7 @@
 package org.gemini.ui.forge.service
 
 import platform.Foundation.*
-import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.usePinned
+import kotlinx.cinterop.*
 import platform.posix.memcpy
 
 @OptIn(ExperimentalForeignApi::class)
@@ -19,9 +17,12 @@ actual class LocalFileStorage {
             val documentUrl = urls.first() as NSURL
             dataDir = documentUrl.path + "/templates"
             
-            var isDir = BooleanArray(1)
-            if (!fileManager.fileExistsAtPath(dataDir, isDir.refTo(0)) || !isDir[0]) {
-                fileManager.createDirectoryAtPath(dataDir, withIntermediateDirectories = true, attributes = null, error = null)
+            memScoped {
+                val isDir = alloc<BooleanVar>()
+                val exists = fileManager.fileExistsAtPath(dataDir, isDir.ptr)
+                if (!exists || !isDir.value) {
+                    fileManager.createDirectoryAtPath(dataDir, withIntermediateDirectories = true, attributes = null, error = null)
+                }
             }
         }
     }
@@ -45,7 +46,6 @@ actual class LocalFileStorage {
         return targetPath
     }
 
-    @OptIn(ExperimentalForeignApi::class)
     actual suspend fun saveBytesToFile(fileName: String, bytes: ByteArray): String {
         val targetPath = "$dataDir/$fileName"
         
@@ -70,7 +70,6 @@ actual class LocalFileStorage {
         return NSString.stringWithContentsOfFile(targetPath, encoding = NSUTF8StringEncoding, error = null) as String?
     }
 
-    @OptIn(ExperimentalForeignApi::class)
     actual suspend fun readBytesFromFile(fileName: String): ByteArray? {
         val targetPath = "$dataDir/$fileName"
         if (!fileManager.fileExistsAtPath(targetPath)) return null
@@ -95,8 +94,11 @@ actual class LocalFileStorage {
         val items = fileManager.contentsOfDirectoryAtPath(targetDir, error = null) as? List<String> ?: emptyList()
         return items.filter { item ->
             val fullPath = "$targetDir/$item"
-            var isDir = BooleanArray(1)
-            fileManager.fileExistsAtPath(fullPath, isDir.refTo(0)) && isDir[0]
+            memScoped {
+                val isDir = alloc<BooleanVar>()
+                val exists = fileManager.fileExistsAtPath(fullPath, isDir.ptr)
+                exists && isDir.value
+            }
         }
     }
 

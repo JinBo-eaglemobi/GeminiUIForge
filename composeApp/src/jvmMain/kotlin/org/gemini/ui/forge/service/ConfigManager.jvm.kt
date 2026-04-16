@@ -3,6 +3,7 @@ package org.gemini.ui.forge.service
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.gemini.ui.forge.utils.AppLogger
 
 actual open class ConfigManager {
     /**
@@ -23,17 +24,26 @@ actual open class ConfigManager {
     }
 
     actual open suspend fun loadGlobalGeminiKey(): String? = withContext(Dispatchers.IO) {
-        // 1. 优先尝试从系统环境变量中获取
-        System.getProperty("GEMINI_API_KEY")?.let { return@withContext it }
+        // 1. 优先尝试从系统环境变量中获取 (macOS/Linux 用户最常用的方式)
+        System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }?.let { return@withContext it }
         
-        // 2. 退避策略：尝试读取 `~/.gemini/.env` 这个通用配置文件
+        // 2. 其次尝试从 JVM 启动属性获取
+        System.getProperty("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }?.let { return@withContext it }
+        
+        // 3. 退避策略：尝试读取 `~/.gemini/.env` 通用配置文件
         val globalEnv = File(System.getProperty("user.home"), ".gemini/.env")
         if (globalEnv.exists()) {
-            globalEnv.readLines().forEach { line ->
-                val trimmed = line.trim()
-                if (trimmed.startsWith("export GEMINI_API_KEY=")) {
-                    return@withContext trimmed.substringAfter("=").trim().removeSurrounding("\"")
+            try {
+                globalEnv.readLines().forEach { line ->
+                    val trimmed = line.trim()
+                    // 兼容 "GEMINI_API_KEY=xxx" 和 "export GEMINI_API_KEY=xxx"
+                    if (trimmed.contains("GEMINI_API_KEY=")) {
+                        val value = trimmed.substringAfter("=").trim().removeSurrounding("\"").removeSurrounding("'")
+                        if (value.isNotBlank()) return@withContext value
+                    }
                 }
+            } catch (e: Exception) {
+                AppLogger.e("ConfigManager", "读取全局 .env 失败", e)
             }
         }
         return@withContext null

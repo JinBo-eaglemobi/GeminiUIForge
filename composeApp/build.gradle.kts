@@ -21,15 +21,15 @@ kotlin {
         }
     }
 
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "ComposeApp"
-            isStatic = true
-        }
-    }
+//    listOf(
+//        iosArm64(),
+//        iosSimulatorArm64()
+//    ).forEach { iosTarget ->
+//        iosTarget.binaries.framework {
+//            baseName = "ComposeApp"
+//            isStatic = true
+//        }
+//    }
 
     jvm()
 
@@ -50,10 +50,8 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
-            // Source: https://mvnrepository.com/artifact/org.jetbrains.compose.foundation/foundation-desktop
-            implementation("org.jetbrains.compose.foundation:foundation-desktop:1.10.0")
             // https://mvnrepository.com/artifact/org.jetbrains.skiko/skiko-android
-//            implementation("org.jetbrains.skiko:skiko-android:0.9.37.3")
+            implementation("org.jetbrains.skiko:skiko-android:0.9.37.3")
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
@@ -99,6 +97,11 @@ kotlin {
             implementation(libs.coil.compose)
             // https://mvnrepository.com/artifact/io.coil-kt.coil3/coil-network-ktor3
             implementation(libs.coil.network.ktor3)
+            // https://mvnrepository.com/artifact/org.jetbrains.skiko/skiko
+            implementation("org.jetbrains.skiko:skiko:0.9.37.3")
+
+            implementation("org.jetbrains.compose.ui:ui-graphics:1.10.0")
+            implementation("org.jetbrains.kotlinx:kotlinx-io-core:0.8.2")
 
         }
         commonTest.dependencies {
@@ -151,6 +154,15 @@ kotlin {
 
 }
 
+// 动态解析版本号
+// 优先使用 GitHub Actions 的 tag (例如 v1.2.3-win -> 1.2.3)，如果不存在则使用默认版本 1.0.0
+val rawTag = System.getenv("GITHUB_REF_NAME") ?: ""
+val projectVersion = if (rawTag.startsWith("v")) {
+    rawTag.removePrefix("v").substringBefore("-")
+} else {
+    "1.0.0"
+}
+
 android {
     namespace = "org.gemini.ui.forge"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -160,9 +172,9 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
-        versionName = "1.0"
+        versionName = projectVersion
     }
-    
+
     signingConfigs {
         create("release") {
             storeFile = file(project.findProperty("KEY_STORE_FILE") ?: "../app.jks")
@@ -200,7 +212,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe)
             packageName = "GeminiUIForge"
-            packageVersion = "1.0.0"
+            packageVersion = projectVersion
             description = "Gemini UI Forge - 便携版"
             copyright = "© 2026 Gemini"
 

@@ -51,7 +51,9 @@ class UpdateService(private val currentVersion: String) {
             })
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 30000
+            requestTimeoutMillis = 600000
+            socketTimeoutMillis = 1800000
+            connectTimeoutMillis = 30000
         }
     }
 
@@ -60,11 +62,11 @@ class UpdateService(private val currentVersion: String) {
     /** 检查更新 */
     suspend fun checkUpdate(): UpdateInfo? = withContext(Dispatchers.Default) {
         try {
-            val response = client.get("https://api.github.com/repos/$GITHUB_REPO/releases/latest")
-            
+            val url = "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
+            val response = client.get(url)
             if (response.status != HttpStatusCode.OK) {
                 val errorMsg = response.bodyAsText()
-                AppLogger.e("UpdateService", "❌ GitHub API 请求失败: ${response.status}. 响应内容: $errorMsg")
+                AppLogger.e("UpdateService", "❌ GitHub API 请求失败: url: $url ${response.status}. 响应内容: $errorMsg")
                 return@withContext null
             }
 

@@ -8,6 +8,11 @@ import platform.Foundation.*
 import platform.UniformTypeIdentifiers.*
 import kotlinx.cinterop.*
 import platform.darwin.NSObject
+import platform.darwin.dispatch_get_main_queue
+import platform.darwin.dispatch_group_create
+import platform.darwin.dispatch_group_enter
+import platform.darwin.dispatch_group_leave
+import platform.darwin.dispatch_group_notify
 
 @Composable
 actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
@@ -21,9 +26,13 @@ actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
                 didFinishPicking.forEach { result ->
                     val pickerResult = result as PHPickerResult
                     val itemProvider = pickerResult.itemProvider
-                    if (itemProvider.canLoadObjectOfClass(UIImage.asDynamic())) {
+                    
+                    // 在 Kotlin/Native 中，PHPicker 要求传入 NSItemProviderReadingProtocol 协议对象。
+                    // UIImage 实现了该协议。我们需要将其作为协议对象传递。
+                    val uiImageClass = UIImage as Any as NSItemProviderReadingProtocol
+                    if (itemProvider.canLoadObjectOfClass(uiImageClass)) {
                         dispatch_group_enter(dispatchGroup)
-                        itemProvider.loadObjectOfClass(UIImage.asDynamic()) { image, error ->
+                        itemProvider.loadObjectOfClass(uiImageClass) { image, error ->
                             if (image != null && image is UIImage) {
                                 // 在 iOS 上，我们通常将图片保存到临时目录并返回路径
                                 val data = UIImagePNGRepresentation(image)

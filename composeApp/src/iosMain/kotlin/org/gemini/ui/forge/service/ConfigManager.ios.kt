@@ -2,7 +2,7 @@ package org.gemini.ui.forge.service
 
 import platform.Foundation.NSUserDefaults
 
-actual class ConfigManager {
+actual open class ConfigManager {
     /**
      * iOS 平台原生的轻量级键值对存储机制 (等同于 Android 的 SharedPreferences)。
      * standardUserDefaults 提供了一个与 App 绑定的持久化字典，
