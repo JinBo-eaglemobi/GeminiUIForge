@@ -26,10 +26,11 @@ jobs:
           java-version: '23'
           distribution: 'temurin'
           cache: 'gradle'
-      - name: 生成 Windows 安装包和绿色版
+      - name: 生成 Windows 产物 (含 JAR/安装包/绿色版)
         run: |
           ./gradlew :composeApp:packageDistributed
           ./gradlew :composeApp:createDistributable
+          ./gradlew :composeApp:desktopJar
       - name: 压缩绿色版
         shell: pwsh
         run: Compress-Archive -Path "composeApp/build/compose/binaries/main/app/*" -DestinationPath "GeminiUIForge-Windows-Portable.zip"
@@ -39,6 +40,7 @@ jobs:
           files: |
             composeApp/build/compose/binaries/main/msi/*.msi
             composeApp/build/compose/binaries/main/exe/*.exe
+            composeApp/build/libs/*.jar
             GeminiUIForge-Windows-Portable.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

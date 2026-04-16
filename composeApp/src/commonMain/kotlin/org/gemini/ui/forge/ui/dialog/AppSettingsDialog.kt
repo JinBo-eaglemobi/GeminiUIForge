@@ -3,6 +3,7 @@ package org.gemini.ui.forge.dialog
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,7 +17,9 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -35,6 +38,7 @@ fun AppSettingsDialog(
     shortcuts: Map<ShortcutAction, String>,
     envStatus: FullEnvironmentStatus,
     initialCategory: SettingCategory = SettingCategory.GENERAL,
+    updateStatus: UpdateStatus = UpdateStatus.Idle,
     onDismiss: () -> Unit,
     onLanguageSelected: (String) -> Unit,
     onThemeSelected: (ThemeMode) -> Unit,
@@ -44,7 +48,9 @@ fun AppSettingsDialog(
     onPromptLangSelected: (PromptLanguage) -> Unit = {},
     onShortcutSaved: (ShortcutAction, String) -> Unit = { _, _ -> },
     onCheckEnv: () -> Unit = {},
-    onInstallEnvItem: (String) -> Unit = {}
+    onInstallEnvItem: (String) -> Unit = {},
+    onCheckUpdate: () -> Unit = {},
+    onStartUpdate: (UpdateInfo) -> Unit = {}
 ) {
     var selectedCategory by remember { mutableStateOf(initialCategory) }
     var leftWeight by remember { mutableStateOf(0.3f) }
@@ -145,6 +151,7 @@ fun AppSettingsDialog(
                                         envStatus, onCheckEnv, onInstallEnvItem
                                     )
                                     SettingCategory.SHORTCUTS -> ShortcutSettings(shortcuts, onShortcutSaved)
+                                    SettingCategory.ABOUT -> AboutSection(updateStatus, onCheckUpdate, onStartUpdate)
                                 }
                             }
                             VerticalScrollbar(
@@ -434,11 +441,103 @@ private fun ShortcutSettings(
 }
 
 @Composable
+private fun AboutSection(
+    updateStatus: UpdateStatus,
+    onCheckUpdate: () -> Unit,
+    onStartUpdate: (UpdateInfo) -> Unit
+) {
+    SettingSectionTitle(stringResource(Res.string.settings_category_about))
+    
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(stringResource(Res.string.app_name), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(stringResource(Res.string.about_version), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        
+        Spacer(Modifier.height(16.dp))
+
+        // 更新检测区域
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            shape = AppShapes.medium
+        ) {
+            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                when (updateStatus) {
+                    is UpdateStatus.Idle -> {
+                        Button(onClick = onCheckUpdate, shape = AppShapes.medium) {
+                            Icon(Icons.Default.SystemUpdateAlt, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(Res.string.update_check_action))
+                        }
+                    }
+                    is UpdateStatus.Checking -> {
+                        CircularProgressIndicator(Modifier.size(24.dp))
+                        Text(stringResource(Res.string.update_checking), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                    }
+                    is UpdateStatus.Available -> {
+                        Text(stringResource(Res.string.update_available_title, updateStatus.info.version), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text(updateStatus.info.releaseNotes, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp))
+                        Button(onClick = { onStartUpdate(updateStatus.info) }, shape = AppShapes.medium) {
+                            Text(stringResource(Res.string.update_action_now))
+                        }
+                    }
+                    is UpdateStatus.Downloading -> {
+                        LinearProgressIndicator(progress = { updateStatus.progress }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape))
+                        Text(stringResource(Res.string.update_downloading, (updateStatus.progress * 100).toInt()), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                    }
+                    is UpdateStatus.ReadyToInstall -> {
+                        CircularProgressIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(Res.string.update_preparing), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                    }
+                    is UpdateStatus.UpToDate -> {
+                        Text(stringResource(Res.string.update_latest), color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = onCheckUpdate, modifier = Modifier.padding(top = 4.dp)) { Text(stringResource(Res.string.update_check_action), style = MaterialTheme.typography.labelSmall) }
+                    }
+                    is UpdateStatus.Error -> {
+                        Text(updateStatus.message, color = MaterialTheme.colorScheme.error)
+                        Button(onClick = onCheckUpdate, modifier = Modifier.padding(top = 8.dp), shape = AppShapes.medium) { Text(stringResource(Res.string.update_check_action)) }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = AppShapes.medium
+        ) {
+            Text(
+                text = stringResource(Res.string.about_description),
+                style = MaterialTheme.typography.bodyMedium,
+                lineHeight = 20.sp,
+                modifier = Modifier.padding(12.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(stringResource(Res.string.about_copyright), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+    }
+}
+
+@Composable
 private fun SettingSectionTitle(title: String) {
     Text(
         text = title,
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.Bold
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(bottom = 8.dp)
     )
 }

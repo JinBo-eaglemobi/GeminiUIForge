@@ -11,7 +11,7 @@ import org.gemini.ui.forge.service.ConfigManager
 
 fun main() {
     val configManager = ConfigManager()
-    
+
     // 同步加载上次保存的窗口状态
     val savedWidth = runBlocking { configManager.loadKey("WINDOW_WIDTH") }?.toFloatOrNull() ?: 1280f
     val savedHeight = runBlocking { configManager.loadKey("WINDOW_HEIGHT") }?.toFloatOrNull() ?: 800f

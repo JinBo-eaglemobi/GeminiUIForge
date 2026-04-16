@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.state
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.ktor.utils.io.release
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -8,6 +9,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.io.buffered
+import kotlinx.io.files.FileSystem
+import kotlinx.io.files.Path
+import kotlinx.io.files.SystemFileSystem
+import kotlinx.io.files.SystemTemporaryDirectory
+import kotlinx.io.files.sink
+import kotlinx.io.files.source
 import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.CloudAssetManager
@@ -46,11 +55,47 @@ class EditorViewModel(
     private val templateRepo: TemplateRepository = TemplateRepository(),
     val cloudAssetManager: CloudAssetManager = CloudAssetManager(configManager),
     private val aiService: AIGenerationService = AIGenerationService(cloudAssetManager),
-    private val envService: org.gemini.ui.forge.service.EnvironmentCheckService = org.gemini.ui.forge.service.createEnvironmentCheckService()
+    private val envService: org.gemini.ui.forge.service.EnvironmentCheckService = org.gemini.ui.forge.service.createEnvironmentCheckService(),
+    private val updateService: org.gemini.ui.forge.service.UpdateService = org.gemini.ui.forge.service.UpdateService("1.0.0")
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditorState())
     val state: StateFlow<EditorState> = _state.asStateFlow()
+
+    /** 检查软件更新 */
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.Checking) }
+            val info = updateService.checkUpdate()
+            if (info != null) {
+                _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.Available(info)) }
+            } else {
+                _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.UpToDate) }
+            }
+        }
+    }
+
+    /** 开始下载并执行更新重启 */
+    fun performUpdate(info: org.gemini.ui.forge.model.app.UpdateInfo) {
+        viewModelScope.launch(Dispatchers.Default) {
+            try {
+                // 使用 kotlinx-io 定义跨平台临时路径 (利用项目现有的存储目录)
+                val storageDir = templateRepo.getDataDir()
+                val tempPath = Path(storageDir, "update_" + info.fileName)
+                
+                updateService.downloadUpdate(info.downloadUrl, tempPath).collect { progress ->
+                    _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.Downloading(progress)) }
+                }
+                
+                _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.ReadyToInstall) }
+                delay(1000)
+                // 执行接力重启 (传递路径字符串)
+                org.gemini.ui.forge.getPlatform().applyUpdateAndRestart(tempPath.toString())
+            } catch (e: Exception) {
+                _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.Error(e.message ?: "Unknown Error")) }
+            }
+        }
+    }
 
     /** 执行全量环境检查 */
     fun checkEnvironment() {

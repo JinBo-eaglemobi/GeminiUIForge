@@ -1,8 +1,11 @@
 package org.gemini.ui.forge
 import androidx.compose.ui.input.pointer.PointerIcon
 
-class JsPlatform: Platform {
+class JsPlatform : Platform {
     override val name: String = "Web with Kotlin/JS"
+    override fun openInBrowser(url: String) {
+        kotlinx.browser.window.open(url)
+    }
 }
 
 actual fun getPlatform(): Platform = JsPlatform()

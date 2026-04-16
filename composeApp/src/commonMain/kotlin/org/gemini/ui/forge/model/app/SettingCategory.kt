@@ -12,9 +12,13 @@ import geminiuiforge.composeapp.generated.resources.settings_category_shortcuts
 import geminiuiforge.composeapp.generated.resources.settings_category_environment
 import androidx.compose.material.icons.filled.Dns
 
+import androidx.compose.material.icons.filled.Info
+import geminiuiforge.composeapp.generated.resources.settings_category_about
+
 enum class SettingCategory(val labelRes: org.jetbrains.compose.resources.StringResource, val icon: ImageVector) {
     GENERAL(Res.string.settings_category_general, Icons.Default.Settings),
     AI(Res.string.settings_category_ai, Icons.Default.AutoAwesome),
     ENVIRONMENT(Res.string.settings_category_environment, Icons.Default.Dns),
-    SHORTCUTS(Res.string.settings_category_shortcuts, Icons.Default.Keyboard)
+    SHORTCUTS(Res.string.settings_category_shortcuts, Icons.Default.Keyboard),
+    ABOUT(Res.string.settings_category_about, Icons.Default.Info)
 }

@@ -31,6 +31,7 @@ import org.gemini.ui.forge.utils.*
 import org.gemini.ui.forge.service.*
 import kotlin.time.Duration.Companion.milliseconds
 import org.gemini.ui.forge.dialog.AppSettingsDialog
+import org.gemini.ui.forge.ui.dialog.HelpDialog
 
 private var originalSystemLanguage: String? = null
 
@@ -54,6 +55,8 @@ fun App(typography: Typography? = null) {
         LaunchedEffect(Unit) {
             delay(100.milliseconds)
             try { focusRequester.requestFocus() } catch (e: Exception) { }
+            // 启动时静默检查更新
+            viewModel.checkForUpdates()
         }
 
         LaunchedEffect(globalState.languageCode) {
@@ -78,6 +81,7 @@ fun App(typography: Typography? = null) {
 
         var showCloudAssetDialog by remember { mutableStateOf(false) }
         var showSettingsDialog by remember { mutableStateOf(false) }
+        var showHelpDialog by remember { mutableStateOf(false) }
         var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
 
         // 环境拦截逻辑：如果在生图界面开启了抠图，但环境不就绪
@@ -104,6 +108,10 @@ fun App(typography: Typography? = null) {
                 )
             }
 
+            if (showHelpDialog) {
+                HelpDialog(onDismiss = { showHelpDialog = false })
+            }
+
             if (showSettingsDialog) {
                 AppSettingsDialog(
                     currentTheme = globalState.themeMode,
@@ -115,6 +123,7 @@ fun App(typography: Typography? = null) {
                     shortcuts = globalState.shortcuts,
                     envStatus = globalState.envStatus,
                     initialCategory = settingsInitialCategory,
+                    updateStatus = state.updateStatus,
                     onDismiss = { showSettingsDialog = false },
                     onLanguageSelected = { 
                         viewModel.setLanguage(it)
@@ -127,7 +136,9 @@ fun App(typography: Typography? = null) {
                     onPromptLangSelected = { viewModel.setPromptLanguagePref(it) },
                     onShortcutSaved = { action, key -> viewModel.saveShortcut(action, key) },
                     onCheckEnv = { viewModel.checkEnvironment() },
-                    onInstallEnvItem = { viewModel.installEnvironmentItem(it) }
+                    onInstallEnvItem = { viewModel.installEnvironmentItem(it) },
+                    onCheckUpdate = { viewModel.checkForUpdates() },
+                    onStartUpdate = { viewModel.performUpdate(it) }
                 )
             }
 
@@ -171,6 +182,9 @@ fun App(typography: Typography? = null) {
                         onSettingsClicked = {
                             settingsInitialCategory = SettingCategory.GENERAL
                             showSettingsDialog = true
+                        },
+                        onHelpClicked = {
+                            showHelpDialog = true
                         }
                     )
                 }

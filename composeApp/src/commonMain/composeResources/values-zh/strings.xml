@@ -29,7 +29,6 @@
 
     <string name="menu_file">文件</string>
     <string name="menu_settings">设置</string>
-    <string name="menu_help">帮助</string>
     <string name="menu_cloud_assets">云端资产</string>
     <string name="settings_title">设置</string>
     <string name="settings_language">语言</string>
@@ -182,5 +181,21 @@
     <string name="env_error_missing_python">检测到 Python 未安装，请先安装 Python 并添加到 PATH。</string>
     <string name="env_dialog_title">运行环境未准备就绪</string>
     <string name="env_dialog_message">执行本地抠图需要 Python 及相关依赖。是否前往设置页面安装？</string>
+    <string name="settings_category_about">关于软件</string>
+    <string name="about_title">关于 Gemini UI Forge</string>
+    <string name="about_version">版本 v1.0.0</string>
+    <string name="about_description">Gemini UI Forge 是一款基于 Google Gemini AI 与 Compose Multiplatform 打造的次世代游戏 UI 辅助开发工具。它旨在通过 AI 的视觉理解与内容生成能力，帮助开发者快速完成从视觉设计到可交互 UI 资源的转化。</string>
+    <string name="about_copyright">© 2026 Gemini UI Forge Team. 保留所有权利。</string>
+    <string name="menu_help">帮助手册</string>
+    <string name="help_title">使用帮助与指南</string>
+    <string name="help_action_open_browser">在浏览器中打开</string>
+    <string name="update_check_action">检查更新</string>
+    <string name="update_checking">正在检查新版本...</string>
+    <string name="update_available_title">发现新版本: {0}</string>
+    <string name="update_action_now">立即更新</string>
+    <string name="update_downloading">正在下载更新包: {0}%</string>
+    <string name="update_preparing">更新包已就绪，准备重启安装...</string>
+    <string name="update_latest">当前已是最新版本</string>
+    <string name="update_error">检查更新失败，请检查网络</string>
     <string name="action_go_to_settings">前往设置</string>
 </resources>

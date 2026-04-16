@@ -11,6 +11,10 @@ import kotlin.time.Instant
 interface Platform {
     /** 平台名称描述（例如 "Android", "iOS", "JVM" 等） */
     val name: String
+    /** 在浏览器中打开指定的 URL 链接 */
+    fun openInBrowser(url: String)
+    /** 执行软件更新替换并自动重启：传入下载好的临时文件路径 */
+    fun applyUpdateAndRestart(tempFilePath: String)
 }
 
 /**

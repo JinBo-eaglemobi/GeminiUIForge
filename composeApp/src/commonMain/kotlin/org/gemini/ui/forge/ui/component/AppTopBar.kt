@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Help
 import androidx.compose.ui.text.font.FontWeight
 
 import androidx.compose.ui.draw.drawBehind
@@ -30,7 +31,8 @@ fun AppTopBar(
     onGenerateTemplateClicked: () -> Unit = {},
     onCloudAssetManagerClicked: () -> Unit = {},
     onSaveClicked: () -> Unit = {},
-    onSettingsClicked: () -> Unit = {}
+    onSettingsClicked: () -> Unit = {},
+    onHelpClicked: () -> Unit = {}
 ) {
     val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
 
@@ -118,17 +120,18 @@ fun AppTopBar(
                         Spacer(Modifier.width(4.dp))
                         Text(stringResource(Res.string.menu_cloud_assets), style = MaterialTheme.typography.labelLarge)
                     }
-
-                    IconButton(onClick = onSettingsClicked) {
-                        Icon(Icons.Default.Settings, contentDescription = stringResource(Res.string.menu_settings))
-                    }
                 } else if (currentScreen == AppScreen.TEMPLATE_EDITOR || currentScreen == AppScreen.TEMPLATE_ASSET_GEN) {
                     IconButton(onClick = onSaveClicked) {
                         Icon(Icons.Default.Save, contentDescription = "Save Layout", tint = MaterialTheme.colorScheme.primary)
                     }
-                    IconButton(onClick = onSettingsClicked) {
-                        Icon(Icons.Default.Settings, contentDescription = stringResource(Res.string.menu_settings))
-                    }
+                }
+                
+                // 帮助与设置按钮（始终显示）
+                IconButton(onClick = onHelpClicked) {
+                    Icon(Icons.Default.Help, contentDescription = stringResource(Res.string.menu_help))
+                }
+                IconButton(onClick = onSettingsClicked) {
+                    Icon(Icons.Default.Settings, contentDescription = stringResource(Res.string.menu_settings))
                 }
             }
         }
