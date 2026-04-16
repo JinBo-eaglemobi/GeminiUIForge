@@ -21,35 +21,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import org.gemini.ui.forge.model.app.AppScreen
-import org.gemini.ui.forge.model.app.PromptLanguage
-import org.gemini.ui.forge.model.app.ShortcutAction
-import org.gemini.ui.forge.model.app.ThemeMode
-import org.gemini.ui.forge.ui.dialog.AppSettingsDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
 
 @Composable
 fun AppTopBar(
     currentScreen: AppScreen,
     onNavigateHome: () -> Unit,
-    onLanguageChangeRequested: (String) -> Unit,
-    currentTheme: ThemeMode,
-    currentLanguage: String = "zh",
-    onThemeChangeRequested: (ThemeMode) -> Unit,
     onGenerateTemplateClicked: () -> Unit = {},
     onCloudAssetManagerClicked: () -> Unit = {},
     onSaveClicked: () -> Unit = {},
-    currentApiKey: String = "",
-    onApiKeyChanged: (String) -> Unit = {},
-    currentStorageDir: String = "",
-    onStorageDirChanged: (String) -> Unit = {},
-    currentMaxRetries: Int = 3,
-    onMaxRetriesSaved: (Int) -> Unit = {},
-    currentPromptLang: PromptLanguage = PromptLanguage.AUTO,
-    onPromptLangChanged: (PromptLanguage) -> Unit = {},
-    shortcuts: Map<ShortcutAction, String> = emptyMap(),
-    onShortcutSaved: (ShortcutAction, String) -> Unit = { _, _ -> }
+    onSettingsClicked: () -> Unit = {}
 ) {
-    var showSettingsDialog by remember { mutableStateOf(false) }
     val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
 
     Surface(
@@ -137,44 +119,18 @@ fun AppTopBar(
                         Text(stringResource(Res.string.menu_cloud_assets), style = MaterialTheme.typography.labelLarge)
                     }
 
-                    IconButton(onClick = { showSettingsDialog = true }) {
+                    IconButton(onClick = onSettingsClicked) {
                         Icon(Icons.Default.Settings, contentDescription = stringResource(Res.string.menu_settings))
                     }
                 } else if (currentScreen == AppScreen.TEMPLATE_EDITOR || currentScreen == AppScreen.TEMPLATE_ASSET_GEN) {
                     IconButton(onClick = onSaveClicked) {
                         Icon(Icons.Default.Save, contentDescription = "Save Layout", tint = MaterialTheme.colorScheme.primary)
                     }
+                    IconButton(onClick = onSettingsClicked) {
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(Res.string.menu_settings))
+                    }
                 }
             }
         }
-    }
-
-    if (showSettingsDialog) {
-        AppSettingsDialog(
-            currentTheme = currentTheme,
-            currentLanguage = currentLanguage,
-            currentApiKey = currentApiKey,
-            currentStorageDir = currentStorageDir,
-            currentMaxRetries = currentMaxRetries,
-            currentPromptLang = currentPromptLang,
-            shortcuts = shortcuts,
-            onDismiss = { showSettingsDialog = false },
-            onLanguageSelected = { 
-                onLanguageChangeRequested(it)
-                showSettingsDialog = false
-            },
-            onThemeSelected = {
-                onThemeChangeRequested(it)
-            },
-            onApiKeySaved = {
-                onApiKeyChanged(it)
-            },
-            onStorageDirSaved = {
-                onStorageDirChanged(it)
-            },
-            onMaxRetriesSaved = onMaxRetriesSaved,
-            onPromptLangSelected = onPromptLangChanged,
-            onShortcutSaved = onShortcutSaved
-        )
     }
 }

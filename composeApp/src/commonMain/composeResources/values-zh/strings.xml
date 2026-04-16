@@ -169,4 +169,18 @@
     <string name="template_name_hint_extended">模板名称 (留空则自动根据图片命名)</string>
     <string name="action_ai_refine_component">AI 组件重塑</string>
     <string name="label_new_id_name">新 ID/名称</string>
+    <string name="settings_category_environment">环境检测</string>
+    <string name="env_python_check_title">Python 运行环境检查</string>
+    <string name="env_item_python">Python 3.9+</string>
+    <string name="env_item_rembg">Rembg (背景移除库)</string>
+    <string name="env_item_onnxruntime">ONNX Runtime (加速引擎)</string>
+    <string name="env_item_pillow">Pillow (图像处理库)</string>
+    <string name="env_status_installed">已安装</string>
+    <string name="env_status_missing">未安装</string>
+    <string name="env_action_check">重新检测</string>
+    <string name="env_action_install">自动安装</string>
+    <string name="env_error_missing_python">检测到 Python 未安装，请先安装 Python 并添加到 PATH。</string>
+    <string name="env_dialog_title">运行环境未准备就绪</string>
+    <string name="env_dialog_message">执行本地抠图需要 Python 及相关依赖。是否前往设置页面安装？</string>
+    <string name="action_go_to_settings">前往设置</string>
 </resources>

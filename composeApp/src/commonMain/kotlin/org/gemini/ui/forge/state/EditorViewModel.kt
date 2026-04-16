@@ -45,12 +45,47 @@ class EditorViewModel(
     private val configManager: ConfigManager = ConfigManager(),
     private val templateRepo: TemplateRepository = TemplateRepository(),
     val cloudAssetManager: CloudAssetManager = CloudAssetManager(configManager),
-    private val aiService: AIGenerationService = AIGenerationService(cloudAssetManager)
+    private val aiService: AIGenerationService = AIGenerationService(cloudAssetManager),
+    private val envService: org.gemini.ui.forge.service.EnvironmentCheckService = org.gemini.ui.forge.service.createEnvironmentCheckService()
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditorState())
     val state: StateFlow<EditorState> = _state.asStateFlow()
-    
+
+    /** 执行全量环境检查 */
+    fun checkEnvironment() {
+        viewModelScope.launch {
+            _state.update { it.copy(globalState = it.globalState.copy(envStatus = it.globalState.envStatus.copy(isChecking = true))) }
+            val status = envService.checkAll()
+            _state.update { it.copy(globalState = it.globalState.copy(envStatus = status)) }
+        }
+    }
+
+    /** 安装特定的环境依赖项 */
+    fun installEnvironmentItem(name: String) {
+        viewModelScope.launch {
+            // 先标记正在安装
+            _state.update { s ->
+                val newItems = s.globalState.envStatus.items.map { 
+                    if (it.name == name) it.copy(isInstalling = true, installLogs = emptyList()) else it 
+                }
+                s.copy(globalState = s.globalState.copy(envStatus = s.globalState.envStatus.copy(items = newItems)))
+            }
+
+            envService.installItem(name).collect { log ->
+                _state.update { s ->
+                    val newItems = s.globalState.envStatus.items.map { 
+                        if (it.name == name) it.copy(installLogs = it.installLogs + log) else it 
+                    }
+                    s.copy(globalState = s.globalState.copy(envStatus = s.globalState.envStatus.copy(items = newItems)))
+                }
+            }
+
+            // 安装结束后刷新全量状态
+            checkEnvironment()
+        }
+    }
+
     private val undoStack = ArrayDeque<ProjectState>()
     private val redoStack = ArrayDeque<ProjectState>()
 
@@ -119,6 +154,7 @@ class EditorViewModel(
         loadBaseTemplate()
         viewModelScope.launch {
             loadSettings()
+            checkEnvironment()
             
             // 加载 AI Refine 提示词
             val updateInstruction = aiService.promptManager.getPrompt("refine_instruction_update")

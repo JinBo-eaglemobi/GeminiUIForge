@@ -1,24 +1,24 @@
 package org.gemini.ui.forge
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.jetbrains.compose.resources.stringResource
+import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 
 import androidx.compose.foundation.focusable
-import androidx.compose.material3.Typography
 import kotlinx.coroutines.launch
 
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.gemini.ui.forge.model.ui.ProjectState
-import org.gemini.ui.forge.model.app.AppScreen
-import org.gemini.ui.forge.model.app.ShortcutAction
-import org.gemini.ui.forge.model.app.UIModule
+import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.state.EditorViewModel
 import org.gemini.ui.forge.ui.feature.home.HomeScreen
@@ -30,6 +30,7 @@ import org.gemini.ui.forge.ui.theme.AppTheme
 import org.gemini.ui.forge.utils.*
 import org.gemini.ui.forge.service.*
 import kotlin.time.Duration.Companion.milliseconds
+import org.gemini.ui.forge.dialog.AppSettingsDialog
 
 private var originalSystemLanguage: String? = null
 
@@ -52,9 +53,7 @@ fun App(typography: Typography? = null) {
 
         LaunchedEffect(Unit) {
             delay(100.milliseconds)
-            try {
-                focusRequester.requestFocus()
-            } catch (e: Exception) { }
+            try { focusRequester.requestFocus() } catch (e: Exception) { }
         }
 
         LaunchedEffect(globalState.languageCode) {
@@ -78,6 +77,19 @@ fun App(typography: Typography? = null) {
         }
 
         var showCloudAssetDialog by remember { mutableStateOf(false) }
+        var showSettingsDialog by remember { mutableStateOf(false) }
+        var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
+
+        // 环境拦截逻辑：如果在生图界面开启了抠图，但环境不就绪
+        val isEnvRequired = state.isGenerateTransparent && globalState.currentScreen == AppScreen.TEMPLATE_ASSET_GEN
+        val isEnvReady = globalState.envStatus.isAllReady
+        var showEnvWarning by remember { mutableStateOf(false) }
+        
+        LaunchedEffect(isEnvRequired, isEnvReady) {
+            if (isEnvRequired && !isEnvReady && !globalState.envStatus.isChecking) {
+                showEnvWarning = true
+            }
+        }
 
         AppTheme(
             themeMode = globalState.themeMode,
@@ -89,6 +101,51 @@ fun App(typography: Typography? = null) {
                 org.gemini.ui.forge.ui.dialog.CloudAssetDialog(
                     cloudAssetManager = viewModel.cloudAssetManager,
                     onDismiss = { showCloudAssetDialog = false }
+                )
+            }
+
+            if (showSettingsDialog) {
+                AppSettingsDialog(
+                    currentTheme = globalState.themeMode,
+                    currentLanguage = globalState.languageCode,
+                    currentApiKey = globalState.apiKey,
+                    currentStorageDir = globalState.templateStorageDir,
+                    currentMaxRetries = globalState.maxRetries,
+                    currentPromptLang = globalState.promptLangPref,
+                    shortcuts = globalState.shortcuts,
+                    envStatus = globalState.envStatus,
+                    initialCategory = settingsInitialCategory,
+                    onDismiss = { showSettingsDialog = false },
+                    onLanguageSelected = { 
+                        viewModel.setLanguage(it)
+                        languageKey++
+                    },
+                    onThemeSelected = { viewModel.setThemeMode(it) },
+                    onApiKeySaved = { viewModel.saveApiKey(it) },
+                    onStorageDirSaved = { viewModel.updateStorageDir(it) },
+                    onMaxRetriesSaved = { viewModel.setMaxRetries(it) },
+                    onPromptLangSelected = { viewModel.setPromptLanguagePref(it) },
+                    onShortcutSaved = { action, key -> viewModel.saveShortcut(action, key) },
+                    onCheckEnv = { viewModel.checkEnvironment() },
+                    onInstallEnvItem = { viewModel.installEnvironmentItem(it) }
+                )
+            }
+
+            if (showEnvWarning) {
+                AlertDialog(
+                    onDismissRequest = { showEnvWarning = false },
+                    title = { Text(stringResource(Res.string.env_dialog_title)) },
+                    text = { Text(stringResource(Res.string.env_dialog_message)) },
+                    confirmButton = {
+                        Button(onClick = { 
+                            showEnvWarning = false
+                            settingsInitialCategory = SettingCategory.ENVIRONMENT
+                            showSettingsDialog = true
+                        }) { Text(stringResource(Res.string.action_go_to_settings)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showEnvWarning = false }) { Text(stringResource(Res.string.prop_cancel)) }
+                    }
                 )
             }
 
@@ -104,19 +161,6 @@ fun App(typography: Typography? = null) {
                                 viewModel.navigateTo(AppScreen.HOME) 
                             }
                         },
-                        onLanguageChangeRequested = { languageCode ->
-                            if (state.isGenerating) return@AppTopBar
-                            val effectiveLang = if (languageCode == "auto") {
-                                val sysLang = originalSystemLanguage ?: androidx.compose.ui.text.intl.Locale.current.language
-                                if (sysLang.lowercase().startsWith("zh")) "zh" else "en"
-                            } else languageCode
-                            setAppLanguage(effectiveLang)
-                            viewModel.setLanguage(languageCode)
-                            languageKey++
-                        },
-                        currentTheme = globalState.themeMode,
-                        currentLanguage = globalState.languageCode,
-                        onThemeChangeRequested = { viewModel.setThemeMode(it) },
                         onGenerateTemplateClicked = { if (!state.isGenerating) viewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
                         onCloudAssetManagerClicked = { showCloudAssetDialog = true },
                         onSaveClicked = {
@@ -124,16 +168,10 @@ fun App(typography: Typography? = null) {
                                 coroutineScope.launch { templateRepo.saveTemplate(state.projectName, state.project) }
                             }
                         },
-                        currentApiKey = globalState.apiKey,
-                        onApiKeyChanged = { viewModel.saveApiKey(it) },
-                        currentStorageDir = globalState.templateStorageDir,
-                        onStorageDirChanged = { viewModel.updateStorageDir(it) },
-                        currentMaxRetries = globalState.maxRetries,
-                        onMaxRetriesSaved = { viewModel.setMaxRetries(it) },
-                        currentPromptLang = globalState.promptLangPref,
-                        onPromptLangChanged = { viewModel.setPromptLanguagePref(it) },
-                        shortcuts = globalState.shortcuts,
-                        onShortcutSaved = { action, key -> viewModel.saveShortcut(action, key) }
+                        onSettingsClicked = {
+                            settingsInitialCategory = SettingCategory.GENERAL
+                            showSettingsDialog = true
+                        }
                     )
                 }
             ) { innerPadding ->

@@ -1,4 +1,5 @@
-package org.gemini.ui.forge.ui.dialog
+package org.gemini.ui.forge.dialog
+
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
@@ -19,10 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
-import org.gemini.ui.forge.model.app.PromptLanguage
-import org.gemini.ui.forge.model.app.SettingCategory
-import org.gemini.ui.forge.model.app.ShortcutAction
-import org.gemini.ui.forge.model.app.ThemeMode
+import org.gemini.ui.forge.model.app.*
+import org.gemini.ui.forge.ui.theme.AppShapes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +33,8 @@ fun AppSettingsDialog(
     currentMaxRetries: Int = 3,
     currentPromptLang: PromptLanguage = PromptLanguage.AUTO,
     shortcuts: Map<ShortcutAction, String>,
+    envStatus: FullEnvironmentStatus,
+    initialCategory: SettingCategory = SettingCategory.GENERAL,
     onDismiss: () -> Unit,
     onLanguageSelected: (String) -> Unit,
     onThemeSelected: (ThemeMode) -> Unit,
@@ -41,9 +42,11 @@ fun AppSettingsDialog(
     onStorageDirSaved: (String) -> Unit,
     onMaxRetriesSaved: (Int) -> Unit = {},
     onPromptLangSelected: (PromptLanguage) -> Unit = {},
-    onShortcutSaved: (ShortcutAction, String) -> Unit = { _, _ -> }
+    onShortcutSaved: (ShortcutAction, String) -> Unit = { _, _ -> },
+    onCheckEnv: () -> Unit = {},
+    onInstallEnvItem: (String) -> Unit = {}
 ) {
-    var selectedCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
+    var selectedCategory by remember { mutableStateOf(initialCategory) }
     var leftWeight by remember { mutableStateOf(0.3f) }
     
     Dialog(onDismissRequest = onDismiss) {
@@ -138,6 +141,9 @@ fun AppSettingsDialog(
                                         currentApiKey, currentMaxRetries, currentPromptLang,
                                         onApiKeySaved, onMaxRetriesSaved, onPromptLangSelected
                                     )
+                                    SettingCategory.ENVIRONMENT -> EnvironmentSettings(
+                                        envStatus, onCheckEnv, onInstallEnvItem
+                                    )
                                     SettingCategory.SHORTCUTS -> ShortcutSettings(shortcuts, onShortcutSaved)
                                 }
                             }
@@ -180,7 +186,8 @@ private fun GeneralSettings(
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_appearance_theme)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(themeExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor()
+            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = themeExpanded, onDismissRequest = { themeExpanded = false }) {
             themeOptions.forEach { (mode, label) ->
@@ -207,7 +214,8 @@ private fun GeneralSettings(
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_language)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(langExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor()
+            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = langExpanded, onDismissRequest = { langExpanded = false }) {
             langOptions.forEach { (code, label) ->
@@ -230,7 +238,8 @@ private fun GeneralSettings(
             onValueChange = { pathInput = it; onStorageDirSaved(it) },
             label = { Text(stringResource(Res.string.settings_storage_dir_title)) },
             modifier = Modifier.fillMaxWidth(),
-            trailingIcon = { IconButton(onClick = { dirPicker() }) { Icon(Icons.Default.Folder, null) } }
+            trailingIcon = { IconButton(onClick = { dirPicker() }) { Icon(Icons.Default.Folder, null) } },
+            shape = AppShapes.medium
         )
     }
 }
@@ -254,7 +263,8 @@ private fun AISettings(
         label = { Text(stringResource(Res.string.settings_gemini_key_title)) },
         modifier = Modifier.fillMaxWidth(),
         visualTransformation = PasswordVisualTransformation(),
-        placeholder = { Text(stringResource(Res.string.settings_gemini_key_placeholder)) }
+        placeholder = { Text(stringResource(Res.string.settings_gemini_key_placeholder)) },
+        shape = AppShapes.medium
     )
     
     var retriesExpanded by remember { mutableStateOf(false) }
@@ -266,7 +276,8 @@ private fun AISettings(
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_max_retries_title)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(retriesExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor()
+            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = retriesExpanded, onDismissRequest = { retriesExpanded = false }) {
             retryOptions.forEach { count ->
@@ -286,7 +297,8 @@ private fun AISettings(
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_prompt_language)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(promptLangExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor()
+            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = promptLangExpanded, onDismissRequest = { promptLangExpanded = false }) {
             PromptLanguage.entries.forEach { lang ->
@@ -296,6 +308,85 @@ private fun AISettings(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun EnvironmentSettings(
+    status: FullEnvironmentStatus,
+    onCheck: () -> Unit,
+    onInstall: (String) -> Unit
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        SettingSectionTitle(stringResource(Res.string.env_python_check_title))
+        TextButton(onClick = onCheck, enabled = !status.isChecking) {
+            if (status.isChecking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            else Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(stringResource(Res.string.env_action_check))
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        status.items.forEach { item ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppShapes.small,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            ) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (item.isInstalled) Icons.Default.CheckCircle else Icons.Default.Error,
+                        contentDescription = null,
+                        tint = if (item.isInstalled) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(item.labelRes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (item.isInstalled) "${stringResource(Res.string.env_status_installed)}: ${item.version ?: "Unknown"}" else stringResource(Res.string.env_status_missing),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (item.isInstalled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
+                        )
+                    }
+                    if (!item.isInstalled && item.name != "python") {
+                        Button(
+                            onClick = { onInstall(item.name) },
+                            enabled = !item.isInstalling,
+                            shape = AppShapes.medium,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            if (item.isInstalling) CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                            else Text(stringResource(Res.string.env_action_install), style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+                
+                if (item.isInstalling && item.installLogs.isNotEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp).background(Color.Black).padding(8.dp)) {
+                        val logScroll = rememberScrollState()
+                        Text(
+                            text = item.installLogs.joinToString("\n"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF00FF00),
+                            modifier = Modifier.verticalScroll(logScroll)
+                        )
+                        LaunchedEffect(item.installLogs.size) { logScroll.animateScrollTo(logScroll.maxValue) }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (status.items.any { it.name == "python" && !it.isInstalled }) {
+        Text(
+            text = stringResource(Res.string.env_error_missing_python),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
 }
 
@@ -335,7 +426,8 @@ private fun ShortcutSettings(
                 },
                 modifier = Modifier.width(160.dp),
                 textStyle = MaterialTheme.typography.bodyMedium,
-                singleLine = true
+                singleLine = true,
+                shape = AppShapes.medium
             )
         }
     }
@@ -349,25 +441,4 @@ private fun SettingSectionTitle(title: String) {
         color = MaterialTheme.colorScheme.primary,
         fontWeight = FontWeight.Bold
     )
-}
-
-
-
-@Composable
-fun ThemeOptionRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
-        if (selected) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
 }

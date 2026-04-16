@@ -169,4 +169,18 @@
     <string name="template_name_hint_extended">Template Name (Leave blank to auto-name)</string>
     <string name="action_ai_refine_component">AI Component Refine</string>
     <string name="label_new_id_name">New ID/Name</string>
+    <string name="settings_category_environment">Environment</string>
+    <string name="env_python_check_title">Python Environment Check</string>
+    <string name="env_item_python">Python 3.9+</string>
+    <string name="env_item_rembg">Rembg (Background Removal)</string>
+    <string name="env_item_onnxruntime">ONNX Runtime</string>
+    <string name="env_item_pillow">Pillow (Image Library)</string>
+    <string name="env_status_installed">Installed</string>
+    <string name="env_status_missing">Not Installed</string>
+    <string name="env_action_check">Re-check</string>
+    <string name="env_action_install">Install</string>
+    <string name="env_error_missing_python">Python not found. Please install Python and add it to PATH.</string>
+    <string name="env_dialog_title">Environment Not Ready</string>
+    <string name="env_dialog_message">Local background removal requires Python and dependencies. Go to settings to install?</string>
+    <string name="action_go_to_settings">Go to Settings</string>
 </resources>
