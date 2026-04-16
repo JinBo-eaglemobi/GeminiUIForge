@@ -30,7 +30,7 @@ jobs:
         run: |
           ./gradlew :composeApp:packageDistributed
           ./gradlew :composeApp:createDistributable
-          ./gradlew :composeApp:desktopJar
+          ./gradlew :composeApp:packageUberJarForCurrentOS
       - name: 压缩绿色版
         shell: pwsh
         run: Compress-Archive -Path "composeApp/build/compose/binaries/main/app/*" -DestinationPath "GeminiUIForge-Windows-Portable.zip"
@@ -40,7 +40,7 @@ jobs:
           files: |
             composeApp/build/compose/binaries/main/msi/*.msi
             composeApp/build/compose/binaries/main/exe/*.exe
-            composeApp/build/libs/*.jar
+            composeApp/build/compose/jars/*.jar
             GeminiUIForge-Windows-Portable.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

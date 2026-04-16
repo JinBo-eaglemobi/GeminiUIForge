@@ -1,6 +1,6 @@
 # Gemini UI Forge
 
-![Kotlin](https://img.shields.io/badge/Kotlin-2.0.0-blue.svg)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.3.0-blue.svg)
 ![Compose Multiplatform](https://img.shields.io/badge/Compose-Multiplatform-orange.svg)
 ![Gemini AI](https://img.shields.io/badge/AI-Gemini_Pro_Vision-purple.svg)
 
