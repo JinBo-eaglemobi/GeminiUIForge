@@ -35,6 +35,7 @@ import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
 import kotlin.math.roundToInt
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -52,35 +53,28 @@ fun HierarchySidebar(
     blocks: List<UIBlock>,
     selectedBlockId: String?,
     onBlockClicked: (String?) -> Unit,
+    onBlockDoubleClicked: (String) -> Unit = {},
     onMoveBlock: (String, String?, DropPosition) -> Unit = { _, _, _ -> },
     onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit = { _, _, _, _ -> },
     onRenameBlock: (String, String) -> Unit = { _, _ -> },
-    onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> }, // 新增单项可见性切换
-    onToggleAllVisibility: (Boolean) -> Unit = {}, // 新增全域可见性切换
+    onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> },
+    onToggleAllVisibility: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
-    isReadOnly: Boolean = false // 新增只读参数
+    isReadOnly: Boolean = false
 ) {
     var draggedBlockId by remember { mutableStateOf<String?>(null) }
     var hoveredBlockId by remember { mutableStateOf<String?>(null) }
-    
     var pressedBlockId by remember { mutableStateOf<String?>(null) }
-    
     var dragShadowIcon by remember { mutableStateOf<ImageVector?>(null) }
     var dragShadowLabel by remember { mutableStateOf<String?>(null) }
-
     var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val itemBounds = remember { mutableMapOf<String, Rect>() }
-    
     var dragPosition by remember { mutableStateOf<Offset?>(null) }
-    
     var showAddDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf<String?>(null) }
-    
-    // 定位追踪逻辑
     var isAutoTrackEnabled by remember { mutableStateOf(true) } 
     var locateTrigger by remember { mutableStateOf(0L) }
 
-    // 监听选中项变化：只有在自动追踪开启时，才触发定位
     LaunchedEffect(selectedBlockId, isAutoTrackEnabled) {
         if (isAutoTrackEnabled && selectedBlockId != null) {
             delay(100)
@@ -116,7 +110,6 @@ fun HierarchySidebar(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             .onGloballyPositioned { listCoordinates = it }
-            // 模块 1：抢占式记录按下位置 (只读模式完全禁用)
             .pointerInput(blocks, isReadOnly) {
                 if (isReadOnly) return@pointerInput
                 awaitEachGesture {
@@ -131,7 +124,6 @@ fun HierarchySidebar(
                     pressedBlockId = hit?.key
                 }
             }
-            // 模块 2：驱动长按拖拽 (只读模式完全禁用)
             .pointerInput(blocks, isReadOnly) {
                 if (isReadOnly) return@pointerInput
                 detectDragGesturesAfterLongPress(
@@ -187,86 +179,35 @@ fun HierarchySidebar(
                 )
             }
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Layers, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Text("图层层级", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                
                 Spacer(Modifier.weight(1f))
-                
-                // 追踪/定位按钮 (始终可用)
-                IconToggleButton(
-                    checked = isAutoTrackEnabled,
-                    onCheckedChange = { isAutoTrackEnabled = it },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isAutoTrackEnabled) Icons.Default.MyLocation else Icons.Default.LocationDisabled,
-                        contentDescription = "Auto Track Selection",
-                        modifier = Modifier.size(18.dp),
-                        tint = if (isAutoTrackEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                IconToggleButton(checked = isAutoTrackEnabled, onCheckedChange = { isAutoTrackEnabled = it }, modifier = Modifier.size(28.dp)) {
+                    Icon(imageVector = if (isAutoTrackEnabled) Icons.Default.MyLocation else Icons.Default.LocationDisabled, contentDescription = "Auto Track", modifier = Modifier.size(18.dp), tint = if (isAutoTrackEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-
                 Spacer(Modifier.width(4.dp))
-                // 全局显示/隐藏按钮 (始终可用)
-                fun checkAllVisible(list: List<UIBlock>): Boolean {
-                    return list.all { it.isVisible && checkAllVisible(it.children) }
-                }
+                fun checkAllVisible(list: List<UIBlock>): Boolean { return list.all { it.isVisible && checkAllVisible(it.children) } }
                 val allVisible = blocks.isNotEmpty() && checkAllVisible(blocks)
-                IconButton(
-                    onClick = { 
-                        AppLogger.d("HierarchySidebar", "Toggle All Visibility clicked. Current allVisible=$allVisible, target=${!allVisible}")
-                        onToggleAllVisibility(!allVisible) 
-                    }, 
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = if (allVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        contentDescription = "Toggle All Visibility",
-                        modifier = Modifier.size(18.dp),
-                        tint = if (allVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                IconButton(onClick = { onToggleAllVisibility(!allVisible) }, modifier = Modifier.size(28.dp)) {
+                    Icon(imageVector = if (allVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = "All Vis", modifier = Modifier.size(18.dp), tint = if (allVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-
-                if (!isReadOnly) { // 仅非只读模式显示修改功能
+                if (!isReadOnly) {
                     Spacer(Modifier.width(4.dp))
-                    IconButton(onClick = { showAddDialog = true }, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.AddBox, contentDescription = "Add Layer", modifier = Modifier.size(18.dp))
-                    }
+                    IconButton(onClick = { showAddDialog = true }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.AddBox, contentDescription = "Add", modifier = Modifier.size(18.dp)) }
                     Spacer(Modifier.width(4.dp))
-                    IconButton(
-                        onClick = { if (selectedBlockId != null) showRenameDialog = selectedBlockId }, 
-                        modifier = Modifier.size(28.dp), 
-                        enabled = selectedBlockId != null
-                    ) {
-                        Icon(
-                            Icons.Default.DriveFileRenameOutline, 
-                            contentDescription = "Rename Layer", 
-                            modifier = Modifier.size(18.dp),
-                            tint = if (selectedBlockId != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        )
+                    IconButton(onClick = { if (selectedBlockId != null) showRenameDialog = selectedBlockId }, modifier = Modifier.size(28.dp), enabled = selectedBlockId != null) {
+                        Icon(Icons.Default.DriveFileRenameOutline, contentDescription = "Rename", modifier = Modifier.size(18.dp), tint = if (selectedBlockId != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                     }
                 }
             }
-            
             if (!isReadOnly && draggedBlockId != null && hoveredBlockId == null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp)
-                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
-                        .padding(8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)).padding(8.dp), contentAlignment = Alignment.Center) {
                     Text(stringResource(Res.string.hierarchy_move_to_top), color = MaterialTheme.colorScheme.onPrimaryContainer, style = MaterialTheme.typography.labelSmall)
                 }
             }            
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
             val scrollState = rememberScrollState()
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
@@ -284,46 +225,107 @@ fun HierarchySidebar(
                                 dropPosition = dropPosition,
                                 locateTrigger = locateTrigger,
                                 onBlockClicked = onBlockClicked,
+                                onBlockDoubleClicked = onBlockDoubleClicked,
                                 onBoundsCalculated = { id, rect -> itemBounds[id] = rect },
                                 onToggleVisibility = onToggleVisibility
                             )
                         }
                     }
                 }
-                VerticalScrollbar(
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                    adapter = rememberScrollbarAdapter(scrollState)
-                )
+                VerticalScrollbar(modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(), adapter = rememberScrollbarAdapter(scrollState))
             }
         }
-
         if (dragShadowLabel != null && dragPosition != null) {
-            Surface(
-                modifier = Modifier
-                    .offset { IntOffset(dragPosition!!.x.roundToInt() - 20, dragPosition!!.y.roundToInt() - 20) }
-                    .alpha(0.85f),
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    dragShadowIcon?.let {
-                        Icon(
-                            imageVector = it,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
+            Surface(modifier = Modifier.offset { IntOffset(dragPosition!!.x.roundToInt() - 20, dragPosition!!.y.roundToInt() - 20) }.alpha(0.85f), shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primaryContainer, shadowElevation = 8.dp) {
+                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    dragShadowIcon?.let { Icon(imageVector = it, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) }
                     Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = dragShadowLabel!!,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    Text(text = dragShadowLabel!!, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HierarchyItem(
+    block: UIBlock,
+    depth: Int,
+    isSelected: Boolean,
+    isDragged: Boolean,
+    isHovered: Boolean,
+    dropPosition: DropPosition,
+    locateTrigger: Long,
+    onBlockClicked: (String?) -> Unit,
+    onBlockDoubleClicked: (String) -> Unit,
+    onBoundsCalculated: (String, Rect) -> Unit,
+    selectedBlockId: String?,
+    draggedBlockId: String?,
+    hoveredBlockId: String?,
+    onToggleVisibility: (String, Boolean) -> Unit
+) {
+    var expanded by remember { mutableStateOf(true) }
+    val hasChildren = block.children.isNotEmpty()
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+
+    LaunchedEffect(selectedBlockId) {
+        if (selectedBlockId != null && hasChildren && isDescendantOfLocal(block, selectedBlockId)) {
+            expanded = true
+        }
+    }
+    LaunchedEffect(locateTrigger) { if (locateTrigger > 0L && isSelected) bringIntoViewRequester.bringIntoView() }
+
+    val indicatorColor = Color(0xFF03A9F4)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .bringIntoViewRequester(bringIntoViewRequester)
+                .onGloballyPositioned { coords -> onBoundsCalculated(block.id, coords.boundsInWindow()) }
+                .drawWithContent {
+                    drawContent()
+                    if (isHovered && isDragged.not() && draggedBlockId != null) {
+                        when (dropPosition) {
+                            DropPosition.BEFORE -> drawLine(color = indicatorColor, start = Offset(0f, 0f), end = Offset(size.width, 0f), strokeWidth = 4f)
+                            DropPosition.AFTER -> if (!hasChildren || !expanded) drawLine(color = indicatorColor, start = Offset(0f, size.height), end = Offset(size.width, size.height), strokeWidth = 4f)
+                            else -> {}
+                        }
+                    }
+                }
+                .background(when {
+                    isHovered && draggedBlockId != null && dropPosition == DropPosition.INSIDE -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)
+                    isDragged -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f)
+                    isSelected -> MaterialTheme.colorScheme.primaryContainer
+                    else -> Color.Transparent
+                })
+                .combinedClickable(
+                    onClick = { onBlockClicked(block.id) },
+                    onDoubleClick = { onBlockDoubleClicked(block.id) }
+                )
+                .padding(start = (8 + depth * 16).dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (hasChildren) {
+                IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(20.dp)) {
+                    Icon(if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight, null, modifier = Modifier.size(16.dp))
+                }
+            } else Spacer(Modifier.width(20.dp))
+            Spacer(Modifier.width(4.dp))
+            Icon(imageVector = block.type.getIcon(), contentDescription = null, modifier = Modifier.size(14.dp), tint = if (isSelected || isHovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(6.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = stringResource(block.type.getDisplayNameRes()), style = MaterialTheme.typography.bodyMedium, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface)
+                Text(text = block.id, style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            }
+            IconButton(onClick = { onToggleVisibility(block.id, !block.isVisible) }, modifier = Modifier.size(24.dp)) {
+                Icon(imageVector = if (block.isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = "Vis", modifier = Modifier.size(16.dp), tint = if (block.isVisible) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+            }
+        }
+        if (hasChildren && expanded) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                block.children.forEach { child ->
+                    HierarchyItem(block = child, depth = depth + 1, isSelected = child.id == selectedBlockId, isDragged = child.id == draggedBlockId, isHovered = child.id == hoveredBlockId, dropPosition = dropPosition, locateTrigger = locateTrigger, onBlockClicked = onBlockClicked, onBlockDoubleClicked = onBlockDoubleClicked, onBoundsCalculated = onBoundsCalculated, selectedBlockId = selectedBlockId, draggedBlockId = draggedBlockId, hoveredBlockId = hoveredBlockId, onToggleVisibility = onToggleVisibility)
                 }
             }
         }
@@ -344,238 +346,21 @@ private fun isDescendantOfLocal(currentBlock: UIBlock, targetId: String): Boolea
     return currentBlock.children.any { isDescendantOfLocal(it, targetId) }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun HierarchyItem(
-    block: UIBlock,
-    depth: Int,
-    isSelected: Boolean,
-    isDragged: Boolean,
-    isHovered: Boolean,
-    dropPosition: DropPosition,
-    locateTrigger: Long,
-    onBlockClicked: (String?) -> Unit,
-    onBoundsCalculated: (String, Rect) -> Unit,
-    selectedBlockId: String?,
-    draggedBlockId: String?,
-    hoveredBlockId: String?,
-    onToggleVisibility: (String, Boolean) -> Unit
-) {
-    var expanded by remember { mutableStateOf(true) }
-    val hasChildren = block.children.isNotEmpty()
-    
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
-
-    LaunchedEffect(selectedBlockId) {
-        if (selectedBlockId != null && hasChildren) {
-            if (isDescendantOfLocal(block, selectedBlockId)) {
-                expanded = true
-            }
-        }
-    }
-
-    LaunchedEffect(locateTrigger) {
-        if (locateTrigger > 0L && isSelected) {
-            bringIntoViewRequester.bringIntoView()
-        }
-    }
-
-    val indicatorColor = Color(0xFF03A9F4)
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .bringIntoViewRequester(bringIntoViewRequester)
-                .onGloballyPositioned { coords ->
-                    onBoundsCalculated(block.id, coords.boundsInWindow())
-                }
-                .drawWithContent {
-                    drawContent()
-                    if (isHovered && isDragged.not() && draggedBlockId != null) {
-                        when (dropPosition) {
-                            DropPosition.BEFORE -> {
-                                drawLine(
-                                    color = indicatorColor,
-                                    start = Offset(0f, 0f),
-                                    end = Offset(size.width, 0f),
-                                    strokeWidth = 4f
-                                )
-                            }
-                            DropPosition.AFTER -> {
-                                if (!hasChildren || !expanded) {
-                                    drawLine(
-                                        color = indicatorColor,
-                                        start = Offset(0f, size.height),
-                                        end = Offset(size.width, size.height),
-                                        strokeWidth = 4f
-                                    )
-                                }
-                            }
-                            else -> {}
-                        }
-                    }
-                }
-                .background(
-                    when {
-                        isHovered && draggedBlockId != null && dropPosition == DropPosition.INSIDE -> 
-                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)
-                        isDragged -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f)
-                        isSelected -> MaterialTheme.colorScheme.primaryContainer
-                        else -> Color.Transparent
-                    }
-                )
-                .clickable { onBlockClicked(block.id) }
-                .padding(start = (8 + depth * 16).dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (hasChildren) {
-                IconButton(
-                    onClick = { expanded = !expanded },
-                    modifier = Modifier.size(20.dp)
-                ) {
-                    Icon(
-                        if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            } else {
-                Spacer(Modifier.width(20.dp))
-            }
-
-            Spacer(Modifier.width(4.dp))
-            
-            Icon(
-                imageVector = block.type.getIcon(),
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = if (isSelected || isHovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            
-            Spacer(Modifier.width(6.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(block.type.getDisplayNameRes()),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = block.id,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
-
-            // 单个图层可见性按钮
-            IconButton(
-                onClick = { onToggleVisibility(block.id, !block.isVisible) },
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    imageVector = if (block.isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                    contentDescription = "Toggle Visibility",
-                    modifier = Modifier.size(16.dp),
-                    tint = if (block.isVisible) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                )
-            }
-        }
-
-        if (hasChildren && expanded) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .drawWithContent {
-                        drawContent()
-                        if (isHovered && isDragged.not() && draggedBlockId != null && dropPosition == DropPosition.AFTER) {
-                            drawLine(
-                                color = indicatorColor,
-                                start = Offset(0f, size.height),
-                                end = Offset(size.width, size.height),
-                                strokeWidth = 4f
-                            )
-                        }
-                    }
-            ) {
-                block.children.forEach { child ->
-                    HierarchyItem(
-                        block = child,
-                        depth = depth + 1,
-                        isSelected = child.id == selectedBlockId,
-                        isDragged = child.id == draggedBlockId,
-                        isHovered = child.id == hoveredBlockId,
-                        dropPosition = dropPosition,
-                        locateTrigger = locateTrigger,
-                        onBlockClicked = onBlockClicked,
-                        onBoundsCalculated = onBoundsCalculated,
-                        selectedBlockId = selectedBlockId,
-                        draggedBlockId = draggedBlockId,
-                        hoveredBlockId = hoveredBlockId,
-                        onToggleVisibility = onToggleVisibility
-                    )
-                }
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddLayerDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String, UIBlockType, Float, Float) -> Unit
-) {
+fun AddLayerDialog(onDismiss: () -> Unit, onConfirm: (String, UIBlockType, Float, Float) -> Unit) {
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(UIBlockType.VIEW) }
     var widthStr by remember { mutableStateOf("200") }
     var heightStr by remember { mutableStateOf("200") }
     var expandedType by remember { mutableStateOf(false) }
-    
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("添加新图层") },
-        text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("添加新图层") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedTextField(
-                    value = name, 
-                    onValueChange = { name = it }, 
-                    label = { Text("图层名称/ID (可选)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppShapes.medium
-                )
-                
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("图层名称/ID (可选)") }, modifier = Modifier.fillMaxWidth(), shape = AppShapes.medium)
                 ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = { expandedType = !expandedType }) {
-                    OutlinedTextField(
-                        value = stringResource(selectedType.getDisplayNameRes()),
-                        onValueChange = {}, readOnly = true,
-                        label = { Text("模块类型") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor(),
-                        shape = AppShapes.medium
-                    )
+                    OutlinedTextField(value = stringResource(selectedType.getDisplayNameRes()), onValueChange = {}, readOnly = true, label = { Text("模块类型") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) }, modifier = Modifier.fillMaxWidth().menuAnchor(), shape = AppShapes.medium)
                     ExposedDropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
-                        val commonTypes = listOf(
-                            UIBlockType.BUTTON, UIBlockType.VIEW, UIBlockType.TEXT, UIBlockType.IMAGE, 
-                            UIBlockType.COMBO_BOX, UIBlockType.PROGRESS_BAR, UIBlockType.POPUP_MENU, 
-                            UIBlockType.LOADER, UIBlockType.SCROLL_BAR, UIBlockType.SLIDER, UIBlockType.INPUT
-                        )
-                        val specialTypes = UIBlockType.entries.filter { it !in commonTypes }
-                        commonTypes.forEach { type ->
-                            DropdownMenuItem(
-                                text = { Text(stringResource(type.getDisplayNameRes())) },
-                                onClick = { selectedType = type; expandedType = false }
-                            )
-                        }
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        specialTypes.forEach { type ->
-                            DropdownMenuItem(
-                                text = { Text(stringResource(type.getDisplayNameRes())) },
-                                onClick = { selectedType = type; expandedType = false }
-                            )
-                        }
+                        UIBlockType.entries.forEach { type -> DropdownMenuItem(text = { Text(stringResource(type.getDisplayNameRes())) }, onClick = { selectedType = type; expandedType = false }) }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -583,46 +368,13 @@ fun AddLayerDialog(
                     OutlinedTextField(value = heightStr, onValueChange = { heightStr = it }, label = { Text("高度") }, modifier = Modifier.weight(1f), shape = AppShapes.medium)
                 }
             }
-        },
-        confirmButton = {
-            Button(onClick = {
-                val w = widthStr.toFloatOrNull() ?: 200f
-                val h = heightStr.toFloatOrNull() ?: 200f
-                onConfirm(name, selectedType, w, h)
-            }, shape = AppShapes.medium) { Text("添加") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, shape = AppShapes.medium) { Text("取消") }
-        }
+        }, confirmButton = { Button(onClick = { onConfirm(name, selectedType, widthStr.toFloatOrNull() ?: 200f, heightStr.toFloatOrNull() ?: 200f) }, shape = AppShapes.medium) { Text("添加") } }, dismissButton = { TextButton(onClick = onDismiss, shape = AppShapes.medium) { Text("取消") } }
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RenameLayerDialog(
-    initialId: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
+fun RenameLayerDialog(initialId: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var newId by remember { mutableStateOf(initialId) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("重命名图层") },
-        text = {
-            OutlinedTextField(
-                value = newId,
-                onValueChange = { newId = it },
-                label = { Text("新 ID/名称") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = AppShapes.medium
-            )
-        },
-        confirmButton = {
-            Button(onClick = { onConfirm(newId) }, shape = AppShapes.medium) { Text("确认") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, shape = AppShapes.medium) { Text("取消") }
-        }
-    )
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("重命名图层") }, text = { OutlinedTextField(value = newId, onValueChange = { newId = it }, label = { Text("新 ID/名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = AppShapes.medium) }, confirmButton = { Button(onClick = { onConfirm(newId) }, shape = AppShapes.medium) { Text("确认") } }, dismissButton = { TextButton(onClick = onDismiss, shape = AppShapes.medium) { Text("取消") } })
 }

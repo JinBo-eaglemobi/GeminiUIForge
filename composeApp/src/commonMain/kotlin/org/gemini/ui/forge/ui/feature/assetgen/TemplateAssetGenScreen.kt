@@ -173,6 +173,7 @@ fun TemplateAssetGenScreen(
                         referenceUri = state.currentPage?.sourceImageUri,
                         isVisualMode = isVisualMode,
                         onToggleVisualMode = onToggleVisualMode,
+                        isReadOnly = true,
                         modifier = Modifier.fillMaxSize()
                     )
                 }

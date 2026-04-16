@@ -1,4 +1,5 @@
 package org.gemini.ui.forge.ui.feature.editor
+
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
@@ -6,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,26 +19,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
-import org.gemini.ui.forge.utils.decodeBase64ToBitmap
 import org.jetbrains.compose.resources.stringResource
-import kotlin.math.abs
-import kotlin.math.min
 import org.gemini.ui.forge.model.app.PromptLanguage
-import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
@@ -47,6 +42,7 @@ import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.component.AITaskProgressDialog
 import org.gemini.ui.forge.ui.feature.common.CanvasArea
 import org.gemini.ui.forge.ui.feature.common.HierarchySidebar
+import androidx.compose.ui.focus.onFocusChanged
 
 @Composable
 fun TemplateEditorScreen(
@@ -157,6 +153,7 @@ fun TemplateEditorScreen(
                         blocks = state.currentPage?.blocks ?: emptyList(),
                         selectedBlockId = state.selectedBlockId,
                         onBlockClicked = onBlockClicked,
+                        onBlockDoubleClicked = onBlockDoubleClicked,
                         onMoveBlock = onMoveBlock,
                         onAddCustomBlock = onAddCustomBlock,
                         onRenameBlock = onRenameBlock,
@@ -183,10 +180,11 @@ fun TemplateEditorScreen(
                     selectedBlockId = state.selectedBlockId,
                     onBlockClicked = onBlockClicked,
                     onBlockDoubleClicked = onBlockDoubleClicked,
-                    onBlockDragged = { id, dx, dy -> onBlockBoundsChanged(id, dx, dy, 0f, 0f) },
+                    onBlockDragged = onBlockDragged,
                     editingGroupId = state.editingGroupId,
                     onExitGroupEdit = onExitGroupEdit,
                     referenceUri = state.currentPage?.sourceImageUri,
+                    isReadOnly = false,
                     modifier = Modifier.fillMaxSize()
                 )
                 
@@ -213,6 +211,8 @@ fun TemplateEditorScreen(
                     currentLang = state.currentEditingPromptLang,
                     onSwitchLang = onSwitchEditingLanguage,
                     onBlockTypeChanged = onBlockTypeChanged,
+                    onBlockBoundsChanged = onBlockBoundsChanged,
+                    onRenameBlock = onRenameBlock,
                     onPromptChanged = onPromptChanged,
                     onOptimizePrompt = onOptimizePrompt,
                     onRefineClick = { id -> refineTargetId = id; showVisualRefine = true },
@@ -231,6 +231,8 @@ private fun PropertyPanel(
     currentLang: PromptLanguage,
     onSwitchLang: (PromptLanguage) -> Unit,
     onBlockTypeChanged: (String, UIBlockType) -> Unit,
+    onBlockBoundsChanged: (String, Float, Float, Float, Float) -> Unit,
+    onRenameBlock: (String, String) -> Unit,
     onPromptChanged: (String, String) -> Unit,
     onOptimizePrompt: (String, (String) -> Unit) -> Unit,
     onRefineClick: (String) -> Unit,
@@ -245,19 +247,67 @@ private fun PropertyPanel(
                 Text(stringResource(Res.string.prop_select_block), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
+            // 模块 ID 编辑
+            OutlinedTextField(
+                value = selectedBlock.id,
+                onValueChange = { if (it.isNotBlank()) onRenameBlock(selectedBlock.id, it) },
+                label = { Text(stringResource(Res.string.prop_block_id)) },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                singleLine = true,
+                shape = AppShapes.medium,
+                textStyle = MaterialTheme.typography.bodyMedium
+            )
+
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                 shape = AppShapes.small,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
             ) {
                 Column(Modifier.padding(8.dp)) {
-                    Text("模块 ID: ${selectedBlock.id}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text("物理坐标与尺寸", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        InfoItem("X", selectedBlock.bounds.left.toInt().toString(), Modifier.weight(1f))
-                        InfoItem("Y", selectedBlock.bounds.top.toInt().toString(), Modifier.weight(1f))
-                        InfoItem("W", selectedBlock.bounds.width.toInt().toString(), Modifier.weight(1f))
-                        InfoItem("H", selectedBlock.bounds.height.toInt().toString(), Modifier.weight(1f))
+                        EditableInfoItem(
+                            label = "X",
+                            value = selectedBlock.bounds.left.toInt().toString(),
+                            onValueChange = { newValue ->
+                                val newLeft = newValue.toFloatOrNull() ?: return@EditableInfoItem
+                                val currentWidth = selectedBlock.bounds.width
+                                onBlockBoundsChanged(selectedBlock.id, newLeft, selectedBlock.bounds.top, newLeft + currentWidth, selectedBlock.bounds.bottom)
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        EditableInfoItem(
+                            label = "Y",
+                            value = selectedBlock.bounds.top.toInt().toString(),
+                            onValueChange = { newValue ->
+                                val newTop = newValue.toFloatOrNull() ?: return@EditableInfoItem
+                                val currentHeight = selectedBlock.bounds.height
+                                onBlockBoundsChanged(selectedBlock.id, selectedBlock.bounds.left, newTop, selectedBlock.bounds.right, newTop + currentHeight)
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        EditableInfoItem(
+                            label = "W",
+                            value = selectedBlock.bounds.width.toInt().toString(),
+                            onValueChange = { newValue ->
+                                val newWidth = newValue.toFloatOrNull() ?: return@EditableInfoItem
+                                onBlockBoundsChanged(selectedBlock.id, selectedBlock.bounds.left, selectedBlock.bounds.top, selectedBlock.bounds.left + newWidth, selectedBlock.bounds.bottom)
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        EditableInfoItem(
+                            label = "H",
+                            value = selectedBlock.bounds.height.toInt().toString(),
+                            onValueChange = { newValue ->
+                                val newHeight = newValue.toFloatOrNull() ?: return@EditableInfoItem
+                                onBlockBoundsChanged(selectedBlock.id, selectedBlock.bounds.left, selectedBlock.bounds.top, selectedBlock.bounds.right, selectedBlock.bounds.top + newHeight)
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -349,6 +399,43 @@ private fun PropertyPanel(
 }
 
 @Composable
+private fun EditableInfoItem(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var textValue by remember(value) { mutableStateOf(value) }
+    var isFocused by remember { mutableStateOf(false) }
+
+    Column(modifier) {
+        OutlinedTextField(
+            value = textValue,
+            onValueChange = { 
+                textValue = it
+                if (it.isNotEmpty() && it.toFloatOrNull() != null) {
+                    onValueChange(it)
+                }
+            },
+            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { isFocused = it.isFocused },
+            shape = AppShapes.small,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = Color.Transparent,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            )
+        )
+    }
+}
+
+@Composable
 private fun InfoItem(label: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -415,7 +502,7 @@ fun VisualRefineDialog(
                                 val left = with(density) { (offsetX + (rect.left / pageWidth) * displayW).dp.toPx() }
                                 val top = with(density) { (offsetY + (rect.top / pageHeight) * displayH).dp.toPx() }
                                 val right = with(density) { (offsetX + (rect.right / pageWidth) * displayW).dp.toPx() }
-                                val bottom = with(density) { (offsetY + (rect.bottom / pageHeight) * displayH).dp.toPx() }
+                                val bottom = with(density) { (offsetX + (rect.right / pageWidth) * displayW).dp.toPx() }
                                 drawRect(color = Color.Cyan, topLeft = Offset(left, top), size = Size(right - left, bottom - top), style = Stroke(width = 2.dp.toPx()))
                                 drawRect(color = Color.Cyan.copy(alpha = 0.2f), topLeft = Offset(left, top), size = Size(right - left, bottom - top))
                             }

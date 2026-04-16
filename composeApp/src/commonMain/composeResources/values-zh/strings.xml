@@ -147,7 +147,7 @@
     <string name="action_close">关闭</string>
     <string name="asset_unnamed">未命名文件</string>
     <string name="action_exit">退出</string>
-    <string name="group_editing_indicator">正在编辑组: {0}</string>
+    <string name="group_editing_indicator_prefix">正在编辑组: </string>
     <string name="editor_tools_title">编辑工具</string>
     <string name="action_refine_area">进入框选重塑</string>
     <string name="label_refine_instruction">修正建议或功能描述</string>

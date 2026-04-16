@@ -102,7 +102,9 @@ class AIGenerationService(
                 "4:3" to 1.333f,
                 "3:4" to 0.75f,
                 "16:9" to 1.777f,
-                "9:16" to 0.562f
+                "9:16" to 0.562f,
+                "3:2" to 1.5f,
+                "2:3" to 0.666f
             )
             options.minByOrNull { kotlin.math.abs(it.value - ratio) }?.key ?: "1:1"
         } else {

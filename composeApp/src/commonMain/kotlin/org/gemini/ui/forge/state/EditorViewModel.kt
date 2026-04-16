@@ -649,7 +649,13 @@ class EditorViewModel(
                                         launch(Dispatchers.Main) { addGenLog(" > $it") }
                                     })
                                     if (success && isFileExists(outputUri)) {
-                                        withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 本地扣图成功：$outputUri") }
+                                        withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 本地扣图成功，正在裁剪多余透明边缘以铺满模块...") }
+                                        val trimmedBytes = org.gemini.ui.forge.utils.trimTransparency(outputUri)
+                                        if (trimmedBytes != null) {
+                                            val finalUri = templateRepo.saveBlockResource(projectName, block.id, outputUri.substringAfterLast("/").substringBeforeLast(".") + "_trimmed", trimmedBytes)
+                                            try { org.gemini.ui.forge.utils.deleteLocalFile(outputUri) } catch (e: Exception) {}
+                                            return@mapIndexed finalUri
+                                        }
                                         return@mapIndexed outputUri
                                     } else {
                                         withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 本地扣图失败，保留原图。") }
@@ -661,7 +667,11 @@ class EditorViewModel(
                                 }
                             } else {
                                 val cloudUri = originalUri.replace("gen_", "cloud_trans_").replace(".jpg", ".png").replace(".jpeg", ".png")
-                                return@mapIndexed templateRepo.saveBlockResource(projectName, block.id, cloudUri.substringAfterLast("/").substringBeforeLast("."), finalProcessedBytes)
+                                withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 正在裁剪多余透明边缘以铺满模块...") }
+                                @OptIn(ExperimentalEncodingApi::class)
+                                val base64ForTrim = "data:image/png;base64," + Base64.encode(finalProcessedBytes)
+                                val trimmedBytes = org.gemini.ui.forge.utils.trimTransparency(base64ForTrim) ?: finalProcessedBytes
+                                return@mapIndexed templateRepo.saveBlockResource(projectName, block.id, cloudUri.substringAfterLast("/").substringBeforeLast("."), trimmedBytes)
                             }
                         } else originalUri
                     }

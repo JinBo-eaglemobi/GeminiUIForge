@@ -147,7 +147,7 @@
     <string name="action_close">Close</string>
     <string name="asset_unnamed">Unnamed File</string>
     <string name="action_exit">Exit</string>
-    <string name="group_editing_indicator">Editing Group: %s</string>
+    <string name="group_editing_indicator_prefix">Editing Group: </string>
     <string name="editor_tools_title">Tools</string>
     <string name="action_refine_area">Refine Area</string>
     <string name="label_refine_instruction">Refinement suggestions or functional descriptions</string>
