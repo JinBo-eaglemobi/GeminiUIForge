@@ -118,7 +118,6 @@ fun ModuleCard(module: UIModule, onEditLayout: () -> Unit, onGenerateUI: () -> U
                     onClick = onGenerateUI,
                     modifier = Modifier.weight(1f).padding(start = 4.dp),
                     shape = AppShapes.medium,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
                     Text(stringResource(Res.string.action_generate_ui), maxLines = 1, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)

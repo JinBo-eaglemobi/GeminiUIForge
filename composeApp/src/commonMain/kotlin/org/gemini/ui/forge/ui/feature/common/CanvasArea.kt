@@ -317,6 +317,8 @@ fun RenderBlock(
     val currentY = parentY + block.bounds.top * baseScale
     val hidePlaceholder = isVisualMode && imageBitmap != null
 
+    val selectionColor = Color(0xFF18A0FB) // Figma 风格的专业选中蓝
+
     Box(
         modifier = Modifier
             .offset(x = currentX.dp, y = currentY.dp)
@@ -324,16 +326,15 @@ fun RenderBlock(
             .clip(RoundedCornerShape(2.dp))
             .background(
                 if (hidePlaceholder) Color.Transparent 
-                else if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) 
+                else if (isSelected) selectionColor.copy(alpha = 0.15f) 
                 else if (isDimmed) Color.Black.copy(alpha = 0.4f) 
-                else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
             )
             .border(
                 width = if (hidePlaceholder && !isSelected) 0.dp 
-                        else if (isSelected) (4.dp / zoom) 
                         else (1.dp / zoom), 
-                color = if (isSelected) MaterialTheme.colorScheme.primary 
-                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                color = if (isSelected) selectionColor 
+                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
             ),
         contentAlignment = Alignment.Center
     ) {
