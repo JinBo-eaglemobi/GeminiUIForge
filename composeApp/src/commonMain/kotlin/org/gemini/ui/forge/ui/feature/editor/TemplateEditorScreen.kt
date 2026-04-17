@@ -101,12 +101,12 @@ fun TemplateEditorScreen(
             pageHeight = state.currentPage?.height ?: 1920f,
             initialInstruction = defaultInstruction,
             onDismiss = { showVisualRefine = false },
-            onConfirm = { rect, instruction, onLog, onChunk, onDone ->
+            onConfirm = { rect, instruction, _, _, _ ->
                 showVisualRefine = false
                 if (refineTargetId != null) {
-                    onRefineArea(refineTargetId!!, rect, instruction, onLog, onChunk, onDone)
+                    onRefineArea(refineTargetId!!, rect, instruction, {}, {}, {})
                 } else {
-                    onRefineCustomArea(rect, instruction, onLog, onChunk, onDone)
+                    onRefineCustomArea(rect, instruction, {}, {}, {})
                 }
             }
         )
@@ -502,9 +502,13 @@ fun VisualRefineDialog(
                                 val left = with(density) { (offsetX + (rect.left / pageWidth) * displayW).dp.toPx() }
                                 val top = with(density) { (offsetY + (rect.top / pageHeight) * displayH).dp.toPx() }
                                 val right = with(density) { (offsetX + (rect.right / pageWidth) * displayW).dp.toPx() }
-                                val bottom = with(density) { (offsetX + (rect.right / pageWidth) * displayW).dp.toPx() }
-                                drawRect(color = Color.Cyan, topLeft = Offset(left, top), size = Size(right - left, bottom - top), style = Stroke(width = 2.dp.toPx()))
-                                drawRect(color = Color.Cyan.copy(alpha = 0.2f), topLeft = Offset(left, top), size = Size(right - left, bottom - top))
+                                val bottom = with(density) { (offsetY + (rect.bottom / pageHeight) * displayH).dp.toPx() }
+                                
+                                val rectTopLeft = Offset(kotlin.math.min(left, right), kotlin.math.min(top, bottom))
+                                val rectSize = Size(kotlin.math.abs(right - left), kotlin.math.abs(bottom - top))
+                                
+                                drawRect(color = Color.Cyan, topLeft = rectTopLeft, size = rectSize, style = Stroke(width = 2.dp.toPx()))
+                                drawRect(color = Color.Cyan.copy(alpha = 0.2f), topLeft = rectTopLeft, size = rectSize)
                             }
                         }
                     }
