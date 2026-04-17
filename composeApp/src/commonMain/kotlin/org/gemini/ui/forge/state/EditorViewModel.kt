@@ -1,4 +1,5 @@
 package org.gemini.ui.forge.state
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.ktor.utils.io.release
@@ -10,13 +11,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
-import kotlinx.io.buffered
-import kotlinx.io.files.FileSystem
-import kotlinx.io.files.Path
-import kotlinx.io.files.SystemFileSystem
-import kotlinx.io.files.SystemTemporaryDirectory
-import kotlinx.io.files.sink
-import kotlinx.io.files.source
 import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.CloudAssetManager
@@ -25,17 +19,8 @@ import org.gemini.ui.forge.utils.getMimeType
 import kotlin.collections.ArrayDeque
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
-import org.gemini.ui.forge.model.app.AppScreen
-import org.gemini.ui.forge.model.app.PromptLanguage
-import org.gemini.ui.forge.model.app.ReferenceDisplayMode
-import org.gemini.ui.forge.model.app.ShortcutAction
-import org.gemini.ui.forge.model.app.ThemeMode
-import org.gemini.ui.forge.model.ui.DropPosition
-import org.gemini.ui.forge.model.ui.ProjectState
-import org.gemini.ui.forge.model.ui.SerialRect
-import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.model.ui.UIBlockType
-import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.model.app.*
+import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.service.ConfigManager
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.cropImage
@@ -55,45 +40,14 @@ class EditorViewModel(
     private val templateRepo: TemplateRepository = TemplateRepository(),
     val cloudAssetManager: CloudAssetManager = CloudAssetManager(configManager),
     private val aiService: AIGenerationService = AIGenerationService(cloudAssetManager),
-    private val envService: org.gemini.ui.forge.service.EnvironmentCheckService = org.gemini.ui.forge.service.createEnvironmentCheckService(),
-    private val updateService: org.gemini.ui.forge.service.UpdateService = org.gemini.ui.forge.service.UpdateService("1.0.0")
+    private val envService: org.gemini.ui.forge.service.EnvironmentCheckService = org.gemini.ui.forge.service.createEnvironmentCheckService()
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditorState())
     val state: StateFlow<EditorState> = _state.asStateFlow()
 
     private var currentGenJob: kotlinx.coroutines.Job? = null
-
-    /** 检查软件更新 */
-    fun checkForUpdates() {
-        viewModelScope.launch {
-            _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.Checking) }
-            val info = updateService.checkUpdate()
-            if (info != null) {
-                _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.Available(info)) }
-            } else {
-                _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.UpToDate) }
-            }
-        }
-    }
-
-    /** 开始下载并执行更新重启 */
-    fun performUpdate(info: org.gemini.ui.forge.model.app.UpdateInfo) {
-        viewModelScope.launch(Dispatchers.Default) {
-            try {
-                val storageDir = templateRepo.getDataDir()
-                val tempPath = Path(storageDir, "update_" + info.fileName)
-                updateService.downloadUpdate(info.downloadUrl, tempPath).collect { progress ->
-                    _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.Downloading(progress)) }
-                }
-                _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.ReadyToInstall) }
-                delay(1000)
-                org.gemini.ui.forge.getPlatform().applyUpdateAndRestart(tempPath.toString())
-            } catch (e: Exception) {
-                _state.update { it.copy(updateStatus = org.gemini.ui.forge.model.app.UpdateStatus.Error(e.message ?: "Unknown Error")) }
-            }
-        }
-    }
+    private var generationJob: kotlinx.coroutines.Job? = null
 
     /** 执行全量环境检查 */
     fun checkEnvironment() {
@@ -565,8 +519,8 @@ class EditorViewModel(
         val projectName = _state.value.projectName
         val isTransparent = _state.value.isGenerateTransparent
         val prioritizeCloud = _state.value.isPrioritizeCloudRemoval
-        currentGenJob?.cancel()
-        currentGenJob = viewModelScope.launch {
+        generationJob?.cancel()
+        generationJob = viewModelScope.launch {
             _state.update { it.copy(isGenerating = true, generationLogs = emptyList(), showAITaskDialog = true) }
             addGenLog(">>> 开始为模块 [${block.id}] 生成资源 <<<")
             try {
@@ -584,11 +538,11 @@ class EditorViewModel(
                         if (isTransparent) {
                             var finalProcessedBytes: ByteArray? = null
                             if (prioritizeCloud) {
-                                withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 正在调用云端执行背景移除...") }
+                                withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 正在调用云端背景移除...") }
                                 finalProcessedBytes = aiService.removeBackgroundCloud(bytes, apiKey)
                             }
                             if (finalProcessedBytes == null) {
-                                withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 正在执行本地 Python 脚本抠图...") }
+                                withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 正在执行本地脚本抠图...") }
                                 val outputUri = originalUri.replace("gen_", "local_trans_").replace(".jpg", ".png").replace(".jpeg", ".png")
                                 val localFileStorage = org.gemini.ui.forge.service.LocalFileStorage()
                                 val scriptCacheName = "scripts/remove_bg.py"
@@ -601,7 +555,7 @@ class EditorViewModel(
                                     val actualScriptPath = localFileStorage.getFilePath(scriptCacheName)
                                     val success = executeSystemCommand("python", listOf(actualScriptPath, originalUri, outputUri), onLog = { launch(Dispatchers.Main) { addGenLog(" > $it") } })
                                     if (success && isFileExists(outputUri)) {
-                                        withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 本地扣图成功，正在裁剪...") }
+                                        withContext(Dispatchers.Main) { addGenLog("[候选图 ${index + 1}] 抠图成功，正在裁剪...") }
                                         val trimmedBytes = org.gemini.ui.forge.utils.trimTransparency(outputUri)
                                         if (trimmedBytes != null) {
                                             val finalUri = templateRepo.saveBlockResource(projectName, block.id, outputUri.substringAfterLast("/").substringBeforeLast(".") + "_trimmed", trimmedBytes)
@@ -624,7 +578,7 @@ class EditorViewModel(
                 addGenLog(">>> 资源处理全部完成 <<<")
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) addGenLog(">>> 生成失败: ${e.message} <<<")
-            } finally { _state.update { it.copy(isGenerating = false) }; currentGenJob = null }
+            } finally { _state.update { it.copy(isGenerating = false) }; generationJob = null }
         }
     }
 
@@ -635,7 +589,8 @@ class EditorViewModel(
                 val imageSize = org.gemini.ui.forge.utils.getImageSize(sourceUri) ?: return@launch
                 val physicalRect = SerialRect(left = cropRect.left * imageSize.first, top = cropRect.top * imageSize.second, right = cropRect.right * imageSize.first, bottom = cropRect.bottom * imageSize.second)
                 val croppedBytes = org.gemini.ui.forge.utils.cropImage(imageSource = sourceUri, bounds = physicalRect, logicalWidth = imageSize.first.toFloat(), logicalHeight = imageSize.second.toFloat(), isPng = sourceUri.endsWith(".png", ignoreCase = true)) ?: throw Exception("裁剪失败")
-                val newUri = templateRepo.saveBlockResource(projectName, blockId, "crop_${org.gemini.ui.forge.getCurrentTimeMillis()}", croppedBytes)
+                val ext = if (sourceUri.endsWith(".png", true)) "png" else "jpg"
+                val newUri = templateRepo.saveBlockResource(projectName, blockId, "crop_${org.gemini.ui.forge.getCurrentTimeMillis()}.$ext", croppedBytes)
                 _state.update { currentState ->
                     val pageId = currentState.selectedPageId ?: return@update currentState
                     val updatedPages = currentState.project.pages.map { page ->
@@ -740,7 +695,10 @@ class EditorViewModel(
     fun toggleGenerationLogVisibility() { _state.update { it.copy(isGenerationLogVisible = !it.isGenerationLogVisible) } }
     fun closeAITaskDialog() { _state.update { it.copy(showAITaskDialog = false, generationLogs = emptyList()) } }
     private fun addGenLog(msg: String) { AppLogger.i("EditorViewModel", msg); _state.update { it.copy(generationLogs = it.generationLogs + msg, showAITaskDialog = true) } }
-    fun cancelGeneration() { currentGenJob?.cancel(); currentGenJob = null; _state.update { it.copy(isGenerating = false, generationLogs = it.generationLogs + ">>> 用户已手动中断处理 <<<") } }
+    fun cancelGeneration() { 
+        currentGenJob?.cancel(); generationJob?.cancel(); currentGenJob = null; generationJob = null; 
+        _state.update { it.copy(isGenerating = false, generationLogs = it.generationLogs + ">>> 用户已手动中断处理 <<<") } 
+    }
     fun setGenerateTransparent(enabled: Boolean) { _state.update { it.copy(isGenerateTransparent = enabled) } }
     fun setPrioritizeCloudRemoval(enabled: Boolean) { _state.update { it.copy(isPrioritizeCloudRemoval = enabled) } }
     fun toggleVisualMode() { _state.update { it.copy(isVisualMode = !it.isVisualMode) } }

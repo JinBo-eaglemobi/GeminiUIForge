@@ -21,6 +21,7 @@ import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.state.EditorViewModel
+import org.gemini.ui.forge.state.AppUpdateViewModel
 import org.gemini.ui.forge.ui.feature.home.HomeScreen
 import org.gemini.ui.forge.ui.feature.assetgen.TemplateAssetGenScreen
 import org.gemini.ui.forge.ui.feature.editor.TemplateEditorScreen
@@ -48,15 +49,19 @@ fun App(typography: Typography? = null) {
     var templatesList by remember { mutableStateOf(emptyList<Pair<String, ProjectState>>()) }
 
     key(languageKey) {
+        // 核心：并列挂载两个完全独立的 ViewModel
         val viewModel: EditorViewModel = viewModel { EditorViewModel(templateRepo = templateRepo) }
+        val updateViewModel: AppUpdateViewModel = viewModel { AppUpdateViewModel(templateRepo = templateRepo) }
+        
         val state by viewModel.state.collectAsState()
+        val updateStatus by updateViewModel.status.collectAsState()
         val globalState = state.globalState
 
         LaunchedEffect(Unit) {
             delay(100.milliseconds)
             try { focusRequester.requestFocus() } catch (e: Exception) { }
-            // 启动时静默检查更新
-            viewModel.checkForUpdates()
+            // 启动时静默检查更新 (通过独立的 updateViewModel)
+            updateViewModel.checkForUpdates()
         }
 
         LaunchedEffect(globalState.languageCode) {
@@ -84,7 +89,6 @@ fun App(typography: Typography? = null) {
         var showHelpDialog by remember { mutableStateOf(false) }
         var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
 
-        // 环境拦截逻辑：如果在生图界面开启了抠图，但环境不就绪
         val isEnvRequired = state.isGenerateTransparent && globalState.currentScreen == AppScreen.TEMPLATE_ASSET_GEN
         val isEnvReady = globalState.envStatus.isAllReady
         var showEnvWarning by remember { mutableStateOf(false) }
@@ -123,12 +127,9 @@ fun App(typography: Typography? = null) {
                     shortcuts = globalState.shortcuts,
                     envStatus = globalState.envStatus,
                     initialCategory = settingsInitialCategory,
-                    updateStatus = state.updateStatus,
+                    updateStatus = updateStatus, // 来自独立 ViewModel
                     onDismiss = { showSettingsDialog = false },
-                    onLanguageSelected = { 
-                        viewModel.setLanguage(it)
-                        languageKey++
-                    },
+                    onLanguageSelected = { viewModel.setLanguage(it); languageKey++ },
                     onThemeSelected = { viewModel.setThemeMode(it) },
                     onApiKeySaved = { viewModel.saveApiKey(it) },
                     onStorageDirSaved = { viewModel.updateStorageDir(it) },
@@ -137,8 +138,8 @@ fun App(typography: Typography? = null) {
                     onShortcutSaved = { action, key -> viewModel.saveShortcut(action, key) },
                     onCheckEnv = { viewModel.checkEnvironment() },
                     onInstallEnvItem = { viewModel.installEnvironmentItem(it) },
-                    onCheckUpdate = { viewModel.checkForUpdates() },
-                    onStartUpdate = { viewModel.performUpdate(it) }
+                    onCheckUpdate = { updateViewModel.checkForUpdates() }, // 绑定至独立 ViewModel
+                    onStartUpdate = { updateViewModel.performUpdate(it) }  // 绑定至独立 ViewModel
                 )
             }
 

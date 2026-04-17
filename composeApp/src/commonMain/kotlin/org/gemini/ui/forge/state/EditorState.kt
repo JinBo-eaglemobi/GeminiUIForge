@@ -67,10 +67,7 @@ data class EditorState(
     val defaultRefineInstructionUpdate: String = "",
     
     /** 针对新选取区域进行 AI 生成时的默认指令模板 */
-    val defaultRefineInstructionNew: String = "",
-    
-    /** 软件更新检查状态 */
-    val updateStatus: org.gemini.ui.forge.model.app.UpdateStatus = org.gemini.ui.forge.model.app.UpdateStatus.Idle
+    val defaultRefineInstructionNew: String = ""
 ) {
     /** 获取当前选中的页面对象 */
     val currentPage: UIPage?
