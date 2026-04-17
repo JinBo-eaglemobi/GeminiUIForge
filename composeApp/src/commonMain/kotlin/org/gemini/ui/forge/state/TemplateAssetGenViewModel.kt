@@ -29,26 +29,35 @@ class TemplateAssetGenViewModel(
     private val aiService: AIGenerationService
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(TemplateAssetGenState(
-        project = initialProject,
-        projectName = initialProjectName,
-        selectedPageId = initialProject.pages.firstOrNull()?.id
-    ))
+    private val _state = MutableStateFlow(
+        TemplateAssetGenState(
+            project = initialProject,
+            projectName = initialProjectName,
+            selectedPageId = initialProject.pages.firstOrNull()?.id
+        )
+    )
     val state: StateFlow<TemplateAssetGenState> = _state.asStateFlow()
 
     private var generationJob: kotlinx.coroutines.Job? = null
 
     // --- 页面与选择逻辑 ---
 
-    fun onPageSelected(pageId: String) = _state.update { it.copy(selectedPageId = pageId, selectedBlockId = null, generatedCandidates = emptyList()) }
-    fun onBlockClicked(blockId: String?) = _state.update { it.copy(selectedBlockId = if (blockId == null) null else if (it.selectedBlockId == blockId) null else blockId) }
+    fun onPageSelected(pageId: String) =
+        _state.update { it.copy(selectedPageId = pageId, selectedBlockId = null, generatedCandidates = emptyList()) }
+
+    fun onBlockClicked(blockId: String?) =
+        _state.update { it.copy(selectedBlockId = if (blockId == null) null else if (it.selectedBlockId == blockId) null else blockId) }
+
     fun onBlockDoubleClicked(blockId: String) {
         val block = findBlockById(_state.value.project.pages.flatMap { it.blocks }, blockId)
         if (block != null && block.children.isNotEmpty()) {
             _state.update { it.copy(editingGroupId = blockId, selectedBlockId = null) }
         }
     }
-    fun exitGroupEditMode() { _state.update { it.copy(editingGroupId = null) } }
+
+    fun exitGroupEditMode() {
+        _state.update { it.copy(editingGroupId = null) }
+    }
 
     // --- 资源生成核心逻辑 ---
 
@@ -58,7 +67,7 @@ class TemplateAssetGenViewModel(
         val projectName = _state.value.projectName
         val isTransparent = _state.value.isGenerateTransparent
         val prioritizeCloud = _state.value.isPrioritizeCloudRemoval
-        
+
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
             _state.update { it.copy(isGenerating = true, generationLogs = emptyList(), showAITaskDialog = true) }
@@ -66,37 +75,47 @@ class TemplateAssetGenViewModel(
             try {
                 val candidatesBase64 = aiService.generateImages(
                     apiKey = apiKey,
-                    blockType = block.type.name, 
-                    userPrompt = submitPrompt, 
-                    maxRetries = 3, 
-                    targetWidth = block.bounds.width, 
-                    targetHeight = block.bounds.height, 
+                    blockType = block.type.name,
+                    userPrompt = submitPrompt,
+                    maxRetries = 3,
+                    targetWidth = block.bounds.width,
+                    targetHeight = block.bounds.height,
                     isPng = isTransparent
                 )
-                
+
                 val candidatePaths = withContext(Dispatchers.Default) {
                     candidatesBase64.mapIndexed { index, base64 ->
                         val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
+
                         @OptIn(ExperimentalEncodingApi::class)
                         val bytes = Base64.decode(pure)
                         val timestamp = getCurrentTimeMillis()
-                        val originalUri = templateRepo.saveBlockResource(projectName, block.id, "gen_${index}_$timestamp", bytes)
-                        
+                        val originalUri =
+                            templateRepo.saveBlockResource(projectName, block.id, "gen_${index}_$timestamp", bytes)
+
                         if (isTransparent) {
                             var processedBytes: ByteArray? = null
                             if (prioritizeCloud) {
                                 processedBytes = aiService.removeBackgroundCloud(bytes, apiKey)
                             }
                             if (processedBytes != null) {
-                                return@mapIndexed templateRepo.saveBlockResource(projectName, block.id, "cloud_${index}_$timestamp", processedBytes)
+                                return@mapIndexed templateRepo.saveBlockResource(
+                                    projectName,
+                                    block.id,
+                                    "cloud_${index}_$timestamp",
+                                    processedBytes
+                                )
                             }
                         }
                         originalUri
                     }
                 }
                 _state.update { it.copy(generatedCandidates = candidatePaths) }
-            } catch (e: Exception) { addGenLog(">>> 生成失败: ${e.message} <<<") } 
-            finally { _state.update { it.copy(isGenerating = false) } }
+            } catch (e: Exception) {
+                addGenLog(">>> 生成失败: ${e.message} <<<")
+            } finally {
+                _state.update { it.copy(isGenerating = false) }
+            }
         }
     }
 
@@ -107,9 +126,16 @@ class TemplateAssetGenViewModel(
         val blockId = _state.value.selectedBlockId ?: return
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == pageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) { it.copy(currentImageUri = imageUri) }) else page
+                if (page.id == pageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) {
+                    it.copy(
+                        currentImageUri = imageUri
+                    )
+                }) else page
             }
-            currentState.copy(project = currentState.project.copy(pages = updatedPages), generatedCandidates = emptyList())
+            currentState.copy(
+                project = currentState.project.copy(pages = updatedPages),
+                generatedCandidates = emptyList()
+            )
         }
         viewModelScope.launch { templateRepo.saveTemplate(_state.value.projectName, _state.value.project) }
     }
@@ -125,7 +151,11 @@ class TemplateAssetGenViewModel(
     fun clearSelectedImage(blockId: String) {
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == currentState.selectedPageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) { it.copy(currentImageUri = null) }) else page
+                if (page.id == currentState.selectedPageId) page.copy(
+                    blocks = updateBlockInList(
+                        page.blocks,
+                        blockId
+                    ) { it.copy(currentImageUri = null) }) else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
@@ -145,15 +175,41 @@ class TemplateAssetGenViewModel(
             val currentPage = currentState.currentPage ?: return@update currentState
             val draggedBlock = findBlockById(currentPage.blocks, draggedBlockId) ?: return@update currentState
             val newBlocks = removeBlockRecursive(currentPage.blocks, draggedBlockId)
-            val resultBlocks = if (targetId == null) newBlocks + draggedBlock else if (dropPosition == DropPosition.INSIDE) updateBlockInList(newBlocks, targetId) { it.copy(children = it.children + draggedBlock) } else insertBlockSibling(newBlocks, targetId, draggedBlock, dropPosition)
-            currentState.copy(project = currentState.project.copy(pages = currentState.project.pages.map { if (it.id == pageId) it.copy(blocks = resultBlocks) else it }))
+            val resultBlocks =
+                if (targetId == null) newBlocks + draggedBlock else if (dropPosition == DropPosition.INSIDE) updateBlockInList(
+                    newBlocks,
+                    targetId
+                ) { it.copy(children = it.children + draggedBlock) } else insertBlockSibling(
+                    newBlocks,
+                    targetId,
+                    draggedBlock,
+                    dropPosition
+                )
+            currentState.copy(project = currentState.project.copy(pages = currentState.project.pages.map {
+                if (it.id == pageId) it.copy(
+                    blocks = resultBlocks
+                ) else it
+            }))
         }
     }
 
     fun moveBlockBy(blockId: String, dx: Float, dy: Float) {
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == currentState.selectedPageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) { b -> b.copy(bounds = b.bounds.copy(left = b.bounds.left + dx, top = b.bounds.top + dy, right = b.bounds.right + dx, bottom = b.bounds.bottom + dy)) }) else page
+                if (page.id == currentState.selectedPageId) page.copy(
+                    blocks = updateBlockInList(
+                        page.blocks,
+                        blockId
+                    ) { b ->
+                        b.copy(
+                            bounds = b.bounds.copy(
+                                left = b.bounds.left + dx,
+                                top = b.bounds.top + dy,
+                                right = b.bounds.right + dx,
+                                bottom = b.bounds.bottom + dy
+                            )
+                        )
+                    }) else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
@@ -162,7 +218,11 @@ class TemplateAssetGenViewModel(
     fun renameBlock(oldId: String, newId: String) {
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == currentState.selectedPageId) page.copy(blocks = updateBlockInList(page.blocks, oldId) { it.copy(id = newId) }) else page
+                if (page.id == currentState.selectedPageId) page.copy(
+                    blocks = updateBlockInList(
+                        page.blocks,
+                        oldId
+                    ) { it.copy(id = newId) }) else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
@@ -181,7 +241,11 @@ class TemplateAssetGenViewModel(
     fun toggleBlockVisibility(blockId: String, isVisible: Boolean) {
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == currentState.selectedPageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) { it.copy(isVisible = isVisible) }) else page
+                if (page.id == currentState.selectedPageId) page.copy(
+                    blocks = updateBlockInList(
+                        page.blocks,
+                        blockId
+                    ) { it.copy(isVisible = isVisible) }) else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
@@ -189,7 +253,9 @@ class TemplateAssetGenViewModel(
 
     fun toggleAllBlocksVisibility(isVisible: Boolean) {
         _state.update { currentState ->
-            fun updateVis(list: List<UIBlock>): List<UIBlock> = list.map { it.copy(isVisible = isVisible, children = updateVis(it.children)) }
+            fun updateVis(list: List<UIBlock>): List<UIBlock> =
+                list.map { it.copy(isVisible = isVisible, children = updateVis(it.children)) }
+
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) page.copy(blocks = updateVis(page.blocks)) else page
             }
@@ -199,20 +265,46 @@ class TemplateAssetGenViewModel(
 
     // --- UI 辅助 ---
 
-    fun setGenerateTransparent(enabled: Boolean) { _state.update { it.copy(isGenerateTransparent = enabled) } }
-    fun setPrioritizeCloudRemoval(enabled: Boolean) { _state.update { it.copy(isPrioritizeCloudRemoval = enabled) } }
-    fun toggleVisualMode() { _state.update { it.copy(isVisualMode = !it.isVisualMode) } }
-    fun cancelGeneration() { generationJob?.cancel(); _state.update { it.copy(isGenerating = false) } }
-    fun toggleGenerationLogVisibility() { _state.update { it.copy(isGenerationLogVisible = !it.isGenerationLogVisible) } }
-    fun closeAITaskDialog() { _state.update { it.copy(showAITaskDialog = false) } }
-    private fun addGenLog(msg: String) { _state.update { it.copy(generationLogs = it.generationLogs + msg, showAITaskDialog = true) } }
+    fun setGenerateTransparent(enabled: Boolean) {
+        _state.update { it.copy(isGenerateTransparent = enabled) }
+    }
+
+    fun setPrioritizeCloudRemoval(enabled: Boolean) {
+        _state.update { it.copy(isPrioritizeCloudRemoval = enabled) }
+    }
+
+    fun toggleVisualMode() {
+        _state.update { it.copy(isVisualMode = !it.isVisualMode) }
+    }
+
+    fun cancelGeneration() {
+        generationJob?.cancel(); _state.update { it.copy(isGenerating = false) }
+    }
+
+    fun toggleGenerationLogVisibility() {
+        _state.update { it.copy(isGenerationLogVisible = !it.isGenerationLogVisible) }
+    }
+
+    fun closeAITaskDialog() {
+        _state.update { it.copy(showAITaskDialog = false) }
+    }
+
+    private fun addGenLog(msg: String) {
+        _state.update { it.copy(generationLogs = it.generationLogs + msg, showAITaskDialog = true) }
+    }
 
     private fun findBlockById(blocks: List<UIBlock>, id: String): UIBlock? {
-        for (block in blocks) { if (block.id == id) return block; findBlockById(block.children, id)?.let { return it } }
+        for (block in blocks) {
+            if (block.id == id) return block; findBlockById(block.children, id)?.let { return it }
+        }
         return null
     }
 
-    private fun updateBlockInList(blocks: List<UIBlock>, blockId: String, transform: (UIBlock) -> UIBlock): List<UIBlock> {
+    private fun updateBlockInList(
+        blocks: List<UIBlock>,
+        blockId: String,
+        transform: (UIBlock) -> UIBlock
+    ): List<UIBlock> {
         return blocks.map { block ->
             if (block.id == blockId) transform(block)
             else {
@@ -222,13 +314,23 @@ class TemplateAssetGenViewModel(
         }
     }
 
-    private fun removeBlockRecursive(blocks: List<UIBlock>, idToRemove: String): List<UIBlock> = blocks.filterNot { it.id == idToRemove }.map { it.copy(children = removeBlockRecursive(it.children, idToRemove)) }
+    private fun removeBlockRecursive(blocks: List<UIBlock>, idToRemove: String): List<UIBlock> =
+        blocks.filterNot { it.id == idToRemove }
+            .map { it.copy(children = removeBlockRecursive(it.children, idToRemove)) }
 
-    private fun insertBlockSibling(blocks: List<UIBlock>, targetId: String, blockToInsert: UIBlock, position: DropPosition): List<UIBlock> {
+    private fun insertBlockSibling(
+        blocks: List<UIBlock>,
+        targetId: String,
+        blockToInsert: UIBlock,
+        position: DropPosition
+    ): List<UIBlock> {
         val index = blocks.indexOfFirst { it.id == targetId }
         if (index != -1) {
             val result = blocks.toMutableList()
-            if (position == DropPosition.BEFORE) result.add(index, blockToInsert) else result.add(index + 1, blockToInsert)
+            if (position == DropPosition.BEFORE) result.add(index, blockToInsert) else result.add(
+                index + 1,
+                blockToInsert
+            )
             return result
         }
         return blocks.map { b ->

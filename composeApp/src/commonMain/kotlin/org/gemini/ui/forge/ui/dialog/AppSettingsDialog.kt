@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.dialog
+package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
@@ -17,14 +17,16 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import geminiuiforge.composeapp.generated.resources.*
+import org.gemini.ui.forge.ResizeHorizontalIcon
+import org.gemini.ui.forge.getPlatform
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.utils.rememberDirectoryPicker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,7 +126,7 @@ fun AppSettingsDialog(
                                 .width(4.dp)
                                 .fillMaxHeight()
                                 .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                                .pointerHoverIcon(org.gemini.ui.forge.ResizeHorizontalIcon)
+                                .pointerHoverIcon(ResizeHorizontalIcon)
                                 .draggable(
                                     orientation = Orientation.Horizontal,
                                     state = rememberDraggableState { delta ->
@@ -235,9 +237,9 @@ private fun GeneralSettings(
     }
 
     // Storage
-    if (org.gemini.ui.forge.getPlatform().name != "Web with Kotlin/JS") {
+    if (getPlatform().name != "Web with Kotlin/JS") {
         var pathInput by remember { mutableStateOf(currentStorageDir) }
-        val dirPicker = org.gemini.ui.forge.utils.rememberDirectoryPicker(stringResource(Res.string.settings_storage_dir_title)) { path ->
+        val dirPicker = rememberDirectoryPicker(stringResource(Res.string.settings_storage_dir_title)) { path ->
             if (path != null) { pathInput = path; onStorageDirSaved(path) }
         }
         OutlinedTextField(

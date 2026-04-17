@@ -1,5 +1,4 @@
 package org.gemini.ui.forge.model.app
-import org.gemini.ui.forge.model.app.ShortcutAction
 
 /**
  * 应用全局状态模型

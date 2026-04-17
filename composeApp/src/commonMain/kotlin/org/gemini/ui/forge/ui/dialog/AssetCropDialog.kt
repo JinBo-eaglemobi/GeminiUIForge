@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.assetgen
+package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -10,7 +10,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,9 +33,9 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.decodeBase64ToBitmap
 import org.gemini.ui.forge.utils.getImageSize
+import org.gemini.ui.forge.utils.getNonTransparentBounds
 import kotlin.math.roundToInt
 
 /**
@@ -220,7 +219,7 @@ fun AssetCropDialog(
                         Button(
                             onClick = {
                                 coroutineScope.launch {
-                                    val bounds = org.gemini.ui.forge.utils.getNonTransparentBounds(currentDisplayUri)
+                                    val bounds = getNonTransparentBounds(currentDisplayUri)
                                     val imgSize = imageSize
                                     if (bounds != null && imgSize != null && imageDisplayRect != Rect.Zero) {
                                         val scaleX = imageDisplayRect.width / imgSize.width.toFloat()

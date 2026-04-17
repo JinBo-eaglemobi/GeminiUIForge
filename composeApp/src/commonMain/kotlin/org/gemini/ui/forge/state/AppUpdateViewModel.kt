@@ -15,7 +15,6 @@ import org.gemini.ui.forge.model.app.UpdateStatus
 import org.gemini.ui.forge.model.app.UpdateInfo
 import org.gemini.ui.forge.service.UpdateService
 import org.gemini.ui.forge.data.repository.TemplateRepository
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 专门负责软件更新业务的独立 ViewModel

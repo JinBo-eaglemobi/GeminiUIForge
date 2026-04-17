@@ -1,6 +1,5 @@
-package org.gemini.ui.forge.ui.component
+package org.gemini.ui.forge.ui.dialog
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn

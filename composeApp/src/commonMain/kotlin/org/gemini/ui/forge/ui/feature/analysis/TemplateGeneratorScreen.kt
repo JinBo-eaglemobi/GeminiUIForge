@@ -1,44 +1,33 @@
 package org.gemini.ui.forge.ui.feature.analysis
+
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.*
-import geminiuiforge.composeapp.generated.resources.Res
 import kotlinx.coroutines.launch
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import org.gemini.ui.forge.service.AIGenerationService
-import org.jetbrains.compose.resources.stringResource
-
-import org.gemini.ui.forge.utils.rememberImagePicker
-
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-
-import androidx.compose.foundation.text.selection.SelectionContainer
-
-import org.gemini.ui.forge.getCurrentTimeMillis
-import org.gemini.ui.forge.formatTimestamp
-
-import androidx.compose.material.icons.filled.Cloud
-
-import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollbarAdapter
 import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.formatTimestamp
+import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.CloudAssetManager
 import org.gemini.ui.forge.service.ConfigManager
 import org.gemini.ui.forge.ui.dialog.CloudAssetDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.utils.rememberImagePicker
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun TemplateGeneratorScreen(

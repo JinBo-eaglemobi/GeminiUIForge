@@ -13,90 +13,110 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
+import kotlinx.coroutines.launch
+import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.app.PromptLanguage
-import org.gemini.ui.forge.model.ui.DropPosition
-import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.model.ui.UIBlockType
+import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.service.AIGenerationService
+import org.gemini.ui.forge.service.CloudAssetManager
+import org.gemini.ui.forge.state.TemplateAssetGenState
+import org.gemini.ui.forge.state.TemplateAssetGenViewModel
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.component.VerticalSplitter
-import org.gemini.ui.forge.ui.component.AITaskProgressDialog
-import kotlinx.coroutines.launch
-import org.gemini.ui.forge.state.TemplateAssetGenState
+import org.gemini.ui.forge.ui.dialog.AITaskProgressDialog
+import org.gemini.ui.forge.ui.dialog.AssetCropDialog
+import org.gemini.ui.forge.ui.dialog.AssetSelectionDialog
 import org.gemini.ui.forge.ui.feature.common.CanvasArea
 import org.gemini.ui.forge.ui.feature.common.HierarchySidebar
 
+/**
+ * 资产生成页面主容器组件。
+ * 负责 [TemplateAssetGenViewModel] 的生命周期管理（State Hoisting 状态提升），
+ * 管理三栏布局（图层树、画布预览、生成设置），以及处理生成进度、历史资源等对话框的弹出交互。
+ */
 @Composable
 fun TemplateAssetGenScreen(
-    state: TemplateAssetGenState,
+    initialProject: ProjectState,
+    initialProjectName: String,
+    templateRepo: TemplateRepository,
+    cloudAssetManager: CloudAssetManager,
+    aiService: AIGenerationService,
+    effectiveApiKey: String,
     currentEditingPromptLang: PromptLanguage,
-    onPageSelected: (String) -> Unit,
-    onBlockClicked: (String?) -> Unit,
-    onBlockDoubleClicked: (String) -> Unit,
-    onExitGroupEdit: () -> Unit,
-    onPromptChanged: (String) -> Unit,
     onSwitchEditingLanguage: (PromptLanguage) -> Unit,
-    onGenerateRequested: () -> Unit,
-    onImageSelected: (String, org.gemini.ui.forge.model.ui.SerialRect?) -> Unit,
-    onDeleteImages: (List<String>) -> Unit,
-    onClearHistoricalCandidates: () -> Unit,
-    onClearSelectedImage: (String) -> Unit,
-    onLoadHistoricalImages: suspend (String) -> List<String>,
-    onMoveBlock: (String, String?, DropPosition) -> Unit,
-    onBlockDragged: (String, Float, Float) -> Unit,
-    onRenameBlock: (String, String) -> Unit,
-    onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit,
-    onToggleTransparent: (Boolean) -> Unit = {},
-    onTogglePrioritizeCloud: (Boolean) -> Unit = {},
-    onCancelGeneration: () -> Unit = {},
-    onToggleGenerationLog: () -> Unit = {},
-    onCloseAITaskDialog: () -> Unit = {},
-    isVisualMode: Boolean = false,
-    onToggleVisualMode: () -> Unit = {},
-    onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> },
-    onToggleAllVisibility: (Boolean) -> Unit = {}
+    onProjectUpdated: (ProjectState) -> Unit
 ) {
+    // 1. 初始化 ViewModel 并将其生命周期与 Screen 绑定
+    val viewModel: TemplateAssetGenViewModel = viewModel(key = initialProjectName) {
+        TemplateAssetGenViewModel(initialProject, initialProjectName, templateRepo, cloudAssetManager, aiService)
+    }
+    val state by viewModel.state.collectAsState()
+
+    // 当项目状态变更时，及时上报给外部全局容器
+    LaunchedEffect(state.project) {
+        onProjectUpdated(state.project)
+    }
+
     val coroutineScope = rememberCoroutineScope()
+    // 历史资源列表的弹窗状态
     var showHistoricalDialog by remember { mutableStateOf(false) }
     var historicalImages by remember { mutableStateOf<List<String>>(emptyList()) }
-
+    // 等待被裁剪处理的图片 URI
     var pendingCropUri by remember { mutableStateOf<String?>(null) }
+    // 控制 AI 日志显隐的本地状态
+    var showAILogs by remember { mutableStateOf(false) }
 
+    // 当 AI 开始生成时，自动展开日志面板以提升反馈感
+    LaunchedEffect(state.isGenerating) {
+        if (state.isGenerating) {
+            showAILogs = true
+        }
+    }
+
+    // --- 弹窗组件区 ---
+
+    // 1. AI 任务执行进度与日志弹窗
     if (state.showAITaskDialog) {
         AITaskProgressDialog(
             title = if (state.generationLogs.any { it.contains("优化") }) "智能优化提示词中..." else "AI 资源生成中...",
             logs = state.generationLogs,
             isProcessing = state.isGenerating,
-            isLogVisible = state.isGenerationLogVisible,
-            onToggleLogVisibility = onToggleGenerationLog,
-            onActionClick = { if (state.isGenerating) onCancelGeneration() else onCloseAITaskDialog() },
-            onDismiss = onCloseAITaskDialog
+            isLogVisible = showAILogs,
+            onToggleLogVisibility = { showAILogs = !showAILogs },
+            onActionClick = { if (state.isGenerating) viewModel.cancelGeneration() else viewModel.closeAITaskDialog() },
+            onDismiss = { viewModel.closeAITaskDialog() }
         )
     }
 
+    // 2. 本次生成资源选择弹窗（自动弹出机制）
     var showCurrentGenerationResults by remember { mutableStateOf(false) }
     LaunchedEffect(state.isGenerating, state.generatedCandidates) {
+        // 如果生成任务结束，并且成功返回了候选图片集合，则自动弹出供用户挑选
         if (!state.isGenerating && state.generatedCandidates.isNotEmpty()) {
             showCurrentGenerationResults = true
         }
     }
 
+    // 3. 图像裁剪确认弹窗
     if (pendingCropUri != null) {
         AssetCropDialog(
             imageUri = pendingCropUri!!,
             targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
             onConfirm = { rect ->
-                state.selectedBlockId?.let { id -> onImageSelected(pendingCropUri!!, rect) }
+                state.selectedBlockId?.let { _ -> viewModel.onImageSelected(pendingCropUri!!) }
                 pendingCropUri = null
             },
             onDismiss = { pendingCropUri = null }
         )
     }
 
+    // 显示最新生成的候选图像列表
     if (showCurrentGenerationResults) {
         AssetSelectionDialog(
             title = "AI 生成资源预览",
@@ -104,14 +124,15 @@ fun TemplateAssetGenScreen(
             initialSelectedUri = state.selectedBlock?.currentImageUri,
             targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
-            onImageSelected = { onImageSelected(it, null); showCurrentGenerationResults = false },
+            onImageSelected = { viewModel.onImageSelected(it); showCurrentGenerationResults = false },
             onCropRequested = { pendingCropUri = it; showCurrentGenerationResults = false },
-            onDeleteImages = { onDeleteImages(it) },
-            onClearAll = { onClearHistoricalCandidates(); showCurrentGenerationResults = false },
+            onDeleteImages = { viewModel.deleteImages(it) },
+            onClearAll = { viewModel.clearCandidates(); showCurrentGenerationResults = false },
             onDismiss = { showCurrentGenerationResults = false }
         )
     }
 
+    // 显示历史资源列表
     if (showHistoricalDialog) {
         AssetSelectionDialog(
             title = "历史资源列表",
@@ -119,45 +140,65 @@ fun TemplateAssetGenScreen(
             initialSelectedUri = state.selectedBlock?.currentImageUri,
             targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
-            onImageSelected = { onImageSelected(it, null); showHistoricalDialog = false },
+            onImageSelected = { viewModel.onImageSelected(it); showHistoricalDialog = false },
             onCropRequested = { pendingCropUri = it; showHistoricalDialog = false },
-            onDeleteImages = { uris -> onDeleteImages(uris); historicalImages = historicalImages.filter { it !in uris } },
-            onClearAll = { },
+            onDeleteImages = { uris ->
+                viewModel.deleteImages(uris); historicalImages = historicalImages.filter { it !in uris }
+            },
+            onClearAll = { }, // 历史记录暂时不支持一键清空
             onDismiss = { showHistoricalDialog = false }
         )
     }
 
+    // --- 主界面布局：三栏结构 ---
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val totalWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
+        // 三栏默认权重
         var leftWeight by remember { mutableStateOf(0.15f) }
         var centerWeight by remember { mutableStateOf(0.55f) }
         var rightWeight by remember { mutableStateOf(0.3f) }
 
         Row(modifier = Modifier.fillMaxSize()) {
+            // [左栏] 图层结构树
             HierarchySidebar(
                 blocks = state.currentPage?.blocks ?: emptyList(),
                 selectedBlockId = state.selectedBlockId,
-                onBlockClicked = onBlockClicked,
-                onMoveBlock = onMoveBlock,
-                onAddCustomBlock = onAddCustomBlock,
-                onRenameBlock = onRenameBlock,
-                onToggleVisibility = onToggleVisibility,
-                onToggleAllVisibility = onToggleAllVisibility,
+                onBlockClicked = { viewModel.onBlockClicked(it) },
+                onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
+                onMoveBlock = { d, t, p -> viewModel.moveBlock(d, t, p) },
+                onAddCustomBlock = { id, type, w, h -> viewModel.addCustomBlock(id, type, w, h) },
+                onRenameBlock = { old, new -> viewModel.renameBlock(old, new) },
+                onToggleVisibility = { id, visible -> viewModel.toggleBlockVisibility(id, visible) },
+                onToggleAllVisibility = { visible -> viewModel.toggleAllBlocksVisibility(visible) },
                 modifier = Modifier.weight(leftWeight).fillMaxHeight(),
-                isReadOnly = true
+                isReadOnly = true // 资产生成页面不允许改变图层结构的主体
             )
 
             VerticalSplitter(onDrag = { delta ->
                 val dw = delta / totalWidthPx
-                if (leftWeight + dw in 0.1f..0.3f) { leftWeight += dw; centerWeight -= dw }
+                if (leftWeight + dw in 0.1f..0.3f) {
+                    leftWeight += dw; centerWeight -= dw
+                }
             })
 
+            // [中栏] 页面 Tab 与画布预览
             Column(modifier = Modifier.weight(centerWeight).fillMaxHeight()) {
                 val pages = state.project.pages
                 val selectedIndex = pages.indexOfFirst { it.id == state.selectedPageId }.coerceAtLeast(0)
                 if (pages.isNotEmpty()) {
-                    PrimaryScrollableTabRow(selectedTabIndex = selectedIndex, edgePadding = 8.dp, containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
-                        pages.forEachIndexed { index, page -> Tab(selected = selectedIndex == index, onClick = { onPageSelected(page.id) }, text = { Text(page.nameStr) }) }
+                    PrimaryScrollableTabRow(
+                        selectedTabIndex = selectedIndex,
+                        edgePadding = 8.dp,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ) {
+                        pages.forEachIndexed { index, page ->
+                            Tab(
+                                selected = selectedIndex == index,
+                                onClick = { if (!state.isGenerating) viewModel.onPageSelected(page.id) },
+                                text = { Text(page.nameStr) }
+                            )
+                        }
                     }
                 }
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -166,40 +207,47 @@ fun TemplateAssetGenScreen(
                         pageHeight = state.currentPage?.height ?: 1920f,
                         blocks = state.currentPage?.blocks ?: emptyList(),
                         selectedBlockId = state.selectedBlockId,
-                        onBlockClicked = onBlockClicked,
-                        onBlockDoubleClicked = onBlockDoubleClicked,
-                        onBlockDragged = onBlockDragged,
+                        onBlockClicked = { viewModel.onBlockClicked(it) },
+                        onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
+                        onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },
                         editingGroupId = state.editingGroupId,
-                        onExitGroupEdit = onExitGroupEdit,
+                        onExitGroupEdit = { viewModel.exitGroupEditMode() },
                         referenceUri = state.currentPage?.sourceImageUri,
-                        isVisualMode = isVisualMode,
-                        onToggleVisualMode = onToggleVisualMode,
+                        isVisualMode = state.isVisualMode,
+                        onToggleVisualMode = { viewModel.toggleVisualMode() },
                         isReadOnly = true,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
             }
-            
+
             VerticalSplitter(onDrag = { delta ->
                 val dw = delta / totalWidthPx
-                if (rightWeight - dw in 0.2f..0.4f) { rightWeight -= dw; centerWeight += dw }
+                if (rightWeight - dw in 0.2f..0.4f) {
+                    rightWeight -= dw; centerWeight += dw
+                }
             })
 
-            Surface(modifier = Modifier.weight(rightWeight).fillMaxHeight(), color = MaterialTheme.colorScheme.surface) {
+            // [右栏] 生成参数配置与提示词编辑面板
+            Surface(
+                modifier = Modifier.weight(rightWeight).fillMaxHeight(),
+                color = MaterialTheme.colorScheme.surface
+            ) {
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                     PropertyPanel(
-                        selectedBlock = state.selectedBlock,
+                        state = state,
+                        viewModel = viewModel,
+                        apiKey = effectiveApiKey,
                         currentEditingLang = currentEditingPromptLang,
-                        isGenerateTransparent = state.isGenerateTransparent,
-                        isPrioritizeCloud = state.isPrioritizeCloudRemoval,
-                        onToggleTransparent = onToggleTransparent,
-                        onTogglePrioritizeCloud = onTogglePrioritizeCloud,
                         onSwitchEditingLang = onSwitchEditingLanguage,
-                        isGenerating = state.isGenerating,
-                        onPromptChanged = onPromptChanged,
-                        onGenerateRequested = onGenerateRequested,
-                        onShowHistory = { state.selectedBlock?.let { block -> coroutineScope.launch { historicalImages = onLoadHistoricalImages(block.id); showHistoricalDialog = true } } },
-                        onUnbindImage = { state.selectedBlockId?.let { onClearSelectedImage(it) } }
+                        onShowHistory = {
+                            state.selectedBlock?.let { block ->
+                                coroutineScope.launch {
+                                    historicalImages = viewModel.loadHistoricalImages(block.id)
+                                    showHistoricalDialog = true
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -207,30 +255,45 @@ fun TemplateAssetGenScreen(
     }
 }
 
+/**
+ * 资产生成参数面板组件。
+ * 提供选中组件的物理参数预览、绑定的资源图像查看，以及触发 AI 图像生成与透明度处理等控制。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PropertyPanel(
-    selectedBlock: UIBlock?,
+    state: TemplateAssetGenState,
+    viewModel: TemplateAssetGenViewModel,
+    apiKey: String,
     currentEditingLang: PromptLanguage,
-    isGenerateTransparent: Boolean,
-    isPrioritizeCloud: Boolean,
-    onToggleTransparent: (Boolean) -> Unit,
-    onTogglePrioritizeCloud: (Boolean) -> Unit,
     onSwitchEditingLang: (PromptLanguage) -> Unit,
-    isGenerating: Boolean,
-    onPromptChanged: (String) -> Unit,
-    onGenerateRequested: () -> Unit,
-    onShowHistory: () -> Unit,
-    onUnbindImage: () -> Unit
+    onShowHistory: () -> Unit
 ) {
+    val selectedBlock = state.selectedBlock
+
     Column(modifier = Modifier.padding(16.dp)) {
-        Text(stringResource(Res.string.editor_gen_settings), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+        Text(
+            stringResource(Res.string.editor_gen_settings),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
         if (selectedBlock == null) {
+            // 未选中任何块的空状态提示
             Text(stringResource(Res.string.prop_select_block), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), shape = AppShapes.small, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+            // 1. 只读物理坐标预览面板
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = AppShapes.small,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            ) {
                 Column(Modifier.padding(8.dp)) {
-                    Text("模块物理参数 (只读)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "模块物理参数 (只读)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                     Spacer(Modifier.height(4.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         InfoItem("X", selectedBlock.bounds.left.toInt().toString(), Modifier.weight(1f))
@@ -240,38 +303,153 @@ private fun PropertyPanel(
                     }
                 }
             }
-            Text(text = "当前绑定资源", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp))
-            Card(modifier = Modifier.fillMaxWidth().height(160.dp), shape = AppShapes.medium, colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))) {
+
+            // 2. 当前绑定资源缩略图展示
+            Text(
+                text = "当前绑定资源",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Card(
+                modifier = Modifier.fillMaxWidth().height(160.dp),
+                shape = AppShapes.medium,
+                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))
+            ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (selectedBlock.currentImageUri != null) {
-                        AsyncImage(model = selectedBlock.currentImageUri, contentDescription = null, modifier = Modifier.fillMaxSize().padding(4.dp), contentScale = ContentScale.Fit)
+                        AsyncImage(
+                            model = selectedBlock.currentImageUri,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize().padding(4.dp),
+                            contentScale = ContentScale.Fit
+                        )
                     } else {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.HideImage, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
-                            Text("尚未绑定任何资源", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(
+                                Icons.Default.HideImage,
+                                null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Text(
+                                "尚未绑定任何资源",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onShowHistory, modifier = Modifier.weight(1f), shape = AppShapes.medium) { Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("历史记录") }
-                OutlinedButton(onClick = onUnbindImage, modifier = Modifier.weight(1f), shape = AppShapes.medium, enabled = selectedBlock.currentImageUri != null, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Icon(Icons.Default.LinkOff, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("解绑") }
+
+            // 3. 历史记录与资源解绑按钮
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(onClick = onShowHistory, modifier = Modifier.weight(1f), shape = AppShapes.medium) {
+                    Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("历史记录")
+                }
+                OutlinedButton(
+                    onClick = { viewModel.clearSelectedImage(selectedBlock.id) },
+                    modifier = Modifier.weight(1f),
+                    shape = AppShapes.medium,
+                    enabled = selectedBlock.currentImageUri != null,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Icon(Icons.Default.LinkOff, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("解绑")
+                }
             }
+
             HorizontalDivider(Modifier.padding(vertical = 12.dp))
+
+            // 4. 语言切换与描述提示词展示
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang -> SegmentedButton(selected = currentEditingLang == lang, onClick = { onSwitchEditingLang(lang) }, shape = SegmentedButtonDefaults.itemShape(index = index, count = 2), label = { Text(lang.displayName) }) }
+                PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang ->
+                    SegmentedButton(
+                        selected = currentEditingLang == lang,
+                        onClick = { onSwitchEditingLang(lang) },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+                        label = { Text(lang.displayName) }
+                    )
+                }
             }
-            val displayPrompt = if (currentEditingLang == PromptLanguage.EN) selectedBlock.userPromptEn else selectedBlock.userPromptZh
-            OutlinedTextField(value = displayPrompt, onValueChange = { onPromptChanged(it) }, label = { Text("${stringResource(Res.string.label_description_content)} (${currentEditingLang.displayName})") }, modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp), maxLines = 8, enabled = !isGenerating)
+
+            val displayPrompt =
+                if (currentEditingLang == PromptLanguage.EN) selectedBlock.userPromptEn else selectedBlock.userPromptZh
+            OutlinedTextField(
+                value = displayPrompt,
+                // 此页面不提供提示词修改，如果需要修改应返回 TemplateEditorScreen
+                onValueChange = { },
+                readOnly = true,
+                label = { Text("${stringResource(Res.string.label_description_content)} (${currentEditingLang.displayName})") },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                maxLines = 8,
+                enabled = !state.isGenerating
+            )
             Spacer(modifier = Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = isGenerateTransparent, onCheckedChange = { onToggleTransparent(it) }, enabled = !isGenerating); Column(modifier = Modifier.padding(start = 8.dp)) { Text("生成透明背景 (PNG)", style = MaterialTheme.typography.bodyMedium); Text("开启后自动处理背景", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-            if (isGenerateTransparent) { Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = isPrioritizeCloud, onCheckedChange = { onTogglePrioritizeCloud(it) }, enabled = !isGenerating); Column(modifier = Modifier.padding(start = 8.dp)) { Text("优先云端抠图", style = MaterialTheme.typography.bodyMedium) } } }
+
+            // 5. 图像生成特性配置（透明度/扣图）
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = state.isGenerateTransparent,
+                    onCheckedChange = { viewModel.setGenerateTransparent(it) },
+                    enabled = !state.isGenerating
+                )
+                Column(modifier = Modifier.padding(start = 8.dp)) {
+                    Text("生成透明背景 (PNG)", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "开启后自动处理背景",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (state.isGenerateTransparent) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = state.isPrioritizeCloudRemoval,
+                        onCheckedChange = { viewModel.setPrioritizeCloudRemoval(it) },
+                        enabled = !state.isGenerating
+                    )
+                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                        Text("优先云端抠图", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(24.dp))
-            Button(onClick = onGenerateRequested, modifier = Modifier.fillMaxWidth(), enabled = !isGenerating && displayPrompt.isNotBlank(), shape = AppShapes.medium) { if (isGenerating) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp) else Text(stringResource(Res.string.editor_start_gen)) }
+
+            // 6. 执行生成按钮
+            Button(
+                onClick = { viewModel.onRequestGeneration(apiKey, currentEditingLang) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !state.isGenerating && displayPrompt.isNotBlank(),
+                shape = AppShapes.medium
+            ) {
+                if (state.isGenerating)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                else
+                    Text(stringResource(Res.string.editor_start_gen))
+            }
         }
     }
 }
 
+/**
+ * 封装的只读信息展示小组件
+ */
 @Composable
 private fun InfoItem(label: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier) {
@@ -279,3 +457,4 @@ private fun InfoItem(label: String, value: String, modifier: Modifier = Modifier
         Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
     }
 }
+

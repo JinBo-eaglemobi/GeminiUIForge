@@ -4,7 +4,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.jetbrains.skia.*
-import org.gemini.ui.forge.utils.readLocalFileBytes
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 

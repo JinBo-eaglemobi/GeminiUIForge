@@ -1,9 +1,7 @@
-package org.gemini.ui.forge.ui.feature.assetgen
+package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -24,6 +22,8 @@ import androidx.compose.ui.window.DialogProperties
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.decodeBase64ToBitmap
 import androidx.compose.foundation.combinedClickable
+import org.gemini.ui.forge.utils.getImageSize
+import kotlin.math.abs
 
 /**
  * 资源选择与管理弹窗 (弹窗 A)
@@ -50,11 +50,11 @@ fun AssetSelectionDialog(
     // 辅助：获取带尺寸信息的候选列表并排序
     var sortedCandidates by remember { mutableStateOf<List<Pair<String, Pair<Int, Int>?>>>(emptyList()) }
     LaunchedEffect(candidates) {
-        val withSize = candidates.map { it to org.gemini.ui.forge.utils.getImageSize(it) }
+        val withSize = candidates.map { it to getImageSize(it) }
         sortedCandidates = withSize.sortedBy { (_, size) ->
             if (size == null) 2f else {
                 val ratio = size.first.toFloat() / size.second
-                kotlin.math.abs(ratio - targetRatio)
+                abs(ratio - targetRatio)
             }
         }
     }
@@ -153,7 +153,7 @@ fun AssetSelectionDialog(
                                 // 比例匹配检查
                                 val isAdapted = if (size == null) false else {
                                     val ratio = size.first.toFloat() / size.second
-                                    kotlin.math.abs(ratio - targetRatio) < 0.05
+                                    abs(ratio - targetRatio) < 0.05
                                 }
 
                                 Card(
@@ -172,7 +172,7 @@ fun AssetSelectionDialog(
                                                     tempSelectedUri = uri
                                                     val isAdapted = if (size == null) false else {
                                                         val ratio = size.first.toFloat() / size.second
-                                                        kotlin.math.abs(ratio - targetRatio) < 0.05
+                                                        abs(ratio - targetRatio) < 0.05
                                                     }
 
                                                     if (isAdapted && size?.first == targetWidth.toInt() && size.second == targetHeight.toInt()) {
@@ -324,7 +324,7 @@ fun AssetSelectionDialog(
                                 val size = sortedCandidates.find { it.first == uri }?.second
                                 val isAdapted = if (size == null) false else {
                                     val ratio = size.first.toFloat() / size.second
-                                    kotlin.math.abs(ratio - targetRatio) < 0.05
+                                    abs(ratio - targetRatio) < 0.05
                                 }
 
                                 if (isAdapted && size?.first == targetWidth.toInt() && size.second == targetHeight.toInt()) {
