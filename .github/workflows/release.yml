@@ -28,9 +28,9 @@ jobs:
           cache: 'gradle'
       - name: 生成 Windows 产物 (含 JAR/安装包/绿色版)
         run: |
-          ./gradlew :composeApp:packageDistributed
+          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS
           ./gradlew :composeApp:createDistributable
-          ./gradlew :composeApp:packageUberJarForCurrentOS
+          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS
       - name: 压缩绿色版
         shell: pwsh
         run: Compress-Archive -Path "composeApp/build/compose/binaries/main/app/*" -DestinationPath "GeminiUIForge-Windows-Portable.zip"
@@ -63,7 +63,7 @@ jobs:
       - name: 授权并打包
         run: |
           chmod +x gradlew
-          ./gradlew :composeApp:packageDistributed
+          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS
           ./gradlew :composeApp:createDistributable
       - name: 压缩绿色版
         run: |

@@ -35,7 +35,7 @@ import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
-import org.gemini.ui.forge.state.EditorState
+import org.gemini.ui.forge.state.TemplateEditorState
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.component.VerticalSplitter
@@ -46,7 +46,8 @@ import androidx.compose.ui.focus.onFocusChanged
 
 @Composable
 fun TemplateEditorScreen(
-    state: EditorState,
+    state: TemplateEditorState,
+    currentEditingPromptLang: PromptLanguage,
     onPageSelected: (String) -> Unit,
     onBlockClicked: (String?) -> Unit,
     onBlockBoundsChanged: (String, Float, Float, Float, Float) -> Unit,
@@ -79,7 +80,7 @@ fun TemplateEditorScreen(
             title = if (state.generationLogs.any { it.contains("优化") || it.contains("润色") }) "智能优化提示词中..." else "正在执行区域重构...",
             logs = state.generationLogs,
             isProcessing = state.isGenerating,
-            isLogVisible = state.isGenerationLogVisible,
+            isLogVisible = false,
             onToggleLogVisibility = onToggleAILog,
             onActionClick = {
                 if (state.isGenerating) onCancelAITask() else onCloseAITaskDialog()
@@ -208,7 +209,7 @@ fun TemplateEditorScreen(
             Surface(modifier = Modifier.weight(rightWeight).fillMaxHeight(), color = MaterialTheme.colorScheme.surface) {
                 PropertyPanel(
                     selectedBlock = state.selectedBlock,
-                    currentLang = state.currentEditingPromptLang,
+                    currentLang = currentEditingPromptLang,
                     onSwitchLang = onSwitchEditingLanguage,
                     onBlockTypeChanged = onBlockTypeChanged,
                     onBlockBoundsChanged = onBlockBoundsChanged,
@@ -247,7 +248,6 @@ private fun PropertyPanel(
                 Text(stringResource(Res.string.prop_select_block), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            // 模块 ID 编辑
             OutlinedTextField(
                 value = selectedBlock.id,
                 onValueChange = { if (it.isNotBlank()) onRenameBlock(selectedBlock.id, it) },
@@ -406,40 +406,20 @@ private fun EditableInfoItem(
     modifier: Modifier = Modifier
 ) {
     var textValue by remember(value) { mutableStateOf(value) }
-    var isFocused by remember { mutableStateOf(false) }
-
     Column(modifier) {
         OutlinedTextField(
             value = textValue,
             onValueChange = { 
                 textValue = it
-                if (it.isNotEmpty() && it.toFloatOrNull() != null) {
-                    onValueChange(it)
-                }
+                if (it.isNotEmpty() && it.toFloatOrNull() != null) { onValueChange(it) }
             },
             label = { Text(label, style = MaterialTheme.typography.labelSmall) },
             singleLine = true,
             textStyle = MaterialTheme.typography.bodySmall,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { isFocused = it.isFocused },
-            shape = AppShapes.small,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = Color.Transparent,
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-            )
+            modifier = Modifier.fillMaxWidth(),
+            shape = AppShapes.small
         )
-    }
-}
-
-@Composable
-private fun InfoItem(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -469,8 +449,7 @@ fun VisualRefineDialog(
                         val imageAspectRatio = pageWidth / pageHeight
                         val containerAspectRatio = containerW.value / containerH.value
 
-                        val displayW: Float
-                        val displayH: Float
+                        val displayW: Float; val displayH: Float
                         if (imageAspectRatio > containerAspectRatio) {
                             displayW = containerW.value
                             displayH = displayW / imageAspectRatio
@@ -503,10 +482,8 @@ fun VisualRefineDialog(
                                 val top = with(density) { (offsetY + (rect.top / pageHeight) * displayH).dp.toPx() }
                                 val right = with(density) { (offsetX + (rect.right / pageWidth) * displayW).dp.toPx() }
                                 val bottom = with(density) { (offsetY + (rect.bottom / pageHeight) * displayH).dp.toPx() }
-                                
                                 val rectTopLeft = Offset(kotlin.math.min(left, right), kotlin.math.min(top, bottom))
                                 val rectSize = Size(kotlin.math.abs(right - left), kotlin.math.abs(bottom - top))
-                                
                                 drawRect(color = Color.Cyan, topLeft = rectTopLeft, size = rectSize, style = Stroke(width = 2.dp.toPx()))
                                 drawRect(color = Color.Cyan.copy(alpha = 0.2f), topLeft = rectTopLeft, size = rectSize)
                             }
@@ -515,7 +492,7 @@ fun VisualRefineDialog(
                 }
 
                 Spacer(Modifier.height(16.dp))
-                OutlinedTextField(value = instruction, onValueChange = { instruction = it }, label = { Text("重塑指令 (例如：优化细节、增加阴影、重新识别结构)") }, modifier = Modifier.fillMaxWidth().height(100.dp), shape = AppShapes.medium)
+                OutlinedTextField(value = instruction, onValueChange = { instruction = it }, label = { Text("重塑指令") }, modifier = Modifier.fillMaxWidth().height(100.dp), shape = AppShapes.medium)
                 Spacer(Modifier.height(16.dp))
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

@@ -21,17 +21,18 @@ import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
-import org.gemini.ui.forge.state.EditorState
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.component.AITaskProgressDialog
 import kotlinx.coroutines.launch
+import org.gemini.ui.forge.state.TemplateAssetGenState
 import org.gemini.ui.forge.ui.feature.common.CanvasArea
 import org.gemini.ui.forge.ui.feature.common.HierarchySidebar
 
 @Composable
 fun TemplateAssetGenScreen(
-    state: EditorState,
+    state: TemplateAssetGenState,
+    currentEditingPromptLang: PromptLanguage,
     onPageSelected: (String) -> Unit,
     onBlockClicked: (String?) -> Unit,
     onBlockDoubleClicked: (String) -> Unit,
@@ -188,7 +189,7 @@ fun TemplateAssetGenScreen(
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                     PropertyPanel(
                         selectedBlock = state.selectedBlock,
-                        currentEditingLang = state.currentEditingPromptLang,
+                        currentEditingLang = currentEditingPromptLang,
                         isGenerateTransparent = state.isGenerateTransparent,
                         isPrioritizeCloud = state.isPrioritizeCloudRemoval,
                         onToggleTransparent = onToggleTransparent,

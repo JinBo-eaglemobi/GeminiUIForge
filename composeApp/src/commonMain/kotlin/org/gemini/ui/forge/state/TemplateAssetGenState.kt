@@ -1,0 +1,47 @@
+package org.gemini.ui.forge.state
+
+import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.model.ui.UIBlock
+
+/**
+ * 资产生成模块专用的运行时状态
+ */
+data class TemplateAssetGenState(
+    /** 当前编辑的项目副本 */
+    val project: ProjectState = ProjectState(),
+    /** 项目名称 */
+    val projectName: String = "",
+    /** 选中的页面及块 */
+    val selectedPageId: String? = null,
+    val selectedBlockId: String? = null,
+    /** 隔离编辑组 */
+    val editingGroupId: String? = null,
+    
+    /** AI 生成相关 */
+    val isGenerating: Boolean = false,
+    val generationLogs: List<String> = emptyList(),
+    val showAITaskDialog: Boolean = false,
+    val isGenerationLogVisible: Boolean = false,
+    
+    /** 生成偏好 */
+    val isGenerateTransparent: Boolean = true,
+    val isPrioritizeCloudRemoval: Boolean = false,
+    
+    /** 候选资产 */
+    val generatedCandidates: List<String> = emptyList(),
+    
+    /** 视觉辅助 */
+    val isVisualMode: Boolean = false
+) {
+    val currentPage get() = project.pages.find { it.id == selectedPageId }
+    val selectedBlock: UIBlock? get() = currentPage?.let { page -> findBlockById(page.blocks, selectedBlockId ?: "") }
+
+    private fun findBlockById(blocks: List<UIBlock>, id: String): UIBlock? {
+        for (block in blocks) {
+            if (block.id == id) return block
+            val found = findBlockById(block.children, id)
+            if (found != null) return found
+        }
+        return null
+    }
+}
