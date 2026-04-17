@@ -33,7 +33,7 @@ jobs:
           ./gradlew :composeApp:packageReleaseUberJarForCurrentOS
       - name: 压缩绿色版
         shell: pwsh
-        run: Compress-Archive -Path "composeApp/build/compose/binaries/main/app/*" -DestinationPath "GeminiUIForge-Windows-Portable.zip"
+        run: Compress-Archive -Path "composeApp/build/compose/binaries/main-release/app/GeminiUIForge/*" -DestinationPath "GeminiUIForge-Windows-Portable.zip"
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:
