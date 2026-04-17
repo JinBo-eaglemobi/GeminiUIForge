@@ -21,6 +21,7 @@ import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.state.AppViewModel
+import org.gemini.ui.forge.state.AppSettingsViewModel
 import org.gemini.ui.forge.state.AppUpdateViewModel
 import org.gemini.ui.forge.state.AppEnvViewModel
 import org.gemini.ui.forge.ui.feature.home.HomeScreen
@@ -50,8 +51,9 @@ fun App(typography: Typography? = null) {
     var templatesList by remember { mutableStateOf(emptyList<Pair<String, ProjectState>>()) }
 
     key(languageKey) {
-        // 三位一体 ViewModel 架构
-        val viewModel: AppViewModel = viewModel { AppViewModel(templateRepo = templateRepo) }
+        // 四层 ViewModel 架构实现
+        val viewModel: AppViewModel = viewModel { AppViewModel(templateRepo = templateRepo, cloudAssetManager = CloudAssetManager(ConfigManager()), aiService = AIGenerationService(CloudAssetManager(ConfigManager()))) }
+        val settingsViewModel: AppSettingsViewModel = viewModel { AppSettingsViewModel(templateRepo = templateRepo) }
         val updateViewModel: AppUpdateViewModel = viewModel { AppUpdateViewModel(templateRepo = templateRepo) }
         val envViewModel: AppEnvViewModel = viewModel { AppEnvViewModel() }
         
@@ -64,6 +66,9 @@ fun App(typography: Typography? = null) {
         LaunchedEffect(Unit) {
             delay(100.milliseconds)
             try { focusRequester.requestFocus() } catch (e: Exception) { }
+            // 1. 同步初始配置
+            viewModel.syncInitialSettings(settingsViewModel.getConfigManager())
+            // 2. 检查更新
             updateViewModel.checkForUpdates()
         }
 
@@ -133,15 +138,36 @@ fun App(typography: Typography? = null) {
                     updateStatus = updateStatus,
                     onDismiss = { showSettingsDialog = false },
                     onLanguageSelected = { 
+                        settingsViewModel.saveLanguage(it)
                         viewModel.setLanguage(it)
                         languageKey++
                     },
-                    onThemeSelected = { viewModel.setThemeMode(it) },
-                    onApiKeySaved = { viewModel.saveApiKey(it) },
-                    onStorageDirSaved = { viewModel.updateStorageDir(it) },
-                    onMaxRetriesSaved = { viewModel.setMaxRetries(it) },
-                    onPromptLangSelected = { viewModel.setPromptLanguagePref(it) },
-                    onShortcutSaved = { action, key -> viewModel.saveShortcut(action, key) },
+                    onThemeSelected = { 
+                        viewModel.setThemeMode(it)
+                    },
+                    onApiKeySaved = { 
+                        settingsViewModel.saveApiKey(it)
+                        viewModel.updateApiKey(it)
+                    },
+                    onStorageDirSaved = { path ->
+                        coroutineScope.launch {
+                            if (settingsViewModel.updateStorageDir(path)) {
+                                viewModel.updateStorageDirState(path)
+                            }
+                        }
+                    },
+                    onMaxRetriesSaved = { 
+                        settingsViewModel.saveMaxRetries(it)
+                        viewModel.updateMaxRetriesState(it)
+                    },
+                    onPromptLangSelected = { 
+                        settingsViewModel.savePromptLanguagePref(it)
+                        viewModel.setPromptLanguagePref(it)
+                    },
+                    onShortcutSaved = { action, key -> 
+                        settingsViewModel.saveShortcut(action, key)
+                        viewModel.updateShortcutState(action, key)
+                    },
                     onCheckEnv = { envViewModel.checkEnvironment() },
                     onInstallEnvItem = { envViewModel.installEnvironmentItem(it) },
                     onCheckUpdate = { updateViewModel.checkForUpdates() },

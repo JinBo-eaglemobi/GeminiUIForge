@@ -2,7 +2,6 @@ package org.gemini.ui.forge.state
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.ktor.utils.io.release
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,13 +32,12 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
- * 应用的主控制 ViewModel，负责全局状态管理、UI 逻辑处理及业务调度
+ * 应用的主控制 ViewModel，负责业务逻辑调度及实时 UI 状态同步
  */
 class AppViewModel(
-    private val configManager: ConfigManager = ConfigManager(),
     private val templateRepo: TemplateRepository = TemplateRepository(),
-    val cloudAssetManager: CloudAssetManager = CloudAssetManager(configManager),
-    private val aiService: AIGenerationService = AIGenerationService(cloudAssetManager)
+    val cloudAssetManager: CloudAssetManager,
+    private val aiService: AIGenerationService
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditorState())
@@ -50,6 +48,80 @@ class AppViewModel(
 
     private val undoStack = ArrayDeque<ProjectState>()
     private val redoStack = ArrayDeque<ProjectState>()
+
+    /**
+     * 初始化加载全局配置 (由 App.kt 在启动时调用)
+     */
+    fun syncInitialSettings(configManager: ConfigManager) {
+        viewModelScope.launch {
+            val apiKey = configManager.loadKey("GEMINI_API_KEY") ?: ""
+            val globalKey = configManager.loadGlobalGeminiKey() ?: ""
+            val languageCode = configManager.loadKey("APP_LANGUAGE") ?: "zh"
+            val promptLangStr = configManager.loadKey("PROMPT_LANGUAGE_PREF") ?: "AUTO"
+            val promptLang = try { PromptLanguage.valueOf(promptLangStr) } catch (e: Exception) { PromptLanguage.AUTO }
+            val effectiveKey = apiKey.ifBlank { globalKey }
+            val storageDir = templateRepo.getDataDir()
+            val retriesStr = configManager.loadKey("API_MAX_RETRIES") ?: "3"
+            val retries = retriesStr.toIntOrNull() ?: 3
+            val customShortcuts = ShortcutAction.entries.associate { action ->
+                val saved = configManager.loadKey("SHORTCUT_${action.name}")
+                action to (saved ?: action.defaultKey)
+            }
+            
+            _state.update { it.copy(
+                globalState = it.globalState.copy(
+                    apiKey = apiKey, 
+                    effectiveApiKey = effectiveKey, 
+                    templateStorageDir = storageDir, 
+                    languageCode = languageCode, 
+                    promptLangPref = promptLang, 
+                    maxRetries = retries, 
+                    shortcuts = customShortcuts
+                ), 
+                currentEditingPromptLang = if (promptLang == PromptLanguage.EN) PromptLanguage.EN else PromptLanguage.ZH
+            ) }
+
+            // 加载指令模板
+            val updateInstruction = aiService.promptManager.getPrompt("refine_instruction_update")
+            val newInstruction = aiService.promptManager.getPrompt("refine_instruction_new")
+            _state.update { it.copy(defaultRefineInstructionUpdate = updateInstruction, defaultRefineInstructionNew = newInstruction) }
+        }
+    }
+
+    // --- 界面控制与导航 ---
+
+    fun navigateTo(screen: AppScreen) = _state.update { it.copy(globalState = it.globalState.copy(currentScreen = screen)) }
+    fun setThemeMode(mode: ThemeMode) = _state.update { it.copy(globalState = it.globalState.copy(themeMode = mode)) }
+    fun setLanguage(code: String) = _state.update { it.copy(globalState = it.globalState.copy(languageCode = code)) }
+    fun switchEditingLanguage(lang: PromptLanguage) = _state.update { it.copy(currentEditingPromptLang = lang) }
+
+    // --- 配置状态同步 (响应 AppSettingsViewModel 的修改) ---
+
+    fun updateApiKey(newKey: String) {
+        _state.update { it.copy(globalState = it.globalState.copy(apiKey = newKey, effectiveApiKey = newKey)) }
+    }
+
+    fun updateStorageDirState(newPath: String) {
+        _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) }
+    }
+
+    fun updateMaxRetriesState(count: Int) {
+        _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) }
+    }
+
+    fun updateShortcutState(action: ShortcutAction, keyChord: String) {
+        _state.update { currentState ->
+            val newShortcuts = currentState.globalState.shortcuts.toMutableMap()
+            newShortcuts[action] = keyChord
+            currentState.copy(globalState = currentState.globalState.copy(shortcuts = newShortcuts))
+        }
+    }
+
+    fun setPromptLanguagePref(pref: PromptLanguage) {
+        _state.update { it.copy(globalState = it.globalState.copy(promptLangPref = pref)) }
+    }
+
+    // --- 业务逻辑管理 ---
 
     fun saveSnapshot() {
         val currentProject = _state.value.project
@@ -98,42 +170,8 @@ class AppViewModel(
         }
     }
 
-    fun saveShortcut(action: ShortcutAction, keyChord: String) {
-        viewModelScope.launch {
-            configManager.saveKey("SHORTCUT_${action.name}", keyChord)
-            _state.update { currentState ->
-                val newShortcuts = currentState.globalState.shortcuts.toMutableMap()
-                newShortcuts[action] = keyChord
-                currentState.copy(globalState = currentState.globalState.copy(shortcuts = newShortcuts))
-            }
-        }
-    }
-
     init {
         loadBaseTemplate()
-        viewModelScope.launch {
-            loadSettings()
-            val updateInstruction = aiService.promptManager.getPrompt("refine_instruction_update")
-            val newInstruction = aiService.promptManager.getPrompt("refine_instruction_new")
-            _state.update { it.copy(defaultRefineInstructionUpdate = updateInstruction, defaultRefineInstructionNew = newInstruction) }
-        }
-    }
-
-    private suspend fun loadSettings() {
-        val apiKey = configManager.loadKey("GEMINI_API_KEY") ?: ""
-        val globalKey = configManager.loadGlobalGeminiKey() ?: ""
-        val languageCode = configManager.loadKey("APP_LANGUAGE") ?: "zh"
-        val promptLangStr = configManager.loadKey("PROMPT_LANGUAGE_PREF") ?: "AUTO"
-        val promptLang = try { PromptLanguage.valueOf(promptLangStr) } catch (e: Exception) { PromptLanguage.AUTO }
-        val effectiveKey = apiKey.ifBlank { globalKey }
-        val storageDir = templateRepo.getDataDir()
-        val retriesStr = configManager.loadKey("API_MAX_RETRIES") ?: "3"
-        val retries = retriesStr.toIntOrNull() ?: 3
-        val customShortcuts = ShortcutAction.entries.associate { action ->
-            val saved = configManager.loadKey("SHORTCUT_${action.name}")
-            action to (saved ?: action.defaultKey)
-        }
-        _state.update { it.copy(globalState = it.globalState.copy(apiKey = apiKey, effectiveApiKey = effectiveKey, templateStorageDir = storageDir, languageCode = languageCode, promptLangPref = promptLang, maxRetries = retries, shortcuts = customShortcuts), currentEditingPromptLang = if (promptLang == PromptLanguage.EN) PromptLanguage.EN else PromptLanguage.ZH) }
     }
 
     fun loadProject(projectName: String, projectState: ProjectState) {
@@ -405,7 +443,7 @@ class AppViewModel(
                     val displayName = originalImage.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "reference.jpg" }
                     originalFileUri = cloudAssetManager.getOrUploadFile(displayName, originalBytes, getMimeType(originalImage)) { _, status -> logger("[$status]") } ?: ""
                 }
-                logger("正在通过 Gemini AI 重塑 UI 结构...")
+                logger("正在通过 Gemini AI 重塑 UI structure...")
                 val currentJson = Json.encodeToString(ProjectState.serializer(), currentState.project)
                 val updatedProject = aiService.refineAreaForTemplate(originalImageUri = originalFileUri, croppedBytes = croppedBytes, currentJson = currentJson, userInstruction = userInstruction, apiKey = apiKey, onLog = logger, onChunk = onChunk)
                 _state.update { it.copy(project = updatedProject) }
@@ -414,7 +452,7 @@ class AppViewModel(
                 onComplete(true)
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) {
-                    AppLogger.e("EditorViewModel", "区域重塑失败", e); addGenLog("❌ 错误: ${e.message}"); onComplete(false)
+                    AppLogger.e("AppViewModel", "区域重塑失败", e); addGenLog("❌ 错误: ${e.message}"); onComplete(false)
                 }
             } finally { _state.update { it.copy(isGenerating = false) } }
         }
@@ -452,7 +490,7 @@ class AppViewModel(
                 onComplete(true)
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) {
-                    AppLogger.e("EditorViewModel", "手动区域重塑失败", e); addGenLog("❌ 错误: ${e.message}"); onComplete(false)
+                    AppLogger.e("AppViewModel", "手动区域重塑失败", e); addGenLog("❌ 错误: ${e.message}"); onComplete(false)
                 }
             } finally { _state.update { it.copy(isGenerating = false) } }
         }
@@ -475,7 +513,7 @@ class AppViewModel(
                 addGenLog("优化完成！已应用到描述框。")
                 onComplete(optimized)
             } catch (e: Exception) {
-                if (e !is kotlinx.coroutines.CancellationException) { addGenLog(">>> 优化失败: ${e.message} <<<"); AppLogger.e("EditorViewModel", "Failed to optimize prompt", e) }
+                if (e !is kotlinx.coroutines.CancellationException) { addGenLog(">>> 优化失败: ${e.message} <<<"); AppLogger.e("AppViewModel", "Failed to optimize prompt", e) }
             } finally { _state.update { it.copy(isGenerating = false) }; currentGenJob = null }
         }
     }
@@ -567,7 +605,7 @@ class AppViewModel(
                     currentState.copy(project = currentState.project.copy(pages = updatedPages))
                 }
                 templateRepo.saveTemplate(projectName, _state.value.project)
-            } catch (e: Exception) { AppLogger.e("EditorViewModel", "裁剪保存失败", e) }
+            } catch (e: Exception) { AppLogger.e("AppViewModel", "裁剪保存失败", e) }
         }
     }
 
@@ -653,16 +691,9 @@ class AppViewModel(
         }
     }
 
-    fun navigateTo(screen: AppScreen) = _state.update { it.copy(globalState = it.globalState.copy(currentScreen = screen)) }
-    fun setThemeMode(mode: ThemeMode) = _state.update { it.copy(globalState = it.globalState.copy(themeMode = mode)) }
-    fun saveApiKey(newKey: String) = viewModelScope.launch { configManager.saveKey("GEMINI_API_KEY", newKey); val globalKey = configManager.loadGlobalGeminiKey() ?: ""; val effectiveKey = newKey.ifBlank { globalKey }; _state.update { it.copy(globalState = it.globalState.copy(apiKey = newKey, effectiveApiKey = effectiveKey)) } }
-    fun setLanguage(code: String) = viewModelScope.launch { configManager.saveKey("APP_LANGUAGE", code); _state.update { it.copy(globalState = it.globalState.copy(languageCode = code)) } }
-    fun updateStorageDir(newPath: String) = viewModelScope.launch { if (templateRepo.updateStorageDir(newPath)) _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) } }
-    fun setMaxRetries(count: Int) = viewModelScope.launch { configManager.saveKey("API_MAX_RETRIES", count.toString()); _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) } }
-    fun switchEditingLanguage(lang: PromptLanguage) = _state.update { it.copy(currentEditingPromptLang = lang) }
     fun toggleGenerationLogVisibility() { _state.update { it.copy(isGenerationLogVisible = !it.isGenerationLogVisible) } }
     fun closeAITaskDialog() { _state.update { it.copy(showAITaskDialog = false, generationLogs = emptyList()) } }
-    private fun addGenLog(msg: String) { AppLogger.i("EditorViewModel", msg); _state.update { it.copy(generationLogs = it.generationLogs + msg, showAITaskDialog = true) } }
+    private fun addGenLog(msg: String) { AppLogger.i("AppViewModel", msg); _state.update { it.copy(generationLogs = it.generationLogs + msg, showAITaskDialog = true) } }
     fun cancelGeneration() { 
         currentGenJob?.cancel(); generationJob?.cancel(); currentGenJob = null; generationJob = null; 
         _state.update { it.copy(isGenerating = false, generationLogs = it.generationLogs + ">>> 用户已手动中断处理 <<<") } 
@@ -670,5 +701,4 @@ class AppViewModel(
     fun setGenerateTransparent(enabled: Boolean) { _state.update { it.copy(isGenerateTransparent = enabled) } }
     fun setPrioritizeCloudRemoval(enabled: Boolean) { _state.update { it.copy(isPrioritizeCloudRemoval = enabled) } }
     fun toggleVisualMode() { _state.update { it.copy(isVisualMode = !it.isVisualMode) } }
-    fun setPromptLanguagePref(pref: PromptLanguage) = viewModelScope.launch { configManager.saveKey("PROMPT_LANGUAGE_PREF", pref.name); _state.update { it.copy(globalState = it.globalState.copy(promptLangPref = pref), currentEditingPromptLang = if (pref == PromptLanguage.EN) PromptLanguage.EN else PromptLanguage.ZH) } }
 }
