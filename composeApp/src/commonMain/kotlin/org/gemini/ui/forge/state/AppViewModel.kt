@@ -33,10 +33,9 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
- * 编辑器页面的 ViewModel，负责 UI 逻辑处理与状态管理
- * 环境检测与更新功能已彻底剥离至独立 ViewModel
+ * 应用的主控制 ViewModel，负责全局状态管理、UI 逻辑处理及业务调度
  */
-class EditorViewModel(
+class AppViewModel(
     private val configManager: ConfigManager = ConfigManager(),
     private val templateRepo: TemplateRepository = TemplateRepository(),
     val cloudAssetManager: CloudAssetManager = CloudAssetManager(configManager),
@@ -671,7 +670,5 @@ class EditorViewModel(
     fun setGenerateTransparent(enabled: Boolean) { _state.update { it.copy(isGenerateTransparent = enabled) } }
     fun setPrioritizeCloudRemoval(enabled: Boolean) { _state.update { it.copy(isPrioritizeCloudRemoval = enabled) } }
     fun toggleVisualMode() { _state.update { it.copy(isVisualMode = !it.isVisualMode) } }
-    fun setReferenceMode(mode: ReferenceDisplayMode) { _state.update { it.copy(referenceMode = mode) } }
-    fun setReferenceOpacity(opacity: Float) { _state.update { it.copy(referenceOpacity = opacity) } }
     fun setPromptLanguagePref(pref: PromptLanguage) = viewModelScope.launch { configManager.saveKey("PROMPT_LANGUAGE_PREF", pref.name); _state.update { it.copy(globalState = it.globalState.copy(promptLangPref = pref), currentEditingPromptLang = if (pref == PromptLanguage.EN) PromptLanguage.EN else PromptLanguage.ZH) } }
 }

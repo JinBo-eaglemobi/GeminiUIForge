@@ -20,7 +20,7 @@ import kotlinx.coroutines.delay
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
-import org.gemini.ui.forge.state.EditorViewModel
+import org.gemini.ui.forge.state.AppViewModel
 import org.gemini.ui.forge.state.AppUpdateViewModel
 import org.gemini.ui.forge.state.AppEnvViewModel
 import org.gemini.ui.forge.ui.feature.home.HomeScreen
@@ -50,8 +50,8 @@ fun App(typography: Typography? = null) {
     var templatesList by remember { mutableStateOf(emptyList<Pair<String, ProjectState>>()) }
 
     key(languageKey) {
-        // 核心：并列挂载三个完全独立的业务 ViewModel
-        val viewModel: EditorViewModel = viewModel { EditorViewModel(templateRepo = templateRepo) }
+        // 三位一体 ViewModel 架构
+        val viewModel: AppViewModel = viewModel { AppViewModel(templateRepo = templateRepo) }
         val updateViewModel: AppUpdateViewModel = viewModel { AppUpdateViewModel(templateRepo = templateRepo) }
         val envViewModel: AppEnvViewModel = viewModel { AppEnvViewModel() }
         
@@ -64,7 +64,6 @@ fun App(typography: Typography? = null) {
         LaunchedEffect(Unit) {
             delay(100.milliseconds)
             try { focusRequester.requestFocus() } catch (e: Exception) { }
-            // 启动时检查更新
             updateViewModel.checkForUpdates()
         }
 
@@ -93,7 +92,6 @@ fun App(typography: Typography? = null) {
         var showHelpDialog by remember { mutableStateOf(false) }
         var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
 
-        // 环境拦截逻辑：利用 envStatus.isAllReady 进行判定
         val isEnvRequired = state.isGenerateTransparent && globalState.currentScreen == AppScreen.TEMPLATE_ASSET_GEN
         val isEnvReady = envStatus.isAllReady
         var showEnvWarning by remember { mutableStateOf(false) }
@@ -281,8 +279,8 @@ fun App(typography: Typography? = null) {
                                 onToggleAILog = { viewModel.toggleGenerationLogVisibility() },
                                 onCloseAITaskDialog = { viewModel.closeAITaskDialog() },
                                 onSaveTemplate = { coroutineScope.launch { templateRepo.saveTemplate(state.projectName, state.project) } }
-                                )
-                                }
+                            )
+                        }
 
                         AppScreen.TEMPLATE_ASSET_GEN -> {
                             TemplateAssetGenScreen(
@@ -315,8 +313,8 @@ fun App(typography: Typography? = null) {
                                 onToggleVisualMode = { viewModel.toggleVisualMode() },
                                 onToggleVisibility = { id, vis -> viewModel.toggleBlockVisibility(id, vis) },
                                 onToggleAllVisibility = { vis -> viewModel.toggleAllBlocksVisibility(vis) }
-                                )
-                                }
+                            )
+                        }
                         AppScreen.TEMPLATE_GENERATOR -> {
                             TemplateGeneratorScreen(
                                 onNavigateBack = { viewModel.navigateTo(AppScreen.HOME) },
