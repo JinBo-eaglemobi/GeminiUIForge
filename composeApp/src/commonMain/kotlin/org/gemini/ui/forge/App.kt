@@ -182,35 +182,19 @@ fun App(typography: Typography? = null) {
                         }
 
                         AppScreen.TEMPLATE_EDITOR -> {
-                            val editorViewModel: TemplateEditorViewModel = viewModel(key = appState.projectName) { 
-                                TemplateEditorViewModel(appState.project, appState.projectName, templateRepo, appViewModel.cloudAssetManager, AIGenerationService(appViewModel.cloudAssetManager))
-                            }
-                            val editorState by editorViewModel.state.collectAsState()
-                            LaunchedEffect(editorState.project) { appViewModel.updateProject(editorState.project) }
-
                             TemplateEditorScreen(
-                                state = editorState,
+                                initialProject = appState.project,
+                                initialProjectName = appState.projectName,
+                                templateRepo = templateRepo,
+                                cloudAssetManager = appViewModel.cloudAssetManager,
+                                aiService = AIGenerationService(appViewModel.cloudAssetManager),
+                                effectiveApiKey = globalState.effectiveApiKey,
                                 currentEditingPromptLang = globalState.promptLangPref,
-                                onPageSelected = { editorViewModel.onPageSelected(it) },
-                                onBlockClicked = { editorViewModel.onBlockClicked(it) },
-                                onBlockBoundsChanged = { id, l, t, r, b -> editorViewModel.updateBlockBounds(id, l, t, r, b) },
-                                onBlockTypeChanged = { _, _ -> }, 
-                                onPromptChanged = { id, prompt -> editorViewModel.onUserPromptChanged(id, prompt, globalState.promptLangPref) },
-                                onOptimizePrompt = { id, _ -> editorViewModel.optimizePrompt(id, globalState.effectiveApiKey, globalState.promptLangPref) },
-                                onRefineArea = { id, bounds, instr, _, _, complete -> editorViewModel.onRefineArea(id, bounds, instr, globalState.effectiveApiKey, complete) },
-                                onRefineCustomArea = { _, _, _, _, complete -> complete(false) }, 
                                 onSwitchEditingLanguage = { appViewModel.switchEditingLanguage(it) },
-                                onBlockDoubleClicked = { editorViewModel.onBlockDoubleClicked(it) },
-                                onExitGroupEdit = { editorViewModel.exitGroupEditMode() },
-                                onAddBlock = { editorViewModel.addBlock(it) },
-                                onAddCustomBlock = { _, _, _, _ -> },
-                                onDeleteBlock = { editorViewModel.deleteBlock(it) },
-                                onMoveBlock = { d, t, p -> editorViewModel.moveBlock(d, t, p) },
-                                onBlockDragged = { id, dx, dy -> editorViewModel.moveBlockBy(id, dx, dy) },
-                                onRenameBlock = { old, new -> editorViewModel.renameBlock(old, new) },        
-                                onCancelAITask = { editorViewModel.cancelAITask() },
-                                onCloseAITaskDialog = { editorViewModel.closeAITaskDialog() },
-                                onSaveTemplate = { coroutineScope.launch { templateRepo.saveTemplate(appState.projectName, editorState.project) } }
+                                onProjectUpdated = { appViewModel.updateProject(it) },
+                                onSaveTemplate = { 
+                                    coroutineScope.launch { templateRepo.saveTemplate(appState.projectName, appState.project) } 
+                                }
                             )
                         }
 

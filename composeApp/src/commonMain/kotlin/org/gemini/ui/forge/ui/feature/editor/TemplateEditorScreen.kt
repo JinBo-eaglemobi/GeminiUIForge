@@ -13,6 +13,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.viewmodel.compose.viewModel
+import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.state.TemplateEditorViewModel
+import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.service.CloudAssetManager
+import org.gemini.ui.forge.service.AIGenerationService
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,58 +50,64 @@ import org.gemini.ui.forge.ui.feature.common.CanvasArea
 import org.gemini.ui.forge.ui.feature.common.HierarchySidebar
 import androidx.compose.ui.focus.onFocusChanged
 
+/**
+ * 模板编辑器主页面。
+ * 负责初始化 ViewModel、管理 UI 三栏布局结构、处理 AI 交互弹窗以及维护画布/属性面板的同步。
+ */
 @Composable
 fun TemplateEditorScreen(
-    state: TemplateEditorState,
+    initialProject: ProjectState,
+    initialProjectName: String,
+    templateRepo: TemplateRepository,
+    cloudAssetManager: CloudAssetManager,
+    aiService: AIGenerationService,
+    effectiveApiKey: String,
     currentEditingPromptLang: PromptLanguage,
-    onPageSelected: (String) -> Unit,
-    onBlockClicked: (String?) -> Unit,
-    onBlockBoundsChanged: (String, Float, Float, Float, Float) -> Unit,
-    onBlockTypeChanged: (String, UIBlockType) -> Unit,
-    onPromptChanged: (String, String) -> Unit,
-    onOptimizePrompt: (String, (String) -> Unit) -> Unit,
-    onRefineArea: (String, SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit,
-    onRefineCustomArea: (SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit,
     onSwitchEditingLanguage: (PromptLanguage) -> Unit,
-    onBlockDoubleClicked: (String) -> Unit,
-    onExitGroupEdit: () -> Unit,
-    onAddBlock: (UIBlockType) -> Unit,
-    onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit,
-    onDeleteBlock: (String) -> Unit,
-    onMoveBlock: (String, String?, org.gemini.ui.forge.model.ui.DropPosition) -> Unit,
-    onBlockDragged: (String, Float, Float) -> Unit,
-    onRenameBlock: (String, String) -> Unit,
-    onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> },
-    onToggleAllVisibility: (Boolean) -> Unit = {},
-    onCancelAITask: () -> Unit = {},
-    onToggleAILog: () -> Unit = {},
-    onCloseAITaskDialog: () -> Unit = {},
+    onProjectUpdated: (ProjectState) -> Unit,
     onSaveTemplate: () -> Unit
 ) {
-    var showVisualRefine by remember { mutableStateOf(false) }
-    var refineTargetId by remember { mutableStateOf<String?>(null) } 
+    // 1. 初始化 ViewModel，其生命周期与当前 Screen 绑定
+    val viewModel: TemplateEditorViewModel = viewModel(key = initialProjectName) {
+        TemplateEditorViewModel(initialProject, initialProjectName, templateRepo, cloudAssetManager, aiService)
+    }
+    val state by viewModel.state.collectAsState()
 
+    // 状态状态同步：当 ViewModel 内部的项目状态发生变化时，同步给外部以便 App 保存
+    LaunchedEffect(state.project) {
+        onProjectUpdated(state.project)
+    }
+
+    // --- 内部 UI 状态控制 ---
+    var showVisualRefine by remember { mutableStateOf(false) }
+    var refineTargetId by remember { mutableStateOf<String?>(null) }
+    var showAILogs by remember { mutableStateOf(false) }
+
+    // 当 AI 开始生成时，自动展开日志面板
+    LaunchedEffect(state.isGenerating) {
+        if (state.isGenerating) {
+            showAILogs = true
+        }
+    }
+
+    // 渲染 AI 任务执行进度弹窗
     if (state.showAITaskDialog) {
         AITaskProgressDialog(
             title = if (state.generationLogs.any { it.contains("优化") || it.contains("润色") }) "智能优化提示词中..." else "正在执行区域重构...",
             logs = state.generationLogs,
             isProcessing = state.isGenerating,
-            isLogVisible = false,
-            onToggleLogVisibility = onToggleAILog,
+            isLogVisible = showAILogs,
+            onToggleLogVisibility = { showAILogs = !showAILogs },
             onActionClick = {
-                if (state.isGenerating) onCancelAITask() else onCloseAITaskDialog()
+                if (state.isGenerating) viewModel.cancelAITask() else viewModel.closeAITaskDialog()
             },
-            onDismiss = onCloseAITaskDialog
+            onDismiss = { viewModel.closeAITaskDialog() }
         )
     }
 
+    // 渲染 AI 视觉重塑框选对话框
     if (showVisualRefine) {
-        val defaultInstruction = if (refineTargetId != null) {
-            state.defaultRefineInstructionUpdate
-        } else {
-            state.defaultRefineInstructionNew
-        }
-
+        val defaultInstruction = if (refineTargetId != null) state.defaultRefineInstructionUpdate else state.defaultRefineInstructionNew
         VisualRefineDialog(
             imageUri = state.currentPage?.sourceImageUri ?: "",
             pageWidth = state.currentPage?.width ?: 1080f,
@@ -104,15 +116,16 @@ fun TemplateEditorScreen(
             onDismiss = { showVisualRefine = false },
             onConfirm = { rect, instruction, _, _, _ ->
                 showVisualRefine = false
-                if (refineTargetId != null) {
-                    onRefineArea(refineTargetId!!, rect, instruction, {}, {}, {})
-                } else {
-                    onRefineCustomArea(rect, instruction, {}, {}, {})
+                viewModel.onRefineArea(refineTargetId, rect, instruction, effectiveApiKey) { success ->
+                    if (success) {
+                        /* ViewModel 内部已处理状态更新，这里可以增加额外的 UI 反馈 */
+                    }
                 }
             }
         )
     }
 
+    // --- 主界面布局 ---
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val totalWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
         var leftWeight by remember { mutableStateOf(0.2f) }
@@ -120,11 +133,13 @@ fun TemplateEditorScreen(
         var rightWeight by remember { mutableStateOf(0.25f) }
 
         Row(modifier = Modifier.fillMaxSize()) {
+            // [左栏] 工具栏与图层树
             Surface(modifier = Modifier.weight(leftWeight).fillMaxHeight(), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Text(stringResource(Res.string.editor_tools_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
                         
+                        // 全局区域重塑
                         Button(
                             onClick = { refineTargetId = null; showVisualRefine = true },
                             modifier = Modifier.fillMaxWidth(),
@@ -140,7 +155,7 @@ fun TemplateEditorScreen(
                         state.project.pages.forEach { page ->
                             val selected = state.selectedPageId == page.id
                             TextButton(
-                                onClick = { onPageSelected(page.id) },
+                                onClick = { viewModel.onPageSelected(page.id) },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = AppShapes.medium
                             ) {
@@ -150,16 +165,17 @@ fun TemplateEditorScreen(
                         HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     }
 
+                    // 图层树
                     HierarchySidebar(
                         blocks = state.currentPage?.blocks ?: emptyList(),
                         selectedBlockId = state.selectedBlockId,
-                        onBlockClicked = onBlockClicked,
-                        onBlockDoubleClicked = onBlockDoubleClicked,
-                        onMoveBlock = onMoveBlock,
-                        onAddCustomBlock = onAddCustomBlock,
-                        onRenameBlock = onRenameBlock,
-                        onToggleVisibility = onToggleVisibility,
-                        onToggleAllVisibility = onToggleAllVisibility,
+                        onBlockClicked = { viewModel.onBlockClicked(it) },
+                        onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
+                        onMoveBlock = { d, t, p -> viewModel.moveBlock(d, t, p) },
+                        onAddCustomBlock = { id, type, w, h -> viewModel.addCustomBlock(id, type, w, h) }, 
+                        onRenameBlock = { old, new -> viewModel.renameBlock(old, new) },
+                        onToggleVisibility = { id, visible -> viewModel.toggleBlockVisibility(id, visible) },
+                        onToggleAllVisibility = { visible -> viewModel.toggleAllBlocksVisibility(visible) },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -173,22 +189,24 @@ fun TemplateEditorScreen(
                 }
             })
 
+            // [中栏] 交互式画布
             Box(modifier = Modifier.weight(centerWeight).fillMaxHeight()) {
                 CanvasArea(
                     pageWidth = state.currentPage?.width ?: 1080f,
                     pageHeight = state.currentPage?.height ?: 1920f,
                     blocks = state.currentPage?.blocks ?: emptyList(),
                     selectedBlockId = state.selectedBlockId,
-                    onBlockClicked = onBlockClicked,
-                    onBlockDoubleClicked = onBlockDoubleClicked,
-                    onBlockDragged = onBlockDragged,
+                    onBlockClicked = { viewModel.onBlockClicked(it) },
+                    onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
+                    onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },
                     editingGroupId = state.editingGroupId,
-                    onExitGroupEdit = onExitGroupEdit,
+                    onExitGroupEdit = { viewModel.exitGroupEditMode() },
                     referenceUri = state.currentPage?.sourceImageUri,
                     isReadOnly = false,
                     modifier = Modifier.fillMaxSize()
                 )
                 
+                // 快捷保存
                 SmallFloatingActionButton(
                     onClick = onSaveTemplate,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
@@ -206,40 +224,37 @@ fun TemplateEditorScreen(
                 }
             })
 
+            // [右栏] 属性编辑面板
             Surface(modifier = Modifier.weight(rightWeight).fillMaxHeight(), color = MaterialTheme.colorScheme.surface) {
                 PropertyPanel(
-                    selectedBlock = state.selectedBlock,
+                    state = state,
+                    viewModel = viewModel,
+                    apiKey = effectiveApiKey,
                     currentLang = currentEditingPromptLang,
                     onSwitchLang = onSwitchEditingLanguage,
-                    onBlockTypeChanged = onBlockTypeChanged,
-                    onBlockBoundsChanged = onBlockBoundsChanged,
-                    onRenameBlock = onRenameBlock,
-                    onPromptChanged = onPromptChanged,
-                    onOptimizePrompt = onOptimizePrompt,
-                    onRefineClick = { id -> refineTargetId = id; showVisualRefine = true },
-                    onDeleteBlock = onDeleteBlock,
-                    isGenerating = state.isGenerating
+                    onRefineClick = { id -> refineTargetId = id; showVisualRefine = true }
                 )
             }
         }
     }
 }
 
+/**
+ * 属性面板。
+ * 直接接收 ViewModel 以便在内部处理用户对具体属性（ID、坐标、提示词等）的修改。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PropertyPanel(
-    selectedBlock: UIBlock?,
+    state: TemplateEditorState,
+    viewModel: TemplateEditorViewModel,
+    apiKey: String,
     currentLang: PromptLanguage,
     onSwitchLang: (PromptLanguage) -> Unit,
-    onBlockTypeChanged: (String, UIBlockType) -> Unit,
-    onBlockBoundsChanged: (String, Float, Float, Float, Float) -> Unit,
-    onRenameBlock: (String, String) -> Unit,
-    onPromptChanged: (String, String) -> Unit,
-    onOptimizePrompt: (String, (String) -> Unit) -> Unit,
-    onRefineClick: (String) -> Unit,
-    onDeleteBlock: (String) -> Unit,
-    isGenerating: Boolean
+    onRefineClick: (String) -> Unit
 ) {
+    val selectedBlock = state.selectedBlock
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text(stringResource(Res.string.editor_properties), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
 
@@ -248,9 +263,10 @@ private fun PropertyPanel(
                 Text(stringResource(Res.string.prop_select_block), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
+            // ID 编辑
             OutlinedTextField(
                 value = selectedBlock.id,
-                onValueChange = { if (it.isNotBlank()) onRenameBlock(selectedBlock.id, it) },
+                onValueChange = { if (it.isNotBlank()) viewModel.renameBlock(selectedBlock.id, it) },
                 label = { Text(stringResource(Res.string.prop_block_id)) },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 singleLine = true,
@@ -258,6 +274,7 @@ private fun PropertyPanel(
                 textStyle = MaterialTheme.typography.bodyMedium
             )
 
+            // 物理参数编辑组
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                 shape = AppShapes.small,
@@ -271,9 +288,8 @@ private fun PropertyPanel(
                             label = "X",
                             value = selectedBlock.bounds.left.toInt().toString(),
                             onValueChange = { newValue ->
-                                val newLeft = newValue.toFloatOrNull() ?: return@EditableInfoItem
-                                val currentWidth = selectedBlock.bounds.width
-                                onBlockBoundsChanged(selectedBlock.id, newLeft, selectedBlock.bounds.top, newLeft + currentWidth, selectedBlock.bounds.bottom)
+                                val x = newValue.toFloatOrNull() ?: return@EditableInfoItem
+                                viewModel.updateBlockBounds(selectedBlock.id, x, selectedBlock.bounds.top, x + selectedBlock.bounds.width, selectedBlock.bounds.bottom)
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -281,9 +297,8 @@ private fun PropertyPanel(
                             label = "Y",
                             value = selectedBlock.bounds.top.toInt().toString(),
                             onValueChange = { newValue ->
-                                val newTop = newValue.toFloatOrNull() ?: return@EditableInfoItem
-                                val currentHeight = selectedBlock.bounds.height
-                                onBlockBoundsChanged(selectedBlock.id, selectedBlock.bounds.left, newTop, selectedBlock.bounds.right, newTop + currentHeight)
+                                val y = newValue.toFloatOrNull() ?: return@EditableInfoItem
+                                viewModel.updateBlockBounds(selectedBlock.id, selectedBlock.bounds.left, y, selectedBlock.bounds.right, y + selectedBlock.bounds.height)
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -294,8 +309,8 @@ private fun PropertyPanel(
                             label = "W",
                             value = selectedBlock.bounds.width.toInt().toString(),
                             onValueChange = { newValue ->
-                                val newWidth = newValue.toFloatOrNull() ?: return@EditableInfoItem
-                                onBlockBoundsChanged(selectedBlock.id, selectedBlock.bounds.left, selectedBlock.bounds.top, selectedBlock.bounds.left + newWidth, selectedBlock.bounds.bottom)
+                                val w = newValue.toFloatOrNull() ?: return@EditableInfoItem
+                                viewModel.updateBlockBounds(selectedBlock.id, selectedBlock.bounds.left, selectedBlock.bounds.top, selectedBlock.bounds.left + w, selectedBlock.bounds.bottom)
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -303,8 +318,8 @@ private fun PropertyPanel(
                             label = "H",
                             value = selectedBlock.bounds.height.toInt().toString(),
                             onValueChange = { newValue ->
-                                val newHeight = newValue.toFloatOrNull() ?: return@EditableInfoItem
-                                onBlockBoundsChanged(selectedBlock.id, selectedBlock.bounds.left, selectedBlock.bounds.top, selectedBlock.bounds.right, selectedBlock.bounds.top + newHeight)
+                                val h = newValue.toFloatOrNull() ?: return@EditableInfoItem
+                                viewModel.updateBlockBounds(selectedBlock.id, selectedBlock.bounds.left, selectedBlock.bounds.top, selectedBlock.bounds.right, selectedBlock.bounds.top + h)
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -312,6 +327,7 @@ private fun PropertyPanel(
                 }
             }
 
+            // 组件类型切换
             var expanded by remember { mutableStateOf(false) }
             Text(stringResource(Res.string.prop_type), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 4.dp))
             ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
@@ -328,12 +344,13 @@ private fun PropertyPanel(
                     UIBlockType.entries.forEach { type ->
                         DropdownMenuItem(
                             text = { Text(stringResource(type.getDisplayNameRes())) },
-                            onClick = { onBlockTypeChanged(selectedBlock.id, type); expanded = false }
+                            onClick = { viewModel.updateBlockType(selectedBlock.id, type); expanded = false }
                         )
                     }
                 }
             }
 
+            // 提示词多语言编辑
             Text(text = stringResource(Res.string.editor_prompt_lang), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 4.dp))
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang ->
@@ -349,19 +366,20 @@ private fun PropertyPanel(
             val displayPrompt = if (currentLang == PromptLanguage.EN) selectedBlock.userPromptEn else selectedBlock.userPromptZh
             OutlinedTextField(
                 value = displayPrompt,
-                onValueChange = { onPromptChanged(selectedBlock.id, it) },
+                onValueChange = { viewModel.onUserPromptChanged(selectedBlock.id, it, currentLang) },
                 label = { Text("${stringResource(Res.string.label_description_content)} (${currentLang.displayName})") },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
                 maxLines = 10,
-                enabled = !isGenerating,
+                enabled = !state.isGenerating,
                 shape = AppShapes.medium
             )
 
+            // AI 辅助工具
             Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick = { onOptimizePrompt(selectedBlock.id) {} },
+                    onClick = { viewModel.optimizePrompt(selectedBlock.id, apiKey, currentLang) },
                     modifier = Modifier.weight(1f),
-                    enabled = !isGenerating && displayPrompt.isNotBlank(),
+                    enabled = !state.isGenerating && displayPrompt.isNotBlank(),
                     shape = AppShapes.medium
                 ) {
                     Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
@@ -372,7 +390,7 @@ private fun PropertyPanel(
                 OutlinedButton(
                     onClick = { onRefineClick(selectedBlock.id) },
                     modifier = Modifier.weight(1f),
-                    enabled = !isGenerating,
+                    enabled = !state.isGenerating,
                     shape = AppShapes.medium
                 ) {
                     Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
@@ -383,12 +401,13 @@ private fun PropertyPanel(
 
             Spacer(Modifier.height(24.dp))
             
+            // 块删除
             Button(
-                onClick = { onDeleteBlock(selectedBlock.id) },
+                onClick = { viewModel.deleteBlock(selectedBlock.id) },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.fillMaxWidth(),
                 shape = AppShapes.medium,
-                enabled = !isGenerating
+                enabled = !state.isGenerating
             ) {
                 Icon(Icons.Default.Delete, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -398,6 +417,9 @@ private fun PropertyPanel(
     }
 }
 
+/**
+ * 封装的数字输入项
+ */
 @Composable
 private fun EditableInfoItem(
     label: String,
@@ -423,6 +445,9 @@ private fun EditableInfoItem(
     }
 }
 
+/**
+ * 视觉框选重塑对话框
+ */
 @Composable
 fun VisualRefineDialog(
     imageUri: String,

@@ -29,7 +29,7 @@ jobs:
       - name: 生成 Windows 产物 (含 JAR/安装包/绿色版)
         run: |
           ./gradlew :composeApp:packageReleaseDistributionForCurrentOS
-          ./gradlew :composeApp:createDistributable
+          ./gradlew :composeApp:createReleaseDistributable
           ./gradlew :composeApp:packageReleaseUberJarForCurrentOS
       - name: 压缩绿色版
         shell: pwsh
@@ -64,7 +64,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :composeApp:packageReleaseDistributionForCurrentOS
-          ./gradlew :composeApp:createDistributable
+          ./gradlew :composeApp:createReleaseDistributable
       - name: 压缩绿色版
         run: |
           cd composeApp/build/compose/binaries/main/app && zip -r ../../../../GeminiUIForge-macOS-Portable.zip .
