@@ -14,6 +14,9 @@ import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.CloudAssetManager
 import org.gemini.ui.forge.service.ConfigManager
 
+import org.gemini.ui.forge.ui.component.ToastData
+import org.gemini.ui.forge.ui.component.ToastType
+
 /**
  * 应用的主控制 ViewModel
  * 负责全局导航、配置同步以及跨模块的核心数据共享
@@ -26,6 +29,30 @@ class AppViewModel(
 
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
+
+    // --- 全局 Toast 状态流 ---
+    private val _toastData = MutableStateFlow<ToastData?>(null)
+    val toastData: StateFlow<ToastData?> = _toastData.asStateFlow()
+
+    /**
+     * 显示全局 Toast
+     */
+    fun showToast(
+        message: String, 
+        type: ToastType = ToastType.INFO, 
+        durationMillis: Long = 3000L,
+        actionLabel: String? = null,
+        onAction: (() -> Unit)? = null
+    ) {
+        _toastData.value = ToastData(message, type, durationMillis, actionLabel, onAction)
+    }
+
+    /**
+     * 清除 Toast（用于手动关闭或动画结束）
+     */
+    fun clearToast() {
+        _toastData.value = null
+    }
 
     /**
      * 初始化加载全局配置

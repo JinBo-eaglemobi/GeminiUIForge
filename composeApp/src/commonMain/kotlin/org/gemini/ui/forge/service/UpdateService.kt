@@ -96,7 +96,12 @@ class UpdateService(private val currentVersion: String) {
     fun downloadUpdate(url: String, targetPath: Path): Flow<Float> = flow {
         AppLogger.i("UpdateService", "📥 开始下载更新包: $url -> $targetPath")
         try {
-            val response = client.prepareGet(url).execute()
+            val response = client.prepareGet(url) {
+                timeout {
+                    requestTimeoutMillis = 1000000L
+
+                }
+            }.execute()
             val contentLength = response.contentLength() ?: 1L
             val channel = response.bodyAsChannel()
             
