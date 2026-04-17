@@ -28,12 +28,12 @@ jobs:
           cache: 'gradle'
       - name: 生成 Windows 产物 (含 JAR/安装包/绿色版)
         run: |
-          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS
-          ./gradlew :composeApp:createReleaseDistributable
-          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS
+          ./gradlew :composeApp:packageDistributionForCurrentOS
+          ./gradlew :composeApp:createDistributable
+          ./gradlew :composeApp:packageUberJarForCurrentOS
       - name: 压缩绿色版
         shell: pwsh
-        run: Compress-Archive -Path "composeApp/build/compose/binaries/main-release/app/GeminiUIForge/*" -DestinationPath "GeminiUIForge-Windows-Portable.zip"
+        run: Compress-Archive -Path "composeApp/build/compose/binaries/main/app/GeminiUIForge/*" -DestinationPath "GeminiUIForge-Windows-Portable.zip"
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:
@@ -63,8 +63,8 @@ jobs:
       - name: 授权并打包
         run: |
           chmod +x gradlew
-          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS
-          ./gradlew :composeApp:createReleaseDistributable
+          ./gradlew :composeApp:packageDistributionForCurrentOS
+          ./gradlew :composeApp:createDistributable
       - name: 压缩绿色版
         run: |
           cd composeApp/build/compose/binaries/main/app && zip -r ../../../../GeminiUIForge-macOS-Portable.zip .
