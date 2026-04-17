@@ -22,6 +22,7 @@ import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.state.EditorViewModel
 import org.gemini.ui.forge.state.AppUpdateViewModel
+import org.gemini.ui.forge.state.AppEnvViewModel
 import org.gemini.ui.forge.ui.feature.home.HomeScreen
 import org.gemini.ui.forge.ui.feature.assetgen.TemplateAssetGenScreen
 import org.gemini.ui.forge.ui.feature.editor.TemplateEditorScreen
@@ -49,18 +50,21 @@ fun App(typography: Typography? = null) {
     var templatesList by remember { mutableStateOf(emptyList<Pair<String, ProjectState>>()) }
 
     key(languageKey) {
-        // 核心：并列挂载两个完全独立的 ViewModel
+        // 核心：并列挂载三个完全独立的业务 ViewModel
         val viewModel: EditorViewModel = viewModel { EditorViewModel(templateRepo = templateRepo) }
         val updateViewModel: AppUpdateViewModel = viewModel { AppUpdateViewModel(templateRepo = templateRepo) }
+        val envViewModel: AppEnvViewModel = viewModel { AppEnvViewModel() }
         
         val state by viewModel.state.collectAsState()
         val updateStatus by updateViewModel.status.collectAsState()
+        val envStatus by envViewModel.status.collectAsState()
+        
         val globalState = state.globalState
 
         LaunchedEffect(Unit) {
             delay(100.milliseconds)
             try { focusRequester.requestFocus() } catch (e: Exception) { }
-            // 启动时静默检查更新 (通过独立的 updateViewModel)
+            // 启动时检查更新
             updateViewModel.checkForUpdates()
         }
 
@@ -89,12 +93,13 @@ fun App(typography: Typography? = null) {
         var showHelpDialog by remember { mutableStateOf(false) }
         var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
 
+        // 环境拦截逻辑：利用 envStatus.isAllReady 进行判定
         val isEnvRequired = state.isGenerateTransparent && globalState.currentScreen == AppScreen.TEMPLATE_ASSET_GEN
-        val isEnvReady = globalState.envStatus.isAllReady
+        val isEnvReady = envStatus.isAllReady
         var showEnvWarning by remember { mutableStateOf(false) }
         
         LaunchedEffect(isEnvRequired, isEnvReady) {
-            if (isEnvRequired && !isEnvReady && !globalState.envStatus.isChecking) {
+            if (isEnvRequired && !isEnvReady && !envStatus.isChecking) {
                 showEnvWarning = true
             }
         }
@@ -125,21 +130,24 @@ fun App(typography: Typography? = null) {
                     currentMaxRetries = globalState.maxRetries,
                     currentPromptLang = globalState.promptLangPref,
                     shortcuts = globalState.shortcuts,
-                    envStatus = globalState.envStatus,
+                    envStatus = envStatus,
                     initialCategory = settingsInitialCategory,
-                    updateStatus = updateStatus, // 来自独立 ViewModel
+                    updateStatus = updateStatus,
                     onDismiss = { showSettingsDialog = false },
-                    onLanguageSelected = { viewModel.setLanguage(it); languageKey++ },
+                    onLanguageSelected = { 
+                        viewModel.setLanguage(it)
+                        languageKey++
+                    },
                     onThemeSelected = { viewModel.setThemeMode(it) },
                     onApiKeySaved = { viewModel.saveApiKey(it) },
                     onStorageDirSaved = { viewModel.updateStorageDir(it) },
                     onMaxRetriesSaved = { viewModel.setMaxRetries(it) },
                     onPromptLangSelected = { viewModel.setPromptLanguagePref(it) },
                     onShortcutSaved = { action, key -> viewModel.saveShortcut(action, key) },
-                    onCheckEnv = { viewModel.checkEnvironment() },
-                    onInstallEnvItem = { viewModel.installEnvironmentItem(it) },
-                    onCheckUpdate = { updateViewModel.checkForUpdates() }, // 绑定至独立 ViewModel
-                    onStartUpdate = { updateViewModel.performUpdate(it) }  // 绑定至独立 ViewModel
+                    onCheckEnv = { envViewModel.checkEnvironment() },
+                    onInstallEnvItem = { envViewModel.installEnvironmentItem(it) },
+                    onCheckUpdate = { updateViewModel.checkForUpdates() },
+                    onStartUpdate = { updateViewModel.performUpdate(it) }
                 )
             }
 

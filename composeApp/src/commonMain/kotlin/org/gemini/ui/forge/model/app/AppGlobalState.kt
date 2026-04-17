@@ -22,6 +22,5 @@ data class AppGlobalState(
     val effectiveApiKey: String = "",
     val templateStorageDir: String = "",
     val maxRetries: Int = 3,
-    val shortcuts: Map<ShortcutAction, String> = ShortcutAction.entries.associate { it to it.defaultKey },
-    val envStatus: FullEnvironmentStatus = FullEnvironmentStatus()
+    val shortcuts: Map<ShortcutAction, String> = ShortcutAction.entries.associate { it to it.defaultKey }
 )

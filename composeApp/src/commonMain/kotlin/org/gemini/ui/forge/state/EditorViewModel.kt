@@ -34,13 +34,13 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * 编辑器页面的 ViewModel，负责 UI 逻辑处理与状态管理
+ * 环境检测与更新功能已彻底剥离至独立 ViewModel
  */
 class EditorViewModel(
     private val configManager: ConfigManager = ConfigManager(),
     private val templateRepo: TemplateRepository = TemplateRepository(),
     val cloudAssetManager: CloudAssetManager = CloudAssetManager(configManager),
-    private val aiService: AIGenerationService = AIGenerationService(cloudAssetManager),
-    private val envService: org.gemini.ui.forge.service.EnvironmentCheckService = org.gemini.ui.forge.service.createEnvironmentCheckService()
+    private val aiService: AIGenerationService = AIGenerationService(cloudAssetManager)
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditorState())
@@ -48,36 +48,6 @@ class EditorViewModel(
 
     private var currentGenJob: kotlinx.coroutines.Job? = null
     private var generationJob: kotlinx.coroutines.Job? = null
-
-    /** 执行全量环境检查 */
-    fun checkEnvironment() {
-        viewModelScope.launch {
-            _state.update { it.copy(globalState = it.globalState.copy(envStatus = it.globalState.envStatus.copy(isChecking = true))) }
-            val status = envService.checkAll()
-            _state.update { it.copy(globalState = it.globalState.copy(envStatus = status)) }
-        }
-    }
-
-    /** 安装特定的环境依赖项 */
-    fun installEnvironmentItem(name: String) {
-        viewModelScope.launch {
-            _state.update { s ->
-                val newItems = s.globalState.envStatus.items.map { 
-                    if (it.name == name) it.copy(isInstalling = true, installLogs = emptyList()) else it 
-                }
-                s.copy(globalState = s.globalState.copy(envStatus = s.globalState.envStatus.copy(items = newItems)))
-            }
-            envService.installItem(name).collect { log ->
-                _state.update { s ->
-                    val newItems = s.globalState.envStatus.items.map { 
-                        if (it.name == name) it.copy(installLogs = it.installLogs + log) else it 
-                    }
-                    s.copy(globalState = s.globalState.copy(envStatus = s.globalState.envStatus.copy(items = newItems)))
-                }
-            }
-            checkEnvironment()
-        }
-    }
 
     private val undoStack = ArrayDeque<ProjectState>()
     private val redoStack = ArrayDeque<ProjectState>()
@@ -144,7 +114,6 @@ class EditorViewModel(
         loadBaseTemplate()
         viewModelScope.launch {
             loadSettings()
-            checkEnvironment()
             val updateInstruction = aiService.promptManager.getPrompt("refine_instruction_update")
             val newInstruction = aiService.promptManager.getPrompt("refine_instruction_new")
             _state.update { it.copy(defaultRefineInstructionUpdate = updateInstruction, defaultRefineInstructionNew = newInstruction) }
