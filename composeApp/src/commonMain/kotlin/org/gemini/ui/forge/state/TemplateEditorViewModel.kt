@@ -354,7 +354,8 @@ class TemplateEditorViewModel(
             }
             currentState.copy(
                 project = currentState.project.copy(pages = updatedPages),
-                selectedBlockId = if (currentState.selectedBlockId == blockId) null else currentState.selectedBlockId
+                selectedBlockId = if (currentState.selectedBlockId == blockId) null else currentState.selectedBlockId,
+                editingGroupId = if (currentState.editingGroupId == blockId) null else currentState.editingGroupId
             )
         }
     }

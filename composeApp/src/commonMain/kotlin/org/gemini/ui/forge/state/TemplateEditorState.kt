@@ -32,7 +32,7 @@ data class TemplateEditorState(
     val currentLang: org.gemini.ui.forge.model.app.PromptLanguage = org.gemini.ui.forge.model.app.PromptLanguage.ZH
 ) {
     val currentPage get() = project.pages.find { it.id == selectedPageId }
-    val selectedBlock: UIBlock? get() = currentPage?.let { page -> findBlockById(page.blocks, selectedBlockId ?: "") }
+    val selectedBlock: UIBlock? get() = currentPage?.let { page -> findBlockById(page.blocks, selectedBlockId ?: editingGroupId ?: "") }
 
     private fun findBlockById(blocks: List<UIBlock>, id: String): UIBlock? {
         for (block in blocks) {
