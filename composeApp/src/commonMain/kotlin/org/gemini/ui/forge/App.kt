@@ -260,9 +260,8 @@ fun App(typography: Typography? = null) {
                                     cloudAssetManager = appViewModel.cloudAssetManager,
                                     aiService = AIGenerationService(appViewModel.cloudAssetManager),
                                     effectiveApiKey = globalState.effectiveApiKey,
-                                    currentEditingPromptLang = globalState.promptLangPref,
-                                    onSwitchEditingLanguage = { appViewModel.switchEditingLanguage(it) },
-                                    onProjectUpdated = { /* 现在仅在内部维护，不主动推给全局防止退出保留 */ },
+                                    initialPromptLang = globalState.promptLangPref,
+                                    onProjectUpdated = { appViewModel.updateProject(it) },
                                     onSaveTemplate = { updatedProject ->
                                         coroutineScope.launch {
                                             appViewModel.updateProject(updatedProject) // 同步给全局
@@ -281,8 +280,7 @@ fun App(typography: Typography? = null) {
                                     cloudAssetManager = appViewModel.cloudAssetManager,
                                     aiService = AIGenerationService(appViewModel.cloudAssetManager),
                                     effectiveApiKey = globalState.effectiveApiKey,
-                                    currentEditingPromptLang = globalState.promptLangPref,
-                                    onSwitchEditingLanguage = { appViewModel.switchEditingLanguage(it) },
+                                    initialPromptLang = globalState.promptLangPref,
                                     onProjectUpdated = { /* 内部维护 */ }
                                 )
                             }

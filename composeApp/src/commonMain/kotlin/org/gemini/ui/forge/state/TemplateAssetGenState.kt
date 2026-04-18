@@ -34,7 +34,10 @@ data class TemplateAssetGenState(
     val isVisualMode: Boolean = false,
 
     /** 临时保存的舞台背景颜色 (不持久化到模板中) */
-    val stageBackgroundColor: String = "#2D2D2D"
+    val stageBackgroundColor: String = "#2D2D2D",
+    
+    /** 当前场景内使用的提示词语言状态 (独立维护，避免跨页面泄漏) */
+    val currentLang: org.gemini.ui.forge.model.app.PromptLanguage = org.gemini.ui.forge.model.app.PromptLanguage.ZH
 ) {
     val currentPage get() = project.pages.find { it.id == selectedPageId }
     val selectedBlock: UIBlock? get() = currentPage?.let { page -> findBlockById(page.blocks, selectedBlockId ?: "") }

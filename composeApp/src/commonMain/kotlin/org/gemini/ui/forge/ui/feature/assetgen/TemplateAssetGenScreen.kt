@@ -47,18 +47,22 @@ fun TemplateAssetGenScreen(
     cloudAssetManager: CloudAssetManager,
     aiService: AIGenerationService,
     effectiveApiKey: String,
-    currentEditingPromptLang: PromptLanguage,
-    onSwitchEditingLanguage: (PromptLanguage) -> Unit,
+    initialPromptLang: PromptLanguage,
     onProjectUpdated: (ProjectState) -> Unit
 ) {
     // 1. 初始化 ViewModel 并将其生命周期与 Screen 绑定
     val viewModel: TemplateAssetGenViewModel = viewModel(key = initialProjectName) {
-        TemplateAssetGenViewModel(initialProject, initialProjectName, templateRepo, cloudAssetManager, aiService)
+        TemplateAssetGenViewModel(initialProject, initialProjectName, initialPromptLang, templateRepo, cloudAssetManager, aiService)
     }
     val state by viewModel.state.collectAsState()
 
     LaunchedEffect(initialProject) {
         viewModel.reload(initialProject)
+    }
+
+    // 监听内部状态变化并向上同步
+    LaunchedEffect(state.project) {
+        onProjectUpdated(state.project)
     }
 
     val coroutineScope = rememberCoroutineScope()
@@ -111,9 +115,13 @@ fun TemplateAssetGenScreen(
             onConfirm = { rect ->
                 isCropping = true
                 coroutineScope.launch {
-                    viewModel.onImageCroppedAndSelected(pendingCropUri!!, rect)
+                    val success = viewModel.onImageCroppedAndSelected(pendingCropUri!!, rect)
                     pendingCropUri = null
                     isCropping = false
+                    if (success) {
+                        showCurrentGenerationResults = false
+                        showHistoricalDialog = false
+                    }
                 }
             },
             onDismiss = { if (!isCropping) pendingCropUri = null }
@@ -129,7 +137,7 @@ fun TemplateAssetGenScreen(
             targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
             onImageSelected = { viewModel.onImageSelected(it); showCurrentGenerationResults = false },
-            onCropRequested = { pendingCropUri = it; showCurrentGenerationResults = false },
+            onCropRequested = { pendingCropUri = it }, // 修改：触发裁剪时不立刻关闭资源弹窗
             onDeleteImages = { viewModel.deleteImages(it) },
             onClearAll = { viewModel.clearCandidates(); showCurrentGenerationResults = false },
             onDismiss = { showCurrentGenerationResults = false }
@@ -145,7 +153,7 @@ fun TemplateAssetGenScreen(
             targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
             onImageSelected = { viewModel.onImageSelected(it); showHistoricalDialog = false },
-            onCropRequested = { pendingCropUri = it; showHistoricalDialog = false },
+            onCropRequested = { pendingCropUri = it }, // 修改：触发裁剪时不立刻关闭历史弹窗
             onDeleteImages = { uris ->
                 viewModel.deleteImages(uris); historicalImages = historicalImages.filter { it !in uris }
             },
@@ -243,8 +251,8 @@ fun TemplateAssetGenScreen(
                         state = state,
                         viewModel = viewModel,
                         apiKey = effectiveApiKey,
-                        currentEditingLang = currentEditingPromptLang,
-                        onSwitchEditingLang = onSwitchEditingLanguage,
+                        currentEditingLang = state.currentLang,
+                        onSwitchEditingLang = { viewModel.switchLang(it) },
                         onShowHistory = {
                             state.selectedBlock?.let { block ->
                                 coroutineScope.launch {
@@ -386,11 +394,16 @@ private fun PropertyPanel(
 
             val displayPrompt =
                 if (currentEditingLang == PromptLanguage.EN) selectedBlock.userPromptEn else selectedBlock.userPromptZh
+            
+            // 使用本地状态，允许用户在生图前临时修改 Prompt，但不持久化到模板
+            var tempPrompt by remember(selectedBlock.id, currentEditingLang, displayPrompt) { 
+                mutableStateOf(displayPrompt) 
+            }
+
             OutlinedTextField(
-                value = displayPrompt,
-                // 此页面不提供提示词修改，如果需要修改应返回 TemplateEditorScreen
-                onValueChange = { },
-                readOnly = true,
+                value = tempPrompt,
+                onValueChange = { tempPrompt = it },
+                readOnly = false,
                 label = { Text("${stringResource(Res.string.label_description_content)} (${currentEditingLang.displayName})") },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
                 maxLines = 8,
@@ -434,9 +447,9 @@ private fun PropertyPanel(
 
             // 6. 执行生成按钮
             Button(
-                onClick = { viewModel.onRequestGeneration(apiKey, currentEditingLang) },
+                onClick = { viewModel.onRequestGeneration(apiKey, tempPrompt) },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isGenerating && displayPrompt.isNotBlank(),
+                enabled = !state.isGenerating && tempPrompt.isNotBlank(),
                 shape = AppShapes.medium
             ) {
                 if (state.isGenerating)

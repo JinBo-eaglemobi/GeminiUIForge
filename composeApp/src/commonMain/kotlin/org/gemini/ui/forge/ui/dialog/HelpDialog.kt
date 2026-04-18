@@ -65,7 +65,7 @@ fun HelpDialog(onDismiss: () -> Unit) {
                 // Footer Buttons
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
-                        onClick = { getPlatform().openInBrowser("https://github.com/boge10371/GeminiUIForge/blob/main/HELP.md") },
+                        onClick = { getPlatform().openInBrowser("https://github.com/JinBo-eaglemobi/GeminiUIForge/blob/main/HELP.md") },
                         modifier = Modifier.weight(1f),
                         shape = AppShapes.medium
                     ) {

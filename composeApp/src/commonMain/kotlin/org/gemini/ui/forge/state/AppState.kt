@@ -16,9 +16,4 @@ data class AppState(
     /** 应用全局配置状态 (主题、语言、导航等) */
     val globalState: AppGlobalState = AppGlobalState(),
     
-    /** 选中的页面 ID (用于跨页跳转同步) */
-    val selectedPageId: String? = null,
-    
-    /** 当前编辑/操作的提示词语言偏好 */
-    val currentEditingPromptLang: PromptLanguage = PromptLanguage.ZH
 )

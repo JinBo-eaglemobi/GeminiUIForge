@@ -44,20 +44,24 @@ fun TemplateEditorScreen(
     cloudAssetManager: CloudAssetManager,
     aiService: AIGenerationService,
     effectiveApiKey: String,
-    currentEditingPromptLang: PromptLanguage,
-    onSwitchEditingLanguage: (PromptLanguage) -> Unit,
+    initialPromptLang: PromptLanguage,
     onProjectUpdated: (ProjectState) -> Unit,
     onSaveTemplate: (ProjectState) -> Unit
 ) {
     // 1. 初始化 ViewModel，其生命周期与当前 Screen 绑定
     val viewModel: TemplateEditorViewModel = viewModel(key = initialProjectName) {
-        TemplateEditorViewModel(initialProject, initialProjectName, templateRepo, cloudAssetManager, aiService)
+        TemplateEditorViewModel(initialProject, initialProjectName, initialPromptLang, templateRepo, cloudAssetManager, aiService)
     }
     val state by viewModel.state.collectAsState()
 
     // 监听传入的 initialProject 变化（比如从首页重新进入时强制刷新 ViewModel 状态）
     LaunchedEffect(initialProject) {
         viewModel.reload(initialProject)
+    }
+
+    // 监听内部 state.project 变化，向外层同步状态，以保证外部顶部导航栏“保存”时拿到最新数据
+    LaunchedEffect(state.project) {
+        onProjectUpdated(state.project)
     }
 
     // --- 内部 UI 状态控制 ---
@@ -199,15 +203,6 @@ fun TemplateEditorScreen(
                     isReadOnly = false,
                     modifier = Modifier.fillMaxSize()
                 )
-
-                // 快捷保存
-                SmallFloatingActionButton(
-                    onClick = { onSaveTemplate(state.project) },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Icon(Icons.Default.Save, null)
-                }
             }
 
             VerticalSplitter(onDrag = { delta ->
@@ -227,8 +222,8 @@ fun TemplateEditorScreen(
                     state = state,
                     viewModel = viewModel,
                     apiKey = effectiveApiKey,
-                    currentLang = currentEditingPromptLang,
-                    onSwitchLang = onSwitchEditingLanguage,
+                    currentLang = state.currentLang,
+                    onSwitchLang = { viewModel.switchLang(it) },
                     onRefineClick = { id -> refineTargetId = id; showVisualRefine = true }
                 )
             }
@@ -495,8 +490,10 @@ private fun PropertyPanel(
             Spacer(Modifier.height(24.dp))
 
             // 块删除
+            var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
             Button(
-                onClick = { viewModel.deleteBlock(selectedBlock.id) },
+                onClick = { showDeleteConfirmDialog = true },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.fillMaxWidth(),
                 shape = AppShapes.medium,
@@ -505,6 +502,29 @@ private fun PropertyPanel(
                 Icon(Icons.Default.Delete, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(Res.string.action_delete_block))
+            }
+
+            if (showDeleteConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteConfirmDialog = false },
+                    title = { Text(stringResource(Res.string.action_delete_block)) },
+                    text = { Text("确定要删除模块 \"${selectedBlock.id}\" 吗？此操作将同时删除其所有子模块，且无法撤销。") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showDeleteConfirmDialog = false
+                                viewModel.deleteBlock(selectedBlock.id)
+                            }
+                        ) {
+                            Text(stringResource(Res.string.dialog_action_delete), color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                            Text(stringResource(Res.string.dialog_action_cancel))
+                        }
+                    }
+                )
             }
         }
     }

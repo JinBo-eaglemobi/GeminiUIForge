@@ -27,8 +27,10 @@ class AIGenerationService(
         prettyPrint = true
     }
     
-    // 初始化 Prompt 管理器
-    val promptManager = PromptManager(LocalFileStorage())
+    // 初始化存储与管理器
+    private val storage = LocalFileStorage()
+    val promptManager = PromptManager(storage)
+    private val scriptManager = ScriptManager(storage)
 
     /**
      * 内部辅助方法：同步将日志发送到 UI 回调和磁盘日志系统。
@@ -71,12 +73,17 @@ class AIGenerationService(
         maxRetries: Int = 3,
         targetWidth: Float? = null,
         targetHeight: Float? = null,
-        isPng: Boolean = false // 新增参数
+        isPng: Boolean = false, // 新增参数
+        onLog: (String) -> Unit = {} // 添加日志回调
     ): List<String> {
-        if (apiKey.isBlank()) throw Exception("API 密钥未配置")
+        if (apiKey.isBlank()) {
+            syncLog("❌ API 密钥未配置", onLog)
+            throw Exception("API 密钥未配置")
+        }
         val url = ApiConfig.getImagenEndpoint(apiKey)
         val client = NetworkClient.shared
         
+        syncLog("⚙️ 准备生图提示词 (类型: $blockType)...", onLog)
         // 核心优化：如果请求 PNG，自动追加易于抠图的 Prompt 指令
         val transparentRequirements = if (isPng) {
             promptManager.getPrompt("image_gen_transparent")
@@ -111,6 +118,7 @@ class AIGenerationService(
             "1:1"
         }
 
+        syncLog("📏 匹配最佳画幅比例: $aspectRatio (目标: ${widthStr}x${heightStr})", onLog)
         AppLogger.d(TAG, "Generating images for $blockType. Calculated AspectRatio: $aspectRatio (target: ${targetWidth}x${targetHeight})")
 
         val requestBody = buildJsonObject {
@@ -125,23 +133,88 @@ class AIGenerationService(
         var lastException: Exception? = null
         for (attempt in 0..maxRetries) {
             try {
+                if (attempt > 0) syncLog("⚠️ 正在进行第 ${attempt + 1} 次重试...", onLog)
+                else syncLog("📡 正在向 Imagen 发送生图请求...", onLog)
+                
                 val response = client.post(url) {
                     contentType(ContentType.Application.Json)
                     setBody(requestBody)
                 }
                 if (response.status.isSuccess()) {
+                    syncLog("✅ 成功接收到云端响应，正在解析数据...", onLog)
                     val jsonResponse = jsonConfig.parseToJsonElement(response.bodyAsText())
-                    return jsonResponse.jsonObject["predictions"]?.jsonArray?.mapNotNull {
+                    val list = jsonResponse.jsonObject["predictions"]?.jsonArray?.mapNotNull {
                         val base64 = it.jsonObject["bytesBase64Encoded"]?.jsonPrimitive?.content
                         if (base64 != null) "data:${if (isPng) "image/png" else "image/jpeg"};base64,$base64" else null
                     } ?: emptyList()
-                } else throw Exception("API 错误: ${response.status}")
+                    syncLog("🎨 成功解析出 ${list.size} 张候选图片", onLog)
+                    return list
+                } else {
+                    val errorMsg = "API 错误: ${response.status}"
+                    syncLog("❌ $errorMsg", onLog)
+                    throw Exception(errorMsg)
+                }
             } catch (e: Exception) {
                 lastException = e
+                syncLog("❌ 请求异常: ${e.message}", onLog)
                 delay(1000L * attempt)
             }
         }
+        syncLog("❌ 达到最大重试次数，生图失败", onLog)
         throw lastException ?: Exception("生成图片未知错误")
+    }
+
+    /**
+     * 调用本地 Python 脚本执行背景去除 (rembg)
+     */
+    suspend fun removeBackgroundLocal(
+        imageBytes: ByteArray,
+        onLog: (String) -> Unit = {}
+    ): ByteArray? {
+        val scriptPath = scriptManager.getScriptPath("remove_bg.py") ?: run {
+            syncLog("❌ 未能获取本地抠图脚本路径", onLog)
+            return null
+        }
+
+        val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
+        val inputPath = storage.getFilePath("temp/input_$timestamp.png")
+        val outputPath = storage.getFilePath("temp/output_$timestamp.png")
+
+        return try {
+            // 1. 写入临时输入文件
+            storage.saveBytesToFile("temp/input_$timestamp.png", imageBytes)
+            
+            syncLog("🚀 启动本地 Python 抠图引擎...", onLog)
+            
+            // 2. 执行系统命令
+            // 尝试 python 或 python3
+            val commands = listOf("python", "python3")
+            var success = false
+            for (cmd in commands) {
+                success = org.gemini.ui.forge.utils.executeSystemCommand(
+                    command = cmd,
+                    args = listOf(scriptPath, inputPath, outputPath),
+                    onLog = { syncLog("[LocalRembg] $it", onLog) }
+                )
+                if (success) break
+            }
+
+            if (success && org.gemini.ui.forge.utils.isFileExists(outputPath)) {
+                val result = org.gemini.ui.forge.utils.readLocalFileBytes(outputPath)
+                syncLog("✅ 本地抠图处理完成", onLog)
+                result
+            } else {
+                syncLog("❌ 本地抠图脚本执行失败", onLog)
+                null
+            }
+        } catch (e: Exception) {
+            syncLog("❌ 本地抠图异常: ${e.message}", onLog)
+            null
+        } finally {
+            // 3. 清理临时文件
+            org.gemini.ui.forge.utils.deleteLocalFile(inputPath)
+            org.gemini.ui.forge.utils.deleteLocalFile(outputPath)
+        }
     }
 
     /**
@@ -149,16 +222,18 @@ class AIGenerationService(
      */
     suspend fun removeBackgroundCloud(
         imageBytes: ByteArray,
-        apiKey: String
+        apiKey: String,
+        onLog: (String) -> Unit = {}
     ): ByteArray? {
         if (apiKey.isBlank()) {
-            AppLogger.e(TAG, "Cloud BG removal failed: API Key is empty")
+            syncLog("❌ 云端抠图失败: API Key 为空", onLog)
             return null
         }
         
         val url = ApiConfig.getImagenEndpoint(apiKey) 
         val client = NetworkClient.shared
 
+        syncLog("☁️ 启动云端 AI 抠图引擎...", onLog)
         AppLogger.i(TAG, "Cloud BG removal starting... Image size: ${imageBytes.size / 1024} KB")
 
         @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
@@ -201,17 +276,21 @@ class AIGenerationService(
                 if (resultBase64 != null) {
                     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
                     val resultBytes = kotlin.io.encoding.Base64.Default.decode(resultBase64)
+                    syncLog("✅ 云端抠图处理完成 (${duration}ms)", onLog)
                     AppLogger.i(TAG, "Cloud BG removal success! Duration: ${duration}ms, Output size: ${resultBytes.size / 1024} KB")
                     resultBytes
                 } else {
+                    syncLog("❌ 云端抠图失败: 响应数据为空", onLog)
                     AppLogger.e(TAG, "Cloud BG removal failed: No image data in response. Full body: $responseText")
                     null
                 }
             } else {
+                syncLog("❌ 云端抠图失败: 接口状态码 ${response.status}", onLog)
                 AppLogger.e(TAG, "Cloud BG removal failed with status ${response.status}. Body: ${response.bodyAsText()}")
                 null
             }
         } catch (e: Exception) {
+            syncLog("❌ 云端抠图异常: ${e.message}", onLog)
             AppLogger.e(TAG, "Cloud BG removal exception after ${org.gemini.ui.forge.getCurrentTimeMillis() - startTime}ms", e)
             null
         }

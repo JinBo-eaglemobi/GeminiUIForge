@@ -25,6 +25,7 @@ import kotlin.collections.ArrayDeque
 class TemplateEditorViewModel(
     initialProject: ProjectState,
     initialProjectName: String,
+    initialLang: PromptLanguage,
     private val templateRepo: TemplateRepository,
     private val cloudAssetManager: CloudAssetManager,
     private val aiService: AIGenerationService
@@ -35,7 +36,8 @@ class TemplateEditorViewModel(
         TemplateEditorState(
             project = initialProject,
             projectName = initialProjectName,
-            selectedPageId = initialProject.pages.firstOrNull()?.id
+            selectedPageId = initialProject.pages.firstOrNull()?.id,
+            currentLang = initialLang
         )
     )
 
@@ -43,6 +45,10 @@ class TemplateEditorViewModel(
      * 对外暴露的不可变状态流，供 Compose 监听
      */
     val state: StateFlow<TemplateEditorState> = _state.asStateFlow()
+
+    fun switchLang(lang: PromptLanguage) {
+        _state.update { it.copy(currentLang = lang) }
+    }
 
     // 追踪当前的 AI 生成任务，以便在需要时进行取消
     private var currentGenJob: kotlinx.coroutines.Job? = null

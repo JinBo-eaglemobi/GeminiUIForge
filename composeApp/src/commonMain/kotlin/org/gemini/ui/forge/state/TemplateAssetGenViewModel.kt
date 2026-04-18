@@ -24,6 +24,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 class TemplateAssetGenViewModel(
     initialProject: ProjectState,
     initialProjectName: String,
+    initialLang: PromptLanguage,
     private val templateRepo: TemplateRepository,
     private val cloudAssetManager: CloudAssetManager,
     private val aiService: AIGenerationService
@@ -33,10 +34,15 @@ class TemplateAssetGenViewModel(
         TemplateAssetGenState(
             project = initialProject,
             projectName = initialProjectName,
-            selectedPageId = initialProject.pages.firstOrNull()?.id
+            selectedPageId = initialProject.pages.firstOrNull()?.id,
+            currentLang = initialLang
         )
     )
     val state: StateFlow<TemplateAssetGenState> = _state.asStateFlow()
+
+    fun switchLang(lang: PromptLanguage) {
+        _state.update { it.copy(currentLang = lang) }
+    }
 
     private var generationJob: kotlinx.coroutines.Job? = null
 
@@ -74,9 +80,9 @@ class TemplateAssetGenViewModel(
 
     // --- 资源生成核心逻辑 ---
 
-    fun onRequestGeneration(apiKey: String, currentLang: PromptLanguage) {
+    fun onRequestGeneration(apiKey: String, customPrompt: String) {
         val block = _state.value.selectedBlock ?: return
-        val submitPrompt = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
+        val submitPrompt = customPrompt
         val projectName = _state.value.projectName
         val isTransparent = _state.value.isGenerateTransparent
         val prioritizeCloud = _state.value.isPrioritizeCloudRemoval
@@ -93,7 +99,8 @@ class TemplateAssetGenViewModel(
                     maxRetries = 3,
                     targetWidth = block.bounds.width,
                     targetHeight = block.bounds.height,
-                    isPng = isTransparent
+                    isPng = isTransparent,
+                    onLog = { addGenLog(it) }
                 )
 
                 val candidatePaths = withContext(Dispatchers.Default) {
@@ -108,14 +115,30 @@ class TemplateAssetGenViewModel(
 
                         if (isTransparent) {
                             var processedBytes: ByteArray? = null
-                            if (prioritizeCloud) {
-                                processedBytes = aiService.removeBackgroundCloud(bytes, apiKey)
+                            
+                            // 优先尝试云端抠图 (如果用户勾选了且有 API Key)
+                            if (prioritizeCloud && apiKey.isNotBlank()) {
+                                try {
+                                    processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) { addGenLog(it) }
+                                } catch (e: Exception) {
+                                    addGenLog("⚠️ 云端抠图失败，尝试回退到本地引擎: ${e.message}")
+                                }
                             }
+                            
+                            // 如果云端未开启，或者云端处理失败，回退到本地 Python 脚本抠图
+                            if (processedBytes == null) {
+                                try {
+                                    processedBytes = aiService.removeBackgroundLocal(bytes) { addGenLog(it) }
+                                } catch (e: Exception) {
+                                    addGenLog("❌ 本地抠图也失败了: ${e.message}")
+                                }
+                            }
+
                             if (processedBytes != null) {
                                 return@mapIndexed templateRepo.saveBlockResource(
                                     projectName,
                                     block.id,
-                                    "cloud_${index}_$timestamp",
+                                    "processed_${index}_$timestamp",
                                     processedBytes
                                 )
                             }

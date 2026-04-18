@@ -38,8 +38,8 @@ class AppViewModel(
      * 显示全局 Toast
      */
     fun showToast(
-        message: String, 
-        type: ToastType = ToastType.INFO, 
+        message: String,
+        type: ToastType = ToastType.INFO,
         durationMillis: Long = 3000L,
         actionLabel: String? = null,
         onAction: (() -> Unit)? = null
@@ -63,39 +63,46 @@ class AppViewModel(
             val globalKey = configManager.loadGlobalGeminiKey() ?: ""
             val languageCode = configManager.loadKey("APP_LANGUAGE") ?: "zh"
             val promptLangStr = configManager.loadKey("PROMPT_LANGUAGE_PREF") ?: "AUTO"
-            val promptLang = try { PromptLanguage.valueOf(promptLangStr) } catch (e: Exception) { PromptLanguage.AUTO }
+            val promptLang = try {
+                PromptLanguage.valueOf(promptLangStr)
+            } catch (e: Exception) {
+                PromptLanguage.AUTO
+            }
             val storageDir = templateRepo.getDataDir()
             val retriesStr = configManager.loadKey("API_MAX_RETRIES") ?: "3"
-            
-            _state.update { it.copy(
-                globalState = it.globalState.copy(
-                    apiKey = apiKey, 
-                    effectiveApiKey = apiKey.ifBlank { globalKey }, 
-                    templateStorageDir = storageDir, 
-                    languageCode = languageCode, 
-                    promptLangPref = promptLang, 
-                    maxRetries = retriesStr.toIntOrNull() ?: 3
-                ), 
-                currentEditingPromptLang = if (promptLang == PromptLanguage.EN) PromptLanguage.EN else PromptLanguage.ZH
-            ) }
+
+            _state.update {
+                it.copy(
+                    globalState = it.globalState.copy(
+                        apiKey = apiKey,
+                        effectiveApiKey = apiKey.ifBlank { globalKey },
+                        templateStorageDir = storageDir,
+                        languageCode = languageCode,
+                        promptLangPref = promptLang,
+                        maxRetries = retriesStr.toIntOrNull() ?: 3
+                    )
+                )
+            }
         }
     }
 
     // --- 导航与显示控制 ---
 
-    fun navigateTo(screen: AppScreen) = _state.update { it.copy(globalState = it.globalState.copy(currentScreen = screen)) }
+    fun navigateTo(screen: AppScreen) =
+        _state.update { it.copy(globalState = it.globalState.copy(currentScreen = screen)) }
+
     fun setThemeMode(mode: ThemeMode) = _state.update { it.copy(globalState = it.globalState.copy(themeMode = mode)) }
     fun setLanguage(code: String) = _state.update { it.copy(globalState = it.globalState.copy(languageCode = code)) }
-    fun switchEditingLanguage(lang: PromptLanguage) = _state.update { it.copy(currentEditingPromptLang = lang) }
 
     // --- 数据加载与共享 ---
 
     fun loadProject(projectName: String, projectState: ProjectState) {
-        _state.update { it.copy(
-            project = projectState, 
-            projectName = projectName, 
-            selectedPageId = projectState.pages.firstOrNull()?.id
-        ) }
+        _state.update {
+            it.copy(
+                project = projectState,
+                projectName = projectName
+            )
+        }
     }
 
     /** 更新项目数据 (由局部编辑器/生图页回流，仅更新内存状态) */
@@ -103,19 +110,25 @@ class AppViewModel(
         _state.update { it.copy(project = updatedProject) }
     }
 
-    fun onPageSelected(pageId: String) = _state.update { it.copy(selectedPageId = pageId) }
-
     // --- 设置同步接口 ---
 
-    fun updateApiKey(newKey: String) = _state.update { it.copy(globalState = it.globalState.copy(apiKey = newKey, effectiveApiKey = newKey)) }
-    fun updateStorageDirState(newPath: String) = _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) }
-    fun updateMaxRetriesState(count: Int) = _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) }
+    fun updateApiKey(newKey: String) =
+        _state.update { it.copy(globalState = it.globalState.copy(apiKey = newKey, effectiveApiKey = newKey)) }
+
+    fun updateStorageDirState(newPath: String) =
+        _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) }
+
+    fun updateMaxRetriesState(count: Int) =
+        _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) }
+
     fun updateShortcutState(action: ShortcutAction, keyChord: String) {
-        _state.update { s -> 
+        _state.update { s ->
             val newShortcuts = s.globalState.shortcuts.toMutableMap()
             newShortcuts[action] = keyChord
             s.copy(globalState = s.globalState.copy(shortcuts = newShortcuts))
         }
     }
-    fun setPromptLanguagePref(pref: PromptLanguage) = _state.update { it.copy(globalState = it.globalState.copy(promptLangPref = pref)) }
+
+    fun setPromptLanguagePref(pref: PromptLanguage) =
+        _state.update { it.copy(globalState = it.globalState.copy(promptLangPref = pref)) }
 }
