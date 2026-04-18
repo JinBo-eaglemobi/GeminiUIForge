@@ -96,6 +96,8 @@ fun CanvasArea(
     val currentOnBlockDragged by rememberUpdatedState(onBlockDragged)
     val currentOnBlockDragStart by rememberUpdatedState(onBlockDragStart)
     val currentOnExitGroupEdit by rememberUpdatedState(onExitGroupEdit)
+    val currentPageWidth by rememberUpdatedState(pageWidth)
+    val currentPageHeight by rememberUpdatedState(pageHeight)
 
     val refBitmapState = produceState<ImageBitmap?>(null, referenceUri) {
         value = referenceUri?.decodeBase64ToBitmap()
@@ -127,7 +129,7 @@ fun CanvasArea(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(zoom, pan, offsetX, offsetY, baseScale) {
+                            .pointerInput(Unit) {
                                 detectTransformGestures { _, panChange, zoomChange, _ ->
                                     val viewCenterX = containerWidthPx / 2f
                                     val viewCenterY = containerHeightPx / 2f
@@ -135,7 +137,7 @@ fun CanvasArea(
                                     pan += panChange
                                 }
                             }
-                            .pointerInput(zoom, pan, offsetX, offsetY, baseScale) {
+                            .pointerInput(Unit) {
                                 awaitPointerEventScope {
                                     while (true) {
                                         val event = awaitPointerEvent()
@@ -178,11 +180,11 @@ fun CanvasArea(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .pointerInput(zoom, pan, offsetX, offsetY, baseScale) {
+                                .pointerInput(Unit) {
                                     detectTapGestures(
                                         onDoubleTap = { offset ->
-                                            val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
-                                            val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
+                                            val lx = (offset.x / density.density - offsetX) / baseScale
+                                            val ly = (offset.y / density.density - offsetY) / baseScale
                                             
                                             val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
                                             
@@ -192,46 +194,55 @@ fun CanvasArea(
                                                 if (currentEditingGroupId != null) {
                                                     currentOnExitGroupEdit()
                                                 } else {
-                                                    // 非组编辑状态下双击空白处，取消选中
+                                                    // 非组编辑状态下双击舞台空白处，取消选中
                                                     currentOnBlockClicked(null)
                                                 }
                                             }
                                         },
                                         onTap = { offset ->
-                                            val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
-                                            val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
+                                            val lx = (offset.x / density.density - offsetX) / baseScale
+                                            val ly = (offset.y / density.density - offsetY) / baseScale
                                             
                                             val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
                                             currentOnBlockClicked(hitBlock?.id)
                                         }
                                     )
                                 }
-                                .pointerInput(zoom, pan, offsetX, offsetY, baseScale, isReadOnly) {
+                                .pointerInput(isReadOnly) {
                                     if (isReadOnly) return@pointerInput
                                     var dragTargetId: String? = null
+                                    var isPanningStage = false 
                                     detectDragGestures(
                                         onDragStart = { offset ->
-                                            val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
-                                            val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
+                                            val lx = (offset.x / density.density - offsetX) / baseScale
+                                            val ly = (offset.y / density.density - offsetY) / baseScale
                                             
                                             val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
                                             
                                             if (hitBlock != null) {
                                                 dragTargetId = hitBlock.id
+                                                isPanningStage = false
                                                 currentOnBlockDragStart(hitBlock.id)
+                                                org.gemini.ui.forge.utils.AppLogger.d("CanvasArea", "🖱️ 开始拖拽模块: ${hitBlock.id}")
                                             } else {
                                                 dragTargetId = null
+                                                isPanningStage = true
+                                                org.gemini.ui.forge.utils.AppLogger.d("CanvasArea", "✋ 点击空白处，开始拖拽平移舞台")
                                             }
                                         },
                                         onDrag = { change, dragAmount ->
-                                            val tid = dragTargetId ?: return@detectDragGestures
                                             change.consume()
-                                            val logicalDx = dragAmount.x / density.density / (baseScale * zoom)
-                                            val logicalDy = dragAmount.y / density.density / (baseScale * zoom)
-                                            currentOnBlockDragged(tid, logicalDx, logicalDy)
+                                            val tid = dragTargetId
+                                            if (isPanningStage) {
+                                                pan += dragAmount
+                                            } else if (tid != null) {
+                                                val logicalDx = dragAmount.x / density.density / baseScale
+                                                val logicalDy = dragAmount.y / density.density / baseScale
+                                                currentOnBlockDragged(tid, logicalDx, logicalDy)
+                                            }
                                         },
-                                        onDragEnd = { dragTargetId = null },
-                                        onDragCancel = { dragTargetId = null }
+                                        onDragEnd = { dragTargetId = null; isPanningStage = false },
+                                        onDragCancel = { dragTargetId = null; isPanningStage = false }
                                     )
                                 }
                         ) {
@@ -302,7 +313,7 @@ fun CanvasArea(
                 Box(modifier = Modifier.height(28.dp).width(42.dp), contentAlignment = Alignment.Center) { Text("${(zoom * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center) }
                 IconButton(onClick = { updateZoom(zoom + 0.2f, centerOffset) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Add, "+", modifier = Modifier.size(16.dp)) }
                 VerticalDivider(modifier = Modifier.height(16.dp))
-                IconButton(onClick = { zoom = 1f; pan = Offset.Zero }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(18.dp)) }
+                IconButton(onClick = { zoom = 1f; pan = Offset.Zero; org.gemini.ui.forge.utils.AppLogger.d("CanvasArea", "🔄 已还原舞台缩放为100%并居中") }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(18.dp)) }
                 VerticalDivider(modifier = Modifier.height(16.dp))
                 IconToggleButton(checked = isVisualMode, onCheckedChange = { onToggleVisualMode() }, modifier = Modifier.size(28.dp)) {
                     Icon(if (isVisualMode) Icons.Default.AutoFixNormal else Icons.Default.AutoFixOff, "Visual", modifier = Modifier.size(18.dp), tint = if (isVisualMode) MaterialTheme.colorScheme.primary else LocalContentColor.current)

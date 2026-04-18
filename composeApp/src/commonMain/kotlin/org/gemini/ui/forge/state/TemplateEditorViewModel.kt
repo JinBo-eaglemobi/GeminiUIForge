@@ -133,8 +133,43 @@ class TemplateEditorViewModel(
         _state.update { it.copy(selectedPageId = pageId, selectedBlockId = null, editingGroupId = null) }
 
     /** 选中指定的 UI 块。如果再次点击已选中的块，则取消选中 */
-    fun onBlockClicked(blockId: String?) =
-        _state.update { it.copy(selectedBlockId = if (blockId == null) null else if (it.selectedBlockId == blockId) null else blockId) }
+    fun onBlockClicked(blockId: String?) {
+        _state.update { currentState ->
+            val newSelectedId = if (blockId == null) null else if (currentState.selectedBlockId == blockId) null else blockId
+            
+            // 打印模块详细信息日志
+            if (newSelectedId != null) {
+                val block = currentState.project.pages.flatMap { it.blocks }.let { findBlockById(it, newSelectedId) }
+                if (block != null) {
+                    AppLogger.d("TemplateEditorViewModel", "👆 选中模块: ID=[${block.id}], 类型=${block.type}, 坐标=(L:${block.bounds.left}, T:${block.bounds.top}, W:${block.bounds.width}, H:${block.bounds.height}), 隐藏=${!block.isVisible}")
+                    
+                    val uri = block.currentImageUri
+                    if (!uri.isNullOrBlank()) {
+                        viewModelScope.launch {
+                            try {
+                                val bitmap = uri.decodeBase64ToBitmap()
+                                if (bitmap != null) {
+                                    val scaleX = block.bounds.width / bitmap.width
+                                    val scaleY = block.bounds.height / bitmap.height
+                                    val imageRatio = bitmap.width.toFloat() / bitmap.height.toFloat()
+                                    val targetRatio = block.bounds.width / block.bounds.height
+                                    AppLogger.d("TemplateEditorViewModel", "🖼️ 图片追踪: 原生像素=${bitmap.width}x${bitmap.height} (比例 $imageRatio)")
+                                    AppLogger.d("TemplateEditorViewModel", "🖼️ 容器追踪: 目标容器=${block.bounds.width}x${block.bounds.height} (比例 $targetRatio)")
+                                    AppLogger.d("TemplateEditorViewModel", "📏 拉伸比例: X轴缩放=$scaleX, Y轴缩放=$scaleY")
+                                }
+                            } catch (e: Exception) {
+                                AppLogger.e("TemplateEditorViewModel", "图片解析追踪异常", e)
+                            }
+                        }
+                    }
+                }
+            } else {
+                AppLogger.d("TemplateEditorViewModel", "👆 取消选中模块 (点击空白处或反选)")
+            }
+            
+            currentState.copy(selectedBlockId = newSelectedId)
+        }
+    }
 
     /** 
      * 双击事件：如果是容器类型的块（拥有子节点），双击则进入该组的局部编辑模式。
@@ -173,6 +208,7 @@ class TemplateEditorViewModel(
     /** 更新块的物理坐标和尺寸 */
     fun updateBlockBounds(blockId: String, left: Float, top: Float, right: Float, bottom: Float) {
         val pageId = _state.value.selectedPageId ?: return
+        AppLogger.d("TemplateEditorViewModel", "📏 更新模块 [$blockId] 边界 -> L:$left, T:$top, R:$right, B:$bottom | 实际宽高: W=${right - left}, H=${bottom - top}")
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {

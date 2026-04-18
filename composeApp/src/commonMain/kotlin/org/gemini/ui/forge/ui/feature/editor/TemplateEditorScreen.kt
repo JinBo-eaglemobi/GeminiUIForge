@@ -520,22 +520,16 @@ private fun EditableInfoItem(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var textValue by remember(value) { mutableStateOf(value) }
-    Column(modifier) {
-        OutlinedTextField(
-            value = textValue,
-            onValueChange = {
-                textValue = it
-                if (it.isNotEmpty() && it.toFloatOrNull() != null) {
-                    onValueChange(it)
-                }
-            },
-            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodySmall,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-            shape = AppShapes.small
-        )
-    }
+    org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField(
+        value = value,
+        onValueChange = { newValue ->
+            if (newValue.isNotEmpty() && newValue.toFloatOrNull() != null) {
+                onValueChange(newValue)
+            }
+        },
+        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = modifier.fillMaxWidth(),
+        maxLines = 1
+    )
 }
