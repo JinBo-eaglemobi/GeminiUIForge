@@ -183,18 +183,24 @@ fun CanvasArea(
                                         onDoubleTap = { offset ->
                                             val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
                                             val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
+                                            
                                             val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
                                             
                                             if (hitBlock != null) {
                                                 currentOnBlockDoubleClicked(hitBlock.id)
                                             } else {
-                                                // 核心修复：双击空白处退出隔离模式
-                                                if (currentEditingGroupId != null) currentOnExitGroupEdit()
+                                                if (currentEditingGroupId != null) {
+                                                    currentOnExitGroupEdit()
+                                                } else {
+                                                    // 非组编辑状态下双击空白处，取消选中
+                                                    currentOnBlockClicked(null)
+                                                }
                                             }
                                         },
                                         onTap = { offset ->
                                             val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
                                             val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
+                                            
                                             val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
                                             currentOnBlockClicked(hitBlock?.id)
                                         }
@@ -207,9 +213,9 @@ fun CanvasArea(
                                         onDragStart = { offset ->
                                             val lx = (offset.x / density.density - pan.x / density.density) / (baseScale * zoom) - offsetX / baseScale
                                             val ly = (offset.y / density.density - pan.y / density.density) / (baseScale * zoom) - offsetY / baseScale
+                                            
                                             val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
                                             
-                                            // 核心修复：命中即可拖拽
                                             if (hitBlock != null) {
                                                 dragTargetId = hitBlock.id
                                                 currentOnBlockDragStart(hitBlock.id)
