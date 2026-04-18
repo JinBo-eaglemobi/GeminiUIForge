@@ -153,6 +153,77 @@ class TemplateAssetGenViewModel(
         viewModelScope.launch { templateRepo.saveTemplate(_state.value.projectName, _state.value.project) }
     }
 
+    /** 
+     * 执行真正的图片裁剪，并将裁剪后的新图片保存绑定给当前的 UIBlock。
+     * @param originalUri 原始底图 URI
+     * @param cropRect 相对原始尺寸(1.0x1.0) 的裁剪比例坐标 (left, top, right, bottom)
+     */
+    suspend fun onImageCroppedAndSelected(originalUri: String, cropRect: SerialRect): Boolean {
+        val blockId = _state.value.selectedBlockId ?: return false
+        val projectName = _state.value.projectName
+
+        return withContext(Dispatchers.Default) {
+            try {
+                AppLogger.i("TemplateAssetGenViewModel", "✂️ 开始执行图片裁剪操作...")
+                AppLogger.d("TemplateAssetGenViewModel", "原图: $originalUri")
+                AppLogger.d("TemplateAssetGenViewModel", "相对裁剪比例: left=${cropRect.left}, top=${cropRect.top}, right=${cropRect.right}, bottom=${cropRect.bottom}")
+
+                // 读取原图实际尺寸
+                val size = getImageSize(originalUri)
+                if (size == null) {
+                    AppLogger.e("TemplateAssetGenViewModel", "❌ 无法读取原图实际尺寸，裁剪失败")
+                    return@withContext false
+                }
+                
+                val originalW = size.first.toFloat()
+                val originalH = size.second.toFloat()
+                AppLogger.d("TemplateAssetGenViewModel", "原图物理像素尺寸: ${size.first}x${size.second}")
+
+                // 根据用户传回的相对比例 (0.0~1.0)，换算为绝对逻辑坐标
+                // 因为 cropImage 函数预期的是基于逻辑宽高的绝对坐标
+                val absLeft = cropRect.left * originalW
+                val absTop = cropRect.top * originalH
+                val absRight = cropRect.right * originalW
+                val absBottom = cropRect.bottom * originalH
+                val bounds = SerialRect(absLeft, absTop, absRight, absBottom)
+                AppLogger.d("TemplateAssetGenViewModel", "换算后的绝对像素裁剪框: $bounds")
+
+                // 执行裁剪 (传入 originalW, originalH 作为 logicalWidth/Height)
+                val croppedBytes = cropImage(
+                    imageSource = originalUri,
+                    bounds = bounds,
+                    logicalWidth = originalW,
+                    logicalHeight = originalH,
+                    isPng = true
+                )
+
+                if (croppedBytes != null) {
+                    AppLogger.i("TemplateAssetGenViewModel", "✅ 像素裁剪成功，正在保存新文件... (${croppedBytes.size / 1024} KB)")
+                    // 保存新生成的裁剪后图片
+                    val croppedUri = templateRepo.saveBlockResource(
+                        projectName,
+                        blockId,
+                        "cropped_${getCurrentTimeMillis()}",
+                        croppedBytes
+                    )
+                    
+                    AppLogger.i("TemplateAssetGenViewModel", "✅ 新文件已落盘: $croppedUri，正在绑定到模块 $blockId")
+                    // 切换回主线程更新 UI 状态
+                    withContext(Dispatchers.Main) {
+                        onImageSelected(croppedUri)
+                    }
+                    true
+                } else {
+                    AppLogger.e("TemplateAssetGenViewModel", "❌ 裁剪引擎返回空数据，操作失败")
+                    false
+                }
+            } catch (e: Exception) {
+                AppLogger.e("TemplateAssetGenViewModel", "❌ 图片裁剪抛出异常", e)
+                false
+            }
+        }
+    }
+
     fun deleteImages(uris: List<String>) {
         viewModelScope.launch {
             uris.forEach { deleteLocalFile(it) }

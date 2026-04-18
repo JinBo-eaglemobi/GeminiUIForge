@@ -71,6 +71,7 @@ fun AssetCropDialog(
     var cropOffset by remember { mutableStateOf(Offset.Zero) }
     var cropSize by remember { mutableStateOf(Size.Zero) }
     var imageDisplayRect by remember { mutableStateOf(Rect.Zero) }
+    var isCropping by remember { mutableStateOf(false) }
 
     val targetRatio = targetWidth / targetHeight
 
@@ -282,12 +283,13 @@ fun AssetCropDialog(
                     }
 
                     Row {
-                        TextButton(onClick = onDismiss, shape = AppShapes.medium) {
+                        TextButton(onClick = onDismiss, shape = AppShapes.medium, enabled = !isCropping) {
                             Text("取消")
                         }
                         Spacer(Modifier.width(12.dp))
                         Button(
                             onClick = {
+                                isCropping = true
                                 val relX = (cropOffset.x - imageDisplayRect.left) / imageDisplayRect.width
                                 val relY = (cropOffset.y - imageDisplayRect.top) / imageDisplayRect.height
                                 val relW = cropSize.width / imageDisplayRect.width
@@ -296,11 +298,18 @@ fun AssetCropDialog(
                                 // 提交时传递 internalImageUri，确保裁剪的是处理后的图
                                 onConfirm(SerialRect(relX, relY, relX + relW, relY + relH))
                             },
-                            shape = AppShapes.medium
+                            shape = AppShapes.medium,
+                            enabled = !isCropping
                         ) {
-                            Icon(Icons.Default.Check, null)
-                            Spacer(Modifier.width(4.dp))
-                            Text("确定裁剪并应用")
+                            if (isCropping) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text("处理中...")
+                            } else {
+                                Icon(Icons.Default.Check, null)
+                                Spacer(Modifier.width(4.dp))
+                                Text("确定裁剪并应用")
+                            }
                         }
                     }
                 }

@@ -103,15 +103,20 @@ fun TemplateAssetGenScreen(
 
     // 3. 图像裁剪确认弹窗
     if (pendingCropUri != null) {
+        var isCropping by remember { mutableStateOf(false) }
         AssetCropDialog(
             imageUri = pendingCropUri!!,
             targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
             onConfirm = { rect ->
-                state.selectedBlockId?.let { _ -> viewModel.onImageSelected(pendingCropUri!!) }
-                pendingCropUri = null
+                isCropping = true
+                coroutineScope.launch {
+                    viewModel.onImageCroppedAndSelected(pendingCropUri!!, rect)
+                    pendingCropUri = null
+                    isCropping = false
+                }
             },
-            onDismiss = { pendingCropUri = null }
+            onDismiss = { if (!isCropping) pendingCropUri = null }
         )
     }
 

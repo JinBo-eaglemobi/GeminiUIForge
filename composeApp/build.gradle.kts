@@ -155,13 +155,11 @@ kotlin {
 }
 
 // 动态解析版本号
-// 优先使用 GitHub Actions 的 tag (例如 v1.2.3-win -> 1.2.3)，如果不存在则使用默认版本 1.0.0
-val rawTag = System.getenv("GITHUB_REF_NAME") ?: ""
-val projectVersion = if (rawTag.startsWith("v")) {
-    rawTag.removePrefix("v").substringBefore("-")
-} else {
-    "1.0.0"
-}
+// 优先顺序：Gradle 参数 (-PversionName) > 环境变量 (GITHUB_REF_NAME) > 默认值 1.0.0
+val projectVersion = project.findProperty("versionName")?.toString() 
+    ?: System.getenv("GITHUB_REF_NAME")?.let { tag ->
+        if (tag.startsWith("v")) tag.removePrefix("v").substringBefore("-") else null
+    } ?: "1.0.0"
 
 android {
     namespace = "org.gemini.ui.forge"
