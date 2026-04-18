@@ -56,16 +56,26 @@ fun CanvasArea(
     isVisualMode: Boolean = false,
     onToggleVisualMode: () -> Unit = {},
     isReadOnly: Boolean = false,
+    stageBackgroundColor: String = "#2D2D2D",
     modifier: Modifier = Modifier
 ) {
     var zoom by remember { mutableStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
-    // ... 省略部分 updateZoom 定义 ...
+    val stageColor = remember(stageBackgroundColor) {
+        try {
+            val colorStr = stageBackgroundColor.removePrefix("#")
+            val colorLong = colorStr.toLong(16)
+            if (colorStr.length <= 6) Color(colorLong or 0xFF000000L) else Color(colorLong)
+        } catch (e: Exception) {
+            Color(0xFF2D2D2D)
+        }
+    }
+
     fun updateZoom(newZoom: Float, centroid: Offset) {
         val oldZoom = zoom
-        val nextZoom = newZoom.coerceIn(0.1f, 5f)
+        val nextZoom = newZoom.coerceIn(0.1f, 10f)
         if (oldZoom == nextZoom) return
         val zoomFactor = nextZoom / oldZoom
         pan = Offset(
@@ -118,8 +128,10 @@ fun CanvasArea(
                         modifier = Modifier
                             .fillMaxSize()
                             .pointerInput(zoom, pan, offsetX, offsetY, baseScale) {
-                                detectTransformGestures { centroid, panChange, zoomChange, _ ->
-                                    updateZoom(zoom * zoomChange, centroid)
+                                detectTransformGestures { _, panChange, zoomChange, _ ->
+                                    val viewCenterX = containerWidthPx / 2f
+                                    val viewCenterY = containerHeightPx / 2f
+                                    updateZoom(zoom * zoomChange, Offset(viewCenterX, viewCenterY))
                                     pan += panChange
                                 }
                             }
@@ -132,7 +144,9 @@ fun CanvasArea(
                                             val delta = change.scrollDelta.y
                                             if (delta != 0f) {
                                                 val multiplier = if (delta > 0) 0.9f else 1.1f
-                                                updateZoom(zoom * multiplier, change.position)
+                                                val viewCenterX = containerWidthPx / 2f
+                                                val viewCenterY = containerHeightPx / 2f
+                                                updateZoom(zoom * multiplier, Offset(viewCenterX, viewCenterY))
                                             }
                                             event.changes.forEach { it.consume() }
                                         }
@@ -147,6 +161,15 @@ fun CanvasArea(
                                 transformOrigin = TransformOrigin(0f, 0f)
                             }
                     ) {
+                        // 舞台背景绘制
+                        Box(
+                            modifier = Modifier
+                                .offset(x = offsetX.dp, y = offsetY.dp)
+                                .size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp)
+                                .background(stageColor)
+                                .border(BorderStroke((1.dp / zoom) / baseScale, MaterialTheme.colorScheme.outlineVariant))
+                        )
+
                         if (internalReferenceMode == ReferenceDisplayMode.OVERLAY && refBitmap != null) {
                             Image(bitmap = refBitmap, contentDescription = null, alpha = internalReferenceOpacity, modifier = Modifier.offset(x = offsetX.dp, y = offsetY.dp).size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp), contentScale = ContentScale.FillBounds)
                         }

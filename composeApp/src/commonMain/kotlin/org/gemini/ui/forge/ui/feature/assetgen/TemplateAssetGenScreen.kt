@@ -57,9 +57,8 @@ fun TemplateAssetGenScreen(
     }
     val state by viewModel.state.collectAsState()
 
-    // 当项目状态变更时，及时上报给外部全局容器
-    LaunchedEffect(state.project) {
-        onProjectUpdated(state.project)
+    LaunchedEffect(initialProject) {
+        viewModel.reload(initialProject)
     }
 
     val coroutineScope = rememberCoroutineScope()
@@ -206,6 +205,7 @@ fun TemplateAssetGenScreen(
                         pageWidth = state.currentPage?.width ?: 1080f,
                         pageHeight = state.currentPage?.height ?: 1920f,
                         blocks = state.currentPage?.blocks ?: emptyList(),
+                        stageBackgroundColor = state.stageBackgroundColor,
                         selectedBlockId = state.selectedBlockId,
                         onBlockClicked = { viewModel.onBlockClicked(it) },
                         onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },

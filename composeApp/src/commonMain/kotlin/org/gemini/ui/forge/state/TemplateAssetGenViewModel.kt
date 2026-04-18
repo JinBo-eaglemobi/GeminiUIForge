@@ -40,6 +40,19 @@ class TemplateAssetGenViewModel(
 
     private var generationJob: kotlinx.coroutines.Job? = null
 
+    /** 强制重载最新的 ProjectState（解决重入时旧状态残留的问题） */
+    fun reload(newProject: ProjectState) {
+        if (_state.value.project === newProject) return
+        _state.update { 
+            it.copy(
+                project = newProject,
+                selectedPageId = newProject.pages.firstOrNull()?.id,
+                selectedBlockId = null,
+                editingGroupId = null
+            ) 
+        }
+    }
+
     // --- 页面与选择逻辑 ---
 
     fun onPageSelected(pageId: String) =

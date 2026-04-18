@@ -47,7 +47,7 @@ fun TemplateEditorScreen(
     currentEditingPromptLang: PromptLanguage,
     onSwitchEditingLanguage: (PromptLanguage) -> Unit,
     onProjectUpdated: (ProjectState) -> Unit,
-    onSaveTemplate: () -> Unit
+    onSaveTemplate: (ProjectState) -> Unit
 ) {
     // 1. 初始化 ViewModel，其生命周期与当前 Screen 绑定
     val viewModel: TemplateEditorViewModel = viewModel(key = initialProjectName) {
@@ -55,9 +55,9 @@ fun TemplateEditorScreen(
     }
     val state by viewModel.state.collectAsState()
 
-    // 状态状态同步：当 ViewModel 内部的项目状态发生变化时，同步给外部以便 App 保存
-    LaunchedEffect(state.project) {
-        onProjectUpdated(state.project)
+    // 监听传入的 initialProject 变化（比如从首页重新进入时强制刷新 ViewModel 状态）
+    LaunchedEffect(initialProject) {
+        viewModel.reload(initialProject)
     }
 
     // --- 内部 UI 状态控制 ---
@@ -188,6 +188,7 @@ fun TemplateEditorScreen(
                     pageWidth = state.currentPage?.width ?: 1080f,
                     pageHeight = state.currentPage?.height ?: 1920f,
                     blocks = state.currentPage?.blocks ?: emptyList(),
+                    stageBackgroundColor = state.stageBackgroundColor,
                     selectedBlockId = state.selectedBlockId,
                     onBlockClicked = { viewModel.onBlockClicked(it) },
                     onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
@@ -201,7 +202,7 @@ fun TemplateEditorScreen(
 
                 // 快捷保存
                 SmallFloatingActionButton(
-                    onClick = onSaveTemplate,
+                    onClick = { onSaveTemplate(state.project) },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 ) {
@@ -259,7 +260,53 @@ private fun PropertyPanel(
         )
 
         if (selectedBlock == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            state.currentPage?.let { page ->
+                Text(
+                    "页面属性 (${page.nameStr})",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    shape = AppShapes.small,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                ) {
+                    Column(Modifier.padding(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            EditableInfoItem(
+                                label = "宽度 (W)",
+                                value = page.width.toInt().toString(),
+                                onValueChange = { 
+                                    val w = it.toFloatOrNull() ?: page.width
+                                    viewModel.updatePageSize(w, page.height)
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                            EditableInfoItem(
+                                label = "高度 (H)",
+                                value = page.height.toInt().toString(),
+                                onValueChange = { 
+                                    val h = it.toFloatOrNull() ?: page.height
+                                    viewModel.updatePageSize(page.width, h)
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = state.stageBackgroundColor,
+                            onValueChange = { viewModel.updateStageBackgroundColor(it) },
+                            label = { Text("临时背景色 (HEX)", style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = AppShapes.small,
+                            textStyle = MaterialTheme.typography.bodySmall,
+                            singleLine = true
+                        )
+                    }
+                }
+            } ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(stringResource(Res.string.prop_select_block), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {

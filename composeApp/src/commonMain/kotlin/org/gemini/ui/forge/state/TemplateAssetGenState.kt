@@ -31,7 +31,10 @@ data class TemplateAssetGenState(
     val generatedCandidates: List<String> = emptyList(),
     
     /** 视觉辅助 */
-    val isVisualMode: Boolean = false
+    val isVisualMode: Boolean = false,
+
+    /** 临时保存的舞台背景颜色 (不持久化到模板中) */
+    val stageBackgroundColor: String = "#2D2D2D"
 ) {
     val currentPage get() = project.pages.find { it.id == selectedPageId }
     val selectedBlock: UIBlock? get() = currentPage?.let { page -> findBlockById(page.blocks, selectedBlockId ?: "") }

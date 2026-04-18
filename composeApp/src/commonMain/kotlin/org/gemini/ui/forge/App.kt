@@ -262,10 +262,11 @@ fun App(typography: Typography? = null) {
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     currentEditingPromptLang = globalState.promptLangPref,
                                     onSwitchEditingLanguage = { appViewModel.switchEditingLanguage(it) },
-                                    onProjectUpdated = { appViewModel.updateProject(it) },
-                                    onSaveTemplate = {
-                                        coroutineScope.launch { 
-                                            templateRepo.saveTemplate(appState.projectName, appState.project)
+                                    onProjectUpdated = { /* 现在仅在内部维护，不主动推给全局防止退出保留 */ },
+                                    onSaveTemplate = { updatedProject ->
+                                        coroutineScope.launch {
+                                            appViewModel.updateProject(updatedProject) // 同步给全局
+                                            templateRepo.saveTemplate(appState.projectName, updatedProject) // 落盘
                                             appViewModel.showToast(message = "模板结构保存成功！", type = org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
                                         }
                                     }
@@ -282,10 +283,9 @@ fun App(typography: Typography? = null) {
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     currentEditingPromptLang = globalState.promptLangPref,
                                     onSwitchEditingLanguage = { appViewModel.switchEditingLanguage(it) },
-                                    onProjectUpdated = { appViewModel.updateProject(it) }
+                                    onProjectUpdated = { /* 内部维护 */ }
                                 )
                             }
-
                             AppScreen.TEMPLATE_GENERATOR -> {
                                 TemplateGeneratorScreen(
                                     onNavigateBack = { appViewModel.navigateTo(AppScreen.HOME) },

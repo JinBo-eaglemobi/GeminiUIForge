@@ -65,6 +65,21 @@ class TemplateEditorViewModel(
         }
     }
 
+    /** 强制从外部重载项目状态（解决 ViewModel 缓存导致旧状态残留的问题） */
+    fun reload(newProject: ProjectState) {
+        if (_state.value.project === newProject) return
+        _state.update { 
+            it.copy(
+                project = newProject,
+                selectedPageId = newProject.pages.firstOrNull()?.id,
+                selectedBlockId = null,
+                editingGroupId = null
+            ) 
+        }
+        undoStack.clear()
+        redoStack.clear()
+    }
+
     // ==========================================
     // 撤销与重做逻辑 (Undo / Redo)
     // ==========================================
@@ -200,6 +215,7 @@ class TemplateEditorViewModel(
             // 默认放在画布或组容器的中心
             var left = (currentPage.width - width) / 2f
             var top = (currentPage.height - height) / 2f
+
             if (editingGroupId != null) {
                 findBlockById(currentPage.blocks, editingGroupId)?.let { group ->
                     left = (group.bounds.width - width) / 2f
@@ -481,6 +497,23 @@ class TemplateEditorViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+    }
+
+    /** 更新当前页面的尺寸属性 */
+    fun updatePageSize(newWidth: Float, newHeight: Float) {
+        val pageId = _state.value.selectedPageId ?: return
+        saveSnapshot()
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) page.copy(width = newWidth, height = newHeight) else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+    }
+
+    /** 更新舞台的临时背景颜色 */
+    fun updateStageBackgroundColor(colorHex: String) {
+        _state.update { it.copy(stageBackgroundColor = colorHex) }
     }
 
     // ==========================================

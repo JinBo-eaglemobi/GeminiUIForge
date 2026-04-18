@@ -98,12 +98,9 @@ class AppViewModel(
         ) }
     }
 
-    /** 更新项目数据 (由局部编辑器/生图页回流) */
+    /** 更新项目数据 (由局部编辑器/生图页回流，仅更新内存状态) */
     fun updateProject(updatedProject: ProjectState) {
         _state.update { it.copy(project = updatedProject) }
-        viewModelScope.launch {
-            templateRepo.saveTemplate(_state.value.projectName, updatedProject)
-        }
     }
 
     fun onPageSelected(pageId: String) = _state.update { it.copy(selectedPageId = pageId) }

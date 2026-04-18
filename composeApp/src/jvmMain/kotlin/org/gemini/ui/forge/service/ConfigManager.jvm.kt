@@ -36,10 +36,24 @@ actual open class ConfigManager {
             try {
                 globalEnv.readLines().forEach { line ->
                     val trimmed = line.trim()
-                    // 兼容 "GEMINI_API_KEY=xxx" 和 "export GEMINI_API_KEY=xxx"
-                    if (trimmed.contains("GEMINI_API_KEY=")) {
-                        val value = trimmed.substringAfter("=").trim().removeSurrounding("\"").removeSurrounding("'")
-                        if (value.isNotBlank()) return@withContext value
+                    // 忽略空行、以 # 开头、或以 / (包含 //) 开头的注释行
+                    if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("/")) return@forEach
+                    
+                    // 严格匹配键名，防止匹配到行内包含但非定义的字符串
+                    val isMatch = trimmed.startsWith("GEMINI_API_KEY=") || 
+                                 trimmed.startsWith("export GEMINI_API_KEY=") ||
+                                 trimmed.startsWith("set GEMINI_API_KEY=")
+                    
+                    if (isMatch) {
+                        var value = trimmed.substringAfter("=").trim()
+                        
+                        // 处理行尾注释：剔除第一个 # 或 / 之后的内容
+                        if (value.contains("#")) value = value.substringBefore("#").trim()
+                        if (value.contains("/")) value = value.substringBefore("/").trim()
+                        
+                        // 脱掉引号外壳
+                        val finalValue = value.removeSurrounding("\"").removeSurrounding("'")
+                        if (finalValue.isNotBlank()) return@withContext finalValue
                     }
                 }
             } catch (e: Exception) {
