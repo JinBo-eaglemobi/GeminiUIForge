@@ -89,6 +89,12 @@ fun CanvasArea(
     LaunchedEffect(referenceMode) { internalReferenceMode = referenceMode }
     var internalReferenceOpacity by remember { mutableStateOf(referenceOpacity) }
 
+    // 当分屏/参考模式切换时，自动重置缩放和偏移，保证立刻刷新居中
+    LaunchedEffect(internalReferenceMode) {
+        zoom = 1f
+        pan = Offset.Zero
+    }
+
     val currentBlocks by rememberUpdatedState(blocks)
     val currentEditingGroupId by rememberUpdatedState(editingGroupId)
     val currentOnBlockClicked by rememberUpdatedState(onBlockClicked)
