@@ -313,12 +313,13 @@ class TemplateAssetGenViewModel(
     }
 
     fun addCustomBlock(id: String, type: UIBlockType, w: Float, h: Float) {
-        val newBlock = UIBlock(id.ifEmpty { "block_${getCurrentTimeMillis()}" }, type, SerialRect(0f, 0f, w, h))
+        val finalId = if (id.isBlank()) "block_${getCurrentTimeMillis()}" else id
+        val newBlock = UIBlock(finalId, type, SerialRect(0f, 0f, w, h))
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) page.copy(blocks = page.blocks + newBlock) else page
             }
-            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+            currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = finalId)
         }
     }
 

@@ -243,6 +243,7 @@ class TemplateEditorViewModel(
     fun addCustomBlock(id: String, type: UIBlockType, w: Float, h: Float) {
         saveSnapshot()
         val pageId = _state.value.selectedPageId ?: return
+        val finalId = if (id.isBlank()) "block_${getCurrentTimeMillis()}" else id
         _state.update { currentState ->
             val currentPage = currentState.currentPage ?: return@update currentState
             val editingGroupId = currentState.editingGroupId
@@ -256,7 +257,7 @@ class TemplateEditorViewModel(
                 }
             }
 
-            val newBlock = UIBlock(id, type, SerialRect(left, top, left + w, top + h))
+            val newBlock = UIBlock(finalId, type, SerialRect(left, top, left + w, top + h))
 
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
@@ -267,7 +268,7 @@ class TemplateEditorViewModel(
                     }
                 } else page
             }
-            currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = id)
+            currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = finalId)
         }
     }
 
