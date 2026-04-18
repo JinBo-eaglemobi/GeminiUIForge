@@ -121,9 +121,16 @@ fun CanvasArea(
             val canvasWeight = if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
             Box(modifier = Modifier.weight(canvasWeight).fillMaxWidth().clipToBounds()) {
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val baseScale = min(maxWidth.value / pageWidth, maxHeight.value / pageHeight) * 0.9f
-                    val offsetX = (maxWidth.value - (pageWidth * baseScale)) / 2
-                    val offsetY = (maxHeight.value - (pageHeight * baseScale)) / 2
+                    // 动态计算有效画布区域（取舞台尺寸与所有模块最远边界的最大值）
+                    val maxBlockRight = currentBlocks.maxOfOrNull { it.bounds.right } ?: 0f
+                    val maxBlockBottom = currentBlocks.maxOfOrNull { it.bounds.bottom } ?: 0f
+                    val effectiveWidth = maxOf(pageWidth, maxBlockRight)
+                    val effectiveHeight = maxOf(pageHeight, maxBlockBottom)
+
+                    val baseScale = min(maxWidth.value / effectiveWidth, maxHeight.value / effectiveHeight) * 0.9f
+                    // 依然让整个有效区域居中
+                    val offsetX = (maxWidth.value - (effectiveWidth * baseScale)) / 2 + (effectiveWidth - pageWidth) / 2 * baseScale
+                    val offsetY = (maxHeight.value - (effectiveHeight * baseScale)) / 2 + (effectiveHeight - pageHeight) / 2 * baseScale
 
                     // 核心交互层
                     Box(
