@@ -24,11 +24,12 @@ class TemplateRepository(
      * 将生成的资源保存到模块专用的资产目录下
      * 路径：templates/$templateName/assets/$blockId/
      */
-    suspend fun saveBlockResource(templateName: String, blockId: String, fileNamePrefix: String, bytes: ByteArray): String {
+    suspend fun saveBlockResource(templateName: String, blockId: String, fileNamePrefix: String, bytes: ByteArray, isPng: Boolean = true): String {
         val sanitizedName = templateName.replace(" ", "_")
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
-        // 存储规范：templates/项目名/assets/模块名/前缀_时间戳.jpg
-        val fileName = "$PROJECTS_DIR/$sanitizedName/assets/$blockId/${fileNamePrefix}_$timestamp.jpg"
+        val ext = if (isPng) "png" else "jpg"
+        // 存储规范：templates/项目名/assets/模块名/前缀_时间戳.ext
+        val fileName = "$PROJECTS_DIR/$sanitizedName/assets/$blockId/${fileNamePrefix}_$timestamp.$ext"
         val savedPath = fileStorage.saveBytesToFile(fileName, bytes)
         AppLogger.i("TemplateRepository", "✅ Block 资源已保存: $savedPath (${bytes.size / 1024} KB)")
         return savedPath

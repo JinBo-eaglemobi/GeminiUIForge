@@ -25,6 +25,9 @@ import androidx.compose.foundation.combinedClickable
 import org.gemini.ui.forge.utils.getImageSize
 import kotlin.math.abs
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isShiftPressed
+
 /**
  * 资源选择与管理弹窗 (弹窗 A)
  */
@@ -35,10 +38,12 @@ fun AssetSelectionDialog(
     initialSelectedUri: String? = null,
     targetWidth: Float = 0f,
     targetHeight: Float = 0f,
+    isProcessing: Boolean = false, // 新增：正在处理的指示
     onImageSelected: (String) -> Unit,
     onCropRequested: (String) -> Unit = {}, // 新增：请求裁剪
     onDeleteImages: (List<String>) -> Unit,
     onClearAll: () -> Unit,
+    onBatchRemoveBg: (List<String>) -> Unit = {}, // 新增：批量抠图
     onDismiss: () -> Unit
 ) {
     // 基础状态
@@ -62,6 +67,9 @@ fun AssetSelectionDialog(
     // 多选管理状态
     var isMultiSelectMode by remember { mutableStateOf(false) }
     val multiSelectedUris = remember { mutableStateListOf<String>() }
+    
+    // Shift 按键状态跟踪
+    var isShiftPressed by remember { mutableStateOf(false) }
 
     // 辅助函数：执行删除
     fun executeDeletion(uris: List<String>) {
@@ -73,12 +81,29 @@ fun AssetSelectionDialog(
         if (multiSelectedUris.isEmpty()) isMultiSelectMode = false
     }
 
+    // 判断是否全为 JPG
+    val isAllSelectedJpg = remember(multiSelectedUris.size) {
+        multiSelectedUris.isNotEmpty() && multiSelectedUris.all { 
+            it.contains(".jpg", ignoreCase = true) || it.contains(".jpeg", ignoreCase = true)
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.85f),
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.85f)
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            isShiftPressed = event.keyboardModifiers.isShiftPressed
+                        }
+                    }
+                },
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
@@ -161,7 +186,10 @@ fun AssetSelectionDialog(
                                         .aspectRatio(1f)
                                         .combinedClickable(
                                             onClick = {
-                                                if (isMultiSelectMode) {
+                                                if (isShiftPressed && !isMultiSelectMode) {
+                                                    isMultiSelectMode = true
+                                                    multiSelectedUris.add(uri)
+                                                } else if (isMultiSelectMode) {
                                                     if (isChosenInMulti) multiSelectedUris.remove(uri) else multiSelectedUris.add(uri)
                                                 } else {
                                                     tempSelectedUri = if (isSelectedInSingle) null else uri
@@ -262,7 +290,7 @@ fun AssetSelectionDialog(
                     if (isMultiSelectMode) {
                         Button(
                             onClick = { executeDeletion(multiSelectedUris.toList()) },
-                            enabled = multiSelectedUris.isNotEmpty(),
+                            enabled = multiSelectedUris.isNotEmpty() && !isProcessing,
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                             shape = AppShapes.medium
                         ) {
@@ -270,8 +298,33 @@ fun AssetSelectionDialog(
                             Spacer(Modifier.width(8.dp))
                             Text("删除选中 (${multiSelectedUris.size})")
                         }
+                        
+                        if (isAllSelectedJpg) {
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    val urisToProcess = multiSelectedUris.toList()
+                                    isMultiSelectMode = false
+                                    multiSelectedUris.clear()
+                                    // 不关闭弹窗，等待进度完成
+                                    onBatchRemoveBg(urisToProcess)
+                                },
+                                enabled = !isProcessing,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                shape = AppShapes.medium
+                            ) {
+                                if (isProcessing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onSecondary, strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.AutoFixHigh, null, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Text(if (isProcessing) "处理中..." else "本地去背景")
+                            }
+                        }
+
                         Spacer(Modifier.weight(1f))
-                        TextButton(onClick = { isMultiSelectMode = false; multiSelectedUris.clear() }, shape = AppShapes.medium) {
+                        TextButton(onClick = { isMultiSelectMode = false; multiSelectedUris.clear() }, enabled = !isProcessing, shape = AppShapes.medium) {
                             Text("退出管理")
                         }
                     } else {
@@ -279,6 +332,7 @@ fun AssetSelectionDialog(
                             if (tempSelectedUri != null) {
                                 TextButton(
                                     onClick = { tempSelectedUri = null },
+                                    enabled = !isProcessing,
                                     shape = AppShapes.medium
                                 ) {
                                     Text("取消选中")
@@ -286,6 +340,7 @@ fun AssetSelectionDialog(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Button(
                                     onClick = { executeDeletion(listOf(tempSelectedUri!!)) },
+                                    enabled = !isProcessing,
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer),
                                     shape = AppShapes.medium,
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
@@ -293,6 +348,30 @@ fun AssetSelectionDialog(
                                     Icon(Icons.Default.DeleteForever, null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text("立即删除", style = MaterialTheme.typography.labelLarge)
+                                }
+                                
+                                val isJpg = tempSelectedUri?.let { it.contains(".jpg", ignoreCase = true) || it.contains(".jpeg", ignoreCase = true) } == true
+                                if (isJpg) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = {
+                                            val uriToProcess = tempSelectedUri!!
+                                            // 不关闭弹窗，等待进度完成
+                                            onBatchRemoveBg(listOf(uriToProcess))
+                                        },
+                                        enabled = !isProcessing,
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                        shape = AppShapes.medium,
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                    ) {
+                                        if (isProcessing) {
+                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onSecondary, strokeWidth = 2.dp)
+                                        } else {
+                                            Icon(Icons.Default.AutoFixHigh, null, modifier = Modifier.size(16.dp))
+                                        }
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(if (isProcessing) "处理中..." else "本地去背景", style = MaterialTheme.typography.labelLarge)
+                                    }
                                 }
                             }
                         }
@@ -304,6 +383,7 @@ fun AssetSelectionDialog(
                                 onClearAll()
                                 onDismiss()
                             },
+                            enabled = !isProcessing,
                             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                             shape = AppShapes.medium
                         ) {
@@ -312,7 +392,7 @@ fun AssetSelectionDialog(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        TextButton(onClick = onDismiss, shape = AppShapes.medium) {
+                        TextButton(onClick = onDismiss, enabled = !isProcessing, shape = AppShapes.medium) {
                             Text("取消")
                         }
 
@@ -335,7 +415,7 @@ fun AssetSelectionDialog(
                                     onCropRequested(uri)
                                 }
                             },
-                            enabled = tempSelectedUri != null,
+                            enabled = tempSelectedUri != null && !isProcessing,
                             shape = AppShapes.medium
                         ) {
                             Text("应用选择")

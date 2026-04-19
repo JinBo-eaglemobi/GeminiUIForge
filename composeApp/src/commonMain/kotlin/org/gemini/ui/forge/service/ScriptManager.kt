@@ -22,23 +22,21 @@ class ScriptManager(private val storage: LocalFileStorage) {
         val relativePath = "$SCRIPTS_DIR/$fileName"
 
         try {
-            // 1. 检查本地是否已存在
-            if (!storage.exists(relativePath)) {
-                AppLogger.i(TAG, "🚀 正在从资源中提取脚本: $fileName")
-                val resourcePath = "scripts/$fileName"
-                val bytes = try {
-                    readResourceBytes(resourcePath)
-                } catch (e: Exception) {
-                    AppLogger.e(TAG, "❌ 无法从资源读取脚本: $resourcePath", e)
-                    null
-                }
+            // 强制每次从资源中提取脚本以保证最新（解决尺寸问题脚本缓存未更新）
+            AppLogger.i(TAG, "🚀 正在从资源中提取脚本并覆盖: $fileName")
+            val resourcePath = "scripts/$fileName"
+            val bytes = try {
+                readResourceBytes(resourcePath)
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "❌ 无法从资源读取脚本: $resourcePath", e)
+                null
+            }
 
-                if (bytes != null) {
-                    storage.saveBytesToFile(relativePath, bytes)
-                    AppLogger.i(TAG, "✅ 脚本提取成功: $fileName")
-                } else {
-                    return null
-                }
+            if (bytes != null) {
+                storage.saveBytesToFile(relativePath, bytes)
+                AppLogger.i(TAG, "✅ 脚本提取成功: $fileName")
+            } else {
+                return null
             }
             
             // 2. 返回绝对路径

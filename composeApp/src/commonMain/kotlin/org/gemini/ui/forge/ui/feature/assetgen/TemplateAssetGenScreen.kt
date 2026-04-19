@@ -85,8 +85,14 @@ fun TemplateAssetGenScreen(
 
     // 1. AI 任务执行进度与日志弹窗
     if (state.showAITaskDialog) {
+        val dialogTitle = when {
+            state.generationLogs.any { it.contains("优化") } -> "智能优化提示词中..."
+            state.generationLogs.any { it.contains("抠图") } -> "本地批量处理中..."
+            else -> "AI 资源生成中..."
+        }
+        
         AITaskProgressDialog(
-            title = if (state.generationLogs.any { it.contains("优化") }) "智能优化提示词中..." else "AI 资源生成中...",
+            title = dialogTitle,
             logs = state.generationLogs,
             isProcessing = state.isGenerating,
             isLogVisible = showAILogs,
@@ -136,10 +142,16 @@ fun TemplateAssetGenScreen(
             initialSelectedUri = state.selectedBlock?.currentImageUri,
             targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
+            isProcessing = state.isLocalProcessing,
             onImageSelected = { viewModel.onImageSelected(it); showCurrentGenerationResults = false },
             onCropRequested = { pendingCropUri = it }, // 修改：触发裁剪时不立刻关闭资源弹窗
             onDeleteImages = { viewModel.deleteImages(it) },
             onClearAll = { viewModel.clearCandidates(); showCurrentGenerationResults = false },
+            onBatchRemoveBg = { uris ->
+                viewModel.batchRemoveBackgroundLocal(uris) { newPaths ->
+                    viewModel.appendCandidates(newPaths)
+                }
+            },
             onDismiss = { showCurrentGenerationResults = false }
         )
     }
@@ -152,12 +164,19 @@ fun TemplateAssetGenScreen(
             initialSelectedUri = state.selectedBlock?.currentImageUri,
             targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
+            isProcessing = state.isLocalProcessing,
             onImageSelected = { viewModel.onImageSelected(it); showHistoricalDialog = false },
             onCropRequested = { pendingCropUri = it }, // 修改：触发裁剪时不立刻关闭历史弹窗
             onDeleteImages = { uris ->
                 viewModel.deleteImages(uris); historicalImages = historicalImages.filter { it !in uris }
             },
             onClearAll = { }, // 历史记录暂时不支持一键清空
+            onBatchRemoveBg = { uris ->
+                viewModel.batchRemoveBackgroundLocal(uris) { newPaths ->
+                    // 仅追加到历史列表，不干扰 AI 生成预览的 candidates 集合
+                    historicalImages = historicalImages + newPaths
+                }
+            }, // 修复：补充了历史弹窗的触发回调
             onDismiss = { showHistoricalDialog = false }
         )
     }

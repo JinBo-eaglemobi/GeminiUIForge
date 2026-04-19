@@ -23,6 +23,9 @@ data class TemplateAssetGenState(
     val showAITaskDialog: Boolean = false,
     val isGenerationLogVisible: Boolean = false,
     
+    /** 本地任务处理状态（如批量抠图） */
+    val isLocalProcessing: Boolean = false,
+    
     /** 生成偏好 */
     val isGenerateTransparent: Boolean = true,
     val isPrioritizeCloudRemoval: Boolean = false,

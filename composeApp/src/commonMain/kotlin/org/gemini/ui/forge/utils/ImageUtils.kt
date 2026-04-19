@@ -91,12 +91,15 @@ suspend fun cropImage(
         val srcRect = Rect.makeXYWH(srcL, srcT, srcW, srcH)
         val dstRect = Rect.makeWH(outputWidth.toFloat(), outputHeight.toFloat())
         
-        // drawImageRect 是最通用的接口
-        canvas.drawImageRect(image, srcRect, dstRect, SamplingMode.DEFAULT, null, true)
+        // drawImageRect 使用高质量插值算法解决缩小导致的模糊问题
+        val paint = Paint().apply { 
+            isAntiAlias = true
+        }
+        canvas.drawImageRect(image, srcRect, dstRect, SamplingMode.MITCHELL, paint, true)
         
         val finalImage = surface.makeImageSnapshot()
         val format = if (isPng) EncodedImageFormat.PNG else EncodedImageFormat.JPEG
-        finalImage.encodeToData(format, 85)?.bytes
+        finalImage.encodeToData(format, 100)?.bytes
     } catch (e: Exception) {
         AppLogger.e("ImageUtils", "❌ 跨平台裁剪失败", e)
         null

@@ -139,7 +139,7 @@ class AIGenerationService(
             put("parameters", buildJsonObject {
                 put("sampleCount", count.coerceIn(1, 4))
                 put("aspectRatio", aspectRatio)
-                put("outputOptions", buildJsonObject { put("mimeType", if (isPng) "image/png" else "image/jpeg") })
+                put("outputOptions", buildJsonObject { put("mimeType", "image/jpeg") })
             })
         }.toString()
 

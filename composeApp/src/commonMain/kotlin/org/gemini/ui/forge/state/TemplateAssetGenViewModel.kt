@@ -111,7 +111,7 @@ class TemplateAssetGenViewModel(
                         val bytes = Base64.decode(pure)
                         val timestamp = getCurrentTimeMillis()
                         val originalUri =
-                            templateRepo.saveBlockResource(projectName, block.id, "gen_${index}_$timestamp", bytes)
+                            templateRepo.saveBlockResource(projectName, block.id, "gen_${index}_$timestamp", bytes, isPng = false)
 
                         if (isTransparent) {
                             var processedBytes: ByteArray? = null
@@ -139,7 +139,8 @@ class TemplateAssetGenViewModel(
                                     projectName,
                                     block.id,
                                     "processed_${index}_$timestamp",
-                                    processedBytes
+                                    processedBytes,
+                                    isPng = true
                                 )
                             }
                         }
@@ -212,12 +213,21 @@ class TemplateAssetGenViewModel(
                 AppLogger.d("TemplateAssetGenViewModel", "换算后的绝对像素裁剪框: $bounds")
 
                 // 执行裁剪 (传入 originalW, originalH 作为 logicalWidth/Height)
+                // 核心改进：强制输出尺寸与模块逻辑尺寸 (bounds.width/height) 对齐，解决像素不一致问题
+                val targetBlock = _state.value.selectedBlock
+                val forceW = targetBlock?.bounds?.width?.toInt()?.coerceAtLeast(1)
+                val forceH = targetBlock?.bounds?.height?.toInt()?.coerceAtLeast(1)
+                
+                AppLogger.d("TemplateAssetGenViewModel", "📏 强制输出尺寸: ${forceW}x${forceH}")
+
                 val croppedBytes = cropImage(
                     imageSource = originalUri,
                     bounds = bounds,
                     logicalWidth = originalW,
                     logicalHeight = originalH,
-                    isPng = true
+                    isPng = true,
+                    forceWidth = forceW,
+                    forceHeight = forceH
                 )
 
                 if (croppedBytes != null) {
@@ -227,7 +237,8 @@ class TemplateAssetGenViewModel(
                         projectName,
                         blockId,
                         "cropped_${getCurrentTimeMillis()}",
-                        croppedBytes
+                        croppedBytes,
+                        isPng = true
                     )
                     
                     AppLogger.i("TemplateAssetGenViewModel", "✅ 新文件已落盘: $croppedUri，正在绑定到模块 $blockId")
@@ -252,6 +263,51 @@ class TemplateAssetGenViewModel(
             uris.forEach { deleteLocalFile(it) }
             _state.update { currentState -> currentState.copy(generatedCandidates = currentState.generatedCandidates.filter { it !in uris }) }
         }
+    }
+
+    fun batchRemoveBackgroundLocal(uris: List<String>, onSuccess: (List<String>) -> Unit = {}) {
+        val block = _state.value.selectedBlock ?: return
+        val projectName = _state.value.projectName
+
+        generationJob?.cancel()
+        generationJob = viewModelScope.launch {
+            _state.update { it.copy(isLocalProcessing = true) }
+            
+            try {
+                val newCandidatePaths = mutableListOf<String>()
+                for ((index, uri) in uris.withIndex()) {
+                    val bytes = readLocalFileBytes(uri)
+                    if (bytes != null) {
+                        val processedBytes = aiService.removeBackgroundLocal(bytes)
+                        if (processedBytes != null) {
+                            val timestamp = getCurrentTimeMillis()
+                            val newUri = templateRepo.saveBlockResource(
+                                projectName,
+                                block.id,
+                                "batch_processed_${index}_$timestamp",
+                                processedBytes,
+                                isPng = true
+                            )
+                            newCandidatePaths.add(newUri)
+                        }
+                    }
+                }
+                
+                if (newCandidatePaths.isNotEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        onSuccess(newCandidatePaths)
+                    }
+                }
+            } catch (e: Exception) {
+                AppLogger.e("TemplateAssetGenViewModel", "批量处理异常", e)
+            } finally {
+                _state.update { it.copy(isLocalProcessing = false) }
+            }
+        }
+    }
+
+    fun appendCandidates(newPaths: List<String>) {
+        _state.update { it.copy(generatedCandidates = it.generatedCandidates + newPaths) }
     }
 
     fun clearCandidates() = _state.update { it.copy(generatedCandidates = emptyList()) }
