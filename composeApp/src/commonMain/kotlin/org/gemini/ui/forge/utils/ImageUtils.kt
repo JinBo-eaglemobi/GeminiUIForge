@@ -78,26 +78,83 @@ suspend fun cropImage(
         
         val srcL = bounds.left * scaleX
         val srcT = bounds.top * scaleY
-        val srcW = bounds.width * scaleX
-        val srcH = bounds.height * scaleY
+        val srcW = (bounds.width * scaleX).coerceAtLeast(1f)
+        val srcH = (bounds.height * scaleY).coerceAtLeast(1f)
         
-        val outputWidth = forceWidth ?: srcW.toInt().coerceAtLeast(1)
-        val outputHeight = forceHeight ?: srcH.toInt().coerceAtLeast(1)
+        val targetWidth = (forceWidth ?: srcW.toInt()).toFloat().coerceAtLeast(1f)
+        val targetHeight = (forceHeight ?: srcH.toInt()).toFloat().coerceAtLeast(1f)
         
-        // 使用 Surface 重新绘制以实现裁剪与缩放
-        val surface = Surface.makeRasterN32Premul(outputWidth, outputHeight)
-        val canvas = surface.canvas
+        val paint = Paint().apply { isAntiAlias = true }
+        val filter = FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR)
+
+        // 1. 先进行裁剪，得到原始比例的位图
+        val cropSurface = Surface.makeRasterN32Premul(srcW.toInt(), srcH.toInt())
+        cropSurface.canvas.drawImageRect(
+            image, 
+            Rect.makeXYWH(srcL, srcT, srcW, srcH), 
+            Rect.makeWH(srcW, srcH), 
+            filter, paint, true
+        )
+        var currentImage = cropSurface.makeImageSnapshot()
+        var currentWidth = srcW
+        var currentHeight = srcH
+
+        // 2. 分步缩放逻辑 (Step-wise scaling)
+        var stepCount = 0
+        AppLogger.d("ImageUtils", "📐 开始缩放处理: [${srcW.toInt()}x${srcH.toInt()}] -> [${targetWidth.toInt()}x${targetHeight.toInt()}]")
         
-        val srcRect = Rect.makeXYWH(srcL, srcT, srcW, srcH)
-        val dstRect = Rect.makeWH(outputWidth.toFloat(), outputHeight.toFloat())
-        
-        // drawImageRect 使用高质量插值算法解决缩小导致的模糊问题
-        val paint = Paint().apply { 
-            isAntiAlias = true
+        while (true) {
+            val ratioW = targetWidth / currentWidth
+            val ratioH = targetHeight / currentHeight
+            
+            // 如果缩放比例在 [0.5, 2.0] 之间，则可以进行最后一步缩放
+            if (ratioW >= 0.5f && ratioW <= 2.0f && ratioH >= 0.5f && ratioH <= 2.0f) {
+                break
+            }
+            
+            stepCount++
+            // 计算单步缩放目标，单步比例限制在 0.5 (缩小) 或 2.0 (放大)
+            val nextStepWidth = when {
+                ratioW < 0.5f -> currentWidth * 0.5f
+                ratioW > 2.0f -> currentWidth * 2.0f
+                else -> targetWidth
+            }
+            val nextStepHeight = when {
+                ratioH < 0.5f -> currentHeight * 0.5f
+                ratioH > 2.0f -> currentHeight * 2.0f
+                else -> targetHeight
+            }
+            
+            val stepW = nextStepWidth.toInt().coerceAtLeast(1)
+            val stepH = nextStepHeight.toInt().coerceAtLeast(1)
+            
+            AppLogger.d("ImageUtils", "⏳ 缩放步骤 #$stepCount: 比例 [W:${(ratioW * 100).toInt()}%, H:${(ratioH * 100).toInt()}%] -> 尺寸 [${stepW}x${stepH}]")
+            
+            val stepSurface = Surface.makeRasterN32Premul(stepW, stepH)
+            stepSurface.canvas.drawImageRect(
+                currentImage,
+                Rect.makeWH(currentWidth, currentHeight),
+                Rect.makeWH(stepW.toFloat(), stepH.toFloat()),
+                filter, paint, true
+            )
+            currentImage = stepSurface.makeImageSnapshot()
+            currentWidth = stepW.toFloat()
+            currentHeight = stepH.toFloat()
         }
-        canvas.drawImageRect(image, srcRect, dstRect, SamplingMode.MITCHELL, paint, true)
+        if (stepCount > 0) {
+            AppLogger.d("ImageUtils", "✅ 分步缩放完成，共执行 $stepCount 步中间转换")
+        }
+
+        // 3. 最终缩放至目标尺寸并导出
+        val finalSurface = Surface.makeRasterN32Premul(targetWidth.toInt(), targetHeight.toInt())
+        finalSurface.canvas.drawImageRect(
+            currentImage,
+            Rect.makeWH(currentWidth, currentHeight),
+            Rect.makeWH(targetWidth, targetHeight),
+            filter, paint, true
+        )
         
-        val finalImage = surface.makeImageSnapshot()
+        val finalImage = finalSurface.makeImageSnapshot()
         val format = if (isPng) EncodedImageFormat.PNG else EncodedImageFormat.JPEG
         finalImage.encodeToData(format, 100)?.bytes
     } catch (e: Exception) {
