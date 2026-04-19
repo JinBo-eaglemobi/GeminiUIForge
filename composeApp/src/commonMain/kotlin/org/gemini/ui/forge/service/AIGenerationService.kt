@@ -40,6 +40,19 @@ class AIGenerationService(
         AppLogger.i(TAG, message)
     }
 
+    /**
+     * 过滤 Base64 数据并统一输出 HTTP 请求日志
+     */
+    private fun logRequest(url: String, requestBody: String, onLog: (String) -> Unit) {
+        val sanitizedBody = requestBody
+            .replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
+            .replace(Regex("\"bytesBase64Encoded\"\\s*:\\s*\"[^\"]+\""), "\"bytesBase64Encoded\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
+            .replace(Regex("\"text\"\\s*:\\s*\"CURRENT_JSON_STATE: [\\s\\S]*?\""), "\"text\": \"CURRENT_JSON_STATE: <HIDDEN_FOR_LOGS>\"")
+        
+        val logMessage = "---- [HTTP REQUEST] ----\nURL: $url\nBody: \n$sanitizedBody\n------------------------"
+        syncLog(logMessage, onLog)
+    }
+
     suspend fun validateImageUris(imageUris: List<String>): String? {
         val client = NetworkClient.shared
         for ((index, uri) in imageUris.withIndex()) {
@@ -134,7 +147,10 @@ class AIGenerationService(
         for (attempt in 0..maxRetries) {
             try {
                 if (attempt > 0) syncLog("⚠️ 正在进行第 ${attempt + 1} 次重试...", onLog)
-                else syncLog("📡 正在向 Imagen 发送生图请求...", onLog)
+                else {
+                    syncLog("📡 正在向 Imagen 发送生图请求...", onLog)
+                    logRequest(url, requestBody, onLog)
+                }
                 
                 val response = client.post(url) {
                     contentType(ContentType.Application.Json)
@@ -262,6 +278,7 @@ class AIGenerationService(
 
         val startTime = org.gemini.ui.forge.getCurrentTimeMillis()
         return try {
+            logRequest(url, requestBody, onLog)
             val response = client.post(url) {
                 contentType(ContentType.Application.Json)
                 setBody(requestBody)
@@ -370,10 +387,8 @@ class AIGenerationService(
             put("generationConfig", buildJsonObject { put("responseMimeType", "application/json") })
         }.toString()
 
-        // 屏蔽日志里的 Base64
-        val fileLogBody =
-            requestBody.replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
-        AppLogger.d(TAG, "---- [FULL ANALYZE REQUEST] ----\n$fileLogBody\n---------------------------------")
+        // 屏蔽日志里的 Base64，并输出到控制台和 UI
+        logRequest(url, requestBody, onLog)
 
         syncLog("📡 正在向服务器建立安全连接...", onLog)
 
@@ -483,19 +498,8 @@ class AIGenerationService(
             put("generationConfig", buildJsonObject { put("responseMimeType", "application/json") })
         }.toString()
 
-        // 核心同步：UI 显示精简版，文件记录完整版
-        val loggableBody = requestBody
-            .replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
-            .replace(
-                Regex("\"text\"\\s*:\\s*\"CURRENT_JSON_STATE: [\\s\\S]*?\""),
-                "\"text\": \"CURRENT_JSON_STATE: <HIDDEN_FOR_LOGS>\""
-            )
-
-        AppLogger.d(TAG, "---- [FULL REFINE REQUEST] ----\n$requestBody\n-------------------------------")
-
-        onLog("---- [HTTP REQUEST (REFINE)] ----")
-        onLog("URL: $url")
-        onLog("Body: \n$loggableBody")
+        // 核心同步：过滤敏感的长字符串后统一打印
+        logRequest(url, requestBody, onLog)
 
         val accumulatedText = StringBuilder()
         try {
@@ -572,6 +576,7 @@ class AIGenerationService(
         var lastException: Exception? = null
         for (attempt in 0..maxRetries) {
             try {
+                logRequest(url, requestBody, {})
                 val response = client.post(url) { setBody(requestBody); contentType(ContentType.Application.Json) }
                 if (response.status.isSuccess()) {
                     return jsonConfig.parseToJsonElement(response.bodyAsText()).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get(
