@@ -196,12 +196,12 @@ val appVersion = (project.findProperty("versionName")?.toString()?.trim()
     val regex = Regex("""^\d+(\.\d+){1,2}$""")
     if (regex.matches(version)) version else {
         if (version.isNotBlank() && version != "1.0.0") {
-            println("Warning: Invalid version format '$version', falling back to '1.0.0'")
+            println("-----------------   Warning: Invalid version format '$version', falling back to '1.0.0'")
         }
         "1.0.0"
     }
 }
-println("Configuring GeminiUIForge version: $appVersion")
+println("-----------------   Configuring GeminiUIForge version: $appVersion")
 
 android {
     namespace = "org.gemini.ui.forge"
