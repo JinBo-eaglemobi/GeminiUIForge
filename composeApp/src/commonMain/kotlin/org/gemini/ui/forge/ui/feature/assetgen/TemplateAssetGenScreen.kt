@@ -45,11 +45,12 @@ fun TemplateAssetGenScreen(
     initialProjectName: String,
     templateRepo: TemplateRepository,
     cloudAssetManager: CloudAssetManager,
-    aiService: AIGenerationService,
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
     onProjectUpdated: (ProjectState) -> Unit
 ) {
+
+    val aiService = AIGenerationService(cloudAssetManager)
     // 1. 初始化 ViewModel 并将其生命周期与 Screen 绑定
     val viewModel: TemplateAssetGenViewModel = viewModel(key = initialProjectName) {
         TemplateAssetGenViewModel(initialProject, initialProjectName, initialPromptLang, templateRepo, cloudAssetManager, aiService)

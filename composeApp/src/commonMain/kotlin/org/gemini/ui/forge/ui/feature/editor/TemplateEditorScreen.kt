@@ -42,12 +42,13 @@ fun TemplateEditorScreen(
     initialProjectName: String,
     templateRepo: TemplateRepository,
     cloudAssetManager: CloudAssetManager,
-    aiService: AIGenerationService,
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
-    onProjectUpdated: (ProjectState) -> Unit,
-    onSaveTemplate: (ProjectState) -> Unit
+    onProjectUpdated: (ProjectState) -> Unit
 ) {
+
+    val aiService = AIGenerationService(cloudAssetManager)
+
     // 1. 初始化 ViewModel，其生命周期与当前 Screen 绑定
     val viewModel: TemplateEditorViewModel = viewModel(key = initialProjectName) {
         TemplateEditorViewModel(initialProject, initialProjectName, initialPromptLang, templateRepo, cloudAssetManager, aiService)

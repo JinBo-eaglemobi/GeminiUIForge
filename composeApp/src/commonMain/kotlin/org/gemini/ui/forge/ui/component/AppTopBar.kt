@@ -12,6 +12,7 @@ import org.jetbrains.compose.resources.stringResource
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Settings
@@ -128,7 +129,7 @@ fun AppTopBar(
                 
                 // 帮助与设置按钮（始终显示）
                 IconButton(onClick = onHelpClicked) {
-                    Icon(Icons.Default.Help, contentDescription = stringResource(Res.string.menu_help))
+                    Icon(Icons.AutoMirrored.Filled.Help, contentDescription = stringResource(Res.string.menu_help))
                 }
                 IconButton(onClick = onSettingsClicked) {
                     Icon(Icons.Default.Settings, contentDescription = stringResource(Res.string.menu_settings))

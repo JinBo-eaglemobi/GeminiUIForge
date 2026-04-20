@@ -174,7 +174,6 @@ class TemplateAssetGenViewModel(
                 generatedCandidates = emptyList()
             )
         }
-        viewModelScope.launch { templateRepo.saveTemplate(_state.value.projectName, _state.value.project) }
     }
 
     /** 

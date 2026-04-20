@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpCenter
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.HelpCenter
 import androidx.compose.material.icons.filled.OpenInBrowser
@@ -31,7 +32,7 @@ fun HelpDialog(onDismiss: () -> Unit) {
             Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
                 // Header
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.HelpCenter, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                    Icon(Icons.AutoMirrored.Filled.HelpCenter, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
                     Spacer(Modifier.width(12.dp))
                     Text(stringResource(Res.string.help_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))

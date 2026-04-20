@@ -90,38 +90,42 @@ fun App(typography: Typography? = null) {
                 is UpdateStatus.Available -> {
                     val info = (updateStatus as UpdateStatus.Available).info
                     appViewModel.showToast(
-                        message = "发现新版本 v${info.version}！", 
-                        type = org.gemini.ui.forge.ui.component.ToastType.INFO, 
+                        message = "发现新版本 v${info.version}！",
+                        type = org.gemini.ui.forge.ui.component.ToastType.INFO,
                         durationMillis = 10000L, // 显示 10 秒
                         actionLabel = "立即更新"
                     ) {
                         updateViewModel.performUpdate(info)
                     }
                 }
+
                 is UpdateStatus.Downloading -> {
                     val progress = (updateStatus as UpdateStatus.Downloading).progress
                     if (progress == 0f) {
                         appViewModel.showToast(
-                            message = "开始后台下载更新...", 
+                            message = "开始后台下载更新...",
                             type = org.gemini.ui.forge.ui.component.ToastType.SUCCESS
                         )
                     }
                 }
+
                 is UpdateStatus.ReadyToInstall -> {
                     appViewModel.showToast(
-                        message = "下载完成，准备重启安装！", 
+                        message = "下载完成，准备重启安装！",
                         type = org.gemini.ui.forge.ui.component.ToastType.SUCCESS,
                         durationMillis = 5000L
                     )
                 }
+
                 is UpdateStatus.Error -> {
                     val errorMsg = (updateStatus as UpdateStatus.Error).message
                     appViewModel.showToast(
-                        message = "更新失败: $errorMsg", 
+                        message = "更新失败: $errorMsg",
                         type = org.gemini.ui.forge.ui.component.ToastType.ERROR,
                         durationMillis = 8000L
                     )
                 }
+
                 else -> {}
             }
         }
@@ -170,11 +174,13 @@ fun App(typography: Typography? = null) {
                         updateStatus = updateStatus,
                         onDismiss = { showSettingsDialog = false },
                         onLanguageSelected = {
-                            settingsViewModel.saveLanguage(it); appViewModel.setLanguage(it); languageKey++
+                            settingsViewModel.saveLanguage(it);
+                            appViewModel.setLanguage(it); languageKey++
                         },
                         onThemeSelected = { appViewModel.setThemeMode(it) },
                         onApiKeySaved = {
-                            settingsViewModel.saveApiKey(it); appViewModel.updateApiKey(it)
+                            settingsViewModel.saveApiKey(it);
+                            appViewModel.updateApiKey(it)
                         },
                         onStorageDirSaved = { path ->
                             coroutineScope.launch {
@@ -184,13 +190,16 @@ fun App(typography: Typography? = null) {
                             }
                         },
                         onMaxRetriesSaved = {
-                            settingsViewModel.saveMaxRetries(it); appViewModel.updateMaxRetriesState(it)
+                            settingsViewModel.saveMaxRetries(it);
+                            appViewModel.updateMaxRetriesState(it)
                         },
                         onPromptLangSelected = {
-                            settingsViewModel.savePromptLanguagePref(it); appViewModel.setPromptLanguagePref(it)
+                            settingsViewModel.savePromptLanguagePref(it);
+                            appViewModel.setPromptLanguagePref(it)
                         },
                         onShortcutSaved = { action, key ->
-                            settingsViewModel.saveShortcut(action, key); appViewModel.updateShortcutState(action, key)
+                            settingsViewModel.saveShortcut(action, key);
+                            appViewModel.updateShortcutState(action, key)
                         },
                         onCheckEnv = { envViewModel.checkEnvironment() },
                         onInstallEnvItem = { envViewModel.installEnvironmentItem(it) },
@@ -208,19 +217,26 @@ fun App(typography: Typography? = null) {
                             onGenerateTemplateClicked = { appViewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
                             onCloudAssetManagerClicked = { showCloudAssetDialog = true },
                             onSaveClicked = {
-                                coroutineScope.launch { 
+                                coroutineScope.launch {
                                     templateRepo.saveTemplate(appState.projectName, appState.project)
-                                    appViewModel.showToast(message = "项目保存成功！", type = org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
+                                    appViewModel.showToast(
+                                        message = "项目保存成功！",
+                                        type = org.gemini.ui.forge.ui.component.ToastType.SUCCESS
+                                    )
                                 }
                             },
                             onSettingsClicked = {
-                                settingsInitialCategory = SettingCategory.GENERAL; showSettingsDialog = true
+                                settingsInitialCategory = SettingCategory.GENERAL;
+                                showSettingsDialog = true
                             },
                             onHelpClicked = { showHelpDialog = true }
                         )
                     }
                 ) { innerPadding ->
-                    Box(modifier = Modifier.padding(innerPadding).fillMaxSize().focusRequester(focusRequester).focusable()) {
+                    Box(
+                        modifier = Modifier.padding(innerPadding).fillMaxSize().focusRequester(focusRequester)
+                            .focusable()
+                    ) {
                         when (globalState.currentScreen) {
                             AppScreen.HOME -> {
                                 HomeScreen(
@@ -258,17 +274,9 @@ fun App(typography: Typography? = null) {
                                     initialProjectName = appState.projectName,
                                     templateRepo = templateRepo,
                                     cloudAssetManager = appViewModel.cloudAssetManager,
-                                    aiService = AIGenerationService(appViewModel.cloudAssetManager),
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     initialPromptLang = globalState.promptLangPref,
-                                    onProjectUpdated = { appViewModel.updateProject(it) },
-                                    onSaveTemplate = { updatedProject ->
-                                        coroutineScope.launch {
-                                            appViewModel.updateProject(updatedProject) // 同步给全局
-                                            templateRepo.saveTemplate(appState.projectName, updatedProject) // 落盘
-                                            appViewModel.showToast(message = "模板结构保存成功！", type = org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
-                                        }
-                                    }
+                                    onProjectUpdated = { appViewModel.updateProject(it) }
                                 )
                             }
 
@@ -278,7 +286,6 @@ fun App(typography: Typography? = null) {
                                     initialProjectName = appState.projectName,
                                     templateRepo = templateRepo,
                                     cloudAssetManager = appViewModel.cloudAssetManager,
-                                    aiService = AIGenerationService(appViewModel.cloudAssetManager),
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     initialPromptLang = globalState.promptLangPref,
                                     onProjectUpdated = { updatedProject ->
@@ -286,17 +293,18 @@ fun App(typography: Typography? = null) {
                                     }
                                 )
                             }
+
                             AppScreen.TEMPLATE_GENERATOR -> {
                                 TemplateGeneratorScreen(
-                                    onNavigateBack = { appViewModel.navigateTo(AppScreen.HOME) },
                                     onTemplateSaved = { name, ps ->
-                                        appViewModel.loadProject(name, ps); appViewModel.navigateTo(
-                                        AppScreen.TEMPLATE_EDITOR
-                                    )
+                                        appViewModel.loadProject(name, ps);
+                                        appViewModel.navigateTo(
+                                            AppScreen.TEMPLATE_EDITOR
+                                        )
                                     },
+                                    globalState = globalState,
+                                    cloudAssetManager = appViewModel.cloudAssetManager,
                                     templateRepo = templateRepo,
-                                    apiKey = globalState.effectiveApiKey,
-                                    maxRetries = globalState.maxRetries
                                 )
                             }
                         }

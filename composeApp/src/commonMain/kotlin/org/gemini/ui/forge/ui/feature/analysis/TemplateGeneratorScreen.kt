@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.formatTimestamp
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.model.app.AppGlobalState
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.CloudAssetManager
@@ -31,17 +32,16 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun TemplateGeneratorScreen(
-    onNavigateBack: () -> Unit,
     onTemplateSaved: (String, ProjectState) -> Unit,
-    apiKey: String,
-    configManager: ConfigManager = remember { ConfigManager() },
+    globalState: AppGlobalState,
     cloudAssetManager: CloudAssetManager = remember {
         CloudAssetManager(ConfigManager())
     },
-    aiService: AIGenerationService = remember { AIGenerationService(cloudAssetManager) },
-    templateRepo: TemplateRepository = remember { TemplateRepository() },
-    maxRetries: Int = 3
+    templateRepo: TemplateRepository = remember { TemplateRepository() }
 ) {
+    val apiKey: String = globalState.effectiveApiKey
+    val maxRetries: Int = globalState.maxRetries
+    val aiService: AIGenerationService = remember { AIGenerationService(cloudAssetManager) }
     val coroutineScope = rememberCoroutineScope()
     var inputUris by remember { mutableStateOf("") }
     var templateName by remember { mutableStateOf("") }
