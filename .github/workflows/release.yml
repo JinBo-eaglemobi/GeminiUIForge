@@ -33,6 +33,15 @@ jobs:
           $projectVersion = if ($rawTag.startsWith("v")) { $rawTag.substring(1).Split("-")[0] } else { "1.0.0" }
           echo "PROJECT_VERSION=$projectVersion" >> $env:GITHUB_ENV
           Write-Host "Resolved Version: $projectVersion"
+          
+          # 显式添加 Wix Toolset 到 PATH 环境变量，确保 jpackage 能够调用 light.exe
+          $wixPath = "C:\Program Files (x86)\WiX Toolset v3.11\bin"
+          if (Test-Path $wixPath) {
+            echo "$wixPath" >> $env:GITHUB_PATH
+            Write-Host "Added Wix to PATH: $wixPath"
+          } else {
+            Write-Host "Warning: Wix path not found at $wixPath"
+          }
       
       - name: 构建 Windows 安装包 (MSI/EXE)
         run: ./gradlew :composeApp:packageDistributionForCurrentOS -PversionName="${{ env.PROJECT_VERSION }}"
