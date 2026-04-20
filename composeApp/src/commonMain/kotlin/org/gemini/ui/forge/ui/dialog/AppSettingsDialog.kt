@@ -58,6 +58,10 @@ fun AppSettingsDialog(
     var selectedCategory by remember { mutableStateOf(initialCategory) }
     var leftWeight by remember { mutableStateOf(0.3f) }
 
+    LaunchedEffect(Unit) {
+        org.gemini.ui.forge.utils.AppLogger.d("AppSettingsDialog", "Current Project Version: ${ProjectConfig.VERSION}")
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier.fillMaxWidth(0.98f).fillMaxHeight(0.9f),
@@ -510,13 +514,21 @@ private fun AboutSection(
             )
         }
         Spacer(Modifier.height(12.dp))
+        val appName = stringResource(Res.string.app_name)
+        val versionTemplate = stringResource(Res.string.about_version)
+        val finalVersion = stringResource(Res.string.about_version, ProjectConfig.VERSION)
+
+        LaunchedEffect(Unit) {
+            org.gemini.ui.forge.utils.AppLogger.d("AppSettingsDialog", "Template: '$versionTemplate', Arg: '${ProjectConfig.VERSION}', Final: '$finalVersion'")
+        }
+
         Text(
-            stringResource(Res.string.app_name),
+            appName,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
         Text(
-            stringResource(Res.string.about_version, ProjectConfig.VERSION),
+            finalVersion,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary
         )

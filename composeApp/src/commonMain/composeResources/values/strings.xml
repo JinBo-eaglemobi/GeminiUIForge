@@ -193,7 +193,7 @@
     <string name="update_checking">Checking for updates...</string>
     <string name="update_available_title">New version found: {0}</string>
     <string name="update_action_now">Update Now</string>
-    <string name="update_downloading">Downloading update: {0}%</string>
+    <string name="update_downloading">Downloading update: %d%%</string>
     <string name="update_preparing">Update ready, preparing to install...</string>
     <string name="update_latest">Current version is up to date</string>
     <string name="update_error">Update check failed, please check your network</string>
