@@ -35,13 +35,13 @@ jobs:
           Write-Host "Resolved Version: $projectVersion"
       
       - name: 构建 Windows 安装包 (MSI/EXE)
-        run: ./gradlew :composeApp:packageDistributionForCurrentOS -PversionName="${{ env:PROJECT_VERSION }}"
+        run: ./gradlew :composeApp:packageDistributionForCurrentOS -PversionName="${{ env.PROJECT_VERSION }}"
       
       - name: 构建 Windows 绿色版目录
-        run: ./gradlew :composeApp:createDistributable -PversionName="${{ env:PROJECT_VERSION }}"
+        run: ./gradlew :composeApp:createDistributable -PversionName="${{ env.PROJECT_VERSION }}"
       
       - name: 构建 Windows UberJar
-        run: ./gradlew :composeApp:packageUberJarForCurrentOS -PversionName="${{ env:PROJECT_VERSION }}"
+        run: ./gradlew :composeApp:packageUberJarForCurrentOS -PversionName="${{ env.PROJECT_VERSION }}"
 
       - name: 压缩绿色版
         shell: pwsh
