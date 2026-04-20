@@ -263,8 +263,8 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Pkg, TargetFormat.Msi, TargetFormat.Exe)
             packageName = "GeminiUIForge"
             packageVersion = appVersion
-            description = "Gemini UI Forge - 便携版"
-            copyright = "© 2026 Gemini"
+            description = "Gemini UI Forge"
+            copyright = "Copyright 2026 Gemini"
 
 
             // 针对 Windows 的配置
