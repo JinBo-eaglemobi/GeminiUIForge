@@ -514,12 +514,18 @@ private fun AboutSection(
             )
         }
         Spacer(Modifier.height(12.dp))
+        // 调试：获取原始模板和参数
         val appName = stringResource(Res.string.app_name)
-        val versionTemplate = stringResource(Res.string.about_version)
-        val finalVersion = stringResource(Res.string.about_version, ProjectConfig.VERSION)
+        val rawVersionTemplate = stringResource(Res.string.about_version)
+        val currentProjectVersion = ProjectConfig.VERSION
+        val substitutedVersion = stringResource(Res.string.about_version, currentProjectVersion)
 
         LaunchedEffect(Unit) {
-            org.gemini.ui.forge.utils.AppLogger.d("AppSettingsDialog", "Template: '$versionTemplate', Arg: '${ProjectConfig.VERSION}', Final: '$finalVersion'")
+            org.gemini.ui.forge.utils.AppLogger.d("AboutSection_Debug", "--- Version Debug Start ---")
+            org.gemini.ui.forge.utils.AppLogger.d("AboutSection_Debug", "Raw Template from XML: '$rawVersionTemplate'")
+            org.gemini.ui.forge.utils.AppLogger.d("AboutSection_Debug", "ProjectConfig.VERSION: '$currentProjectVersion'")
+            org.gemini.ui.forge.utils.AppLogger.d("AboutSection_Debug", "Substituted Result: '$substitutedVersion'")
+            org.gemini.ui.forge.utils.AppLogger.d("AboutSection_Debug", "--- Version Debug End ---")
         }
 
         Text(
@@ -528,7 +534,7 @@ private fun AboutSection(
             fontWeight = FontWeight.Bold
         )
         Text(
-            finalVersion,
+            substitutedVersion,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary
         )
