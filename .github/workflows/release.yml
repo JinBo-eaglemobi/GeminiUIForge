@@ -31,9 +31,9 @@ jobs:
         run: |
           $rawTag = "${{ github.ref_name }}"
           $projectVersion = if ($rawTag.startsWith("v")) { $rawTag.substring(1).Split("-")[0] } else { "1.0.0" }
-          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS -PversionName=$projectVersion
-          ./gradlew :composeApp:createReleaseDistributable -PversionName=$projectVersion
-          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS -PversionName=$projectVersion
+          ./gradlew :composeApp:packageDistributionForCurrentOS -PversionName="$projectVersion"
+          ./gradlew :composeApp:createDistributable -PversionName="$projectVersion"
+          ./gradlew :composeApp:packageUberJarForCurrentOS -PversionName="$projectVersion"
       - name: 压缩绿色版
         shell: pwsh
         run: Compress-Archive -Path "composeApp/build/compose/binaries/main/app/GeminiUIForge/*" -DestinationPath "GeminiUIForge-Windows-Portable.zip"
@@ -72,8 +72,8 @@ jobs:
           else
             PROJECT_VERSION="1.0.0"
           fi
-          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS -PversionName=$PROJECT_VERSION
-          ./gradlew :composeApp:createReleaseDistributable -PversionName=$PROJECT_VERSION
+          ./gradlew :composeApp:packageDistributionForCurrentOS -PversionName="$PROJECT_VERSION"
+          ./gradlew :composeApp:createDistributable -PversionName="$PROJECT_VERSION"
       - name: 压缩绿色版
         run: |
           cd composeApp/build/compose/binaries/main/app/GeminiUIForge && zip -r ../../../../../GeminiUIForge-macOS-Portable.zip .
@@ -109,7 +109,7 @@ jobs:
           else
             PROJECT_VERSION="1.0.0"
           fi
-          ./gradlew :composeApp:assembleRelease -PversionName=$PROJECT_VERSION
+          ./gradlew :composeApp:assembleRelease -PversionName="$PROJECT_VERSION"
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:

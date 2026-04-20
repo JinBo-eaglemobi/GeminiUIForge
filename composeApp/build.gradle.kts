@@ -156,10 +156,18 @@ kotlin {
 
 // 动态解析版本号
 // 优先顺序：Gradle 参数 (-PversionName) > 环境变量 (GITHUB_REF_NAME) > 默认值 1.0.0
-val projectVersion = project.findProperty("versionName")?.toString() 
+val appVersion = (project.findProperty("versionName")?.toString()
     ?: System.getenv("GITHUB_REF_NAME")?.let { tag ->
         if (tag.startsWith("v")) tag.removePrefix("v").substringBefore("-") else null
-    } ?: "1.0.0"
+    } ?: "1.0.0").let { version ->
+    // 强制正则校验：必须是 X.Y 或 X.Y.Z 格式（纯数字），否则回退到 1.0.0
+    val regex = Regex("""^\d+(\.\d+){1,2}$""")
+    if (regex.matches(version)) version else {
+        println("Warning: Invalid version format '$version', falling back to '1.0.0'")
+        "1.0.0"
+    }
+}
+println("Configuring GeminiUIForge version: $appVersion")
 
 android {
     namespace = "org.gemini.ui.forge"
@@ -170,7 +178,7 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
-        versionName = projectVersion
+        versionName = appVersion
     }
 
     signingConfigs {
@@ -210,7 +218,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe)
             packageName = "GeminiUIForge"
-            packageVersion = projectVersion
+            packageVersion = appVersion
             description = "Gemini UI Forge - 便携版"
             copyright = "© 2026 Gemini"
 
