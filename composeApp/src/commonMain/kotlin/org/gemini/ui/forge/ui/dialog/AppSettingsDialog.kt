@@ -518,12 +518,13 @@ private fun AboutSection(
         val appName = stringResource(Res.string.app_name)
         val rawVersionTemplate = stringResource(Res.string.about_version)
         val currentProjectVersion = ProjectConfig.VERSION
-        val substitutedVersion = stringResource(Res.string.about_version, currentProjectVersion)
+        
+        // 显式执行替换逻辑，确保 {0} 被识别并填充
+        val substitutedVersion = rawVersionTemplate.replace("{0}", currentProjectVersion)
 
         LaunchedEffect(Unit) {
             org.gemini.ui.forge.utils.AppLogger.d("AboutSection_Debug", "--- Version Debug Start ---")
-            org.gemini.ui.forge.utils.AppLogger.d("AboutSection_Debug", "Raw Template from XML: '$rawVersionTemplate'")
-            org.gemini.ui.forge.utils.AppLogger.d("AboutSection_Debug", "ProjectConfig.VERSION: '$currentProjectVersion'")
+            org.gemini.ui.forge.utils.AppLogger.d("AboutSection_Debug", "Raw Template: '$rawVersionTemplate'")
             org.gemini.ui.forge.utils.AppLogger.d("AboutSection_Debug", "Substituted Result: '$substitutedVersion'")
             org.gemini.ui.forge.utils.AppLogger.d("AboutSection_Debug", "--- Version Debug End ---")
         }

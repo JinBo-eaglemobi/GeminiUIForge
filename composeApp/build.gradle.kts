@@ -3,6 +3,7 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
+import java.io.ByteArrayOutputStream
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -177,15 +178,26 @@ kotlin {
 }
 
 // 动态解析版本号
-// 优先顺序：Gradle 参数 (-PversionName) > 环境变量 (GITHUB_REF_NAME) > 默认值 1.0.0
-val appVersion = (project.findProperty("versionName")?.toString()
+// 优先顺序：Gradle 参数 (-PversionName) > 环境变量 (GITHUB_REF_NAME) > 本地 Git Tag > 默认值 1.0.0
+val appVersion = (project.findProperty("versionName")?.toString()?.trim()
     ?: System.getenv("GITHUB_REF_NAME")?.let { tag ->
         if (tag.startsWith("v")) tag.removePrefix("v").substringBefore("-") else null
-    } ?: "1.0.0").let { version ->
+    } 
+    ?: try {
+        // 本地环境尝试获取最近的 tag (Configuration Cache 安全方式)
+        providers.exec {
+            commandLine("git", "describe", "--tags", "--abbrev=0")
+        }.standardOutput.asText.get().trim()
+        .let { tag -> if (tag.startsWith("v")) tag.removePrefix("v").substringBefore("-") else null }
+    } catch (e: Exception) { null }
+
+    ?: "1.0.0").let { version ->
     // 强制正则校验：必须是 X.Y 或 X.Y.Z 格式（纯数字），否则回退到 1.0.0
     val regex = Regex("""^\d+(\.\d+){1,2}$""")
     if (regex.matches(version)) version else {
-        println("Warning: Invalid version format '$version', falling back to '1.0.0'")
+        if (version.isNotBlank() && version != "1.0.0") {
+            println("Warning: Invalid version format '$version', falling back to '1.0.0'")
+        }
         "1.0.0"
     }
 }
@@ -238,7 +250,7 @@ compose.desktop {
         mainClass = "org.gemini.ui.forge.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe)
+            targetFormats(TargetFormat.Dmg, TargetFormat.Pkg, TargetFormat.Msi, TargetFormat.Exe)
             packageName = "GeminiUIForge"
             packageVersion = appVersion
             description = "Gemini UI Forge - 便携版"

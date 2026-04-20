@@ -26,14 +26,14 @@ jobs:
           java-version: '23'
           distribution: 'temurin'
           cache: 'gradle'
-      - name: 生成 Windows 产物 (含 JAR/安装包/绿色版)
+      - name: 生成 Windows 产物 (安装包/绿色版)
         shell: pwsh
         run: |
           $rawTag = "${{ github.ref_name }}"
           $projectVersion = if ($rawTag.startsWith("v")) { $rawTag.substring(1).Split("-")[0] } else { "1.0.0" }
+          echo "PROJECT_VERSION=$projectVersion" >> $env:GITHUB_ENV
           ./gradlew :composeApp:packageDistributionForCurrentOS -PversionName="$projectVersion"
           ./gradlew :composeApp:createDistributable -PversionName="$projectVersion"
-          ./gradlew :composeApp:packageUberJarForCurrentOS -PversionName="$projectVersion"
       - name: 压缩绿色版
         shell: pwsh
         run: Compress-Archive -Path "composeApp/build/compose/binaries/main/app/GeminiUIForge/*" -DestinationPath "GeminiUIForge-Windows-Portable.zip"
@@ -43,8 +43,39 @@ jobs:
           files: |
             composeApp/build/compose/binaries/main/msi/*.msi
             composeApp/build/compose/binaries/main/exe/*.exe
-            composeApp/build/compose/jars/*.jar
             GeminiUIForge-Windows-Portable.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --- 跨平台 JAR 打包任务 ---
+  build-jar:
+    if: |
+      !contains(github.ref_name, '-') || 
+      contains(github.ref_name, '-jar')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 设置 JDK 23
+        uses: actions/setup-java@v4
+        with:
+          java-version: '23'
+          distribution: 'temurin'
+          cache: 'gradle'
+      - name: 打包 UberJar
+        run: |
+          chmod +x gradlew
+          RAW_TAG="${{ github.ref_name }}"
+          if [[ $RAW_TAG == v* ]]; then
+            PROJECT_VERSION=$(echo ${RAW_TAG#v} | cut -d'-' -f1)
+          else
+            PROJECT_VERSION="1.0.0"
+          fi
+          ./gradlew :composeApp:packageUberJarForCurrentOS -PversionName="$PROJECT_VERSION"
+      - name: 上传到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: composeApp/build/compose/jars/*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
