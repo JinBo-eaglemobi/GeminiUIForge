@@ -190,11 +190,21 @@ val appVersion = (project.findProperty("versionName")?.toString()?.trim()
         }.standardOutput.asText.get().trim()
         .let { tag -> if (tag.startsWith("v")) tag.removePrefix("v").substringBefore("-") else null }
     } catch (e: Exception) { null }
-
     ?: "1.0.0").let { version ->
-    // 强制正则校验：必须是 X.Y 或 X.Y.Z 格式（纯数字），否则回退到 1.0.0
+    // 强制正则校验与修复
+    // 1. 移除非数字和点的字符
+    val cleanVersion = version.filter { it.isDigit() || it == '.' }
+    // 2. 截取前 3 段（Windows 强制要求 MAJOR.MINOR.BUILD，不允许 4 段）
+    val segments = cleanVersion.split(".")
+    val finalVer = if (segments.size > 3) {
+        val truncated = segments.take(3).joinToString(".")
+        println("-----------------   Warning: Truncating version '$version' to '$truncated' for compatibility")
+        truncated
+    } else cleanVersion
+
+    // 3. 最终匹配校验
     val regex = Regex("""^\d+(\.\d+){1,2}$""")
-    if (regex.matches(version)) version else {
+    if (regex.matches(finalVer)) finalVer else {
         if (version.isNotBlank() && version != "1.0.0") {
             println("-----------------   Warning: Invalid version format '$version', falling back to '1.0.0'")
         }
