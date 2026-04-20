@@ -61,10 +61,7 @@ fun TemplateAssetGenScreen(
         viewModel.reload(initialProject)
     }
 
-    // 监听内部状态变化并向上同步
-    LaunchedEffect(state.project) {
-        onProjectUpdated(state.project)
-    }
+    // 监听内部状态变化（手动同步模式，已移除自动同步 LaunchedEffect）
 
     val coroutineScope = rememberCoroutineScope()
     // 历史资源列表的弹窗状态
@@ -305,11 +302,31 @@ private fun PropertyPanel(
     val selectedBlock = state.selectedBlock
 
     Column(modifier = Modifier.padding(16.dp)) {
-        Text(
-            stringResource(Res.string.editor_gen_settings),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                stringResource(Res.string.editor_gen_settings),
+                style = MaterialTheme.typography.titleMedium
+            )
+            
+            // 显示当前选中的模块 ID/名称
+            if (selectedBlock != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = AppShapes.small
+                ) {
+                    Text(
+                        text = selectedBlock.id,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
 
         if (selectedBlock == null) {
             // 未选中任何块的空状态提示
