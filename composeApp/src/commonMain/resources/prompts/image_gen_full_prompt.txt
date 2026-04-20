@@ -1,1 +1,1 @@
-Game UI asset for a Slot game. Type: {0}. Target bounding box: {3}x{4} pixels. CRITICAL: The main object MUST FULLY OCCUPY the {3}:{4} aspect ratio. It must be scaled to touch the top, bottom, left, and right edges of the canvas without leaving any empty margins or transparent padding. Style requirements: {1} {2}
+Game UI asset for a Slot game. Type: {0}. Target bounding box: {3}x{4} pixels. CRITICAL: The main object MUST FULLY OCCUPY the {3}:{4} aspect ratio. {5}. Style requirements: {1} {2}

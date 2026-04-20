@@ -86,8 +86,9 @@ class AIGenerationService(
         maxRetries: Int = 3,
         targetWidth: Float? = null,
         targetHeight: Float? = null,
-        isPng: Boolean = false, // 新增参数
-        onLog: (String) -> Unit = {} // 添加日志回调
+        isPng: Boolean = false,
+        imageSize: String = "1k", // 新增：支持 1k, 2k 等
+        onLog: (String) -> Unit = {}
     ): List<String> {
         if (apiKey.isBlank()) {
             syncLog("❌ API 密钥未配置", onLog)
@@ -96,7 +97,7 @@ class AIGenerationService(
         val url = ApiConfig.getImagenEndpoint(apiKey)
         val client = NetworkClient.shared
         
-        syncLog("⚙️ 准备生图提示词 (类型: $blockType)...", onLog)
+        syncLog("⚙️ 准备生图提示词 (类型: $blockType, 尺寸基准: $imageSize)...", onLog)
         // 核心优化：如果请求 PNG，自动追加易于抠图的 Prompt 指令
         val transparentRequirements = if (isPng) {
             promptManager.getPrompt("image_gen_transparent")
@@ -104,17 +105,7 @@ class AIGenerationService(
         
         val fullPromptTemplate = promptManager.getPrompt("image_gen_full_prompt")
         
-        val widthStr = targetWidth?.toInt()?.toString() ?: "auto"
-        val heightStr = targetHeight?.toInt()?.toString() ?: "auto"
-        
-        val fullPrompt = fullPromptTemplate
-            .replace("{0}", blockType)
-            .replace("{1}", userPrompt)
-            .replace("{2}", transparentRequirements)
-            .replace("{3}", widthStr)
-            .replace("{4}", heightStr)
-
-        // 计算最接近的标准比例
+        // 1. 计算最接近的标准比例
         val aspectRatio = if (targetWidth != null && targetHeight != null && targetHeight > 0) {
             val ratio = targetWidth / targetHeight
             val options = mapOf(
@@ -131,14 +122,86 @@ class AIGenerationService(
             "1:1"
         }
 
-        syncLog("📏 匹配最佳画幅比例: $aspectRatio (目标: ${widthStr}x${heightStr})", onLog)
-        AppLogger.d(TAG, "Generating images for $blockType. Calculated AspectRatio: $aspectRatio (target: ${targetWidth}x${targetHeight})")
+        // 2. 核心优化：根据 imageSize 动态定义分辨率基准 (1k=1024, 2k=2048)
+        val baseRes = if (imageSize.lowercase().contains("2k")) 2048f else 1024f
+        val resolutionMap = mapOf(
+            "1:1" to (baseRes.toInt() to baseRes.toInt()),
+            "4:3" to (baseRes.toInt() to (baseRes * 0.75f).toInt()),
+            "3:4" to ((baseRes * 0.75f).toInt() to baseRes.toInt()),
+            "16:9" to (baseRes.toInt() to (baseRes * 0.5625f).toInt()),
+            "9:16" to ((baseRes * 0.5625f).toInt() to baseRes.toInt()),
+            "3:2" to (baseRes.toInt() to (baseRes * 0.666f).toInt()),
+            "2:3" to ((baseRes * 0.666f).toInt() to baseRes.toInt())
+        )
 
+        val (maximizedWidth, maximizedHeight) = if (targetWidth != null && targetHeight != null && targetHeight > 0) {
+            val canvasRes = resolutionMap[aspectRatio] ?: (baseRes.toInt() to baseRes.toInt())
+            val canvasW = canvasRes.first.toFloat()
+            val canvasH = canvasRes.second.toFloat()
+            val targetRatio = targetWidth / targetHeight
+            val canvasRatio = canvasW / canvasH
+
+            if (targetRatio > canvasRatio) {
+                // 模块更宽，受限于画布宽度
+                canvasW.toInt() to (canvasW / targetRatio).toInt()
+            } else {
+                // 模块更高，受限于画布高度
+                (canvasH * targetRatio).toInt() to canvasH.toInt()
+            }
+        } else {
+            null to null
+        }
+
+        val widthStr = maximizedWidth?.toString() ?: targetWidth?.toInt()?.toString() ?: "auto"
+        val heightStr = maximizedHeight?.toString() ?: targetHeight?.toInt()?.toString() ?: "auto"
+
+        // 3. 动态生成形状描述和边缘触及指令，采用更极端的指令引导
+        val targetRatio = if (targetWidth != null && targetHeight != null && targetHeight > 0) targetWidth / targetHeight else 1.0f
+        val shapeType = when {
+            targetRatio > 2.5f -> "ultra-wide horizontal"
+            targetRatio > 1.2f -> "rectangular"
+            targetRatio < 0.4f -> "ultra-tall vertical"
+            targetRatio < 0.8f -> "tall"
+            else -> "square-shaped and blocky"
+        }
+
+        val touchInstruction = if (maximizedWidth != null && maximizedHeight != null) {
+            val canvasRes = resolutionMap[aspectRatio] ?: (baseRes.toInt() to baseRes.toInt())
+            val isWidthFull = maximizedWidth >= canvasRes.first - 15
+            val isHeightFull = maximizedHeight >= canvasRes.second - 15
+            
+            when {
+                isWidthFull && isHeightFull -> "[MANDATORY] This $shapeType object MUST be MASSIVE, filling the entire canvas edge-to-edge. ZERO padding on any side. It must be so large it almost bleeds off the canvas."
+                isWidthFull -> "[MANDATORY] This $shapeType object MUST be edge-to-edge horizontally and VERTICALLY STRETCHED to occupy exactly ${maximizedHeight}px in height. It must DOMINATE the canvas vertically. DO NOT leave large empty spaces at the top or bottom."
+                else -> "[MANDATORY] This $shapeType object MUST be edge-to-edge vertically and HORIZONTALLY STRETCHED to occupy exactly ${maximizedWidth}px in width. It must DOMINATE the canvas horizontally."
+            }
+        } else {
+            "The object should be massive and occupy the maximum possible area."
+        }
+        
+        // 核心优化：将背景要求与布局紧密锁定
+        val finalLayoutInstruction = if (isPng) {
+            "$touchInstruction The background MUST only exist as thin solid flat white strips where the object ends. No shadows, no padding."
+        } else touchInstruction
+
+        // 重新定义拼接顺序：【约束与布局】第一，【风格描述】第二
+        val fullPrompt = "{5}. Asset Type: {0}. Shape: $shapeType. Target Size: {3}x{4} pixels. {1}. {2}"
+            .replace("{0}", blockType)
+            .replace("{1}", userPrompt)
+            .replace("{2}", if (isPng && maximizedWidth == null) transparentRequirements else "")
+            .replace("{3}", widthStr)
+            .replace("{4}", heightStr)
+            .replace("{5}", finalLayoutInstruction)
+
+        val originalSizeStr = "${targetWidth?.toInt() ?: "auto"}x${targetHeight?.toInt() ?: "auto"}"
+        syncLog("📏 匹配最佳画幅比例: $aspectRatio (原始: $originalSizeStr -> 优化占比: ${widthStr}x${heightStr} @ ${imageSize})", onLog)
+        
         val requestBody = buildJsonObject {
             put("instances", buildJsonArray { add(buildJsonObject { put("prompt", fullPrompt) }) })
             put("parameters", buildJsonObject {
                 put("sampleCount", count.coerceIn(1, 4))
                 put("aspectRatio", aspectRatio)
+                put("imageSize", imageSize) // 明确指定尺寸基准
                 put("outputOptions", buildJsonObject { put("mimeType", "image/jpeg") })
             })
         }.toString()

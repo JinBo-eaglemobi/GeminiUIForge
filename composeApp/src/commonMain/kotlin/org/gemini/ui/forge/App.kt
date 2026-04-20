@@ -281,7 +281,9 @@ fun App(typography: Typography? = null) {
                                     aiService = AIGenerationService(appViewModel.cloudAssetManager),
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     initialPromptLang = globalState.promptLangPref,
-                                    onProjectUpdated = { /* 内部维护 */ }
+                                    onProjectUpdated = { updatedProject ->
+                                        appViewModel.updateProject(updatedProject)
+                                    }
                                 )
                             }
                             AppScreen.TEMPLATE_GENERATOR -> {
