@@ -182,8 +182,20 @@
     <string name="env_dialog_title">Environment Not Ready</string>
     <string name="env_dialog_message">Local background removal requires Python and dependencies. Go to settings to install?</string>
     <string name="settings_category_about">About</string>
+    <string name="about_title">About Gemini UI Forge</string>
+    <string name="about_version">Version v{0}</string>
+    <string name="about_description">Gemini UI Forge is a next-generation game UI assistant tool built with Google Gemini AI and Compose Multiplatform. It leverages AI visual understanding and content generation to help developers rapidly transform visual designs into interactive UI assets.</string>
+    <string name="about_copyright">© 2026 Gemini UI Forge Team. All rights reserved.</string>
     <string name="menu_help">Help Center</string>
     <string name="help_title">Help &amp; Guide</string>
     <string name="help_action_open_browser">Open in Browser</string>
+    <string name="update_check_action">Check for Updates</string>
+    <string name="update_checking">Checking for updates...</string>
+    <string name="update_available_title">New version found: {0}</string>
+    <string name="update_action_now">Update Now</string>
+    <string name="update_downloading">Downloading update: {0}%</string>
+    <string name="update_preparing">Update ready, preparing to install...</string>
+    <string name="update_latest">Current version is up to date</string>
+    <string name="update_error">Update check failed, please check your network</string>
     <string name="action_go_to_settings">Go to Settings</string>
 </resources>

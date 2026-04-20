@@ -183,7 +183,7 @@
     <string name="env_dialog_message">执行本地抠图需要 Python 及相关依赖。是否前往设置页面安装？</string>
     <string name="settings_category_about">关于软件</string>
     <string name="about_title">关于 Gemini UI Forge</string>
-    <string name="about_version">版本 v1.0.0</string>
+    <string name="about_version">版本 v{0}</string>
     <string name="about_description">Gemini UI Forge 是一款基于 Google Gemini AI 与 Compose Multiplatform 打造的次世代游戏 UI 辅助开发工具。它旨在通过 AI 的视觉理解与内容生成能力，帮助开发者快速完成从视觉设计到可交互 UI 资源的转化。</string>
     <string name="about_copyright">© 2026 Gemini UI Forge Team. 保留所有权利。</string>
     <string name="menu_help">帮助手册</string>

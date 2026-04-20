@@ -13,6 +13,26 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
 }
 
+// 动态生成版本号文件任务
+val generateProjectConfig = tasks.register("generateProjectConfig") {
+    val version = appVersion // 捕获到局部变量以兼容 Configuration Cache
+    val outputDir = layout.buildDirectory.dir("generated/projectConfig/kotlin/commonMain/org/gemini/ui/forge")
+    outputs.dir(outputDir)
+    doLast {
+        val configFile = outputDir.get().file("ProjectConfig.kt").asFile
+        configFile.parentFile.mkdirs()
+        configFile.writeText(
+            """
+            package org.gemini.ui.forge
+
+            object ProjectConfig {
+                const val VERSION = "$version"
+            }
+            """.trimIndent()
+        )
+    }
+}
+
 kotlin {
 
     androidTarget {
@@ -45,7 +65,9 @@ kotlin {
     }
 
     sourceSets {
-
+        commonMain {
+            kotlin.srcDir(generateProjectConfig.map { it.outputs.files.asPath })
+        }
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)

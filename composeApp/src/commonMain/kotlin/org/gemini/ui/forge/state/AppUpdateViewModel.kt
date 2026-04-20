@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.io.files.Path
+import org.gemini.ui.forge.ProjectConfig
 import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.model.app.UpdateStatus
 import org.gemini.ui.forge.model.app.UpdateInfo
@@ -22,7 +23,7 @@ import org.gemini.ui.forge.data.repository.TemplateRepository
  */
 class AppUpdateViewModel(
     private val templateRepo: TemplateRepository = TemplateRepository(),
-    private val updateService: UpdateService = UpdateService("1.0.0")
+    private val updateService: UpdateService = UpdateService(ProjectConfig.VERSION)
 ) : ViewModel() {
 
     private val _status = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)

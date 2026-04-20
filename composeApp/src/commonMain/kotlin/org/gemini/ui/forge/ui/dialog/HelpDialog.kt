@@ -32,25 +32,43 @@ fun HelpDialog(onDismiss: () -> Unit) {
             Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
                 // Header
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Filled.HelpCenter, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                    Icon(
+                        Icons.AutoMirrored.Filled.HelpCenter,
+                        null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
                     Spacer(Modifier.width(12.dp))
-                    Text(stringResource(Res.string.help_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(
+                        stringResource(Res.string.help_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null) }
                 }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                )
 
                 // Content (Simplified Markdown View)
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     val scrollState = rememberScrollState()
                     Column(modifier = Modifier.verticalScroll(scrollState).padding(end = 8.dp)) {
-                        HelpSection("1. 核心模式介绍", "本工具包含首页管理、布局编辑（UI 结构定义）及资源生成（AI 生图）三大核心模式。")
+                        HelpSection(
+                            "1. 核心模式介绍",
+                            "本工具包含首页管理、布局编辑（UI 结构定义）及资源生成（AI 生图）三大核心模式。"
+                        )
                         HelpItem("双击模块", "进入该组的隔离编辑模式，专注于局部微调。")
                         HelpItem("双击空白", "退出隔离模式，返回上级。")
                         HelpItem("拖拽与缩放", "支持画布自由平移、缩放以及模块坐标的精准修改。")
-                        
-                        HelpSection("2. AI 与环境配置", "生图功能依赖 Google Gemini API。本地抠图（背景移除）需要本地安装 Python 3.9+ 及其相关库。")
+
+                        HelpSection(
+                            "2. AI 与环境配置",
+                            "生图功能依赖 Google Gemini API。本地抠图（背景移除）需要本地安装 Python 3.9+ 及其相关库。"
+                        )
                         HelpItem("环境自检", "您可以在设置页面一键检测并自动安装缺失的 Python 依赖。")
                         HelpItem("视觉引导重塑", "支持通过框选参考图中的特定区域，由 AI 辅助识别并重塑组件。")
 
@@ -74,7 +92,7 @@ fun HelpDialog(onDismiss: () -> Unit) {
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(Res.string.help_action_open_browser))
                     }
-                    
+
                     Button(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f),
@@ -91,8 +109,18 @@ fun HelpDialog(onDismiss: () -> Unit) {
 @Composable
 private fun HelpSection(title: String, desc: String) {
     Column(Modifier.padding(vertical = 8.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-        Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            desc,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+        )
     }
 }
 
@@ -102,7 +130,11 @@ private fun HelpItem(label: String, content: String) {
         Text("• ", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         Column {
             Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-            Text(content, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                content,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
