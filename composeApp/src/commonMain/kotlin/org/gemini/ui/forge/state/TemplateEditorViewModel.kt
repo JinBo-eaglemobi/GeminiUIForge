@@ -73,7 +73,7 @@ class TemplateEditorViewModel(
 
     /** 强制从外部重载项目状态（解决 ViewModel 缓存导致旧状态残留的问题） */
     fun reload(newProject: ProjectState) {
-        if (_state.value.project === newProject) return
+        if (_state.value.project == newProject) return
         _state.update { 
             it.copy(
                 project = newProject,

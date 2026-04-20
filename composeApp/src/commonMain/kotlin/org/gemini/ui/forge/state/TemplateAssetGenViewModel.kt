@@ -48,7 +48,7 @@ class TemplateAssetGenViewModel(
 
     /** 强制重载最新的 ProjectState（解决重入时旧状态残留的问题） */
     fun reload(newProject: ProjectState) {
-        if (_state.value.project === newProject) return
+        if (_state.value.project == newProject) return
         _state.update { 
             it.copy(
                 project = newProject,
