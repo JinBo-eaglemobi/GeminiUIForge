@@ -76,7 +76,7 @@ jobs:
           ./gradlew :composeApp:createDistributable -PversionName="$PROJECT_VERSION"
       - name: 压缩绿色版
         run: |
-          cd composeApp/build/compose/binaries/main/app/GeminiUIForge && zip -r ../../../../../GeminiUIForge-macOS-Portable.zip .
+          cd composeApp/build/compose/binaries/main/app && zip -r ../../../../../GeminiUIForge-macOS-Portable.zip GeminiUIForge.app
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:
