@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -99,22 +100,24 @@ fun AITaskProgressDialog(
                             modifier = Modifier.fillMaxSize()
                                 .background(Color.Black.copy(alpha = 0.05f), AppShapes.medium).padding(8.dp)
                         ) {
-                            LazyColumn(state = listState) {
-                                items(logs) { log ->
-                                    Text(
-                                        text = log,
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 11.sp,
-                                            lineHeight = 16.sp
-                                        ),
-                                        color = when {
-                                            log.contains("错误", true) || log.contains("FAIL", true) -> MaterialTheme.colorScheme.error
-                                            log.startsWith(">>>") -> MaterialTheme.colorScheme.primary
-                                            else -> MaterialTheme.colorScheme.onSurface
-                                        }
-                                    )
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.Black.copy(alpha = 0.02f))
+                            SelectionContainer {
+                                LazyColumn(state = listState) {
+                                    items(logs) { log ->
+                                        Text(
+                                            text = log,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 11.sp,
+                                                lineHeight = 16.sp
+                                            ),
+                                            color = when {
+                                                log.contains("错误", true) || log.contains("FAIL", true) -> MaterialTheme.colorScheme.error
+                                                log.startsWith(">>>") -> MaterialTheme.colorScheme.primary
+                                                else -> MaterialTheme.colorScheme.onSurface
+                                            }
+                                        )
+                                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.Black.copy(alpha = 0.02f))
+                                    }
                                 }
                             }
                         }
