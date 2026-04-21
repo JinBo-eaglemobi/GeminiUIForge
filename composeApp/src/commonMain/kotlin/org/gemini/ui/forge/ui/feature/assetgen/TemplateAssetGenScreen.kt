@@ -300,6 +300,10 @@ private fun PropertyPanel(
     onShowHistory: () -> Unit
 ) {
     val selectedBlock = state.selectedBlock
+    val imagePicker = org.gemini.ui.forge.utils.rememberImagePicker { uris ->
+        uris.firstOrNull()?.let { viewModel.setReferenceImage(it) }
+    }
+    var showModelMenu by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(16.dp)) {
         Row(
@@ -311,19 +315,151 @@ private fun PropertyPanel(
                 stringResource(Res.string.editor_gen_settings),
                 style = MaterialTheme.typography.titleMedium
             )
-            
-            // 显示当前选中的模块 ID/名称
-            if (selectedBlock != null) {
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    shape = AppShapes.small
+
+            // 模型切换按钮
+            Box {
+                OutlinedButton(
+                    onClick = { showModelMenu = true },
+                    modifier = Modifier.height(32.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                    shape = AppShapes.small,
+                    enabled = !state.isGenerating
                 ) {
-                    Text(
-                        text = selectedBlock.id,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                    )
+                    Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(state.selectedModel.displayName, style = MaterialTheme.typography.labelSmall)
+                    Icon(Icons.Default.ArrowDropDown, null)
+                }
+
+                DropdownMenu(
+                    expanded = showModelMenu,
+                    onDismissRequest = { showModelMenu = false },
+                    modifier = Modifier.width(220.dp)
+                ) {
+                    org.gemini.ui.forge.model.api.GeminiModel.entries
+                        .filter { 
+                            it.supportedMethods.contains("predict") || 
+                            it.modelName.contains("imagen") || 
+                            it.modelName.contains("image") 
+                        }
+                        .forEach { model ->
+                            val isImagen = model.supportedMethods.contains("predict") || model.modelName.contains("imagen")
+                            DropdownMenuItem(
+                                text = { 
+                                    Column {
+                                        Text(model.displayName, style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            if (isImagen) "Imagen API" else "Native Gemini", 
+                                            style = MaterialTheme.typography.labelSmall, 
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setImageGenModel(model)
+                                    showModelMenu = false
+                                },
+                                leadingIcon = {
+                                    if (state.selectedModel == model) Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
+                                }
+                            )
+                        }
+                }
+            }
+        }
+        
+        // 显示当前选中的模块 ID/名称 (独立一行显示，避免顶部太挤)
+        if (selectedBlock != null) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = AppShapes.small,
+                modifier = Modifier.padding(bottom = 12.dp)
+            ) {
+                Text(
+                    text = "正在编辑: ${selectedBlock.id}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        // --- 全局生成偏好设置 (始终显示) ---
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
+            shape = AppShapes.medium,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+        ) {
+            Column(Modifier.padding(12.dp)) {
+                Text(
+                    "全局生成风格",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                
+                OutlinedTextField(
+                    value = state.globalStyle,
+                    onValueChange = { viewModel.setGlobalStyle(it) },
+                    placeholder = { Text("例如：Cyberpunk, Minimalist, 3D Render...", style = MaterialTheme.typography.bodySmall) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    enabled = !state.isGenerating
+                )
+                
+                Spacer(Modifier.height(12.dp))
+                
+                Text(
+                    "风格参考图 (图生图)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier.size(60.dp).padding(4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (state.referenceImageUri != null) {
+                            AsyncImage(
+                                model = state.referenceImageUri,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = AppShapes.small,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Icon(Icons.Default.AddPhotoAlternate, null, modifier = Modifier.padding(8.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    
+                    Column(Modifier.weight(1f).padding(start = 8.dp)) {
+                        Button(
+                            onClick = { imagePicker() },
+                            modifier = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            shape = AppShapes.small,
+                            enabled = !state.isGenerating
+                        ) {
+                            Text("选择参考图", style = MaterialTheme.typography.labelSmall)
+                        }
+                        if (state.referenceImageUri != null) {
+                            TextButton(
+                                onClick = { viewModel.setReferenceImage(null) },
+                                modifier = Modifier.height(24.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text("清除参考", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
                 }
             }
         }

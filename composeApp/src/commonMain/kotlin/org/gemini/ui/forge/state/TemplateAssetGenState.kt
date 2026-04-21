@@ -36,6 +36,14 @@ data class TemplateAssetGenState(
     /** 视觉辅助 */
     val isVisualMode: Boolean = false,
 
+    /** 当前选中的生图模型类型 */
+    val selectedModel: org.gemini.ui.forge.model.api.GeminiModel = org.gemini.ui.forge.model.api.GeminiModel.IMAGEN_4_0_FAST_GENERATE_001,
+
+    /** 全局生成风格定义 */
+    val globalStyle: String = "",
+    /** 参考图本地 URI (用于图生图) */
+    val referenceImageUri: String? = null,
+
     /** 临时保存的舞台背景颜色 (不持久化到模板中) */
     val stageBackgroundColor: String = "#2D2D2D",
     

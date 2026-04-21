@@ -16,7 +16,7 @@ import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.utils.AppLogger
 
 /**
- * AI 生成服务类，封装了与 Google Gemini 和 Imagen API 的交互逻辑
+ * AI 生成服务类（门面），协调 ImagenGenerator 和 GeminiImageGenerator。
  */
 class AIGenerationService(
     private val cloudAssetManager: CloudAssetManager
@@ -31,6 +31,9 @@ class AIGenerationService(
     private val storage = LocalFileStorage()
     val promptManager = PromptManager(storage)
     private val scriptManager = ScriptManager(storage)
+
+    private val imagenGenerator = ImagenGenerator(cloudAssetManager, promptManager)
+    private val geminiGenerator = GeminiImageGenerator(cloudAssetManager, promptManager)
 
     /**
      * 内部辅助方法：同步将日志发送到 UI 回调和磁盘日志系统。
@@ -78,7 +81,11 @@ class AIGenerationService(
         return null
     }
 
+    /**
+     * 核心生图方法，根据选中的 GeminiModel 自动路由到 Imagen 或 Native Gemini 生成逻辑。
+     */
     suspend fun generateImages(
+        model: org.gemini.ui.forge.model.api.GeminiModel,
         blockType: String,
         userPrompt: String,
         count: Int = 4,
@@ -87,151 +94,44 @@ class AIGenerationService(
         targetWidth: Float? = null,
         targetHeight: Float? = null,
         isPng: Boolean = false,
-        imageSize: String = "1k", // 新增：支持 1k, 2k 等
+        imageSize: String = "1k", 
+        style: String = "", 
+        referenceImageUri: String? = null, 
+        isVertexAI: Boolean = false,
         onLog: (String) -> Unit = {}
     ): List<String> {
-        if (apiKey.isBlank()) {
-            syncLog("❌ API 密钥未配置", onLog)
-            throw Exception("API 密钥未配置")
-        }
-        val url = ApiConfig.getImagenEndpoint(apiKey)
-        val client = NetworkClient.shared
-        
-        syncLog("⚙️ 准备生图提示词 (类型: $blockType, 尺寸基准: $imageSize)...", onLog)
-        // 核心优化：如果请求 PNG，自动追加易于抠图的 Prompt 指令
-        val transparentRequirements = if (isPng) {
-            promptManager.getPrompt("image_gen_transparent")
-        } else ""
-        
-        val fullPromptTemplate = promptManager.getPrompt("image_gen_full_prompt")
-        
-        // 1. 计算最接近的标准比例
-        val aspectRatio = if (targetWidth != null && targetHeight != null && targetHeight > 0) {
-            val ratio = targetWidth / targetHeight
-            val options = mapOf(
-                "1:1" to 1.0f,
-                "4:3" to 1.333f,
-                "3:4" to 0.75f,
-                "16:9" to 1.777f,
-                "9:16" to 0.562f,
-                "3:2" to 1.5f,
-                "2:3" to 0.666f
-            )
-            options.minByOrNull { kotlin.math.abs(it.value - ratio) }?.key ?: "1:1"
-        } else {
-            "1:1"
-        }
-
-        // 2. 核心优化：根据 imageSize 动态定义分辨率基准 (1k=1024, 2k=2048)
-        val baseRes = if (imageSize.lowercase().contains("2k")) 2048f else 1024f
-        val resolutionMap = mapOf(
-            "1:1" to (baseRes.toInt() to baseRes.toInt()),
-            "4:3" to (baseRes.toInt() to (baseRes * 0.75f).toInt()),
-            "3:4" to ((baseRes * 0.75f).toInt() to baseRes.toInt()),
-            "16:9" to (baseRes.toInt() to (baseRes * 0.5625f).toInt()),
-            "9:16" to ((baseRes * 0.5625f).toInt() to baseRes.toInt()),
-            "3:2" to (baseRes.toInt() to (baseRes * 0.666f).toInt()),
-            "2:3" to ((baseRes * 0.666f).toInt() to baseRes.toInt())
+        val params = BaseImageGenerator.GenParams(
+            blockType = blockType,
+            userPrompt = userPrompt,
+            count = count,
+            apiKey = apiKey,
+            targetWidth = targetWidth,
+            targetHeight = targetHeight,
+            isPng = isPng,
+            imageSize = imageSize,
+            style = style,
+            referenceImageUri = referenceImageUri,
+            isVertexAI = isVertexAI
         )
 
-        val (maximizedWidth, maximizedHeight) = if (targetWidth != null && targetHeight != null && targetHeight > 0) {
-            val canvasRes = resolutionMap[aspectRatio] ?: (baseRes.toInt() to baseRes.toInt())
-            val canvasW = canvasRes.first.toFloat()
-            val canvasH = canvasRes.second.toFloat()
-            val targetRatio = targetWidth / targetHeight
-            val canvasRatio = canvasW / canvasH
-
-            if (targetRatio > canvasRatio) {
-                // 模块更宽，受限于画布宽度
-                canvasW.toInt() to (canvasW / targetRatio).toInt()
-            } else {
-                // 模块更高，受限于画布高度
-                (canvasH * targetRatio).toInt() to canvasH.toInt()
-            }
-        } else {
-            null to null
-        }
-
-        val widthStr = maximizedWidth?.toString() ?: targetWidth?.toInt()?.toString() ?: "auto"
-        val heightStr = maximizedHeight?.toString() ?: targetHeight?.toInt()?.toString() ?: "auto"
-
-        // 3. 动态生成形状描述和边缘触及指令，采用更极端的指令引导
-        val targetRatio = if (targetWidth != null && targetHeight != null && targetHeight > 0) targetWidth / targetHeight else 1.0f
-        val shapeType = when {
-            targetRatio > 2.5f -> "ultra-wide horizontal"
-            targetRatio > 1.2f -> "rectangular"
-            targetRatio < 0.4f -> "ultra-tall vertical"
-            targetRatio < 0.8f -> "tall"
-            else -> "square-shaped and blocky"
-        }
-
-        val touchInstruction = if (maximizedWidth != null && maximizedHeight != null) {
-            val canvasRes = resolutionMap[aspectRatio] ?: (baseRes.toInt() to baseRes.toInt())
-            val isWidthFull = maximizedWidth >= canvasRes.first - 15
-            val isHeightFull = maximizedHeight >= canvasRes.second - 15
-            
-            when {
-                isWidthFull && isHeightFull -> "[MANDATORY] This $shapeType object MUST be MASSIVE, filling the entire canvas edge-to-edge. ZERO padding on any side. It must be so large it almost bleeds off the canvas."
-                isWidthFull -> "[MANDATORY] This $shapeType object MUST be edge-to-edge horizontally and VERTICALLY STRETCHED to occupy exactly ${maximizedHeight}px in height. It must DOMINATE the canvas vertically. DO NOT leave large empty spaces at the top or bottom."
-                else -> "[MANDATORY] This $shapeType object MUST be edge-to-edge vertically and HORIZONTALLY STRETCHED to occupy exactly ${maximizedWidth}px in width. It must DOMINATE the canvas horizontally."
-            }
-        } else {
-            "The object should be massive and occupy the maximum possible area."
-        }
-        
-        // 核心优化：将背景要求与布局紧密锁定
-        val finalLayoutInstruction = if (isPng) {
-            "$touchInstruction The background MUST only exist as thin solid flat white strips where the object ends. No shadows, no padding."
-        } else touchInstruction
-
-        // 重新定义拼接顺序：【约束与布局】第一，【风格描述】第二
-        val fullPrompt = "{5}. Asset Type: {0}. Shape: $shapeType. Target Size: {3}x{4} pixels. {1}. {2}"
-            .replace("{0}", blockType)
-            .replace("{1}", userPrompt)
-            .replace("{2}", if (isPng && maximizedWidth == null) transparentRequirements else "")
-            .replace("{3}", widthStr)
-            .replace("{4}", heightStr)
-            .replace("{5}", finalLayoutInstruction)
-
-        val originalSizeStr = "${targetWidth?.toInt() ?: "auto"}x${targetHeight?.toInt() ?: "auto"}"
-        syncLog("📏 匹配最佳画幅比例: $aspectRatio (原始: $originalSizeStr -> 优化占比: ${widthStr}x${heightStr} @ ${imageSize})", onLog)
-        
-        val requestBody = buildJsonObject {
-            put("instances", buildJsonArray { add(buildJsonObject { put("prompt", fullPrompt) }) })
-            put("parameters", buildJsonObject {
-                put("sampleCount", count.coerceIn(1, 4))
-                put("aspectRatio", aspectRatio)
-                put("imageSize", imageSize) // 明确指定尺寸基准
-                put("outputOptions", buildJsonObject { put("mimeType", "image/jpeg") })
-            })
-        }.toString()
+        // 路由逻辑：
+        // 1. 如果支持 predict 方法或者是 imagen 名下的，走 ImagenGenerator
+        // 2. 如果支持 generateContent 且包含 image 关键字，走 GeminiImageGenerator
+        // 3. 否则默认走 ImagenGenerator (兼容性考虑)
+        val isImagen = model.supportedMethods.contains("predict") || model.modelName.contains("imagen")
+        val isGeminiNative = model.supportedMethods.contains("generateContent") && model.modelName.contains("image")
 
         var lastException: Exception? = null
         for (attempt in 0..maxRetries) {
             try {
-                if (attempt > 0) syncLog("⚠️ 正在进行第 ${attempt + 1} 次重试...", onLog)
-                else {
-                    syncLog("📡 正在向 Imagen 发送生图请求...", onLog)
-                    logRequest(url, requestBody, onLog)
+                if (attempt > 0) {
+                    syncLog("⚠️ 重试中 (${attempt + 1})...", onLog)
                 }
                 
-                val response = client.post(url) {
-                    contentType(ContentType.Application.Json)
-                    setBody(requestBody)
-                }
-                if (response.status.isSuccess()) {
-                    syncLog("✅ 成功接收到云端响应，正在解析数据...", onLog)
-                    val jsonResponse = jsonConfig.parseToJsonElement(response.bodyAsText())
-                    val list = jsonResponse.jsonObject["predictions"]?.jsonArray?.mapNotNull {
-                        val base64 = it.jsonObject["bytesBase64Encoded"]?.jsonPrimitive?.content
-                        if (base64 != null) "data:${if (isPng) "image/png" else "image/jpeg"};base64,$base64" else null
-                    } ?: emptyList()
-                    syncLog("🎨 成功解析出 ${list.size} 张候选图片", onLog)
-                    return list
+                return if (isGeminiNative) {
+                    geminiGenerator.generate(model.modelName, params, onLog)
                 } else {
-                    val errorMsg = "API 错误: ${response.status}"
-                    syncLog("❌ $errorMsg", onLog)
-                    throw Exception(errorMsg)
+                    imagenGenerator.generate(model.modelName, params, onLog)
                 }
             } catch (e: Exception) {
                 lastException = e
@@ -239,8 +139,7 @@ class AIGenerationService(
                 delay(1000L * attempt)
             }
         }
-        syncLog("❌ 达到最大重试次数，生图失败", onLog)
-        throw lastException ?: Exception("生成图片未知错误")
+        throw lastException ?: Exception("生图未知错误")
     }
 
     /**
@@ -260,13 +159,10 @@ class AIGenerationService(
         val outputPath = storage.getFilePath("temp/output_$timestamp.png")
 
         return try {
-            // 1. 写入临时输入文件
             storage.saveBytesToFile("temp/input_$timestamp.png", imageBytes)
             
             syncLog("🚀 启动本地 Python 抠图引擎...", onLog)
             
-            // 2. 执行系统命令
-            // 尝试 python 或 python3
             val commands = listOf("python", "python3")
             var success = false
             for (cmd in commands) {
@@ -290,7 +186,6 @@ class AIGenerationService(
             syncLog("❌ 本地抠图异常: ${e.message}", onLog)
             null
         } finally {
-            // 3. 清理临时文件
             org.gemini.ui.forge.utils.deleteLocalFile(inputPath)
             org.gemini.ui.forge.utils.deleteLocalFile(outputPath)
         }
@@ -313,7 +208,6 @@ class AIGenerationService(
         val client = NetworkClient.shared
 
         syncLog("☁️ 启动云端 AI 抠图引擎...", onLog)
-        AppLogger.i(TAG, "Cloud BG removal starting... Image size: ${imageBytes.size / 1024} KB")
 
         @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
         val base64Image = kotlin.io.encoding.Base64.Default.encode(imageBytes)
@@ -357,21 +251,17 @@ class AIGenerationService(
                     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
                     val resultBytes = kotlin.io.encoding.Base64.Default.decode(resultBase64)
                     syncLog("✅ 云端抠图处理完成 (${duration}ms)", onLog)
-                    AppLogger.i(TAG, "Cloud BG removal success! Duration: ${duration}ms, Output size: ${resultBytes.size / 1024} KB")
                     resultBytes
                 } else {
                     syncLog("❌ 云端抠图失败: 响应数据为空", onLog)
-                    AppLogger.e(TAG, "Cloud BG removal failed: No image data in response. Full body: $responseText")
                     null
                 }
             } else {
                 syncLog("❌ 云端抠图失败: 接口状态码 ${response.status}", onLog)
-                AppLogger.e(TAG, "Cloud BG removal failed with status ${response.status}. Body: ${response.bodyAsText()}")
                 null
             }
         } catch (e: Exception) {
             syncLog("❌ 云端抠图异常: ${e.message}", onLog)
-            AppLogger.e(TAG, "Cloud BG removal exception after ${org.gemini.ui.forge.getCurrentTimeMillis() - startTime}ms", e)
             null
         }
     }
@@ -410,29 +300,22 @@ class AIGenerationService(
                                 syncLog("❌ 无法读取图 ${index + 1}", onLog)
                                 return@async null
                             }
-                            val displayName =
-                                localUri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "image_$index.jpg" }
+                            val displayName = localUri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "image_$index.jpg" }
                             val mime = org.gemini.ui.forge.utils.getMimeType(localUri)
                             val fileUri = cloudAssetManager.getOrUploadFile(displayName, bytes, mime)
 
                             if (fileUri != null) {
                                 syncLog("✅ 图 [${index + 1}] 云端同步成功", onLog)
                                 buildJsonObject {
-                                    put(
-                                        "fileData",
-                                        buildJsonObject { put("mimeType", mime); put("fileUri", fileUri) })
+                                    put("fileData", buildJsonObject { put("mimeType", mime); put("fileUri", fileUri) })
                                 }
                             } else {
                                 syncLog("⚠️ 图 [${index + 1}] 触发 Base64 降级补偿", onLog)
                                 buildJsonObject {
-                                    put(
-                                        "inlineData",
-                                        buildJsonObject {
-                                            put("mimeType", mime); put(
-                                            "data",
-                                            kotlin.io.encoding.Base64.Default.encode(bytes)
-                                        )
-                                        })
+                                    put("inlineData", buildJsonObject {
+                                        put("mimeType", mime)
+                                        put("data", kotlin.io.encoding.Base64.Default.encode(bytes))
+                                    })
                                 }
                             }
                         } catch (e: Exception) {
@@ -450,7 +333,6 @@ class AIGenerationService(
             put("generationConfig", buildJsonObject { put("responseMimeType", "application/json") })
         }.toString()
 
-        // 屏蔽日志里的 Base64，并输出到控制台和 UI
         logRequest(url, requestBody, onLog)
 
         syncLog("📡 正在向服务器建立安全连接...", onLog)
@@ -460,9 +342,7 @@ class AIGenerationService(
             client.preparePost(url) {
                 contentType(ContentType.Application.Json)
                 setBody(requestBody)
-                timeout { 
-                    requestTimeoutMillis = 300_000L 
-                }
+                timeout { requestTimeoutMillis = 300_000L }
             }.execute { response ->
                 syncLog("收到响应，状态: ${response.status}，接收数据流...", onLog)
                 if (response.status.isSuccess()) {
@@ -473,16 +353,12 @@ class AIGenerationService(
                             val dataJson = line.substringAfter("data: ").trim()
                             if (dataJson.isEmpty() || dataJson == "[DONE]") continue
                             try {
-                                val textChunk =
-                                    jsonConfig.parseToJsonElement(dataJson).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get(
-                                        "content"
-                                    )?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
+                                val textChunk = jsonConfig.parseToJsonElement(dataJson).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
                                 if (textChunk != null) {
                                     accumulatedText.append(textChunk)
                                     onChunk(textChunk)
                                 }
-                            } catch (e: Exception) {
-                            }
+                            } catch (e: Exception) {}
                         }
                     }
                     syncLog("UI 框架解析完毕。", onLog)
@@ -498,11 +374,7 @@ class AIGenerationService(
             val cleanJson = finalString.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
             val parsedState = jsonConfig.decodeFromString<ProjectState>(cleanJson)
             return parsedState.copy(pages = parsedState.pages.mapIndexed { i, p ->
-                p.copy(
-                    sourceImageUri = imageUris.getOrNull(
-                        i
-                    )
-                )
+                p.copy(sourceImageUri = imageUris.getOrNull(i))
             })
         } catch (e: Exception) {
             AppLogger.e(TAG, "分析异常", e)
@@ -526,7 +398,6 @@ class AIGenerationService(
         val client = NetworkClient.shared
 
         val promptTemplate = promptManager.getPrompt("refine_template")
-
         val fullPrompt = promptTemplate.replace($$"${USER_INSTRUCTION}", userInstruction)
 
         val requestBody = buildJsonObject {
@@ -536,17 +407,6 @@ class AIGenerationService(
                     put("parts", buildJsonArray {
                         add(buildJsonObject { put("text", fullPrompt) })
                         add(buildJsonObject { put("text", "CURRENT_JSON_STATE: \n$currentJson") })
-//                        if (originalImageUri.isNotBlank()) {
-//                            add(buildJsonObject {
-//                                put(
-//                                    "fileData",
-//                                    buildJsonObject {
-//                                        put("mimeType", "image/jpeg");
-//                                        put("fileUri", originalImageUri)
-//                                    })
-//                            })
-//                        } else syncLog("⚠️ 未找到原图云端引用，仅使用局部裁剪。", onLog)
-
                         add(buildJsonObject {
                             put("inlineData", buildJsonObject {
                                 put("mimeType", "image/jpeg")
@@ -561,7 +421,6 @@ class AIGenerationService(
             put("generationConfig", buildJsonObject { put("responseMimeType", "application/json") })
         }.toString()
 
-        // 核心同步：过滤敏感的长字符串后统一打印
         logRequest(url, requestBody, onLog)
 
         val accumulatedText = StringBuilder()
@@ -569,9 +428,7 @@ class AIGenerationService(
             client.preparePost(url) {
                 contentType(ContentType.Application.Json)
                 setBody(requestBody)
-                timeout { 
-                    requestTimeoutMillis = 300_000L 
-                }
+                timeout { requestTimeoutMillis = 300_000L }
             }.execute { response ->
                 if (response.status.isSuccess()) {
                     val channel = response.bodyAsChannel()
@@ -581,16 +438,12 @@ class AIGenerationService(
                             val dataJson = line.substringAfter("data: ").trim()
                             if (dataJson.isEmpty() || dataJson == "[DONE]") continue
                             try {
-                                val textChunk =
-                                    jsonConfig.parseToJsonElement(dataJson).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get(
-                                        "content"
-                                    )?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
+                                val textChunk = jsonConfig.parseToJsonElement(dataJson).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
                                 if (textChunk != null) {
                                     accumulatedText.append(textChunk)
                                     onChunk(textChunk)
                                 }
-                            } catch (e: Exception) {
-                            }
+                            } catch (e: Exception) {}
                         }
                     }
                     syncLog("✅ 重塑结构解析完毕。", onLog)
@@ -622,16 +475,9 @@ class AIGenerationService(
             put("contents", buildJsonArray {
                 add(buildJsonObject {
                     put("role", "user")
-                    put(
-                        "parts",
-                        buildJsonArray {
-                            add(buildJsonObject {
-                                put(
-                                    "text",
-                                    fullPrompt
-                                )
-                            })
-                        })
+                    put("parts", buildJsonArray {
+                        add(buildJsonObject { put("text", fullPrompt) })
+                    })
                 })
             })
         }.toString()
@@ -642,10 +488,7 @@ class AIGenerationService(
                 logRequest(url, requestBody, {})
                 val response = client.post(url) { setBody(requestBody); contentType(ContentType.Application.Json) }
                 if (response.status.isSuccess()) {
-                    return jsonConfig.parseToJsonElement(response.bodyAsText()).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get(
-                        "content"
-                    )?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content?.trim()
-                        ?: ""
+                    return jsonConfig.parseToJsonElement(response.bodyAsText()).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content?.trim() ?: ""
                 } else throw Exception("API 错误: ${response.status}")
             } catch (e: Exception) {
                 lastException = e
@@ -655,4 +498,3 @@ class AIGenerationService(
         throw lastException ?: Exception("优化未知错误")
     }
 }
-

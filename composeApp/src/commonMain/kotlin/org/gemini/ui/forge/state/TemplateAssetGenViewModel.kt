@@ -86,6 +86,9 @@ class TemplateAssetGenViewModel(
         val projectName = _state.value.projectName
         val isTransparent = _state.value.isGenerateTransparent
         val prioritizeCloud = _state.value.isPrioritizeCloudRemoval
+        val globalStyle = _state.value.globalStyle
+        val refUri = _state.value.referenceImageUri
+        val selectedModel = _state.value.selectedModel
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
@@ -93,6 +96,7 @@ class TemplateAssetGenViewModel(
             addGenLog(">>> 开始为模块 [${block.id}] 生成资源 <<<")
             try {
                 val candidatesBase64 = aiService.generateImages(
+                    model = selectedModel,
                     apiKey = apiKey,
                     blockType = block.type.name,
                     userPrompt = submitPrompt,
@@ -100,6 +104,8 @@ class TemplateAssetGenViewModel(
                     targetWidth = block.bounds.width,
                     targetHeight = block.bounds.height,
                     isPng = isTransparent,
+                    style = globalStyle,
+                    referenceImageUri = refUri,
                     onLog = { addGenLog(it) }
                 )
 
@@ -434,6 +440,18 @@ class TemplateAssetGenViewModel(
 
     fun setPrioritizeCloudRemoval(enabled: Boolean) {
         _state.update { it.copy(isPrioritizeCloudRemoval = enabled) }
+    }
+
+    fun setGlobalStyle(style: String) {
+        _state.update { it.copy(globalStyle = style) }
+    }
+
+    fun setImageGenModel(model: org.gemini.ui.forge.model.api.GeminiModel) {
+        _state.update { it.copy(selectedModel = model) }
+    }
+
+    fun setReferenceImage(uri: String?) {
+        _state.update { it.copy(referenceImageUri = uri) }
     }
 
     fun toggleVisualMode() {
