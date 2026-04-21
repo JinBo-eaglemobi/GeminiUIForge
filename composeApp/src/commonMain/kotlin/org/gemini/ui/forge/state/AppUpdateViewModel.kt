@@ -53,6 +53,8 @@ class AppUpdateViewModel(
     fun performUpdate(info: UpdateInfo) {
         viewModelScope.launch(Dispatchers.Default) {
             org.gemini.ui.forge.utils.AppLogger.i("AppUpdateViewModel", "🚀 用户确认更新，开始处理版本: v${info.version}")
+            // 立即更新状态为下载中，避免 UI 停留在 Available 导致用户重复点击或认为无响应
+            _status.update { UpdateStatus.Downloading(0f) }
             try {
                 // 1. 获取临时存放目录
                 val storageDir = templateRepo.getDataDir()

@@ -18,6 +18,7 @@ import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.model.app.UpdateInfo
 import org.gemini.ui.forge.model.api.*
 import org.gemini.ui.forge.utils.AppLogger
+import io.ktor.client.plugins.logging.*
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.buffered
@@ -37,8 +38,19 @@ class UpdateService(private val currentVersion: String) {
             })
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 30000
-            connectTimeoutMillis = 10000
+            requestTimeoutMillis = 60000 
+            connectTimeoutMillis = 15000
+        }
+        install(HttpRedirect) {
+            checkHttpMethod = false
+        }
+        install(Logging) {
+            logger = object : Logger {
+                override fun log(message: String) {
+                    AppLogger.d("UpdateService_Http", message)
+                }
+            }
+            level = LogLevel.INFO
         }
     }
 
@@ -102,7 +114,10 @@ class UpdateService(private val currentVersion: String) {
 
                 }
             }.execute()
-            val contentLength = response.contentLength() ?: 1L
+            AppLogger.i("UpdateService", "📡 下载请求响应状态: ${response.status}")
+            val contentLength = response.contentLength() ?: -1L
+            AppLogger.i("UpdateService", "📦 预估下载大小: ${if (contentLength > 0) "${contentLength / 1024} KB" else "未知"}")
+            
             val channel = response.bodyAsChannel()
             
             val sink = SystemFileSystem.sink(targetPath).buffered()
