@@ -1,11 +1,10 @@
 package org.gemini.ui.forge.ui.feature.analysis
 
-import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollbarAdapter
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
@@ -260,9 +259,9 @@ fun TemplateGeneratorScreen(
                         }
 
                         // 恢复物理滚动条
-                        VerticalScrollbar(
+                        VerticalScrollbarAdapter(
                             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                            adapter = rememberScrollbarAdapter(scrollState = listState)
+                            scrollState = listState
                         )
                     }
                 }

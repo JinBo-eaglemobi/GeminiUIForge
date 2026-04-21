@@ -13,8 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.rememberScrollbarAdapter
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.geometry.Offset
@@ -278,9 +277,9 @@ fun HierarchySidebar(
                         }
                     }
                 }
-                VerticalScrollbar(
+                VerticalScrollbarAdapter(
                     modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                    adapter = rememberScrollbarAdapter(scrollState)
+                    scrollState = scrollState
                 )
             }
         }

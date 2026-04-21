@@ -2,6 +2,7 @@ package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -126,9 +127,9 @@ fun AppSettingsDialog(
                                     }
                                 }
                             }
-                            VerticalScrollbar(
+                            VerticalScrollbarAdapter(
                                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                                adapter = rememberScrollbarAdapter(leftScrollState)
+                                scrollState = leftScrollState
                             )
                         }
 
@@ -174,9 +175,9 @@ fun AppSettingsDialog(
                                     SettingCategory.ABOUT -> AboutSection(updateStatus, onCheckUpdate, onStartUpdate)
                                 }
                             }
-                            VerticalScrollbar(
+                            VerticalScrollbarAdapter(
                                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                                adapter = rememberScrollbarAdapter(rightScrollState)
+                                scrollState = rightScrollState
                             )
                         }
                     }

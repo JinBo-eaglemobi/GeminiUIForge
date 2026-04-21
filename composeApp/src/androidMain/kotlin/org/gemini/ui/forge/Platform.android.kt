@@ -1,12 +1,24 @@
 package org.gemini.ui.forge
 
-import android.os.Build
-import java.text.SimpleDateFormat
-import java.util.Date
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.input.pointer.PointerIcon
+import java.io.File
+import org.gemini.ui.forge.utils.AppLogger
 
 class AndroidPlatform : Platform {
-    override val name: String = "Android ${Build.VERSION.SDK_INT}"
+    override val name: String = "Android ${android.os.Build.VERSION.SDK_INT}"
+
+    override fun openInBrowser(url: String) {
+        AppLogger.d("AndroidPlatform", "Attempting to open URL: $url")
+    }
+
+    override fun applyUpdateAndRestart(tempFilePath: String) {
+        val file = File(tempFilePath)
+        if (file.exists()) {
+            AppLogger.d("AndroidPlatform", "Apply update from: $tempFilePath")
+        }
+    }
 }
 
 actual fun getPlatform(): Platform = AndroidPlatform()
