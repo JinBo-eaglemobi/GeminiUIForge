@@ -1,6 +1,8 @@
 package org.gemini.ui.forge.data
 
+import coil3.toUri
 import kotlinx.coroutines.flow.Flow
+import kotlinx.io.files.SystemPathSeparator
 import org.gemini.ui.forge.state.GlobalAppEnv
 import kotlinx.serialization.Serializable
 
@@ -22,7 +24,7 @@ class TemplateFile(path: String) {
     init {
         val root = GlobalAppEnv.currentRootPath.replace("\\", "/").trimEnd('/')
         val normalized = path.replace("\\", "/").trim('/')
-        
+
         relativePath = when {
             // 情况 1: 已经是相对于 root 的路径
             !isAbsoluteInternal(normalized) -> normalized
@@ -46,8 +48,10 @@ class TemplateFile(path: String) {
 
     /** 拼接全局根目录，获取当前的绝对物理路径 */
     fun getAbsolutePath(): String {
-        val root = GlobalAppEnv.currentRootPath.replace("\\", "/").trimEnd('/')
-        return "$root/$relativePath".replace("//", "/")
+        val root = GlobalAppEnv.currentRootPath.trimEnd {
+            it == '/' || it == '\\'
+        }
+        return "$root$SystemPathSeparator$relativePath"
     }
 
     private fun isAbsoluteInternal(path: String): Boolean {

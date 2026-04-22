@@ -97,7 +97,7 @@ fun TemplateEditorScreen(
         val defaultInstruction =
             if (refineTargetId != null) state.defaultRefineInstructionUpdate else state.defaultRefineInstructionNew
         VisualRefineDialog(
-            imageUri = state.currentPage?.sourceImageUri?.getAbsolutePath() ?: "",
+            imageUri = state.currentPage?.sourceImageUri,
             pageWidth = state.currentPage?.width ?: 1080f,
             pageHeight = state.currentPage?.height ?: 1920f,
             initialInstruction = defaultInstruction,

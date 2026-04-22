@@ -42,6 +42,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.action_refine_area
+import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.jetbrains.compose.resources.stringResource
@@ -51,7 +52,7 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun VisualRefineDialog(
-    imageUri: String,
+    imageUri: TemplateFile?,
     pageWidth: Float,
     pageHeight: Float,
     initialInstruction: String,
@@ -96,7 +97,7 @@ fun VisualRefineDialog(
                         val offsetY = (containerH.value - displayH) / 2
 
                         AsyncImage(
-                            model = imageUri,
+                            model = imageUri?.getAbsolutePath(),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Fit
