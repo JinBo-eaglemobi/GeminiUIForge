@@ -2,12 +2,14 @@ package org.gemini.ui.forge.data
 
 import kotlinx.coroutines.flow.Flow
 import org.gemini.ui.forge.state.GlobalAppEnv
+import kotlinx.serialization.Serializable
 
 /**
  * 模板系统专用的强类型相对路径类。
  * 强制约束：路径必须相对于全局数据根目录 [GlobalAppEnv.currentRootPath]。
  * 严禁传入带盘符或以斜杠开头的绝对路径。
  */
+@Serializable(with = TemplateFileSerializer::class)
 data class TemplateFile(val relativePath: String) {
     
     init {
