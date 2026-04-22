@@ -26,6 +26,7 @@ import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.CloudAssetManager
+import org.gemini.ui.forge.service.ConfigManager
 import org.gemini.ui.forge.state.TemplateAssetGenState
 import org.gemini.ui.forge.state.TemplateAssetGenViewModel
 import org.gemini.ui.forge.ui.theme.AppShapes
@@ -46,11 +47,12 @@ fun TemplateAssetGenScreen(
     initialProjectName: String,
     templateRepo: TemplateRepository,
     cloudAssetManager: CloudAssetManager,
+    configManager: ConfigManager,
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
     onProjectUpdated: (ProjectState) -> Unit
 ) {
-    val aiService = AIGenerationService(cloudAssetManager)
+    val aiService = AIGenerationService(cloudAssetManager, configManager)
     val viewModel: TemplateAssetGenViewModel = viewModel(key = initialProjectName) {
         TemplateAssetGenViewModel(initialProject, initialProjectName, initialPromptLang, templateRepo, cloudAssetManager, aiService)
     }

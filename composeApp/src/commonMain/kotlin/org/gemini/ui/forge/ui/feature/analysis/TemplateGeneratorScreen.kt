@@ -33,14 +33,13 @@ import org.jetbrains.compose.resources.stringResource
 fun TemplateGeneratorScreen(
     onTemplateSaved: (String, ProjectState) -> Unit,
     globalState: AppGlobalState,
-    cloudAssetManager: CloudAssetManager = remember {
-        CloudAssetManager(ConfigManager())
-    },
-    templateRepo: TemplateRepository = remember { TemplateRepository() }
+    cloudAssetManager: CloudAssetManager,
+    configManager: ConfigManager,
+    templateRepo: TemplateRepository
 ) {
     val apiKey: String = globalState.effectiveApiKey
     val maxRetries: Int = globalState.maxRetries
-    val aiService: AIGenerationService = remember { AIGenerationService(cloudAssetManager) }
+    val aiService: AIGenerationService = remember { AIGenerationService(cloudAssetManager, configManager) }
     val coroutineScope = rememberCoroutineScope()
     var inputUris by remember { mutableStateOf("") }
     var templateName by remember { mutableStateOf("") }

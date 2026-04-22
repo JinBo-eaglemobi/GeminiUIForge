@@ -43,15 +43,17 @@ fun App(typography: Typography? = null) {
     var templatesList by remember { mutableStateOf(emptyList<Pair<String, ProjectState>>()) }
 
     key(languageKey) {
+        val configManager = remember { ConfigManager() }
         // 全局基础 ViewModel
         val appViewModel: AppViewModel = viewModel {
+            val cloudAssetManager = CloudAssetManager(configManager)
             AppViewModel(
                 templateRepo = templateRepo,
-                cloudAssetManager = CloudAssetManager(ConfigManager()),
-                aiService = AIGenerationService(CloudAssetManager(ConfigManager()))
+                cloudAssetManager = cloudAssetManager,
+                aiService = AIGenerationService(cloudAssetManager, configManager)
             )
         }
-        val settingsViewModel: AppSettingsViewModel = viewModel { AppSettingsViewModel(templateRepo = templateRepo) }
+        val settingsViewModel: AppSettingsViewModel = viewModel { AppSettingsViewModel(templateRepo = templateRepo, configManager = configManager) }
         val updateViewModel: AppUpdateViewModel = viewModel { AppUpdateViewModel(templateRepo = templateRepo) }
         val envViewModel: AppEnvViewModel = viewModel { AppEnvViewModel() }
 
@@ -167,6 +169,7 @@ fun App(typography: Typography? = null) {
                         currentApiKey = globalState.apiKey,
                         currentStorageDir = globalState.templateStorageDir,
                         currentMaxRetries = globalState.maxRetries,
+                        currentImageGenCount = globalState.imageGenCount,
                         currentPromptLang = globalState.promptLangPref,
                         shortcuts = globalState.shortcuts,
                         envStatus = envStatus,
@@ -192,6 +195,10 @@ fun App(typography: Typography? = null) {
                         onMaxRetriesSaved = {
                             settingsViewModel.saveMaxRetries(it);
                             appViewModel.updateMaxRetriesState(it)
+                        },
+                        onImageGenCountSaved = {
+                            settingsViewModel.saveImageGenCount(it);
+                            appViewModel.updateImageGenCountState(it)
                         },
                         onPromptLangSelected = {
                             settingsViewModel.savePromptLanguagePref(it);
@@ -274,6 +281,7 @@ fun App(typography: Typography? = null) {
                                     initialProjectName = appState.projectName,
                                     templateRepo = templateRepo,
                                     cloudAssetManager = appViewModel.cloudAssetManager,
+                                    configManager = configManager,
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     initialPromptLang = globalState.promptLangPref,
                                     onProjectUpdated = { appViewModel.updateProject(it) }
@@ -286,6 +294,7 @@ fun App(typography: Typography? = null) {
                                     initialProjectName = appState.projectName,
                                     templateRepo = templateRepo,
                                     cloudAssetManager = appViewModel.cloudAssetManager,
+                                    configManager = configManager,
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     initialPromptLang = globalState.promptLangPref,
                                     onProjectUpdated = { updatedProject ->
@@ -304,6 +313,7 @@ fun App(typography: Typography? = null) {
                                     },
                                     globalState = globalState,
                                     cloudAssetManager = appViewModel.cloudAssetManager,
+                                    configManager = configManager,
                                     templateRepo = templateRepo,
                                 )
                             }

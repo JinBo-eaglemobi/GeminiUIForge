@@ -110,6 +110,7 @@
     <string name="settings_gemini_key_title">Gemini API Key</string>
     <string name="settings_gemini_key_placeholder">Paste your API Key here</string>
     <string name="settings_max_retries_title">API Max Retries</string>
+    <string name="settings_image_gen_count_title">Default Image Generation Count</string>
     <string name="settings_prompt_language">Default Prompt Language</string>
     <string name="settings_shortcuts_title">Custom Shortcuts</string>
     <string name="shortcut_undo">Undo</string>

@@ -60,7 +60,7 @@ class GeminiImageGenerator(
                             if (bytes != null) {
                                 val mime = org.gemini.ui.forge.utils.getMimeType(params.referenceImageUri)
                                 @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-                                val base64 = kotlin.io.encoding.Base64.Default.encode(bytes)
+                                val base64 = kotlin.io.encoding.Base64.encode(bytes)
                                 
                                 add(buildJsonObject {
                                     put("inlineData", buildJsonObject {
@@ -72,6 +72,9 @@ class GeminiImageGenerator(
                         }
                     })
                 })
+            })
+            put("generationConfig", buildJsonObject {
+                put("candidateCount", params.count.coerceIn(1, 8))
             })
         }.toString()
 

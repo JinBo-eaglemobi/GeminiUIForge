@@ -70,6 +70,7 @@ class AppViewModel(
             }
             val storageDir = templateRepo.getDataDir()
             val retriesStr = configManager.loadKey("API_MAX_RETRIES") ?: "3"
+            val imageGenCountStr = configManager.loadKey("IMAGE_GEN_COUNT") ?: "4"
 
             _state.update {
                 it.copy(
@@ -79,7 +80,8 @@ class AppViewModel(
                         templateStorageDir = storageDir,
                         languageCode = languageCode,
                         promptLangPref = promptLang,
-                        maxRetries = retriesStr.toIntOrNull() ?: 3
+                        maxRetries = retriesStr.toIntOrNull() ?: 3,
+                        imageGenCount = imageGenCountStr.toIntOrNull() ?: 4
                     )
                 )
             }
@@ -120,6 +122,9 @@ class AppViewModel(
 
     fun updateMaxRetriesState(count: Int) =
         _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) }
+
+    fun updateImageGenCountState(count: Int) =
+        _state.update { it.copy(globalState = it.globalState.copy(imageGenCount = count)) }
 
     fun updateShortcutState(action: ShortcutAction, keyChord: String) {
         _state.update { s ->

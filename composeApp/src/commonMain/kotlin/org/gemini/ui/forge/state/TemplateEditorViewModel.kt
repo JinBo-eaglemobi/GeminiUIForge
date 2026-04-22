@@ -447,6 +447,7 @@ class TemplateEditorViewModel(
         bounds: SerialRect,
         userInstruction: String,
         apiKey: String,
+        useChatContext: Boolean = false,
         onComplete: (Boolean) -> Unit
     ) {
         val currentState = _state.value
@@ -479,7 +480,15 @@ class TemplateEditorViewModel(
                     ) { _, status -> logger("[$status]") } ?: ""
                 }
 
-                // 3. 将当前 JSON 状态传递给 AI，执行重塑
+                // 3. 获取历史上下文
+                val historyKey = blockId ?: "GLOBAL_REFINE"
+                val history = if (useChatContext) {
+                    _state.value.chatHistories[historyKey] ?: emptyList()
+                } else {
+                    emptyList()
+                }
+
+                // 4. 将当前 JSON 状态传递给 AI，执行重塑
                 val currentJson = Json.encodeToString(ProjectState.serializer(), currentState.project)
                 val updatedProject = aiService.refineAreaForTemplate(
                     originalImageUri = originalFileUri,
@@ -487,10 +496,20 @@ class TemplateEditorViewModel(
                     currentJson = currentJson,
                     userInstruction = userInstruction,
                     apiKey = apiKey,
+                    history = history,
                     onLog = logger
                 )
 
-                _state.update { it.copy(project = updatedProject) }
+                // 5. 更新历史 (无论是否使用旧历史，新对话都记录下来，方便之后开启会话模式)
+                val newUserMsg = org.gemini.ui.forge.model.api.ChatMessage("user", userInstruction)
+                val newModelMsg = org.gemini.ui.forge.model.api.ChatMessage("model", "已重塑 UI 结构。")
+                _state.update { s ->
+                    val newHistory = history + newUserMsg + newModelMsg
+                    s.copy(
+                        project = updatedProject,
+                        chatHistories = s.chatHistories + (historyKey to newHistory)
+                    )
+                }
                 templateRepo.saveTemplate(currentState.projectName, updatedProject)
                 onComplete(true)
             } catch (e: Exception) {
@@ -506,7 +525,7 @@ class TemplateEditorViewModel(
     /**
      * 对用户提示词进行 AI 自动优化与润色。
      */
-    fun optimizePrompt(blockId: String, apiKey: String, currentLang: PromptLanguage) {
+    fun optimizePrompt(blockId: String, apiKey: String, currentLang: PromptLanguage, useChatContext: Boolean = false) {
         val block = _state.value.project.pages.flatMap { it.blocks }.let { findBlockById(it, blockId) } ?: return
         val textToOptimize = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
         if (textToOptimize.isBlank()) return
@@ -516,10 +535,28 @@ class TemplateEditorViewModel(
             try {
                 // 根据当前语言获取相应的系统指令设定
                 val systemInstruction = if (currentLang == PromptLanguage.EN) aiService.promptManager.getPrompt("optimize_instruction_en") else aiService.promptManager.getPrompt("optimize_instruction_zh")
+                
+                // 获取历史
+                val historyKey = "PROMPT_$blockId"
+                val history = if (useChatContext) {
+                    _state.value.chatHistories[historyKey] ?: emptyList()
+                } else {
+                    emptyList()
+                }
+                
                 addGenLog(">>> 正在使用 AI 优化提示词 (${currentLang.displayName})...")
-                val optimized = aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, 3)
+                val optimized = aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, 3, history = history)
                 addGenLog(">>> 优化完成！")
+                
                 onUserPromptChanged(blockId, optimized, currentLang)
+
+                // 更新历史
+                val newUserMsg = org.gemini.ui.forge.model.api.ChatMessage("user", textToOptimize)
+                val newModelMsg = org.gemini.ui.forge.model.api.ChatMessage("model", optimized)
+                _state.update { s ->
+                    val newHistory = history + newUserMsg + newModelMsg
+                    s.copy(chatHistories = s.chatHistories + (historyKey to newHistory))
+                }
             } catch (e: Exception) {
                 addGenLog(">>> 优化失败: ${e.message} <<<")
             } finally {

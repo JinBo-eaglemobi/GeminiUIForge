@@ -28,6 +28,8 @@ data class TemplateEditorState(
     val defaultRefineInstructionNew: String = "",
     /** 临时保存的舞台背景颜色 (不持久化到模板中) */
     val stageBackgroundColor: String = "#2D2D2D",
+    /** 模块 AI 会话历史 (Key 为 blockId 或 "GLOBAL") */
+    val chatHistories: Map<String, List<org.gemini.ui.forge.model.api.ChatMessage>> = emptyMap(),
     /** 当前场景内使用的提示词语言状态 (独立维护，避免跨页面泄漏) */
     val currentLang: org.gemini.ui.forge.model.app.PromptLanguage = org.gemini.ui.forge.model.app.PromptLanguage.ZH
 ) {

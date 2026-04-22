@@ -20,7 +20,8 @@ import org.gemini.ui.forge.utils.AppLogger
  * AI 生成服务类（门面），协调 ImagenGenerator 和 GeminiImageGenerator。
  */
 class AIGenerationService(
-    private val cloudAssetManager: CloudAssetManager
+    private val cloudAssetManager: CloudAssetManager,
+    private val configManager: ConfigManager
 ) {
     private val TAG = "AIGenerationService"
     private val jsonConfig = Json {
@@ -84,12 +85,12 @@ class AIGenerationService(
 
     /**
      * 核心生图方法，根据选中的 GeminiModel 自动路由到 Imagen 或 Native Gemini 生成逻辑。
+     * 现在支持从设置中读取默认生图数量，并自动拆分为并发批次请求（单次上限 4 张）。
      */
     suspend fun generateImages(
         model: GeminiModel,
         blockType: String,
         userPrompt: String,
-        count: Int = 4,
         apiKey: String = "",
         maxRetries: Int = 3,
         targetWidth: Float? = null,
@@ -100,20 +101,10 @@ class AIGenerationService(
         referenceImageUri: String? = null,
         isVertexAI: Boolean = false,
         onLog: (String) -> Unit = {}
-    ): List<String> {
-        val params = BaseImageGenerator.GenParams(
-            blockType = blockType,
-            userPrompt = userPrompt,
-            count = count,
-            apiKey = apiKey,
-            targetWidth = targetWidth,
-            targetHeight = targetHeight,
-            isPng = isPng,
-            imageSize = imageSize,
-            style = style,
-            referenceImageUri = referenceImageUri,
-            isVertexAI = isVertexAI
-        )
+    ): List<String> = coroutineScope {
+        // 从配置中读取总数量，默认为 4
+        val configCountStr = configManager.loadKey("IMAGE_GEN_COUNT") ?: "4"
+        val totalCount = configCountStr.toIntOrNull() ?: 4
 
         // 路由逻辑：
         // 1. 如果支持 predict 方法或者是 imagen 名下的，走 ImagenGenerator
@@ -122,25 +113,62 @@ class AIGenerationService(
         val isImagen = model.supportedMethods.contains("predict") || model.modelName.contains("imagen")
         val isGeminiNative = model.supportedMethods.contains("generateContent") && model.modelName.contains("image")
 
-        var lastException: Exception? = null
-        for (attempt in 0..maxRetries) {
-            try {
-                if (attempt > 0) {
-                    syncLog("⚠️ 重试中 (${attempt + 1})...", onLog)
+        // 单次 API 请求的最大张数限制：Imagen 3 和原生 Gemini 通常单次最高支持 4 张 (candidateCount/sampleCount)
+        val maxBatchSize = if (isGeminiNative) 8 else 4
+        
+        // 计算批次
+        val batchCounts = mutableListOf<Int>()
+        var remaining = totalCount
+        while (remaining > 0) {
+            val nextBatch = if (remaining > maxBatchSize) maxBatchSize else remaining
+            batchCounts.add(nextBatch)
+            remaining -= nextBatch
+        }
+        
+        syncLog("🚀 开始生图任务: 总数 $totalCount, 拆分为 ${batchCounts.size} 个批次", onLog)
+
+        // 并发执行批次
+        val deferredResults = batchCounts.mapIndexed { index, batchSize ->
+            async {
+                val batchTag = if (batchCounts.size > 1) "[批次 ${index + 1}/${batchSize}张]" else ""
+                val params = BaseImageGenerator.GenParams(
+                    blockType = blockType,
+                    userPrompt = userPrompt,
+                    count = batchSize,
+                    apiKey = apiKey,
+                    targetWidth = targetWidth,
+                    targetHeight = targetHeight,
+                    isPng = isPng,
+                    imageSize = imageSize,
+                    style = style,
+                    referenceImageUri = referenceImageUri,
+                    isVertexAI = isVertexAI
+                )
+
+                var lastException: Exception? = null
+                for (attempt in 0..maxRetries) {
+                    try {
+                        if (attempt > 0) {
+                            syncLog("⚠️ $batchTag 重试中 (${attempt + 1})...", onLog)
+                        }
+                        
+                        return@async if (isGeminiNative) {
+                            geminiGenerator.generate(model.modelName, params, onLog)
+                        } else {
+                            imagenGenerator.generate(model.modelName, params, onLog)
+                        }
+                    } catch (e: Exception) {
+                        lastException = e
+                        syncLog("❌ $batchTag 请求异常: ${e.message}", onLog)
+                        if (attempt < maxRetries) delay(1000L * (attempt + 1))
+                    }
                 }
-                
-                return if (isGeminiNative) {
-                    geminiGenerator.generate(model.modelName, params, onLog)
-                } else {
-                    imagenGenerator.generate(model.modelName, params, onLog)
-                }
-            } catch (e: Exception) {
-                lastException = e
-                syncLog("❌ 请求异常: ${e.message}", onLog)
-                delay(1000L * attempt)
+                throw lastException ?: Exception("生图未知错误")
             }
         }
-        throw lastException ?: Exception("生图未知错误")
+
+        // 等待所有批次完成并汇总结果
+        deferredResults.awaitAll().flatten()
     }
 
     /**
@@ -386,6 +414,7 @@ class AIGenerationService(
         currentJson: String,
         userInstruction: String,
         apiKey: String = "",
+        history: List<org.gemini.ui.forge.model.api.ChatMessage> = emptyList(),
         onLog: (String) -> Unit = {},
         onChunk: (String) -> Unit = {}
     ): ProjectState {
@@ -400,6 +429,17 @@ class AIGenerationService(
 
         val requestBody = buildJsonObject {
             put("contents", buildJsonArray {
+                // 1. 注入历史
+                history.forEach { msg ->
+                    add(buildJsonObject {
+                        put("role", msg.role)
+                        put("parts", buildJsonArray {
+                            add(buildJsonObject { put("text", msg.text) })
+                        })
+                    })
+                }
+
+                // 2. 当前最新请求 (带图)
                 add(buildJsonObject {
                     put("role", "user")
                     put("parts", buildJsonArray {
@@ -461,7 +501,12 @@ class AIGenerationService(
         }
     }
 
-    suspend fun optimizePrompt(originalPrompt: String, apiKey: String, maxRetries: Int = 3): String {
+    suspend fun optimizePrompt(
+        originalPrompt: String, 
+        apiKey: String, 
+        maxRetries: Int = 3,
+        history: List<org.gemini.ui.forge.model.api.ChatMessage> = emptyList()
+    ): String {
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
         val url = ApiConfig.getGenerateContentEndpoint(apiKey)
         val client = NetworkClient.shared
@@ -471,6 +516,17 @@ class AIGenerationService(
 
         val requestBody = buildJsonObject {
             put("contents", buildJsonArray {
+                // 1. 注入历史会话记录
+                history.forEach { msg ->
+                    add(buildJsonObject {
+                        put("role", msg.role)
+                        put("parts", buildJsonArray {
+                            add(buildJsonObject { put("text", msg.text) })
+                        })
+                    })
+                }
+                
+                // 2. 追加当前最新请求
                 add(buildJsonObject {
                     put("role", "user")
                     put("parts", buildJsonArray {

@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.service
 
 import kotlinx.coroutines.test.runTest
+import org.gemini.ui.forge.model.GeminiModel
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -20,15 +21,15 @@ class AIGenerationServiceConnectivityTest {
         // 实例化真实依赖 (因为 ConfigManager 是 expect 类，在 JVM 测试环境下会有对应实现)
         val configManager = ConfigManager()
         val cloudAssetManager = CloudAssetManager(configManager)
-        val service = AIGenerationService(cloudAssetManager)
+        val service = AIGenerationService(cloudAssetManager, configManager)
 
         println("开始测试 Google AI Studio (Imagen) 请求...")
 
         try {
             val results = service.generateImages(
+                model = GeminiModel.IMAGEN_3_FAST, // 传入模型
                 blockType = "Button",
                 userPrompt = "A futuristic glowing button, sci-fi style, high quality",
-                count = 1,
                 apiKey = apiKey,
                 onLog = { println("[LOG] $it") }
             )
@@ -48,15 +49,15 @@ class AIGenerationServiceConnectivityTest {
         val apiKey = getApiKey()
         val configManager = ConfigManager()
         val cloudAssetManager = CloudAssetManager(configManager)
-        val service = AIGenerationService(cloudAssetManager)
+        val service = AIGenerationService(cloudAssetManager, configManager)
 
         println("\n🚀 开始测试 Vertex AI 专用 Endpoint 请求...")
 
         try {
             val results = service.generateImages(
+                model = GeminiModel.IMAGEN_3_FAST,
                 blockType = "Button",
                 userPrompt = "A futuristic glowing button, vertex ai style, high quality",
-                count = 1,
                 apiKey = apiKey,
                 isVertexAI = true, // 启用 Vertex AI 模式
                 onLog = { println("[Vertex Log] $it") }

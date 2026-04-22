@@ -110,6 +110,7 @@
     <string name="settings_gemini_key_title">Gemini API Key</string>
     <string name="settings_gemini_key_placeholder">在此粘贴您的 API Key</string>
     <string name="settings_max_retries_title">请求重试次数</string>
+    <string name="settings_image_gen_count_title">AI 生图默认生成数量</string>
     <string name="settings_prompt_language">默认提示词语言</string>
     <string name="settings_shortcuts_title">自定义快捷键</string>
     <string name="shortcut_undo">撤销</string>

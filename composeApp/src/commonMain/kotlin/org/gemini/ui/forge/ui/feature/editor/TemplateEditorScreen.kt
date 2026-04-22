@@ -12,6 +12,7 @@ import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.state.TemplateEditorViewModel
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.service.CloudAssetManager
+import org.gemini.ui.forge.service.ConfigManager
 import org.gemini.ui.forge.service.AIGenerationService
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,12 +43,13 @@ fun TemplateEditorScreen(
     initialProjectName: String,
     templateRepo: TemplateRepository,
     cloudAssetManager: CloudAssetManager,
+    configManager: ConfigManager,
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
     onProjectUpdated: (ProjectState) -> Unit
 ) {
 
-    val aiService = AIGenerationService(cloudAssetManager)
+    val aiService = AIGenerationService(cloudAssetManager, configManager)
 
     // 1. 初始化 ViewModel，其生命周期与当前 Screen 绑定
     val viewModel: TemplateEditorViewModel = viewModel(key = initialProjectName) {
@@ -102,9 +104,9 @@ fun TemplateEditorScreen(
             pageHeight = state.currentPage?.height ?: 1920f,
             initialInstruction = defaultInstruction,
             onDismiss = { showVisualRefine = false },
-            onConfirm = { rect, instruction, _, _, _ ->
+            onConfirm = { rect, instruction, useChatContext, _, _, _ ->
                 showVisualRefine = false
-                viewModel.onRefineArea(refineTargetId, rect, instruction, effectiveApiKey) { success ->
+                viewModel.onRefineArea(refineTargetId, rect, instruction, effectiveApiKey, useChatContext) { success ->
                     if (success) {
                         /* ViewModel 内部已处理状态更新，这里可以增加额外的 UI 反馈 */
                     }
@@ -461,12 +463,21 @@ private fun PropertyPanel(
             )
 
             // AI 辅助工具
+            var useChatContext by remember { mutableStateOf(false) }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(
+                    checked = useChatContext,
+                    onCheckedChange = { useChatContext = it }
+                )
+                Text("携带历史上下文 (会话模式)", style = MaterialTheme.typography.bodyMedium)
+            }
+            
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = { viewModel.optimizePrompt(selectedBlock.id, apiKey, currentLang) },
+                    onClick = { viewModel.optimizePrompt(selectedBlock.id, apiKey, currentLang, useChatContext) },
                     modifier = Modifier.weight(1f),
                     enabled = !state.isGenerating && displayPrompt.isNotBlank(),
                     shape = AppShapes.medium

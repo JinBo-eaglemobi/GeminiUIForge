@@ -38,6 +38,7 @@ fun AppSettingsDialog(
     currentApiKey: String,
     currentStorageDir: String,
     currentMaxRetries: Int = 3,
+    currentImageGenCount: Int = 4,
     currentPromptLang: PromptLanguage = PromptLanguage.AUTO,
     shortcuts: Map<ShortcutAction, String>,
     envStatus: FullEnvironmentStatus,
@@ -49,6 +50,7 @@ fun AppSettingsDialog(
     onApiKeySaved: (String) -> Unit,
     onStorageDirSaved: (String) -> Unit,
     onMaxRetriesSaved: (Int) -> Unit = {},
+    onImageGenCountSaved: (Int) -> Unit = {},
     onPromptLangSelected: (PromptLanguage) -> Unit = {},
     onShortcutSaved: (ShortcutAction, String) -> Unit = { _, _ -> },
     onCheckEnv: () -> Unit = {},
@@ -163,8 +165,8 @@ fun AppSettingsDialog(
                                     )
 
                                     SettingCategory.AI -> AISettings(
-                                        currentApiKey, currentMaxRetries, currentPromptLang,
-                                        onApiKeySaved, onMaxRetriesSaved, onPromptLangSelected
+                                        currentApiKey, currentMaxRetries, currentImageGenCount, currentPromptLang,
+                                        onApiKeySaved, onMaxRetriesSaved, onImageGenCountSaved, onPromptLangSelected
                                     )
 
                                     SettingCategory.ENVIRONMENT -> EnvironmentSettings(
@@ -279,9 +281,11 @@ private fun GeneralSettings(
 private fun AISettings(
     currentApiKey: String,
     currentMaxRetries: Int,
+    currentImageGenCount: Int,
     currentPromptLang: PromptLanguage,
     onApiKeySaved: (String) -> Unit,
     onMaxRetriesSaved: (Int) -> Unit,
+    onImageGenCountSaved: (Int) -> Unit,
     onPromptLangSelected: (PromptLanguage) -> Unit
 ) {
     SettingSectionTitle(stringResource(Res.string.settings_category_ai))
@@ -314,6 +318,28 @@ private fun AISettings(
                 DropdownMenuItem(
                     text = { Text(count.toString()) },
                     onClick = { onMaxRetriesSaved(count); retriesExpanded = false }
+                )
+            }
+        }
+    }
+
+    var genCountExpanded by remember { mutableStateOf(false) }
+    val genCountOptions = listOf(1, 2, 4, 8, 12, 16)
+
+    ExposedDropdownMenuBox(expanded = genCountExpanded, onExpandedChange = { genCountExpanded = !genCountExpanded }) {
+        OutlinedTextField(
+            value = currentImageGenCount.toString(),
+            onValueChange = {}, readOnly = true,
+            label = { Text(stringResource(Res.string.settings_image_gen_count_title)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(genCountExpanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            shape = AppShapes.medium
+        )
+        ExposedDropdownMenu(expanded = genCountExpanded, onDismissRequest = { genCountExpanded = false }) {
+            genCountOptions.forEach { count ->
+                DropdownMenuItem(
+                    text = { Text(count.toString()) },
+                    onClick = { onImageGenCountSaved(count); genCountExpanded = false }
                 )
             }
         }

@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -57,10 +58,11 @@ fun VisualRefineDialog(
     pageHeight: Float,
     initialInstruction: String,
     onDismiss: () -> Unit,
-    onConfirm: (SerialRect, String, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit
+    onConfirm: (SerialRect, String, Boolean, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit
 ) {
     var instruction by remember { mutableStateOf(initialInstruction) }
     var selectedRect by remember { mutableStateOf<SerialRect?>(null) }
+    var useChatContext by remember { mutableStateOf(false) }
     val density = LocalDensity.current
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -151,14 +153,23 @@ fun VisualRefineDialog(
                 )
                 Spacer(Modifier.height(16.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) { Text("取消") }
-                    Spacer(Modifier.width(8.dp))
-                    Button(
-                        onClick = { selectedRect?.let { onConfirm(it, instruction, {}, {}, {}) } },
-                        enabled = selectedRect != null,
-                        shape = AppShapes.medium
-                    ) { Text("确认重塑") }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Checkbox(
+                            checked = useChatContext,
+                            onCheckedChange = { useChatContext = it }
+                        )
+                        Text("携带历史上下文 (会话模式)", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Row {
+                        TextButton(onClick = onDismiss) { Text("取消") }
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = { selectedRect?.let { onConfirm(it, instruction, useChatContext, {}, {}, {}) } },
+                            enabled = selectedRect != null,
+                            shape = AppShapes.medium
+                        ) { Text("确认重塑") }
+                    }
                 }
             }
         }

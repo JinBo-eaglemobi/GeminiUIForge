@@ -67,6 +67,15 @@ class AppSettingsViewModel(
             configManager.saveKey("PROMPT_LANGUAGE_PREF", pref.name)
         }
     }
+
+    /**
+     * 保存默认生图数量
+     */
+    fun saveImageGenCount(count: Int) {
+        viewModelScope.launch {
+            configManager.saveKey("IMAGE_GEN_COUNT", count.toString())
+        }
+    }
     
     /**
      * 获取 ConfigManager 实例，用于初始化加载
