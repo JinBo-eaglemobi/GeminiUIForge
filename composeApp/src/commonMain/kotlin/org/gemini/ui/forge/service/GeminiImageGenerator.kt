@@ -74,7 +74,7 @@ class GeminiImageGenerator(
                 })
             })
             put("generationConfig", buildJsonObject {
-                put("candidateCount", params.count.coerceIn(1, 8))
+//                put("n", params.count.coerceIn(1, 8))
             })
         }.toString()
 

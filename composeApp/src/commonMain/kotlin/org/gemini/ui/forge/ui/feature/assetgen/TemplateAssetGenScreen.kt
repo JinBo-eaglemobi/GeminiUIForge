@@ -62,6 +62,10 @@ fun TemplateAssetGenScreen(
         viewModel.reload(initialProject)
     }
 
+    LaunchedEffect(state.project) {
+        onProjectUpdated(state.project)
+    }
+
     val coroutineScope = rememberCoroutineScope()
     var showHistoricalDialog by remember { mutableStateOf(false) }
     var historicalImages by remember { mutableStateOf<List<TemplateFile>>(emptyList()) }

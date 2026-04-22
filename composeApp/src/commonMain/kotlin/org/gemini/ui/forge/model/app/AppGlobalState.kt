@@ -20,7 +20,7 @@ data class AppGlobalState(
     val apiKey: String = "",
     val effectiveApiKey: String = "",
     val templateStorageDir: String = "",
-    val maxRetries: Int = 3,
+    val maxRetries: Int = 0,
     val imageGenCount: Int = 4,
     val shortcuts: Map<ShortcutAction, String> = ShortcutAction.entries.associateWith { it.defaultKey }
 )

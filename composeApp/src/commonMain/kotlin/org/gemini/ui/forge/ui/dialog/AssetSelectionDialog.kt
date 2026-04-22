@@ -247,12 +247,13 @@ fun AssetSelectionDialog(
                                                 modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
                                                 shape = RoundedCornerShape(2.dp)
                                             ) {
+                                                val isExactMatch = size != null && size.first == targetWidth.toInt() && size.second == targetHeight.toInt()
                                                 val format = if (tFile.relativePath.contains(".png", ignoreCase = true)) "PNG" else "JPG"
                                                 Text(
                                                     text = if (size != null) "${size.first}x${size.second} ($format)" else "未知尺寸",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                                                    color = if (isAdapted) Color.Green else Color.White
+                                                    color = if (isExactMatch) Color.Green else Color.White
                                                 )
                                             }
 
