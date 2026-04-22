@@ -32,10 +32,10 @@ fun ModuleCard(module: UIModule, onEditLayout: () -> Unit, onGenerateUI: () -> U
         ) {
             val title = if (module.nameRes != null) stringResource(module.nameRes) else module.nameStr ?: "Unknown"
 
-            val coverUrl = module.projectState?.pages?.firstOrNull()?.sourceImageUri
-            if (!coverUrl.isNullOrBlank()) {
+            val coverUri = module.projectState?.pages?.firstOrNull()?.sourceImageUri
+            if (coverUri != null) {
                 AsyncImage(
-                    model = coverUrl,
+                    model = coverUri.getAbsolutePath(),
                     contentDescription = "Cover for $title",
                     modifier = Modifier
                         .fillMaxWidth()

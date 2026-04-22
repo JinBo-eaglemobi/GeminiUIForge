@@ -7,31 +7,53 @@ import kotlinx.serialization.Serializable
 /**
  * 模板系统专用的强类型相对路径类。
  * 强制约束：路径必须相对于全局数据根目录 [GlobalAppEnv.currentRootPath]。
- * 严禁传入带盘符或以斜杠开头的绝对路径。
+ * 
+ * 增强特性：
+ * 1. 若传入的是相对路径，则直接使用。
+ * 2. 若传入的是绝对路径，且该路径位于当前全局根目录下，则自动转换为相对路径。
+ * 3. 否则（如指向外部、远程 URL 或 Base64）将抛出 IllegalArgumentException。
  */
 @Serializable(with = TemplateFileSerializer::class)
-data class TemplateFile(val relativePath: String) {
-    
+class TemplateFile(path: String) {
+
+    /** 核心属性：归一化后的相对路径 (使用 / 作为分隔符) */
+    val relativePath: String
+
     init {
-        val normalized = relativePath.replace("\\", "/")
-        require(!isAbsolute(normalized)) {
-            "TemplateFile 必须使用相对路径！非法路径输入: $relativePath"
+        val root = GlobalAppEnv.currentRootPath.replace("\\", "/").trimEnd('/')
+        val normalized = path.replace("\\", "/").trim('/')
+        
+        relativePath = when {
+            // 情况 1: 已经是相对于 root 的路径
+            !isAbsoluteInternal(normalized) -> normalized
+            
+            // 情况 2: 是绝对路径且位于 root 目录下
+            normalized.startsWith(root, ignoreCase = true) -> {
+                normalized.removePrefix(root).trim('/')
+            }
+            
+            // 情况 3: 非法路径 (远程、Base64 或工作区外的绝对路径)
+            else -> {
+                throw IllegalArgumentException(
+                    "TemplateFile 路径非法！\n" +
+                    "输入路径: $path\n" +
+                    "当前根目录: $root\n" +
+                    "要求：必须是相对路径，或者是位于根目录下的绝对路径。"
+                )
+            }
         }
     }
 
     /** 拼接全局根目录，获取当前的绝对物理路径 */
     fun getAbsolutePath(): String {
-        val root = GlobalAppEnv.currentRootPath
-        return if (root.isBlank()) relativePath else "$root/$relativePath".replace("//", "/")
+        val root = GlobalAppEnv.currentRootPath.replace("\\", "/").trimEnd('/')
+        return "$root/$relativePath".replace("//", "/")
     }
 
-    /**
-     * 判断路径是否为绝对路径的辅助方法。
-     */
-    private fun isAbsolute(path: String): Boolean {
+    private fun isAbsoluteInternal(path: String): Boolean {
         // Windows 盘符探测 (C:/...)
         if (path.contains(":/")) return true
-        // Unix/Linux 根目录探测
+        // Unix/Linux 绝对路径探测
         if (path.startsWith("/")) return true
         // 协议探测
         if (path.startsWith("http") || path.startsWith("data:")) return true
@@ -40,13 +62,11 @@ data class TemplateFile(val relativePath: String) {
 
     /**
      * 转换为平台原生的 Path 对象。
-     * 每次调用都会基于最新的 [getAbsolutePath] 重新创建。
      */
     fun toPlatformPath(): PlatformPath = resolvePlatformPath(getAbsolutePath())
 
     /**
      * 将当前文件拷贝到目标模板文件路径。
-     * @param target 目标 TemplateFile 对象
      */
     suspend fun copyTo(target: TemplateFile): Boolean {
         return copyToInternal(getAbsolutePath(), target.getAbsolutePath())
@@ -54,19 +74,18 @@ data class TemplateFile(val relativePath: String) {
 
     /**
      * 将当前文件拷贝到目标字符串路径。
-     * @param targetPath 目标字符串路径（支持绝对路径或相对路径）
      */
     suspend fun copyTo(targetPath: String): Boolean {
-        // 如果是 String 且不是绝对路径，则拼接当前根目录
-        val resolvedTarget = if (isAbsolute(targetPath)) {
+        val resolvedTarget = if (isAbsoluteInternal(targetPath)) {
             targetPath
         } else {
-            "${GlobalAppEnv.currentRootPath}/$targetPath".replace("//", "/")
+            val root = GlobalAppEnv.currentRootPath.replace("\\", "/").trimEnd('/')
+            "$root/$targetPath".replace("//", "/")
         }
         return copyToInternal(getAbsolutePath(), resolvedTarget)
     }
 
-    // --- 跨平台 IO 核心方法 (具体实现在各 platform 模块中) ---
+    // --- 跨平台 IO 核心方法 ---
 
     suspend fun exists(): Boolean = isFileExistsInternal(getAbsolutePath())
 
@@ -74,14 +93,25 @@ data class TemplateFile(val relativePath: String) {
 
     suspend fun writeBytes(data: ByteArray): Boolean = writeBytesInternal(getAbsolutePath(), data)
 
-    /** 流式读取文件内容，分块返回，内存安全 */
     fun readStream(chunkSize: Int = 8192): Flow<ByteArray> = readStreamInternal(getAbsolutePath(), chunkSize)
 
-    /** 如果父目录不存在，则递归创建所有父目录 */
     suspend fun createParentDirs(): Boolean = createParentDirsInternal(getAbsolutePath())
 
-    /** 删除文件或目录。若 recursive 为 true，则删除目录及其所有子文件 */
     suspend fun delete(recursive: Boolean = false): Boolean = deleteInternal(getAbsolutePath(), recursive)
+
+    // --- 模拟 Data Class 行为 ---
+
+    fun copy(path: String = this.relativePath): TemplateFile = TemplateFile(path)
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is TemplateFile) return false
+        return relativePath == other.relativePath
+    }
+
+    override fun hashCode(): Int = relativePath.hashCode()
+
+    override fun toString(): String = "TemplateFile(rel=$relativePath)"
 
     companion object {
         /** 从路径字符串创建 TemplateFile 实例 */
@@ -90,31 +120,17 @@ data class TemplateFile(val relativePath: String) {
 }
 
 /** 快速将字符串转换为 TemplateFile 的扩展方法 */
-fun String.toTemplateFile(): TemplateFile = TemplateFile.fromPath(this)
+fun String.toTemplateFile(): TemplateFile = TemplateFile(this)
 
 /** 跨平台路径对象的类型占位符 */
 expect class PlatformPath
 
-/** 内部桥接方法：解析平台原生 Path */
+/** 内部桥接方法 */
 expect fun resolvePlatformPath(absolutePath: String): PlatformPath
-
-/** 内部桥接方法：拷贝文件 */
 expect suspend fun copyToInternal(sourcePath: String, targetPath: String): Boolean
-
-/** 内部桥接方法：判断存在 */
 expect suspend fun isFileExistsInternal(absPath: String): Boolean
-
-/** 内部桥接方法：读取字节 */
 expect suspend fun readBytesInternal(absPath: String): ByteArray?
-
-/** 内部桥接方法：写入字节 */
 expect suspend fun writeBytesInternal(absPath: String, data: ByteArray): Boolean
-
-/** 内部桥接方法：流式读取 */
 expect fun readStreamInternal(absPath: String, chunkSize: Int): Flow<ByteArray>
-
-/** 内部桥接方法：创建目录 */
 expect suspend fun createParentDirsInternal(absPath: String): Boolean
-
-/** 内部桥接方法：删除 */
 expect suspend fun deleteInternal(absPath: String, recursive: Boolean): Boolean

@@ -1,5 +1,6 @@
 package org.gemini.ui.forge.state
 
+import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.ProjectState
@@ -33,7 +34,7 @@ data class TemplateAssetGenState(
     val isPrioritizeCloudRemoval: Boolean = false,
 
     /** 候选资产 */
-    val generatedCandidates: List<String> = emptyList(),
+    val generatedCandidates: List<TemplateFile> = emptyList(),
 
     /** 视觉辅助 */
     val isVisualMode: Boolean = false,
@@ -44,7 +45,7 @@ data class TemplateAssetGenState(
     /** 全局生成风格定义 */
     val globalStyle: String = project.globalStyle,
     /** 参考图本地 URI (用于图生图) */
-    val referenceImageUri: String? = project.styleReferenceUri,
+    val referenceImageUri: TemplateFile? = project.styleReferenceUri,
 
     /** 临时保存的舞台背景颜色 (不持久化到模板中) */
     val stageBackgroundColor: String = "#2D2D2D",

@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.utils
 
 import androidx.compose.ui.graphics.ImageBitmap
+import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.jetbrains.skia.*
 import kotlin.io.encoding.Base64
@@ -36,6 +37,9 @@ suspend fun String.decodeBase64ToBitmap(): ImageBitmap? {
     }
 }
 
+/** 扩展：支持直接从 TemplateFile 解码 */
+suspend fun TemplateFile.decodeToBitmap(): ImageBitmap? = this.getAbsolutePath().decodeBase64ToBitmap()
+
 /**
  * 跨平台将字节数组转换为 ImageBitmap (基于 Skia)
  */
@@ -55,6 +59,9 @@ suspend fun getImageSize(uri: String): Pair<Int, Int>? {
         null
     }
 }
+
+/** 扩展：获取 TemplateFile 图片尺寸 */
+suspend fun TemplateFile.getImageSize(): Pair<Int, Int>? = getImageSize(this.getAbsolutePath())
 
 /**
  * 跨平台图像裁剪与缩放逻辑 (基于 Skia)
@@ -161,6 +168,16 @@ suspend fun cropImage(
         null
     }
 }
+
+/** 扩展：从 TemplateFile 裁剪图片 */
+suspend fun TemplateFile.crop(
+    bounds: SerialRect,
+    logicalWidth: Float,
+    logicalHeight: Float,
+    isPng: Boolean = true,
+    forceWidth: Int? = null,
+    forceHeight: Int? = null
+): ByteArray? = cropImage(this.getAbsolutePath(), bounds, logicalWidth, logicalHeight, isPng, forceWidth, forceHeight)
 
 /**
  * 跨平台透明度边界检测 (基于 Skia)

@@ -19,10 +19,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.utils.decodeBase64ToBitmap
-import androidx.compose.foundation.combinedClickable
+import org.gemini.ui.forge.utils.decodeToBitmap
 import org.gemini.ui.forge.utils.getImageSize
+import androidx.compose.foundation.combinedClickable
 import kotlin.math.abs
 
 import androidx.compose.ui.input.pointer.pointerInput
@@ -34,16 +35,16 @@ import androidx.compose.ui.input.pointer.isShiftPressed
 @Composable
 fun AssetSelectionDialog(
     title: String,
-    candidates: List<String>,
-    initialSelectedUri: String? = null,
+    candidates: List<TemplateFile>,
+    initialSelectedUri: TemplateFile? = null,
     targetWidth: Float = 0f,
     targetHeight: Float = 0f,
     isProcessing: Boolean = false, // 新增：正在处理的指示
-    onImageSelected: (String) -> Unit,
-    onCropRequested: (String) -> Unit = {}, // 新增：请求裁剪
-    onDeleteImages: (List<String>) -> Unit,
+    onImageSelected: (TemplateFile) -> Unit,
+    onCropRequested: (TemplateFile) -> Unit = {}, // 新增：请求裁剪
+    onDeleteImages: (List<TemplateFile>) -> Unit,
     onClearAll: () -> Unit,
-    onBatchRemoveBg: (List<String>) -> Unit = {}, // 新增：批量抠图
+    onBatchRemoveBg: (List<TemplateFile>) -> Unit = {}, // 新增：批量抠图
     onDismiss: () -> Unit
 ) {
     // 基础状态
@@ -53,9 +54,9 @@ fun AssetSelectionDialog(
     val targetRatio = if (targetHeight > 0) targetWidth / targetHeight else 1f
 
     // 辅助：获取带尺寸信息的候选列表并排序
-    var sortedCandidates by remember { mutableStateOf<List<Pair<String, Pair<Int, Int>?>>>(emptyList()) }
+    var sortedCandidates by remember { mutableStateOf<List<Pair<TemplateFile, Pair<Int, Int>?>>>(emptyList()) }
     LaunchedEffect(candidates) {
-        val withSize = candidates.map { it to getImageSize(it) }
+        val withSize = candidates.map { it to it.getImageSize() }
         sortedCandidates = withSize.sortedBy { (_, size) ->
             if (size == null) 2f else {
                 val ratio = size.first.toFloat() / size.second
@@ -66,13 +67,13 @@ fun AssetSelectionDialog(
 
     // 多选管理状态
     var isMultiSelectMode by remember { mutableStateOf(false) }
-    val multiSelectedUris = remember { mutableStateListOf<String>() }
+    val multiSelectedUris = remember { mutableStateListOf<TemplateFile>() }
     
     // Shift 按键状态跟踪
     var isShiftPressed by remember { mutableStateOf(false) }
 
     // 辅助函数：执行删除
-    fun executeDeletion(uris: List<String>) {
+    fun executeDeletion(uris: List<TemplateFile>) {
         onDeleteImages(uris)
         if (tempSelectedUri in uris) {
             tempSelectedUri = null
@@ -84,7 +85,7 @@ fun AssetSelectionDialog(
     // 判断是否全为 JPG
     val isAllSelectedJpg = remember(multiSelectedUris.size) {
         multiSelectedUris.isNotEmpty() && multiSelectedUris.all { 
-            it.contains(".jpg", ignoreCase = true) || it.contains(".jpeg", ignoreCase = true)
+            it.relativePath.contains(".jpg", ignoreCase = true) || it.relativePath.contains(".jpeg", ignoreCase = true)
         }
     }
 
@@ -166,12 +167,12 @@ fun AssetSelectionDialog(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(sortedCandidates) { (uri, size) ->
-                                val isChosenInMulti = multiSelectedUris.contains(uri)
-                                val isSelectedInSingle = !isMultiSelectMode && tempSelectedUri == uri
+                            items(sortedCandidates, key = { it.first.relativePath }) { (tFile, size) ->
+                                val isChosenInMulti = multiSelectedUris.contains(tFile)
+                                val isSelectedInSingle = !isMultiSelectMode && tempSelectedUri == tFile
                                 
-                                val imageBitmapState = produceState<ImageBitmap?>(null, uri) {
-                                    value = uri.decodeBase64ToBitmap()
+                                val imageBitmapState = produceState<ImageBitmap?>(null, tFile) {
+                                    value = tFile.decodeToBitmap()
                                 }
                                 val bitmap = imageBitmapState.value
 
@@ -188,33 +189,33 @@ fun AssetSelectionDialog(
                                             onClick = {
                                                 if (isShiftPressed && !isMultiSelectMode) {
                                                     isMultiSelectMode = true
-                                                    multiSelectedUris.add(uri)
+                                                    multiSelectedUris.add(tFile)
                                                 } else if (isMultiSelectMode) {
-                                                    if (isChosenInMulti) multiSelectedUris.remove(uri) else multiSelectedUris.add(uri)
+                                                    if (isChosenInMulti) multiSelectedUris.remove(tFile) else multiSelectedUris.add(tFile)
                                                 } else {
-                                                    tempSelectedUri = if (isSelectedInSingle) null else uri
+                                                    tempSelectedUri = if (isSelectedInSingle) null else tFile
                                                 }
                                             },
                                             onDoubleClick = {
                                                 if (!isMultiSelectMode) {
-                                                    tempSelectedUri = uri
+                                                    tempSelectedUri = tFile
                                                     val isAdapted = if (size == null) false else {
                                                         val ratio = size.first.toFloat() / size.second
                                                         abs(ratio - targetRatio) < 0.05
                                                     }
 
                                                     if (isAdapted && size?.first == targetWidth.toInt() && size.second == targetHeight.toInt()) {
-                                                        onImageSelected(uri)
+                                                        onImageSelected(tFile)
                                                         onDismiss()
                                                     } else {
-                                                        onCropRequested(uri)
+                                                        onCropRequested(tFile)
                                                     }
                                                 }
                                             },
                                             onLongClick = {
                                                 if (!isMultiSelectMode) {
                                                     isMultiSelectMode = true
-                                                    multiSelectedUris.add(uri)
+                                                    multiSelectedUris.add(tFile)
                                                 }
                                             }
                                         )
@@ -246,7 +247,7 @@ fun AssetSelectionDialog(
                                                 modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
                                                 shape = RoundedCornerShape(2.dp)
                                             ) {
-                                                val format = if (uri.contains(".png", ignoreCase = true)) "PNG" else "JPG"
+                                                val format = if (tFile.relativePath.contains(".png", ignoreCase = true)) "PNG" else "JPG"
                                                 Text(
                                                     text = if (size != null) "${size.first}x${size.second} ($format)" else "未知尺寸",
                                                     style = MaterialTheme.typography.labelSmall,
@@ -255,7 +256,7 @@ fun AssetSelectionDialog(
                                                 )
                                             }
 
-                                            if (uri == initialSelectedUri) {
+                                            if (tFile == initialSelectedUri) {
                                                 Surface(
                                                     color = MaterialTheme.colorScheme.primary,
                                                     modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
@@ -350,7 +351,7 @@ fun AssetSelectionDialog(
                                     Text("立即删除", style = MaterialTheme.typography.labelLarge)
                                 }
                                 
-                                val isJpg = tempSelectedUri?.let { it.contains(".jpg", ignoreCase = true) || it.contains(".jpeg", ignoreCase = true) } == true
+                                val isJpg = tempSelectedUri?.let { it.relativePath.contains(".jpg", ignoreCase = true) || it.relativePath.contains(".jpeg", ignoreCase = true) } == true
                                 if (isJpg) {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Button(
@@ -367,7 +368,7 @@ fun AssetSelectionDialog(
                                         if (isProcessing) {
                                             CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onSecondary, strokeWidth = 2.dp)
                                         } else {
-                                            Icon(Icons.Default.AutoFixHigh, null, modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.AutoFixHigh, null, modifier = Modifier.size(18.dp))
                                         }
                                         Spacer(Modifier.width(4.dp))
                                         Text(if (isProcessing) "处理中..." else "本地去背景", style = MaterialTheme.typography.labelLarge)

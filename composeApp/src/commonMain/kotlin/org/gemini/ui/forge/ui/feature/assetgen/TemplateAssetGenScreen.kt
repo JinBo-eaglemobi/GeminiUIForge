@@ -62,7 +62,7 @@ fun TemplateAssetGenScreen(
 
     val coroutineScope = rememberCoroutineScope()
     var showHistoricalDialog by remember { mutableStateOf(false) }
-    var historicalImages by remember { mutableStateOf<List<String>>(emptyList()) }
+    var historicalImages by remember { mutableStateOf<List<TemplateFile>>(emptyList()) }
     var pendingCropUri by remember { mutableStateOf<String?>(null) }
     var showAILogs by remember { mutableStateOf(false) }
 
@@ -128,7 +128,7 @@ fun TemplateAssetGenScreen(
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
             isProcessing = state.isLocalProcessing,
             onImageSelected = { viewModel.onImageSelected(it); showCurrentGenerationResults = false },
-            onCropRequested = { pendingCropUri = it },
+            onCropRequested = { pendingCropUri = it.getAbsolutePath() },
             onDeleteImages = { viewModel.deleteImages(it) },
             onClearAll = { viewModel.clearCandidates(); showCurrentGenerationResults = false },
             onBatchRemoveBg = { uris ->
@@ -149,7 +149,7 @@ fun TemplateAssetGenScreen(
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
             isProcessing = state.isLocalProcessing,
             onImageSelected = { viewModel.onImageSelected(it); showHistoricalDialog = false },
-            onCropRequested = { pendingCropUri = it },
+            onCropRequested = { pendingCropUri = it.getAbsolutePath() },
             onDeleteImages = { uris ->
                 viewModel.deleteImages(uris); historicalImages = historicalImages.filter { it !in uris }
             },
@@ -222,7 +222,7 @@ fun TemplateAssetGenScreen(
                         onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },
                         editingGroupId = state.editingGroupId,
                         onExitGroupEdit = { viewModel.exitGroupEditMode() },
-                        referenceUri = state.currentPage?.sourceImageUri,
+                        referenceUri = state.currentPage?.sourceImageUri?.getAbsolutePath(),
                         isVisualMode = state.isVisualMode,
                         onToggleVisualMode = { viewModel.toggleVisualMode() },
                         isReadOnly = true,
@@ -282,7 +282,9 @@ private fun PropertyPanel(
     
     // 获取带初始路径的选择器触发器 (注意这里是在 Composable 顶层调用)
     val imagePicker = projectAssetsBase.rememberImagePicker { uris ->
-        uris.firstOrNull()?.let { viewModel.setReferenceImage(it) }
+        uris.firstOrNull()?.let { 
+            viewModel.setReferenceImageExternal(it)
+        }
     }
     
     var showModelMenu by remember { mutableStateOf(false) }
@@ -406,7 +408,7 @@ private fun PropertyPanel(
                             ) {
                                 if (state.referenceImageUri != null) {
                                     AsyncImage(
-                                        model = state.referenceImageUri,
+                                        model = state.referenceImageUri.getAbsolutePath(),
                                         contentDescription = null,
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Crop
@@ -529,7 +531,7 @@ private fun PropertyPanel(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (selectedBlock.currentImageUri != null) {
                         AsyncImage(
-                            model = selectedBlock.currentImageUri,
+                            model = selectedBlock.currentImageUri.getAbsolutePath(),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize().padding(4.dp),
                             contentScale = ContentScale.Fit

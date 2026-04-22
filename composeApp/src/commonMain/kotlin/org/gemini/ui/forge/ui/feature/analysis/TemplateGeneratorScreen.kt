@@ -170,9 +170,17 @@ fun TemplateGeneratorScreen(
                             logs.add("[${formatTimestamp(getCurrentTimeMillis())}] 💾 正在自动归档参考图并保存模板...")
                             val allImageUris = inputUris.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
                             
+                            // 先执行归档，获取 TemplateFile 列表
+                            val archivedFiles = templateRepo.archiveExternalImages(finalTemplateName, allImageUris)
+                            
+                            // 更新 ProjectState 中的参考图和页面关联图
                             val stateToSave = resultState.copy(
                                 createdAt = getCurrentTimeMillis(),
-                                referenceImages = allImageUris // 传递全量路径供 Repository 执行搬迁
+                                referenceImages = archivedFiles,
+                                pages = resultState.pages.mapIndexed { index, page ->
+                                    // 假设页面与参考图按索引一一对应（或者取第一个）
+                                    page.copy(sourceImageUri = archivedFiles.getOrNull(index) ?: archivedFiles.firstOrNull())
+                                }
                             )
                             
                             templateRepo.saveTemplate(finalTemplateName, stateToSave)

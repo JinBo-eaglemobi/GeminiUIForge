@@ -1,13 +1,14 @@
 package org.gemini.ui.forge.data.repository
+
 import io.ktor.client.*
 import io.ktor.client.request.*
-import io.ktor.client.statement.readRawBytes
+import io.ktor.client.statement.*
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import org.gemini.ui.forge.data.remote.NetworkClient
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.service.LocalFileStorage
 import org.gemini.ui.forge.utils.*
-
 import org.gemini.ui.forge.data.TemplateFile
 
 /**
@@ -24,7 +25,7 @@ class TemplateRepository(
     /**
      * 将生成的资源保存到模块专用的资产目录下
      */
-    suspend fun saveBlockResource(templateName: String, blockId: String, fileNamePrefix: String, bytes: ByteArray, isPng: Boolean = true): String {
+    suspend fun saveBlockResource(templateName: String, blockId: String, fileNamePrefix: String, bytes: ByteArray, isPng: Boolean = true): TemplateFile {
         val sanitizedName = templateName.replace(" ", "_")
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
         val ext = if (isPng) "png" else "jpg"
@@ -37,18 +38,19 @@ class TemplateRepository(
         tFile.writeBytes(bytes)
         
         AppLogger.i("TemplateRepository", "✅ Block 资源已保存: $relPath")
-        return relPath
+        return tFile
     }
 
     /**
      * 将临时图片保存到模板的 cache 目录下
      */
-    suspend fun saveCacheImage(templateName: String, fileNamePrefix: String, bytes: ByteArray): String {
+    suspend fun saveCacheImage(templateName: String, fileNamePrefix: String, bytes: ByteArray): TemplateFile {
         val sanitizedName = templateName.replace(" ", "_")
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
         val relPath = "$PROJECTS_DIR/$sanitizedName/cache/${fileNamePrefix}_$timestamp.jpg"
-        TemplateFile(relPath).writeBytes(bytes)
-        return relPath
+        val tFile = TemplateFile(relPath)
+        tFile.writeBytes(bytes)
+        return tFile
     }
 
     /**
@@ -80,34 +82,21 @@ class TemplateRepository(
     }
 
     /**
-     * 保存项目模板到本地。
+     * 将外部图片资源（本地绝对路径、远程 URL 或 Base64）归档到模板的资产目录下。
+     * 返回归档后的 TemplateFile 列表。
      */
-    suspend fun saveTemplate(templateName: String, projectState: ProjectState) {
+    suspend fun archiveExternalImages(templateName: String, externalUris: List<String>): List<TemplateFile> {
         val sanitizedName = templateName.replace(" ", "_")
-        AppLogger.i("TemplateRepository", "💾 开始保存模板: $templateName")
+        val archivedFiles = mutableListOf<TemplateFile>()
         
-        val dataDir = fileStorage.getDataDir().replace("\\", "/")
-        
-        fun String.toRelative(): String {
-            val normalized = this.replace("\\", "/")
-            return if (normalized.startsWith(dataDir)) {
-                normalized.removePrefix(dataDir).removePrefix("/")
-            } else {
-                normalized
-            }
-        }
-
-        val pathMapping = mutableMapOf<String, String>()
-        val updatedReferenceImages = mutableListOf<String>()
-
-        projectState.referenceImages.forEachIndexed { index, originalPath ->
+        externalUris.forEachIndexed { index, originalPath ->
             try {
                 var bytes: ByteArray? = null
                 var ext = "png"
 
                 when {
                     originalPath.startsWith("http") -> {
-                        val response = httpClient.get(originalPath)
+                        val response: HttpResponse = httpClient.get(originalPath)
                         if (response.status.value == 200) {
                             bytes = response.readRawBytes()
                             ext = response.headers["Content-Type"]?.substringAfter("/")?.substringBefore(";") ?: "png"
@@ -127,47 +116,36 @@ class TemplateRepository(
 
                 if (bytes != null) {
                     val relPath = "$PROJECTS_DIR/$sanitizedName/assets/reference_$index.$ext"
-                    TemplateFile(relPath).writeBytes(bytes)
-                    updatedReferenceImages.add(relPath)
-                    pathMapping[originalPath] = relPath
+                    val tFile = TemplateFile(relPath)
+                    tFile.writeBytes(bytes)
+                    archivedFiles.add(tFile)
                 } else {
-                    val rel = originalPath.toRelative()
-                    updatedReferenceImages.add(rel)
-                    pathMapping[originalPath] = rel
+                    AppLogger.i("TemplateRepository", "⚠️ 无法读取资源内容，跳过归档: $originalPath")
                 }
             } catch (e: Exception) {
-                AppLogger.e("TemplateRepository", "❌ 归档参考图失败: $originalPath", e)
+                AppLogger.e("TemplateRepository", "❌ 归档资源失败: $originalPath", e)
             }
         }
+        return archivedFiles
+    }
 
-        val updatedPages = projectState.pages.map { page ->
-            val mappedSource = pathMapping[page.sourceImageUri] ?: page.sourceImageUri?.toRelative()
-            page.copy(
-                sourceImageUri = mappedSource,
-                blocks = cleanBlockPaths(page.blocks, dataDir)
-            )
-        }
-
-        val updatedState = projectState.copy(
-            styleReferenceUri = projectState.styleReferenceUri?.toRelative(),
-            referenceImages = updatedReferenceImages,
-            pages = updatedPages
-        )
+    /**
+     * 保存项目模板到本地。
+     */
+    suspend fun saveTemplate(templateName: String, projectState: ProjectState) {
+        val sanitizedName = templateName.replace(" ", "_")
+        AppLogger.i("TemplateRepository", "💾 开始保存模板 JSON: $templateName")
 
         val jsonRelPath = "$PROJECTS_DIR/$sanitizedName/template.json"
-        val content = json.encodeToString(updatedState)
+        val content = json.encodeToString(projectState)
         fileStorage.saveToFile(jsonRelPath, content)
         AppLogger.i("TemplateRepository", "✅ 模板 JSON 已更新")
     }
 
-    private fun cleanBlockPaths(blocks: List<org.gemini.ui.forge.model.ui.UIBlock>, dataDir: String): List<org.gemini.ui.forge.model.ui.UIBlock> {
+    private fun cleanBlockPaths(blocks: List<org.gemini.ui.forge.model.ui.UIBlock>): List<org.gemini.ui.forge.model.ui.UIBlock> {
         return blocks.map { block ->
-            val cleanedUri = block.currentImageUri?.replace("\\", "/")?.let {
-                if (it.startsWith(dataDir)) it.removePrefix(dataDir).removePrefix("/") else it
-            }
             block.copy(
-                currentImageUri = cleanedUri,
-                children = cleanBlockPaths(block.children, dataDir)
+                children = cleanBlockPaths(block.children)
             )
         }
     }
@@ -182,21 +160,21 @@ class TemplateRepository(
     }
 
     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-    suspend fun saveResource(templateName: String, blockId: String, base64Data: String): String {
+    suspend fun saveResource(templateName: String, blockId: String, base64Data: String): TemplateFile {
         val sanitizedName = templateName.replace(" ", "_")
         val pureBase64 = if (base64Data.contains(",")) base64Data.substringAfter(",") else base64Data
         val bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
 
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
         val resourceName = "$PROJECTS_DIR/$sanitizedName/assets/$blockId/manual_$timestamp.png"
-        val savedPath = fileStorage.saveBytesToFile(resourceName, bytes)
-        AppLogger.i("TemplateRepository", "✅ 手动保存资源成功: $savedPath")
-        return savedPath
+        val tFile = TemplateFile(resourceName)
+        tFile.writeBytes(bytes)
+        AppLogger.i("TemplateRepository", "✅ 手动保存资源成功: ${tFile.relativePath}")
+        return tFile
     }
 
     suspend fun getTemplates(): List<Pair<String, ProjectState>> {
         AppLogger.d("TemplateRepository", "🔍 正在扫描本地模板列表...")
-        // 关键点：扫描 templates 子目录下的项目
         val dirs = fileStorage.listDirectories(PROJECTS_DIR)
         return dirs.mapNotNull { dirName ->
             val relativePath = "$PROJECTS_DIR/$dirName"

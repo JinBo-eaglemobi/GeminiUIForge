@@ -150,10 +150,10 @@ class TemplateEditorViewModel(
                     AppLogger.d("TemplateEditorViewModel", "👆 选中模块: ID=[${block.id}], 类型=${block.type}, 坐标=(L:${block.bounds.left}, T:${block.bounds.top}, W:${block.bounds.width}, H:${block.bounds.height}), 隐藏=${!block.isVisible}")
                     
                     val uri = block.currentImageUri
-                    if (!uri.isNullOrBlank()) {
+                    if (uri != null) {
                         viewModelScope.launch {
                             try {
-                                val bitmap = uri.decodeBase64ToBitmap()
+                                val bitmap = uri.decodeToBitmap()
                                 if (bitmap != null) {
                                     val scaleX = block.bounds.width / bitmap.width
                                     val scaleY = block.bounds.height / bitmap.height
@@ -459,12 +459,12 @@ class TemplateEditorViewModel(
                 val logger = { msg: String -> addGenLog(msg) }
                 // 1. 根据坐标和原图尺寸进行裁剪
                 val croppedBytes = cropImage(
-                    imageSource = originalImage,
+                    imageSource = originalImage.getAbsolutePath(),
                     bounds = bounds,
                     logicalWidth = currentPage.width,
                     logicalHeight = currentPage.height
                 ) ?: throw Exception("裁剪失败")
-                val originalBytes = readLocalFileBytes(originalImage) ?: throw Exception("无法读取原图")
+                val originalBytes = originalImage.readBytes() ?: throw Exception("无法读取原图")
                 val fingerprint = originalBytes.calculateMd5()
 
                 // 2. 检查云端资产库是否已缓存原图
@@ -473,9 +473,9 @@ class TemplateEditorViewModel(
                         ?: ""
                 if (originalFileUri.isBlank()) {
                     originalFileUri = cloudAssetManager.getOrUploadFile(
-                        originalImage.substringAfterLast("/"),
+                        originalImage.relativePath.substringAfterLast("/"),
                         originalBytes,
-                        getMimeType(originalImage)
+                        getMimeType(originalImage.getAbsolutePath())
                     ) { _, status -> logger("[$status]") } ?: ""
                 }
 

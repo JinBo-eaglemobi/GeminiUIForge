@@ -373,10 +373,7 @@ class AIGenerationService(
             val finalString = accumulatedText.toString()
             if (finalString.isEmpty()) throw Exception("响应为空")
             val cleanJson = finalString.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-            val parsedState = jsonConfig.decodeFromString<ProjectState>(cleanJson)
-            return parsedState.copy(pages = parsedState.pages.mapIndexed { i, p ->
-                p.copy(sourceImageUri = imageUris.getOrNull(i))
-            })
+            return jsonConfig.decodeFromString<ProjectState>(cleanJson)
         } catch (e: Exception) {
             AppLogger.e(TAG, "分析异常", e)
             throw e

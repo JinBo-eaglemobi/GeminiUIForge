@@ -97,7 +97,7 @@ fun TemplateEditorScreen(
         val defaultInstruction =
             if (refineTargetId != null) state.defaultRefineInstructionUpdate else state.defaultRefineInstructionNew
         VisualRefineDialog(
-            imageUri = state.currentPage?.sourceImageUri ?: "",
+            imageUri = state.currentPage?.sourceImageUri?.getAbsolutePath() ?: "",
             pageWidth = state.currentPage?.width ?: 1080f,
             pageHeight = state.currentPage?.height ?: 1920f,
             initialInstruction = defaultInstruction,
@@ -200,7 +200,7 @@ fun TemplateEditorScreen(
                     onBlockDragged = { id, dx, dy -> viewModel.moveBlockBy(id, dx, dy) },
                     editingGroupId = state.editingGroupId,
                     onExitGroupEdit = { viewModel.exitGroupEditMode() },
-                    referenceUri = state.currentPage?.sourceImageUri,
+                    referenceUri = state.currentPage?.sourceImageUri?.getAbsolutePath(),
                     isReadOnly = false,
                     modifier = Modifier.fillMaxSize()
                 )

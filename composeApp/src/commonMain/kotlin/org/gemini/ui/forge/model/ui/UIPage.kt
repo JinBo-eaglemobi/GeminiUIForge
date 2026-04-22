@@ -1,4 +1,5 @@
 package org.gemini.ui.forge.model.ui
+import org.gemini.ui.forge.data.TemplateFile
 import kotlinx.serialization.Serializable
 
 /**
@@ -17,6 +18,6 @@ data class UIPage(
     val nameStr: String = "Page",
     val width: Float = 1080f,
     val height: Float = 1920f,
-    val sourceImageUri: String? = null,
+    val sourceImageUri: TemplateFile? = null,
     val blocks: List<UIBlock> = emptyList()
 )

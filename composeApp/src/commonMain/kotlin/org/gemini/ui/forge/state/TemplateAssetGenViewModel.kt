@@ -72,22 +72,23 @@ class TemplateAssetGenViewModel(
         val sanitizedProjectName = projectName.replace(" ", "_")
         
         viewModelScope.launch {
-            var finalRefUri: String? = currentRefUri
+            var finalRefUri: TemplateFile? = currentRefUri
 
-            if (!currentRefUri.isNullOrBlank()) {
+            if (currentRefUri != null) {
                 val destDir = "templates/$sanitizedProjectName/assets/style_ref"
+                val currentRelPath = currentRefUri.relativePath
                 
                 try {
                     // 如果参考图不在当前的目标文件夹内，说明需要执行更新逻辑
-                    if (!currentRefUri.contains(destDir)) {
-                        // 1. 流式计算新参考图的哈希值 (使用底层工具 calculateFileHash 仍需绝对路径，但结果可用于 TemplateFile)
-                        val newHash = calculateFileHash(currentRefUri)
+                    if (!currentRelPath.contains(destDir)) {
+                        // 1. 流式计算新参考图的哈希值
+                        val newHash = calculateFileHash(currentRefUri.getAbsolutePath())
                         var isSame = false
 
                         if (newHash != null) {
                             // 使用 TemplateFile 扫描现有文件
                             val destDirFile = TemplateFile(destDir)
-                            val existingFiles = listFilesInLocalDirectory(destDirFile.getAbsolutePath())
+                            val existingFiles = if (destDirFile.exists()) listFilesInLocalDirectory(destDirFile.getAbsolutePath()) else emptyList()
                             
                             // 2. 检查现有文件是否具有相同的哈希
                             if (existingFiles.isNotEmpty()) {
@@ -95,11 +96,12 @@ class TemplateAssetGenViewModel(
                                 val oldHash = calculateFileHash(oldFilePath)
                                 if (oldHash == newHash) {
                                     isSame = true
-                                    // 转换为相对路径存储
-                                    finalRefUri = oldFilePath.replace("\\", "/").let {
+                                    // 转换为 TemplateFile 存储
+                                    val rel = oldFilePath.replace("\\", "/").let {
                                         val root = org.gemini.ui.forge.state.GlobalAppEnv.currentRootPath
                                         if (it.startsWith(root)) it.removePrefix(root).removePrefix("/") else it
                                     }
+                                    finalRefUri = TemplateFile(rel)
                                     AppLogger.d("AssetGenVM", "✅ 参考图内容一致 (SHA-256: $newHash)，跳过复制")
                                 }
                             }
@@ -109,15 +111,15 @@ class TemplateAssetGenViewModel(
                                 AppLogger.i("AssetGenVM", "🔄 发现新的参考图，开始清理旧图并执行流式复制...")
                                 existingFiles.forEach { deleteLocalFile(it) }
                                 
-                                val ext = currentRefUri.substringAfterLast(".", "jpg")
+                                val ext = currentRelPath.substringAfterLast(".", "jpg")
                                 val targetFileName = "active_style_ref_${newHash.take(8)}.$ext"
                                 val relDestPath = "$destDir/$targetFileName"
-                                val tFile = org.gemini.ui.forge.data.TemplateFile(relDestPath)
+                                val tFile = TemplateFile(relDestPath)
                                 
-                                // 流式复制新图 (借用底层工具，但路径管理通过 TemplateFile)
-                                val success = copyLocalFile(currentRefUri, tFile.getAbsolutePath())
+                                // 流式复制新图
+                                val success = copyLocalFile(currentRefUri.getAbsolutePath(), tFile.getAbsolutePath())
                                 if (success) {
-                                    finalRefUri = relDestPath
+                                    finalRefUri = tFile
                                     _state.update { it.copy(referenceImageUri = finalRefUri) }
                                     AppLogger.i("AssetGenVM", "✅ 参考图流式复制成功: $targetFileName")
                                 } else {
@@ -134,7 +136,7 @@ class TemplateAssetGenViewModel(
                 // 用户清除了参考图，清理缓存目录
                 try {
                     val destDir = "templates/$sanitizedProjectName/assets/style_ref"
-                    val tDir = org.gemini.ui.forge.data.TemplateFile(destDir)
+                    val tDir = TemplateFile(destDir)
                     if (tDir.exists()) {
                         tDir.delete(recursive = true)
                     }
@@ -202,7 +204,7 @@ class TemplateAssetGenViewModel(
                     targetHeight = block.bounds.height,
                     isPng = isTransparent,
                     style = globalStyle,
-                    referenceImageUri = refUri,
+                    referenceImageUri = refUri?.getAbsolutePath(),
                     onLog = { addGenLog(it) }
                 )
 
@@ -214,8 +216,8 @@ class TemplateAssetGenViewModel(
                         val bytes = Base64.decode(pure)
                         val timestamp = getCurrentTimeMillis()
                         
-                        // saveBlockResource 内部会调用 saveBytesToFile，后者现已返回相对路径
-                        val originalRelPath =
+                        // saveBlockResource 内部会调用 saveBytesToFile，后者现已返回 TemplateFile
+                        val originalTFile =
                             templateRepo.saveBlockResource(projectName, block.id, "gen_${index}_$timestamp", bytes, isPng = false)
 
                         if (isTransparent) {
@@ -247,7 +249,7 @@ class TemplateAssetGenViewModel(
                                 )
                             }
                         }
-                        originalRelPath
+                        originalTFile
                     }
                 }
                 _state.update { it.copy(generatedCandidates = candidatePaths) }
@@ -261,7 +263,7 @@ class TemplateAssetGenViewModel(
 
     // --- 资产操作逻辑 ---
 
-    fun onImageSelected(imageUri: String) {
+    fun onImageSelected(imageUri: TemplateFile) {
         val pageId = _state.value.selectedPageId ?: return
         val blockId = _state.value.selectedBlockId ?: return
         _state.update { currentState ->
@@ -281,7 +283,7 @@ class TemplateAssetGenViewModel(
 
     /** 
      * 执行真正的图片裁剪，并将裁剪后的新图片保存绑定给当前的 UIBlock。
-     * @param originalUri 原始底图 URI
+     * @param originalUri 原始底图 (注意：这里可能是非 TemplateFile 的路径，如相册路径)
      * @param cropRect 相对原始尺寸(1.0x1.0) 的裁剪比例坐标 (left, top, right, bottom)
      */
     suspend fun onImageCroppedAndSelected(originalUri: String, cropRect: SerialRect): Boolean {
@@ -306,7 +308,6 @@ class TemplateAssetGenViewModel(
                 AppLogger.d("TemplateAssetGenViewModel", "原图物理像素尺寸: ${size.first}x${size.second}")
 
                 // 根据用户传回的相对比例 (0.0~1.0)，换算为绝对逻辑坐标
-                // 因为 cropImage 函数预期的是基于逻辑宽高的绝对坐标
                 val absLeft = cropRect.left * originalW
                 val absTop = cropRect.top * originalH
                 val absRight = cropRect.right * originalW
@@ -314,8 +315,6 @@ class TemplateAssetGenViewModel(
                 val bounds = SerialRect(absLeft, absTop, absRight, absBottom)
                 AppLogger.d("TemplateAssetGenViewModel", "换算后的绝对像素裁剪框: $bounds")
 
-                // 执行裁剪 (传入 originalW, originalH 作为 logicalWidth/Height)
-                // 核心改进：强制输出尺寸与模块逻辑尺寸 (bounds.width/height) 对齐，解决像素不一致问题
                 val targetBlock = _state.value.selectedBlock
                 val forceW = targetBlock?.bounds?.width?.toInt()?.coerceAtLeast(1)
                 val forceH = targetBlock?.bounds?.height?.toInt()?.coerceAtLeast(1)
@@ -335,7 +334,7 @@ class TemplateAssetGenViewModel(
                 if (croppedBytes != null) {
                     AppLogger.i("TemplateAssetGenViewModel", "✅ 像素裁剪成功，正在保存新文件... (${croppedBytes.size / 1024} KB)")
                     // 保存新生成的裁剪后图片
-                    val croppedUri = templateRepo.saveBlockResource(
+                    val croppedTFile = templateRepo.saveBlockResource(
                         projectName,
                         blockId,
                         "cropped_${getCurrentTimeMillis()}",
@@ -343,10 +342,10 @@ class TemplateAssetGenViewModel(
                         isPng = true
                     )
                     
-                    AppLogger.i("TemplateAssetGenViewModel", "✅ 新文件已落盘: $croppedUri，正在绑定到模块 $blockId")
+                    AppLogger.i("TemplateAssetGenViewModel", "✅ 新文件已落盘: ${croppedTFile.relativePath}，正在绑定到模块 $blockId")
                     // 切换回主线程更新 UI 状态
                     withContext(Dispatchers.Main) {
-                        onImageSelected(croppedUri)
+                        onImageSelected(croppedTFile)
                     }
                     true
                 } else {
@@ -360,14 +359,14 @@ class TemplateAssetGenViewModel(
         }
     }
 
-    fun deleteImages(uris: List<String>) {
+    fun deleteImages(uris: List<TemplateFile>) {
         viewModelScope.launch {
-            uris.forEach { deleteLocalFile(it) }
+            uris.forEach { it.delete() }
             _state.update { currentState -> currentState.copy(generatedCandidates = currentState.generatedCandidates.filter { it !in uris }) }
         }
     }
 
-    fun batchRemoveBackgroundLocal(uris: List<String>, onSuccess: (List<String>) -> Unit = {}) {
+    fun batchRemoveBackgroundLocal(uris: List<TemplateFile>, onSuccess: (List<TemplateFile>) -> Unit = {}) {
         val block = _state.value.selectedBlock ?: return
         val projectName = _state.value.projectName
 
@@ -376,21 +375,21 @@ class TemplateAssetGenViewModel(
             _state.update { it.copy(isLocalProcessing = true) }
             
             try {
-                val newCandidatePaths = mutableListOf<String>()
-                for ((index, uri) in uris.withIndex()) {
-                    val bytes = readLocalFileBytes(uri)
+                val newCandidatePaths = mutableListOf<TemplateFile>()
+                for ((index, tFile) in uris.withIndex()) {
+                    val bytes = tFile.readBytes()
                     if (bytes != null) {
                         val processedBytes = aiService.removeBackgroundLocal(bytes)
                         if (processedBytes != null) {
                             val timestamp = getCurrentTimeMillis()
-                            val newUri = templateRepo.saveBlockResource(
+                            val newTFile = templateRepo.saveBlockResource(
                                 projectName,
                                 block.id,
                                 "batch_processed_${index}_$timestamp",
                                 processedBytes,
                                 isPng = true
                             )
-                            newCandidatePaths.add(newUri)
+                            newCandidatePaths.add(newTFile)
                         }
                     }
                 }
@@ -408,7 +407,7 @@ class TemplateAssetGenViewModel(
         }
     }
 
-    fun appendCandidates(newPaths: List<String>) {
+    fun appendCandidates(newPaths: List<TemplateFile>) {
         _state.update { it.copy(generatedCandidates = it.generatedCandidates + newPaths) }
     }
 
@@ -426,10 +425,18 @@ class TemplateAssetGenViewModel(
         }
     }
 
-    suspend fun loadHistoricalImages(blockId: String): List<String> {
+    suspend fun loadHistoricalImages(blockId: String): List<TemplateFile> {
         val rootDir = templateRepo.getDataDir()
         val dir = "$rootDir/templates/${_state.value.projectName.replace(" ", "_")}/assets/$blockId"
-        return listFilesInLocalDirectory(dir).filter { it.endsWith(".png") || it.endsWith(".jpg") }
+        return listFilesInLocalDirectory(dir)
+            .filter { it.endsWith(".png") || it.endsWith(".jpg") }
+            .map { absPath ->
+                val rel = absPath.replace("\\", "/").let {
+                    val root = org.gemini.ui.forge.state.GlobalAppEnv.currentRootPath
+                    if (it.startsWith(root)) it.removePrefix(root).removePrefix("/") else it
+                }
+                TemplateFile(rel)
+            }
     }
 
     // --- 布局同步逻辑 ---
@@ -547,8 +554,33 @@ class TemplateAssetGenViewModel(
         _state.update { it.copy(selectedModel = model) }
     }
 
-    fun setReferenceImage(uri: String?) {
-        _state.update { it.copy(referenceImageUri = uri) }
+    /**
+     * 设置参考图。支持传入外部绝对路径，会自动执行即时归档。
+     */
+    fun setReferenceImageExternal(uriOrPath: String?) {
+        if (uriOrPath == null) {
+            _state.update { it.copy(referenceImageUri = null) }
+            return
+        }
+
+        viewModelScope.launch {
+            // 如果已经是相对路径，尝试直接构造
+            val tFile = if (!uriOrPath.startsWith("/") && !uriOrPath.contains(":\\")) {
+                TemplateFile(uriOrPath)
+            } else {
+                // 外部路径，执行归档
+                templateRepo.archiveExternalImages(_state.value.projectName, listOf(uriOrPath)).firstOrNull()
+            }
+
+            if (tFile != null) {
+                _state.update { it.copy(referenceImageUri = tFile) }
+            }
+        }
+    }
+
+    /** 内部使用的强类型设置方法 */
+    fun setReferenceImage(tFile: TemplateFile?) {
+        _state.update { it.copy(referenceImageUri = tFile) }
     }
 
     fun toggleVisualMode() {

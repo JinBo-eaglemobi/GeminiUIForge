@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.utils.decodeBase64ToBitmap
+import org.gemini.ui.forge.utils.decodeToBitmap
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
 import kotlin.math.min
@@ -364,7 +365,7 @@ fun RenderBlock(
     editingGroupId: String?
 ) {
     if (!block.isVisible) return
-    val imageBitmapState = produceState<ImageBitmap?>(null, block.currentImageUri) { value = block.currentImageUri?.decodeBase64ToBitmap() }
+    val imageBitmapState = produceState<ImageBitmap?>(null, block.currentImageUri) { value = block.currentImageUri?.decodeToBitmap() }
     val imageBitmap = imageBitmapState.value
     val currentX = parentX + block.bounds.left * baseScale
     val currentY = parentY + block.bounds.top * baseScale
