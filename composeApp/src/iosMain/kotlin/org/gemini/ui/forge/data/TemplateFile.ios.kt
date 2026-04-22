@@ -5,7 +5,14 @@ import kotlinx.coroutines.flow.flow
 import platform.Foundation.*
 import kotlinx.cinterop.*
 
-actual fun resolvePlatformPath(absolutePath: String): Any = absolutePath
+actual typealias PlatformPath = String
+
+actual fun resolvePlatformPath(absolutePath: String): PlatformPath = absolutePath
+
+actual suspend fun copyToInternal(sourcePath: String, targetPath: String): Boolean {
+    // iOS 具体实现待补充（可使用 NSFileManager）
+    return false
+}
 
 actual suspend fun isFileExistsInternal(absPath: String): Boolean {
     return NSFileManager.defaultManager.fileExistsAtPath(absPath)

@@ -4,7 +4,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import org.gemini.ui.forge.service.LocalFileStorage
 
-actual fun resolvePlatformPath(absolutePath: String): Any = absolutePath
+actual typealias PlatformPath = String
+
+actual fun resolvePlatformPath(absolutePath: String): PlatformPath = absolutePath
+
+actual suspend fun copyToInternal(sourcePath: String, targetPath: String): Boolean {
+    // JS 环境通常不具备直接的文件系统操作能力
+    return false
+}
 
 actual suspend fun isFileExistsInternal(absPath: String): Boolean {
     return LocalFileStorage().exists(absPath)

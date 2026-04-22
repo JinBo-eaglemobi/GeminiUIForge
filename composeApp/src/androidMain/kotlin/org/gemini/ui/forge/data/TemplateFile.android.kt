@@ -6,9 +6,28 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import java.io.File
 
-actual fun resolvePlatformPath(absolutePath: String): Any {
+actual typealias PlatformPath = java.io.File
+
+actual fun resolvePlatformPath(absolutePath: String): PlatformPath {
     // Android (API < 26) 可能不支持 java.nio.file.Path，返回 File 对象作为替代
     return File(absolutePath)
+}
+
+actual suspend fun copyToInternal(sourcePath: String, targetPath: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val source = File(sourcePath)
+        val target = File(targetPath)
+        target.parentFile?.mkdirs()
+        source.inputStream().use { input ->
+            target.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        true
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
+    }
 }
 
 actual suspend fun isFileExistsInternal(absPath: String): Boolean = withContext(Dispatchers.IO) {

@@ -42,7 +42,29 @@ data class TemplateFile(val relativePath: String) {
      * 转换为平台原生的 Path 对象。
      * 每次调用都会基于最新的 [getAbsolutePath] 重新创建。
      */
-    fun toPlatformPath(): Any = resolvePlatformPath(getAbsolutePath())
+    fun toPlatformPath(): PlatformPath = resolvePlatformPath(getAbsolutePath())
+
+    /**
+     * 将当前文件拷贝到目标模板文件路径。
+     * @param target 目标 TemplateFile 对象
+     */
+    suspend fun copyTo(target: TemplateFile): Boolean {
+        return copyToInternal(getAbsolutePath(), target.getAbsolutePath())
+    }
+
+    /**
+     * 将当前文件拷贝到目标字符串路径。
+     * @param targetPath 目标字符串路径（支持绝对路径或相对路径）
+     */
+    suspend fun copyTo(targetPath: String): Boolean {
+        // 如果是 String 且不是绝对路径，则拼接当前根目录
+        val resolvedTarget = if (isAbsolute(targetPath)) {
+            targetPath
+        } else {
+            "${GlobalAppEnv.currentRootPath}/$targetPath".replace("//", "/")
+        }
+        return copyToInternal(getAbsolutePath(), resolvedTarget)
+    }
 
     // --- 跨平台 IO 核心方法 (具体实现在各 platform 模块中) ---
 
@@ -60,10 +82,24 @@ data class TemplateFile(val relativePath: String) {
 
     /** 删除文件或目录。若 recursive 为 true，则删除目录及其所有子文件 */
     suspend fun delete(recursive: Boolean = false): Boolean = deleteInternal(getAbsolutePath(), recursive)
+
+    companion object {
+        /** 从路径字符串创建 TemplateFile 实例 */
+        fun fromPath(path: String): TemplateFile = TemplateFile(path)
+    }
 }
 
+/** 快速将字符串转换为 TemplateFile 的扩展方法 */
+fun String.toTemplateFile(): TemplateFile = TemplateFile.fromPath(this)
+
+/** 跨平台路径对象的类型占位符 */
+expect class PlatformPath
+
 /** 内部桥接方法：解析平台原生 Path */
-expect fun resolvePlatformPath(absolutePath: String): Any
+expect fun resolvePlatformPath(absolutePath: String): PlatformPath
+
+/** 内部桥接方法：拷贝文件 */
+expect suspend fun copyToInternal(sourcePath: String, targetPath: String): Boolean
 
 /** 内部桥接方法：判断存在 */
 expect suspend fun isFileExistsInternal(absPath: String): Boolean

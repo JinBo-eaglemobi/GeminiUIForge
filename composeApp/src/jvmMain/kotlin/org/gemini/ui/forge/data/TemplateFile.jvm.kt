@@ -5,10 +5,26 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.nio.file.Paths
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
-actual fun resolvePlatformPath(absolutePath: String): Any {
-    return Paths.get(absolutePath)
+actual typealias PlatformPath = java.io.File
+
+actual fun resolvePlatformPath(absolutePath: String): PlatformPath {
+    return File(absolutePath)
+}
+
+actual suspend fun copyToInternal(sourcePath: String, targetPath: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val source = File(sourcePath).toPath()
+        val target = File(targetPath).toPath()
+        Files.createDirectories(target.parent)
+        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
+        true
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
+    }
 }
 
 actual suspend fun isFileExistsInternal(absPath: String): Boolean = withContext(Dispatchers.IO) {
