@@ -8,7 +8,7 @@ actual fun Throwable.getPlatformStackTrace(): String {
 }
 
 actual suspend fun getLocalFileLastModified(filePath: String): Long {
-    // Web OPFS does not easily expose last modified via handles yet.
+    // Web OPFS does not easily expose last modified via handles yet in pure JS without File interface wrapping.
     // Return current time as a placeholder.
     return org.gemini.ui.forge.getCurrentTimeMillis()
 }
@@ -133,6 +133,19 @@ actual suspend fun executeSystemCommand(
 ): Boolean {
     onLog("System command execution is not supported on Browser/JS.")
     return false
+}
+
+actual suspend fun calculateFileHash(filePath: String): String? {
+    // Web OPFS 环境暂且直接读取后做 MD5 替代
+    val bytes = readLocalFileBytes(filePath) ?: return null
+    return bytes.calculateMd5()
+}
+
+actual suspend fun copyLocalFile(sourcePath: String, destPath: String): Boolean {
+    val storage = LocalFileStorage()
+    val bytes = storage.readBytesFromFile(sourcePath) ?: return false
+    storage.saveBytesToFile(destPath, bytes)
+    return true
 }
 
 private infix fun Int.add(other: Int): Int = this + other

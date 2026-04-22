@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.service.*
@@ -34,7 +36,6 @@ class TemplateAssetGenViewModel(
         TemplateAssetGenState(
             project = initialProject,
             projectName = initialProjectName,
-            selectedPageId = initialProject.pages.firstOrNull()?.id,
             currentLang = initialLang
         )
     )
@@ -54,8 +55,104 @@ class TemplateAssetGenViewModel(
                 project = newProject,
                 selectedPageId = newProject.pages.firstOrNull()?.id,
                 selectedBlockId = null,
-                editingGroupId = null
+                editingGroupId = null,
+                globalStyle = newProject.globalStyle,
+                referenceImageUri = newProject.styleReferenceUri
             ) 
+        }
+    }
+
+    /** 
+     * 保存当前的风格设置与参考图，并执行磁盘缓存管理 
+     */
+    fun saveStyleSettings(onComplete: () -> Unit) {
+        val currentStyle = _state.value.globalStyle
+        val currentRefUri = _state.value.referenceImageUri
+        val projectName = _state.value.projectName
+        val sanitizedProjectName = projectName.replace(" ", "_")
+        
+        viewModelScope.launch {
+            var finalRefUri: String? = currentRefUri
+
+            if (!currentRefUri.isNullOrBlank()) {
+                val destDir = "templates/$sanitizedProjectName/assets/style_ref"
+                
+                try {
+                    // 如果参考图不在当前的目标文件夹内，说明需要执行更新逻辑
+                    if (!currentRefUri.contains(destDir)) {
+                        // 1. 流式计算新参考图的哈希值 (使用底层工具 calculateFileHash 仍需绝对路径，但结果可用于 TemplateFile)
+                        val newHash = calculateFileHash(currentRefUri)
+                        var isSame = false
+
+                        if (newHash != null) {
+                            // 使用 TemplateFile 扫描现有文件
+                            val destDirFile = TemplateFile(destDir)
+                            val existingFiles = listFilesInLocalDirectory(destDirFile.getAbsolutePath())
+                            
+                            // 2. 检查现有文件是否具有相同的哈希
+                            if (existingFiles.isNotEmpty()) {
+                                val oldFilePath = existingFiles.first()
+                                val oldHash = calculateFileHash(oldFilePath)
+                                if (oldHash == newHash) {
+                                    isSame = true
+                                    // 转换为相对路径存储
+                                    finalRefUri = oldFilePath.replace("\\", "/").let {
+                                        val root = org.gemini.ui.forge.state.GlobalAppEnv.currentRootPath
+                                        if (it.startsWith(root)) it.removePrefix(root).removePrefix("/") else it
+                                    }
+                                    AppLogger.d("AssetGenVM", "✅ 参考图内容一致 (SHA-256: $newHash)，跳过复制")
+                                }
+                            }
+                            
+                            // 3. 哈希不同或不存在旧文件，执行覆盖
+                            if (!isSame) {
+                                AppLogger.i("AssetGenVM", "🔄 发现新的参考图，开始清理旧图并执行流式复制...")
+                                existingFiles.forEach { deleteLocalFile(it) }
+                                
+                                val ext = currentRefUri.substringAfterLast(".", "jpg")
+                                val targetFileName = "active_style_ref_${newHash.take(8)}.$ext"
+                                val relDestPath = "$destDir/$targetFileName"
+                                val tFile = org.gemini.ui.forge.data.TemplateFile(relDestPath)
+                                
+                                // 流式复制新图 (借用底层工具，但路径管理通过 TemplateFile)
+                                val success = copyLocalFile(currentRefUri, tFile.getAbsolutePath())
+                                if (success) {
+                                    finalRefUri = relDestPath
+                                    _state.update { it.copy(referenceImageUri = finalRefUri) }
+                                    AppLogger.i("AssetGenVM", "✅ 参考图流式复制成功: $targetFileName")
+                                } else {
+                                    AppLogger.e("AssetGenVM", "❌ 复制失败")
+                                    finalRefUri = currentRefUri
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    AppLogger.e("AssetGenVM", "处理风格图失败: ${e.message}")
+                }
+            } else {
+                // 用户清除了参考图，清理缓存目录
+                try {
+                    val destDir = "templates/$sanitizedProjectName/assets/style_ref"
+                    val tDir = org.gemini.ui.forge.data.TemplateFile(destDir)
+                    if (tDir.exists()) {
+                        tDir.delete(recursive = true)
+                    }
+                } catch (e: Exception) {}
+            }
+
+            // 更新内存并在后台同步保存 JSON
+            val updatedProject = _state.value.project.copy(
+                globalStyle = currentStyle,
+                styleReferenceUri = finalRefUri
+            )
+            
+            _state.update { it.copy(project = updatedProject) }
+            templateRepo.saveTemplate(projectName, updatedProject)
+            
+            withContext(Dispatchers.Main) {
+                onComplete()
+            }
         }
     }
 
@@ -116,22 +213,22 @@ class TemplateAssetGenViewModel(
                         @OptIn(ExperimentalEncodingApi::class)
                         val bytes = Base64.decode(pure)
                         val timestamp = getCurrentTimeMillis()
-                        val originalUri =
+                        
+                        // saveBlockResource 内部会调用 saveBytesToFile，后者现已返回相对路径
+                        val originalRelPath =
                             templateRepo.saveBlockResource(projectName, block.id, "gen_${index}_$timestamp", bytes, isPng = false)
 
                         if (isTransparent) {
                             var processedBytes: ByteArray? = null
                             
-                            // 优先尝试云端抠图 (如果用户勾选了且有 API Key)
                             if (prioritizeCloud && apiKey.isNotBlank()) {
                                 try {
                                     processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) { addGenLog(it) }
                                 } catch (e: Exception) {
-                                    addGenLog("⚠️ 云端抠图失败，尝试回退到本地引擎: ${e.message}")
+                                    addGenLog("⚠️ 云端抠图失败: ${e.message}")
                                 }
                             }
                             
-                            // 如果云端未开启，或者云端处理失败，回退到本地 Python 脚本抠图
                             if (processedBytes == null) {
                                 try {
                                     processedBytes = aiService.removeBackgroundLocal(bytes) { addGenLog(it) }
@@ -150,7 +247,7 @@ class TemplateAssetGenViewModel(
                                 )
                             }
                         }
-                        originalUri
+                        originalRelPath
                     }
                 }
                 _state.update { it.copy(generatedCandidates = candidatePaths) }
@@ -446,7 +543,7 @@ class TemplateAssetGenViewModel(
         _state.update { it.copy(globalStyle = style) }
     }
 
-    fun setImageGenModel(model: org.gemini.ui.forge.model.api.GeminiModel) {
+    fun setImageGenModel(model: GeminiModel) {
         _state.update { it.copy(selectedModel = model) }
     }
 

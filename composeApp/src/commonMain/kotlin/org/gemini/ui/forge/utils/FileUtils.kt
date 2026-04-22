@@ -54,6 +54,16 @@ expect suspend fun executeSystemCommand(
 ): Boolean
 
 /**
+ * 跨平台计算文件的 SHA-256 哈希值 (流式读取，内存安全)
+ */
+expect suspend fun calculateFileHash(filePath: String): String?
+
+/**
+ * 跨平台安全复制文件 (流式写入，内存安全)
+ */
+expect suspend fun copyLocalFile(sourcePath: String, destPath: String): Boolean
+
+/**
  * 根据文件路径或 URI 后缀名推断准确的 MIME 类型。
  * 确保 Gemini API 能接收到正确的媒体格式描述，从而提高识别准确度。
  */

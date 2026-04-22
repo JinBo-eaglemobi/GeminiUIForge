@@ -12,6 +12,7 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.data.remote.NetworkClient
+import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.utils.AppLogger
 
@@ -85,7 +86,7 @@ class AIGenerationService(
      * 核心生图方法，根据选中的 GeminiModel 自动路由到 Imagen 或 Native Gemini 生成逻辑。
      */
     suspend fun generateImages(
-        model: org.gemini.ui.forge.model.api.GeminiModel,
+        model: GeminiModel,
         blockType: String,
         userPrompt: String,
         count: Int = 4,
@@ -94,9 +95,9 @@ class AIGenerationService(
         targetWidth: Float? = null,
         targetHeight: Float? = null,
         isPng: Boolean = false,
-        imageSize: String = "1k", 
-        style: String = "", 
-        referenceImageUri: String? = null, 
+        imageSize: String = "1k",
+        style: String = "",
+        referenceImageUri: String? = null,
         isVertexAI: Boolean = false,
         onLog: (String) -> Unit = {}
     ): List<String> {

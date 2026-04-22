@@ -1,5 +1,5 @@
 package org.gemini.ui.forge.data.remote
-import org.gemini.ui.forge.model.api.GeminiModel
+import org.gemini.ui.forge.model.GeminiModel
 
 /**
  * 集中管理和配置应用内使用到的所有网络 API 地址

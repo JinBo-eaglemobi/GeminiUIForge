@@ -19,7 +19,9 @@ import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.launch
+import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.service.AIGenerationService
@@ -33,11 +35,10 @@ import org.gemini.ui.forge.ui.dialog.AssetCropDialog
 import org.gemini.ui.forge.ui.dialog.AssetSelectionDialog
 import org.gemini.ui.forge.ui.feature.common.CanvasArea
 import org.gemini.ui.forge.ui.feature.common.HierarchySidebar
+import org.gemini.ui.forge.utils.rememberImagePicker
 
 /**
  * 资产生成页面主容器组件。
- * 负责 [TemplateAssetGenViewModel] 的生命周期管理（State Hoisting 状态提升），
- * 管理三栏布局（图层树、画布预览、生成设置），以及处理生成进度、历史资源等对话框的弹出交互。
  */
 @Composable
 fun TemplateAssetGenScreen(
@@ -49,9 +50,7 @@ fun TemplateAssetGenScreen(
     initialPromptLang: PromptLanguage,
     onProjectUpdated: (ProjectState) -> Unit
 ) {
-
     val aiService = AIGenerationService(cloudAssetManager)
-    // 1. 初始化 ViewModel 并将其生命周期与 Screen 绑定
     val viewModel: TemplateAssetGenViewModel = viewModel(key = initialProjectName) {
         TemplateAssetGenViewModel(initialProject, initialProjectName, initialPromptLang, templateRepo, cloudAssetManager, aiService)
     }
@@ -61,27 +60,18 @@ fun TemplateAssetGenScreen(
         viewModel.reload(initialProject)
     }
 
-    // 监听内部状态变化（手动同步模式，已移除自动同步 LaunchedEffect）
-
     val coroutineScope = rememberCoroutineScope()
-    // 历史资源列表的弹窗状态
     var showHistoricalDialog by remember { mutableStateOf(false) }
     var historicalImages by remember { mutableStateOf<List<String>>(emptyList()) }
-    // 等待被裁剪处理的图片 URI
     var pendingCropUri by remember { mutableStateOf<String?>(null) }
-    // 控制 AI 日志显隐的本地状态
     var showAILogs by remember { mutableStateOf(false) }
 
-    // 当 AI 开始生成时，自动展开日志面板以提升反馈感
     LaunchedEffect(state.isGenerating) {
         if (state.isGenerating) {
             showAILogs = true
         }
     }
 
-    // --- 弹窗组件区 ---
-
-    // 1. AI 任务执行进度与日志弹窗
     if (state.showAITaskDialog) {
         val dialogTitle = when {
             state.generationLogs.any { it.contains("优化") } -> "智能优化提示词中..."
@@ -100,16 +90,13 @@ fun TemplateAssetGenScreen(
         )
     }
 
-    // 2. 本次生成资源选择弹窗（自动弹出机制）
     var showCurrentGenerationResults by remember { mutableStateOf(false) }
     LaunchedEffect(state.isGenerating, state.generatedCandidates) {
-        // 如果生成任务结束，并且成功返回了候选图片集合，则自动弹出供用户挑选
         if (!state.isGenerating && state.generatedCandidates.isNotEmpty()) {
             showCurrentGenerationResults = true
         }
     }
 
-    // 3. 图像裁剪确认弹窗
     if (pendingCropUri != null) {
         var isCropping by remember { mutableStateOf(false) }
         AssetCropDialog(
@@ -132,7 +119,6 @@ fun TemplateAssetGenScreen(
         )
     }
 
-    // 显示最新生成的候选图像列表
     if (showCurrentGenerationResults) {
         AssetSelectionDialog(
             title = "AI 生成资源预览",
@@ -142,7 +128,7 @@ fun TemplateAssetGenScreen(
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
             isProcessing = state.isLocalProcessing,
             onImageSelected = { viewModel.onImageSelected(it); showCurrentGenerationResults = false },
-            onCropRequested = { pendingCropUri = it }, // 修改：触发裁剪时不立刻关闭资源弹窗
+            onCropRequested = { pendingCropUri = it },
             onDeleteImages = { viewModel.deleteImages(it) },
             onClearAll = { viewModel.clearCandidates(); showCurrentGenerationResults = false },
             onBatchRemoveBg = { uris ->
@@ -154,7 +140,6 @@ fun TemplateAssetGenScreen(
         )
     }
 
-    // 显示历史资源列表
     if (showHistoricalDialog) {
         AssetSelectionDialog(
             title = "历史资源列表",
@@ -164,31 +149,27 @@ fun TemplateAssetGenScreen(
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
             isProcessing = state.isLocalProcessing,
             onImageSelected = { viewModel.onImageSelected(it); showHistoricalDialog = false },
-            onCropRequested = { pendingCropUri = it }, // 修改：触发裁剪时不立刻关闭历史弹窗
+            onCropRequested = { pendingCropUri = it },
             onDeleteImages = { uris ->
                 viewModel.deleteImages(uris); historicalImages = historicalImages.filter { it !in uris }
             },
-            onClearAll = { }, // 历史记录暂时不支持一键清空
+            onClearAll = { },
             onBatchRemoveBg = { uris ->
                 viewModel.batchRemoveBackgroundLocal(uris) { newPaths ->
-                    // 仅追加到历史列表，不干扰 AI 生成预览的 candidates 集合
                     historicalImages = historicalImages + newPaths
                 }
-            }, // 修复：补充了历史弹窗的触发回调
+            },
             onDismiss = { showHistoricalDialog = false }
         )
     }
 
-    // --- 主界面布局：三栏结构 ---
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val totalWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
-        // 三栏默认权重
         var leftWeight by remember { mutableStateOf(0.15f) }
         var centerWeight by remember { mutableStateOf(0.55f) }
         var rightWeight by remember { mutableStateOf(0.3f) }
 
         Row(modifier = Modifier.fillMaxSize()) {
-            // [左栏] 图层结构树
             HierarchySidebar(
                 blocks = state.currentPage?.blocks ?: emptyList(),
                 selectedBlockId = state.selectedBlockId,
@@ -200,7 +181,7 @@ fun TemplateAssetGenScreen(
                 onToggleVisibility = { id, visible -> viewModel.toggleBlockVisibility(id, visible) },
                 onToggleAllVisibility = { visible -> viewModel.toggleAllBlocksVisibility(visible) },
                 modifier = Modifier.weight(leftWeight).fillMaxHeight(),
-                isReadOnly = true // 资产生成页面不允许改变图层结构的主体
+                isReadOnly = true
             )
 
             VerticalSplitter(onDrag = { delta ->
@@ -210,7 +191,6 @@ fun TemplateAssetGenScreen(
                 }
             })
 
-            // [中栏] 页面 Tab 与画布预览
             Column(modifier = Modifier.weight(centerWeight).fillMaxHeight()) {
                 val pages = state.project.pages
                 val selectedIndex = pages.indexOfFirst { it.id == state.selectedPageId }.coerceAtLeast(0)
@@ -258,7 +238,6 @@ fun TemplateAssetGenScreen(
                 }
             })
 
-            // [右栏] 生成参数配置与提示词编辑面板
             Surface(
                 modifier = Modifier.weight(rightWeight).fillMaxHeight(),
                 color = MaterialTheme.colorScheme.surface
@@ -285,10 +264,6 @@ fun TemplateAssetGenScreen(
     }
 }
 
-/**
- * 资产生成参数面板组件。
- * 提供选中组件的物理参数预览、绑定的资源图像查看，以及触发 AI 图像生成与透明度处理等控制。
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PropertyPanel(
@@ -300,10 +275,18 @@ private fun PropertyPanel(
     onShowHistory: () -> Unit
 ) {
     val selectedBlock = state.selectedBlock
-    val imagePicker = org.gemini.ui.forge.utils.rememberImagePicker { uris ->
+    val projectName = state.projectName.replace(" ", "_")
+    
+    // 使用 TemplateFile 定义起点目录
+    val projectAssetsBase = TemplateFile("templates/$projectName/assets")
+    
+    // 获取带初始路径的选择器触发器 (注意这里是在 Composable 顶层调用)
+    val imagePicker = projectAssetsBase.rememberImagePicker { uris ->
         uris.firstOrNull()?.let { viewModel.setReferenceImage(it) }
     }
+    
     var showModelMenu by remember { mutableStateOf(false) }
+    var showAdvancedSettingsDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(16.dp)) {
         Row(
@@ -316,59 +299,74 @@ private fun PropertyPanel(
                 style = MaterialTheme.typography.titleMedium
             )
 
-            // 模型切换按钮
-            Box {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
-                    onClick = { showModelMenu = true },
+                    onClick = { showAdvancedSettingsDialog = true },
                     modifier = Modifier.height(32.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                     shape = AppShapes.small,
                     enabled = !state.isGenerating
                 ) {
-                    Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Palette, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text(state.selectedModel.displayName, style = MaterialTheme.typography.labelSmall)
-                    Icon(Icons.Default.ArrowDropDown, null)
+                    Text("风格与参考", style = MaterialTheme.typography.labelSmall)
                 }
 
-                DropdownMenu(
-                    expanded = showModelMenu,
-                    onDismissRequest = { showModelMenu = false },
-                    modifier = Modifier.width(220.dp)
-                ) {
-                    org.gemini.ui.forge.model.api.GeminiModel.entries
-                        .filter { 
-                            it.supportedMethods.contains("predict") || 
-                            it.modelName.contains("imagen") || 
-                            it.modelName.contains("image") 
-                        }
-                        .forEach { model ->
-                            val isImagen = model.supportedMethods.contains("predict") || model.modelName.contains("imagen")
-                            DropdownMenuItem(
-                                text = { 
-                                    Column {
-                                        Text(model.displayName, style = MaterialTheme.typography.bodyMedium)
-                                        Text(
-                                            if (isImagen) "Imagen API" else "Native Gemini", 
-                                            style = MaterialTheme.typography.labelSmall, 
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                Box {
+                    OutlinedButton(
+                        onClick = { showModelMenu = true },
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        shape = AppShapes.small,
+                        enabled = !state.isGenerating
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(state.selectedModel.displayName, style = MaterialTheme.typography.labelSmall)
+                        Icon(Icons.Default.ArrowDropDown, null)
+                    }
+
+                    DropdownMenu(
+                        expanded = showModelMenu,
+                        onDismissRequest = { showModelMenu = false },
+                        modifier = Modifier.width(220.dp)
+                    ) {
+                        GeminiModel.entries
+                            .filter { 
+                                it.supportedMethods.contains("predict") || 
+                                it.modelName.contains("imagen") || 
+                                it.modelName.contains("image") 
+                            }
+                            .forEach { model ->
+                                val isImagen = model.supportedMethods.contains("predict") || model.modelName.contains("imagen")
+                                val modelNameText = model.displayName
+                                val techText = if (isImagen) "Imagen API" else "Native Gemini"
+                                
+                                DropdownMenuItem(
+                                    text = { 
+                                        Column {
+                                            Text(modelNameText, style = MaterialTheme.typography.bodyMedium)
+                                            Text(
+                                                techText, 
+                                                style = MaterialTheme.typography.labelSmall, 
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        viewModel.setImageGenModel(model)
+                                        showModelMenu = false
+                                    },
+                                    leadingIcon = {
+                                        if (state.selectedModel == model) Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
                                     }
-                                },
-                                onClick = {
-                                    viewModel.setImageGenModel(model)
-                                    showModelMenu = false
-                                },
-                                leadingIcon = {
-                                    if (state.selectedModel == model) Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
-                                }
-                            )
-                        }
+                                )
+                            }
+                    }
                 }
             }
         }
         
-        // 显示当前选中的模块 ID/名称 (独立一行显示，避免顶部太挤)
         if (selectedBlock != null) {
             Surface(
                 color = MaterialTheme.colorScheme.secondaryContainer,
@@ -384,91 +382,118 @@ private fun PropertyPanel(
             }
         }
 
-        // --- 全局生成偏好设置 (始终显示) ---
-        Surface(
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
-            shape = AppShapes.medium,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-        ) {
-            Column(Modifier.padding(12.dp)) {
-                Text(
-                    "全局生成风格",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.height(8.dp))
-                
-                OutlinedTextField(
-                    value = state.globalStyle,
-                    onValueChange = { viewModel.setGlobalStyle(it) },
-                    placeholder = { Text("例如：Cyberpunk, Minimalist, 3D Render...", style = MaterialTheme.typography.bodySmall) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodySmall,
-                    enabled = !state.isGenerating
-                )
-                
-                Spacer(Modifier.height(12.dp))
-                
-                Text(
-                    "风格参考图 (图生图)",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.height(8.dp))
-                
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier.size(60.dp).padding(4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (state.referenceImageUri != null) {
-                            AsyncImage(
-                                model = state.referenceImageUri,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                shape = AppShapes.small,
-                                modifier = Modifier.fillMaxSize()
+        if (showAdvancedSettingsDialog) {
+            AlertDialog(
+                onDismissRequest = { showAdvancedSettingsDialog = false },
+                properties = androidx.compose.ui.window.DialogProperties(
+                    dismissOnClickOutside = false,
+                    dismissOnBackPress = false
+                ),
+                title = { Text("风格与参考设置", style = MaterialTheme.typography.titleMedium) },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "风格参考图 (图生图引导)",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier.size(100.dp).padding(4.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.AddPhotoAlternate, null, modifier = Modifier.padding(8.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (state.referenceImageUri != null) {
+                                    AsyncImage(
+                                        model = state.referenceImageUri,
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        shape = AppShapes.small,
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        Icon(Icons.Default.AddPhotoAlternate, null, modifier = Modifier.padding(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                            
+                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                Button(
+                                    onClick = { imagePicker() },
+                                    modifier = Modifier.height(36.dp),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                                    shape = AppShapes.small,
+                                    enabled = !state.isGenerating
+                                ) {
+                                    Text("更改参考图", style = MaterialTheme.typography.labelSmall)
+                                }
+                                if (state.referenceImageUri != null) {
+                                    Spacer(Modifier.height(8.dp))
+                                    TextButton(
+                                        onClick = { viewModel.setReferenceImage(null) },
+                                        modifier = Modifier.height(28.dp),
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text("移除参考", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                    }
+                                }
                             }
                         }
-                    }
-                    
-                    Column(Modifier.weight(1f).padding(start = 8.dp)) {
-                        Button(
-                            onClick = { imagePicker() },
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                            shape = AppShapes.small,
+
+                        Spacer(Modifier.height(20.dp))
+
+                        Text(
+                            "全局风格关键词",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = state.globalStyle,
+                            onValueChange = { viewModel.setGlobalStyle(it) },
+                            placeholder = { Text("例如：Cyberpunk, neon lights...", style = MaterialTheme.typography.bodySmall) },
+                            modifier = Modifier.fillMaxWidth().height(120.dp),
+                            singleLine = false,
+                            textStyle = MaterialTheme.typography.bodySmall,
                             enabled = !state.isGenerating
-                        ) {
-                            Text("选择参考图", style = MaterialTheme.typography.labelSmall)
-                        }
-                        if (state.referenceImageUri != null) {
-                            TextButton(
-                                onClick = { viewModel.setReferenceImage(null) },
-                                modifier = Modifier.height(24.dp),
-                                contentPadding = PaddingValues(0.dp)
-                            ) {
-                                Text("清除参考", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                        )
+                        
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "提示：设置的风格和参考图将在每次生成时自动生效。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { 
+                            viewModel.saveStyleSettings {
+                                showAdvancedSettingsDialog = false
                             }
-                        }
+                        },
+                        enabled = !state.isGenerating
+                    ) {
+                        Text("保存并完成")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAdvancedSettingsDialog = false }) {
+                        Text("取消")
                     }
                 }
-            }
+            )
         }
 
         if (selectedBlock == null) {
-            // 未选中任何块的空状态提示
             Text(stringResource(Res.string.prop_select_block), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            // 1. 只读物理坐标预览面板
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                 shape = AppShapes.small,
@@ -490,7 +515,6 @@ private fun PropertyPanel(
                 }
             }
 
-            // 2. 当前绑定资源缩略图展示
             Text(
                 text = "当前绑定资源",
                 style = MaterialTheme.typography.labelMedium,
@@ -528,7 +552,6 @@ private fun PropertyPanel(
                 }
             }
 
-            // 3. 历史记录与资源解绑按钮
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -553,7 +576,6 @@ private fun PropertyPanel(
 
             HorizontalDivider(Modifier.padding(vertical = 12.dp))
 
-            // 4. 语言切换与描述提示词展示
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang ->
                     SegmentedButton(
@@ -565,13 +587,8 @@ private fun PropertyPanel(
                 }
             }
 
-            val displayPrompt =
-                if (currentEditingLang == PromptLanguage.EN) selectedBlock.userPromptEn else selectedBlock.userPromptZh
-            
-            // 使用本地状态，允许用户在生图前临时修改 Prompt，但不持久化到模板
-            var tempPrompt by remember(selectedBlock.id, currentEditingLang, displayPrompt) { 
-                mutableStateOf(displayPrompt) 
-            }
+            val displayPrompt = if (currentEditingLang == PromptLanguage.EN) selectedBlock.userPromptEn else selectedBlock.userPromptZh
+            var tempPrompt by remember(selectedBlock.id, currentEditingLang, displayPrompt) { mutableStateOf(displayPrompt) }
 
             OutlinedTextField(
                 value = tempPrompt,
@@ -584,7 +601,6 @@ private fun PropertyPanel(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 5. 图像生成特性配置（透明度/扣图）
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = state.isGenerateTransparent,
@@ -618,7 +634,6 @@ private fun PropertyPanel(
             }
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 6. 执行生成按钮
             Button(
                 onClick = { viewModel.onRequestGeneration(apiKey, tempPrompt) },
                 modifier = Modifier.fillMaxWidth(),
@@ -638,9 +653,6 @@ private fun PropertyPanel(
     }
 }
 
-/**
- * 封装的只读信息展示小组件
- */
 @Composable
 private fun InfoItem(label: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier) {
@@ -648,4 +660,3 @@ private fun InfoItem(label: String, value: String, modifier: Modifier = Modifier
         Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
     }
 }
-

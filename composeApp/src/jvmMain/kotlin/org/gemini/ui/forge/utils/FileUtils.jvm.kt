@@ -5,27 +5,37 @@ import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** 辅助：如果路径是相对的，则解析为绝对路径 */
+private fun resolve(path: String): String {
+    if (path.startsWith("http") || path.startsWith("data:")) return path
+    val file = File(path)
+    if (file.isAbsolute) return path
+    // 相对路径，通过与 LocalFileStorage 一致的规则解析
+    val dataDir = File(System.getProperty("user.home"), ".geminiuiforge")
+    return File(dataDir, path).absolutePath
+}
+
 actual fun Throwable.getPlatformStackTrace(): String {
     return this.stackTraceToString()
 }
 
 actual suspend fun getLocalFileLastModified(filePath: String): Long = withContext(Dispatchers.IO) {
-    return@withContext File(filePath).lastModified()
+    return@withContext File(resolve(filePath)).lastModified()
 }
 
 actual suspend fun deleteLocalFile(filePath: String): Boolean = withContext(Dispatchers.IO) {
-    return@withContext File(filePath).delete()
+    return@withContext File(resolve(filePath)).delete()
 }
 
 actual suspend fun listFilesInLocalDirectory(dirPath: String): List<String> = withContext(Dispatchers.IO) {
-    val dir = File(dirPath)
+    val dir = File(resolve(dirPath))
     if (!dir.exists() || !dir.isDirectory) return@withContext emptyList()
     return@withContext dir.listFiles()?.filter { it.isFile }?.map { it.absolutePath } ?: emptyList()
 }
 
 actual suspend fun readLocalFileBytes(filePath: String): ByteArray? = withContext(Dispatchers.IO) {
     return@withContext try {
-        val file = File(filePath)
+        val file = File(resolve(filePath))
         if (file.exists()) file.readBytes() else null
     } catch (e: Exception) {
         null
@@ -34,7 +44,7 @@ actual suspend fun readLocalFileBytes(filePath: String): ByteArray? = withContex
 
 actual suspend fun isFileExists(filePath: String): Boolean = withContext(Dispatchers.IO) {
     return@withContext try {
-        File(filePath).exists()
+        File(resolve(filePath)).exists()
     } catch (e: Exception) {
         false
     }
@@ -42,7 +52,7 @@ actual suspend fun isFileExists(filePath: String): Boolean = withContext(Dispatc
 
 actual suspend fun appendToLocalFile(filePath: String, content: String): Boolean = withContext(Dispatchers.IO) {
     return@withContext try {
-        File(filePath).appendText(content)
+        File(resolve(filePath)).appendText(content)
         true
     } catch (e: Exception) {
         false
@@ -84,3 +94,46 @@ actual suspend fun executeSystemCommand(
         false
     }
 }
+
+actual suspend fun calculateFileHash(filePath: String): String? = withContext(Dispatchers.IO) {
+    try {
+        val file = File(resolve(filePath))
+        if (!file.exists() || !file.isFile) return@withContext null
+        
+        val md = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            while (input.read(buffer).also { bytesRead = it } != -1) {
+                md.update(buffer, 0, bytesRead)
+            }
+        }
+        val digest = md.digest()
+        digest.joinToString("") { "%02x".format(it) }
+    } catch (e: Exception) {
+        AppLogger.e("FileUtils", "计算文件哈希失败: ${e.message}")
+        null
+    }
+}
+
+actual suspend fun copyLocalFile(sourcePath: String, destPath: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val sourceFile = File(resolve(sourcePath))
+        if (!sourceFile.exists() || !sourceFile.isFile) return@withContext false
+        
+        val destFile = File(resolve(destPath))
+        destFile.parentFile?.mkdirs()
+        
+        // 流式复制，避免 OOM
+        sourceFile.inputStream().use { input ->
+            destFile.outputStream().use { output ->
+                input.copyTo(output, 8192)
+            }
+        }
+        true
+    } catch (e: Exception) {
+        AppLogger.e("FileUtils", "文件复制失败: ${e.message}")
+        false
+    }
+}
+

@@ -88,4 +88,18 @@ actual suspend fun executeSystemCommand(
     return false
 }
 
+@OptIn(ExperimentalForeignApi::class)
+actual suspend fun calculateFileHash(filePath: String): String? {
+    // iOS 暂未实现流式 SHA-256，退化为通过 ByteArray 的 MD5 (仅供编译和基础演示通过)
+    val bytes = readLocalFileBytes(filePath) ?: return null
+    return bytes.calculateMd5()
+}
+
+@OptIn(ExperimentalForeignApi::class)
+actual suspend fun copyLocalFile(sourcePath: String, destPath: String): Boolean {
+    val fileManager = NSFileManager.defaultManager
+    fileManager.removeItemAtPath(destPath, null) // 清理旧文件以防覆盖报错
+    return fileManager.copyItemAtPath(sourcePath, destPath, null)
+}
+
 private infix fun Int.add(other: Int): Int = this + other

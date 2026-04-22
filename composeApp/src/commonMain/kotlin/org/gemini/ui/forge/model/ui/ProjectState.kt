@@ -13,6 +13,10 @@ import kotlinx.serialization.Serializable
 data class ProjectState(
     val projectId: String = "default_project",
     val globalTheme: String = "classic casino",
+    /** 整个生成模块的风格定义 (持久化保存) */
+    val globalStyle: String = "",
+    /** 生成模块选中的参考图本地路径 (持久化保存) */
+    val styleReferenceUri: String? = null,
     val referenceImages: List<String> = emptyList(), // 多参考图路径列表
     val pages: List<UIPage> = emptyList(),
     val createdAt: Long = 0L

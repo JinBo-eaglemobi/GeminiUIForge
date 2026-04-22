@@ -1,8 +1,13 @@
-package org.gemini.ui.forge
+package org.gemini.ui.forge.model
 
 /**
  * 自动生成的 Gemini 模型枚举类
  * 包含了当前 API Key 支持的所有可用模型。
+ *
+ * @property modelName 实际传给 API 请求的模型标识符（如 "gemini-3-pro-preview"）
+ * @property displayName 用于 UI 展示的人类可读名称
+ * @property description 模型的官方描述及功能说明
+ * @property supportedMethods 该模型支持调用的 API 方法列表
  */
 enum class GeminiModel(
     val modelName: String,
@@ -68,59 +73,45 @@ enum class GeminiModel(
 
     /**
      * 显示名称: Gemma 3 1B
-     * 功能描述: 
+     * 功能描述:
      * 支持的方法: generateContent, countTokens
      */
     GEMMA_3_1B_IT("gemma-3-1b-it", "Gemma 3 1B", "", "generateContent, countTokens"),
 
     /**
      * 显示名称: Gemma 3 4B
-     * 功能描述: 
+     * 功能描述:
      * 支持的方法: generateContent, countTokens
      */
     GEMMA_3_4B_IT("gemma-3-4b-it", "Gemma 3 4B", "", "generateContent, countTokens"),
 
     /**
      * 显示名称: Gemma 3 12B
-     * 功能描述: 
+     * 功能描述:
      * 支持的方法: generateContent, countTokens
      */
     GEMMA_3_12B_IT("gemma-3-12b-it", "Gemma 3 12B", "", "generateContent, countTokens"),
 
     /**
      * 显示名称: Gemma 3 27B
-     * 功能描述: 
+     * 功能描述:
      * 支持的方法: generateContent, countTokens
      */
     GEMMA_3_27B_IT("gemma-3-27b-it", "Gemma 3 27B", "", "generateContent, countTokens"),
 
     /**
      * 显示名称: Gemma 3n E4B
-     * 功能描述: 
+     * 功能描述:
      * 支持的方法: generateContent, countTokens
      */
     GEMMA_3N_E4B_IT("gemma-3n-e4b-it", "Gemma 3n E4B", "", "generateContent, countTokens"),
 
     /**
      * 显示名称: Gemma 3n E2B
-     * 功能描述: 
+     * 功能描述:
      * 支持的方法: generateContent, countTokens
      */
     GEMMA_3N_E2B_IT("gemma-3n-e2b-it", "Gemma 3n E2B", "", "generateContent, countTokens"),
-
-    /**
-     * 显示名称: Gemma 4 26B A4B IT
-     * 功能描述: Gemma 4 26B A4B IT
-     * 支持的方法: generateContent, countTokens
-     */
-    GEMMA_4_26B_A4B_IT("gemma-4-26b-a4b-it", "Gemma 4 26B A4B IT", "Gemma 4 26B A4B IT", "generateContent, countTokens"),
-
-    /**
-     * 显示名称: Gemma 4 31B IT
-     * 功能描述: Gemma 4 31B IT
-     * 支持的方法: generateContent, countTokens
-     */
-    GEMMA_4_31B_IT("gemma-4-31b-it", "Gemma 4 31B IT", "Gemma 4 31B IT", "generateContent, countTokens"),
 
     /**
      * 显示名称: Gemini Flash Latest
@@ -156,6 +147,13 @@ enum class GeminiModel(
      * 支持的方法: generateContent, countTokens, batchGenerateContent
      */
     GEMINI_2_5_FLASH_IMAGE("gemini-2.5-flash-image", "Nano Banana", "Gemini 2.5 Flash Preview Image", "generateContent, countTokens, batchGenerateContent"),
+
+    /**
+     * 显示名称: Gemini 2.5 Flash-Lite Preview Sep 2025
+     * 功能描述: Preview release (Septempber 25th, 2025) of Gemini 2.5 Flash-Lite
+     * 支持的方法: generateContent, countTokens, createCachedContent, batchGenerateContent
+     */
+    GEMINI_2_5_FLASH_LITE_PREVIEW_09_2025("gemini-2.5-flash-lite-preview-09-2025", "Gemini 2.5 Flash-Lite Preview Sep 2025", "Preview release (Septempber 25th, 2025) of Gemini 2.5 Flash-Lite", "generateContent, countTokens, createCachedContent, batchGenerateContent"),
 
     /**
      * 显示名称: Gemini 3 Pro Preview
@@ -228,25 +226,11 @@ enum class GeminiModel(
     LYRIA_3_PRO_PREVIEW("lyria-3-pro-preview", "Lyria 3 Pro Preview", "Lyria 3 Pro Preview", "generateContent, countTokens"),
 
     /**
-     * 显示名称: Gemini 3.1 Flash TTS Preview
-     * 功能描述: Gemini 3.1 Flash TTS Preview
-     * 支持的方法: generateContent, countTokens, batchGenerateContent
-     */
-    GEMINI_3_1_FLASH_TTS_PREVIEW("gemini-3.1-flash-tts-preview", "Gemini 3.1 Flash TTS Preview", "Gemini 3.1 Flash TTS Preview", "generateContent, countTokens, batchGenerateContent"),
-
-    /**
      * 显示名称: Gemini Robotics-ER 1.5 Preview
      * 功能描述: Gemini Robotics-ER 1.5 Preview
      * 支持的方法: generateContent, countTokens
      */
     GEMINI_ROBOTICS_ER_1_5_PREVIEW("gemini-robotics-er-1.5-preview", "Gemini Robotics-ER 1.5 Preview", "Gemini Robotics-ER 1.5 Preview", "generateContent, countTokens"),
-
-    /**
-     * 显示名称: Gemini Robotics-ER 1.6 Preview
-     * 功能描述: Gemini Robotics-ER 1.6 Preview
-     * 支持的方法: generateContent, countTokens, createCachedContent, batchGenerateContent
-     */
-    GEMINI_ROBOTICS_ER_1_6_PREVIEW("gemini-robotics-er-1.6-preview", "Gemini Robotics-ER 1.6 Preview", "Gemini Robotics-ER 1.6 Preview", "generateContent, countTokens, createCachedContent, batchGenerateContent"),
 
     /**
      * 显示名称: Gemini 2.5 Computer Use Preview 10-2025
@@ -358,5 +342,19 @@ enum class GeminiModel(
      * 功能描述: Gemini 2.5 Flash Native Audio Preview 09-2025
      * 支持的方法: countTokens, bidiGenerateContent
      */
-    GEMINI_2_5_FLASH_NATIVE_AUDIO_PREVIEW_09_2025("gemini-2.5-flash-native-audio-preview-09-2025", "Gemini 2.5 Flash Native Audio Preview 09-2025", "Gemini 2.5 Flash Native Audio Preview 09-2025", "countTokens, bidiGenerateContent");
+    GEMINI_2_5_FLASH_NATIVE_AUDIO_PREVIEW_09_2025("gemini-2.5-flash-native-audio-preview-09-2025", "Gemini 2.5 Flash Native Audio Preview 09-2025", "Gemini 2.5 Flash Native Audio Preview 09-2025", "countTokens, bidiGenerateContent"),
+
+    /**
+     * 显示名称: Gemini 2.5 Flash Native Audio Preview 12-2025
+     * 功能描述: Gemini 2.5 Flash Native Audio Preview 12-2025
+     * 支持的方法: countTokens, bidiGenerateContent
+     */
+    GEMINI_2_5_FLASH_NATIVE_AUDIO_PREVIEW_12_2025("gemini-2.5-flash-native-audio-preview-12-2025", "Gemini 2.5 Flash Native Audio Preview 12-2025", "Gemini 2.5 Flash Native Audio Preview 12-2025", "countTokens, bidiGenerateContent"),
+
+    /**
+     * 显示名称: Gemini 3.1 Flash Live Preview
+     * 功能描述: Gemini 3.1 Flash Live Preview
+     * 支持的方法: bidiGenerateContent
+     */
+    GEMINI_3_1_FLASH_LIVE_PREVIEW("gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live Preview", "Gemini 3.1 Flash Live Preview", "bidiGenerateContent");
 }

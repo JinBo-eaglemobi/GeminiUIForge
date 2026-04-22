@@ -1,96 +1,88 @@
 package org.gemini.ui.forge.utils
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import kotlinx.browser.document
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
+import org.khronos.webgl.Int8Array
 import org.w3c.dom.HTMLInputElement
+import org.w3c.files.FileReader
+import org.w3c.files.get
+import org.gemini.ui.forge.data.TemplateFile
+import org.gemini.ui.forge.service.LocalFileStorage
+import org.gemini.ui.forge.getCurrentTimeMillis
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 @Composable
 actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
-    return remember {
-        {
-            val input = document.createElement("input") as HTMLInputElement
-            input.type = "file"
-            input.accept = "image/*"
-            input.multiple = true
-            input.onchange = {
-                val files = input.files
-                if (files != null) {
-                    val result = mutableListOf<String>()
-                    var processedCount = 0
-                    val totalFiles = files.length
-                    
-                    if (totalFiles == 0) {
-                        onResult(emptyList())
-                    } else {
-                        for (i in 0 until totalFiles) {
-                            val file = files.item(i)
-                            if (file != null) {
-                                val reader = org.w3c.files.FileReader()
-                                reader.onload = { event ->
-                                    // 使用 asDynamic() 绕过 Kotlin 的类型检查，直接访问 JS 的 result 属性并调用 toString()
-                                    val target = event.target.asDynamic()
-                                    val dataUrl = target.result?.toString() ?: ""
-                                    
-                                    console.log("File read success. Data URL length: " + dataUrl.length)
-                                    // 打印前几十个字符帮助调试
-                                    console.log("Data URL prefix: " + dataUrl.take(30))
-                                    
-                                    result.add(dataUrl)
-                                    processedCount++
-                                    if (processedCount == totalFiles) {
-                                        onResult(result)
-                                    }
-                                }
-                                reader.onerror = {
-                                    console.log("FileReader error occurred")
-                                    processedCount++
-                                    if (processedCount == totalFiles) {
-                                        onResult(result)
-                                    }
-                                }
-                                reader.readAsDataURL(file)
-                            } else {
-                                processedCount++
-                                if (processedCount == totalFiles) {
-                                    onResult(result)
-                                }
-                            }
+    return {
+        val input = document.createElement("input") as HTMLInputElement
+        input.type = "file"
+        input.accept = "image/png, image/jpeg, image/webp"
+        input.multiple = true
+        
+        input.onchange = {
+            val files = input.files
+            if (files != null && files.length > 0) {
+                MainScope().launch {
+                    val resultPaths = mutableListOf<String>()
+                    val storage = LocalFileStorage()
+                    for (i in 0 until files.length) {
+                        val file = files.item(i)
+                        if (file != null) {
+                            val bytes = readFileAsByteArray(file)
+                            val timestamp = getCurrentTimeMillis()
+                            val opfsPath = "imports/img_${timestamp}_${file.name}"
+                            storage.saveBytesToFile(opfsPath, bytes)
+                            resultPaths.add(opfsPath)
                         }
                     }
+                    onResult(resultPaths)
                 }
             }
-            input.click()
+            null
         }
+        input.click()
     }
 }
 
 @Composable
+actual fun TemplateFile.rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
+    return rememberImagePicker(onResult)
+}
+
+@Composable
 actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): () -> Unit {
-    return remember {
-        {
-            val input = document.createElement("input") as HTMLInputElement
-            input.type = "file"
-            input.asDynamic().webkitdirectory = true
-            input.onchange = {
-                val files = input.files
-                if (files != null && files.length > 0) {
-                    // 对于 Web，我们拿不到真实的绝对路径，
-                    // 通常返回第一个文件的路径前缀或特定的标识符，
-                    // 这里我们为了兼容 LocalFileStorage，返回一个虚拟前缀。
-                    val file = files.item(0)
-                    if (file != null) {
-                        val fullPath = file.asDynamic().webkitRelativePath as String
-                        val dirName = fullPath.split("/").firstOrNull() ?: ""
-                        onResult(dirName)
-                    } else {
-                        onResult(null)
-                    }
-                } else {
-                    onResult(null)
-                }
+    // Directory picking in browser via <input webkitdirectory>
+    return {
+        val input = document.createElement("input") as HTMLInputElement
+        input.type = "file"
+        input.setAttribute("webkitdirectory", "true")
+        
+        input.onchange = {
+            val files = input.files
+            if (files != null && files.length > 0) {
+                // Just return a dummy path or the first file's webkitRelativePath
+                val path = files.item(0)?.asDynamic()?.webkitRelativePath?.toString()?.substringBefore("/")
+                onResult(path)
+            } else {
+                onResult(null)
             }
-            input.click()
+            null
         }
+        input.click()
     }
+}
+
+private suspend fun readFileAsByteArray(file: org.w3c.files.File): ByteArray = suspendCoroutine { cont ->
+    val reader = FileReader()
+    reader.onload = {
+        val arrayBuffer = reader.result as org.khronos.webgl.ArrayBuffer
+        val int8Array = Int8Array(arrayBuffer)
+        val dynArray = int8Array.asDynamic()
+        val bytes = ByteArray(int8Array.length) { index -> dynArray[index].unsafeCast<Byte>() }
+        cont.resume(bytes)
+    }
+    reader.readAsArrayBuffer(file)
 }

@@ -8,6 +8,7 @@ import javax.swing.JFileChooser
 import javax.swing.UIManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.gemini.ui.forge.data.TemplateFile
 
 // 全局静态预热，避免点击时才初始化 LookAndFeel 和 FileSystemView 导致卡顿
 private var isLafSet = false
@@ -36,18 +37,35 @@ private fun getWarmChooser(title: String): JFileChooser {
 @Composable
 actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
     return {
-        // Run dialog picking on a background to avoid blocking the main UI event loop
         Thread {
             val activeWindow = java.awt.Window.getWindows().firstOrNull { it.isActive }
             val dialog = FileDialog(activeWindow as? Frame, "Select Images", FileDialog.LOAD)
-            dialog.isAlwaysOnTop = true // 永远置顶
+            dialog.isAlwaysOnTop = true
             dialog.isMultipleMode = true
             dialog.isVisible = true
             val files = dialog.files
             if (files != null && files.isNotEmpty()) {
-                val paths = files.map { it.absolutePath }
-                // Call result callback
-                onResult(paths)
+                onResult(files.map { it.absolutePath })
+            }
+            dialog.dispose()
+        }.start()
+    }
+}
+
+@Composable
+actual fun TemplateFile.rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
+    val initialDir = this.getAbsolutePath()
+    return {
+        Thread {
+            val activeWindow = java.awt.Window.getWindows().firstOrNull { it.isActive }
+            val dialog = FileDialog(activeWindow as? Frame, "Select Images", FileDialog.LOAD)
+            dialog.isAlwaysOnTop = true
+            dialog.directory = initialDir
+            dialog.isMultipleMode = true
+            dialog.isVisible = true
+            val files = dialog.files
+            if (files != null && files.isNotEmpty()) {
+                onResult(files.map { it.absolutePath })
             }
             dialog.dispose()
         }.start()
@@ -56,7 +74,6 @@ actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
 
 @Composable
 actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): () -> Unit {
-    // 界面加载时后台预热 JFileChooser
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             getWarmChooser(title)
@@ -67,10 +84,8 @@ actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): 
         Thread {
             val activeWindow = java.awt.Window.getWindows().firstOrNull { it.isActive }
             val chooser = getWarmChooser(title)
-            
-            // 创建一个临时的 JDialog 包装器并设置 isAlwaysOnTop
             val dialog = object : javax.swing.JDialog(activeWindow as? Frame, title, true) {}
-            dialog.isAlwaysOnTop = true // 永远置顶
+            dialog.isAlwaysOnTop = true
             
             val result = chooser.showOpenDialog(dialog)
             if (result == JFileChooser.APPROVE_OPTION) {

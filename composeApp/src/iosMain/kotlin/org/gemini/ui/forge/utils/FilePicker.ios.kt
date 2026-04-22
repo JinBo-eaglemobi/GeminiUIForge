@@ -13,6 +13,7 @@ import platform.darwin.dispatch_group_create
 import platform.darwin.dispatch_group_enter
 import platform.darwin.dispatch_group_leave
 import platform.darwin.dispatch_group_notify
+import org.gemini.ui.forge.data.TemplateFile
 
 @Composable
 actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
@@ -26,15 +27,11 @@ actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
                 didFinishPicking.forEach { result ->
                     val pickerResult = result as PHPickerResult
                     val itemProvider = pickerResult.itemProvider
-                    
-                    // 在 Kotlin/Native 中，PHPicker 要求传入 NSItemProviderReadingProtocol 协议对象。
-                    // UIImage 实现了该协议。我们需要将其作为协议对象传递。
                     val uiImageClass = UIImage as Any as NSItemProviderReadingProtocol
                     if (itemProvider.canLoadObjectOfClass(uiImageClass)) {
                         dispatch_group_enter(dispatchGroup)
                         itemProvider.loadObjectOfClass(uiImageClass) { image, error ->
                             if (image != null && image is UIImage) {
-                                // 在 iOS 上，我们通常将图片保存到临时目录并返回路径
                                 val data = UIImagePNGRepresentation(image)
                                 if (data != null) {
                                     val tempDir = NSTemporaryDirectory()
@@ -58,14 +55,18 @@ actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
 
     return {
         val pickerConfig = PHPickerConfiguration()
-        pickerConfig.selectionLimit = 0 // 0 means multiselect
+        pickerConfig.selectionLimit = 0
         pickerConfig.filter = PHPickerFilter.imagesFilter()
         val picker = PHPickerViewController(pickerConfig)
         picker.delegate = delegate
-        
         val rootVC = UIApplication.sharedApplication.keyWindow?.rootViewController
         rootVC?.presentViewController(picker, animated = true, completion = null)
     }
+}
+
+@Composable
+actual fun TemplateFile.rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
+    return rememberImagePicker(onResult)
 }
 
 @Composable
@@ -76,7 +77,6 @@ actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): 
                 val url = didPickDocumentsAtURLs.firstOrNull() as? NSURL
                 onResult(url?.path)
             }
-
             override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) {
                 onResult(null)
             }
@@ -86,7 +86,6 @@ actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): 
     return {
         val picker = UIDocumentPickerViewController(forOpeningContentTypes = listOf(UTTypeFolder), asCopy = false)
         picker.delegate = delegate
-        
         val rootVC = UIApplication.sharedApplication.keyWindow?.rootViewController
         rootVC?.presentViewController(picker, animated = true, completion = null)
     }

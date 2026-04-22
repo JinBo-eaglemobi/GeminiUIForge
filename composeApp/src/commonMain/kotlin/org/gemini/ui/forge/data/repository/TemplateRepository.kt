@@ -8,9 +8,10 @@ import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.service.LocalFileStorage
 import org.gemini.ui.forge.utils.*
 
+import org.gemini.ui.forge.data.TemplateFile
+
 /**
  * 模板持久化仓库类，负责项目模板及关联资源的保存、读取和删除
- * @property fileStorage 本地文件存储抽象层
  */
 class TemplateRepository(
     val fileStorage: LocalFileStorage = LocalFileStorage(),
@@ -22,29 +23,32 @@ class TemplateRepository(
 
     /**
      * 将生成的资源保存到模块专用的资产目录下
-     * 路径：templates/$templateName/assets/$blockId/
      */
     suspend fun saveBlockResource(templateName: String, blockId: String, fileNamePrefix: String, bytes: ByteArray, isPng: Boolean = true): String {
         val sanitizedName = templateName.replace(" ", "_")
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
         val ext = if (isPng) "png" else "jpg"
-        // 存储规范：templates/项目名/assets/模块名/前缀_时间戳.ext
-        val fileName = "$PROJECTS_DIR/$sanitizedName/assets/$blockId/${fileNamePrefix}_$timestamp.$ext"
-        val savedPath = fileStorage.saveBytesToFile(fileName, bytes)
-        AppLogger.i("TemplateRepository", "✅ Block 资源已保存: $savedPath (${bytes.size / 1024} KB)")
-        return savedPath
+        
+        // 构造强类型相对路径
+        val relPath = "$PROJECTS_DIR/$sanitizedName/assets/$blockId/${fileNamePrefix}_$timestamp.$ext"
+        val tFile = TemplateFile(relPath)
+        
+        // 执行写入 (TemplateFile.writeBytes 内部会自动处理绝对路径拼接)
+        tFile.writeBytes(bytes)
+        
+        AppLogger.i("TemplateRepository", "✅ Block 资源已保存: $relPath")
+        return relPath
     }
 
     /**
-     * 将临时图片（如分析时的局部图）保存到模板的 cache 目录下
+     * 将临时图片保存到模板的 cache 目录下
      */
     suspend fun saveCacheImage(templateName: String, fileNamePrefix: String, bytes: ByteArray): String {
         val sanitizedName = templateName.replace(" ", "_")
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
-        val fileName = "$PROJECTS_DIR/$sanitizedName/cache/${fileNamePrefix}_$timestamp.jpg"
-        val savedPath = fileStorage.saveBytesToFile(fileName, bytes)
-        AppLogger.d("TemplateRepository", "📦 缓存图片已保存: $savedPath (${bytes.size / 1024} KB)")
-        return savedPath
+        val relPath = "$PROJECTS_DIR/$sanitizedName/cache/${fileNamePrefix}_$timestamp.jpg"
+        TemplateFile(relPath).writeBytes(bytes)
+        return relPath
     }
 
     /**
@@ -52,11 +56,11 @@ class TemplateRepository(
      */
     suspend fun cleanupExpiredCache(templateName: String) {
         val sanitizedName = templateName.replace(" ", "_")
-        val cacheDirName = "$PROJECTS_DIR/$sanitizedName/cache"
+        val cacheDirRel = "$PROJECTS_DIR/$sanitizedName/cache"
         AppLogger.i("TemplateRepository", "🧹 开始清理过期缓存: $sanitizedName")
         try {
             val rootDir = fileStorage.getDataDir()
-            val fullCacheDir = "$rootDir/$cacheDirName"
+            val fullCacheDir = "$rootDir/$cacheDirRel"
             val files = listFilesInLocalDirectory(fullCacheDir)
             val now = org.gemini.ui.forge.getCurrentTimeMillis()
             val oneDay = 24 * 60 * 60 * 1000L
@@ -67,10 +71,9 @@ class TemplateRepository(
                 if (now - lastMod > oneDay) {
                     deleteLocalFile(filePath)
                     count++
-                    AppLogger.d("TemplateRepository", "🗑️ 已清理过期缓存文件: $filePath")
                 }
             }
-            AppLogger.i("TemplateRepository", "✅ 缓存清理完成，共移除 $count 个文件")
+            AppLogger.i("TemplateRepository", "✅ 缓存清理完成")
         } catch (e: Exception) {
             AppLogger.e("TemplateRepository", "❌ 清理缓存异常", e)
         }
@@ -83,6 +86,17 @@ class TemplateRepository(
         val sanitizedName = templateName.replace(" ", "_")
         AppLogger.i("TemplateRepository", "💾 开始保存模板: $templateName")
         
+        val dataDir = fileStorage.getDataDir().replace("\\", "/")
+        
+        fun String.toRelative(): String {
+            val normalized = this.replace("\\", "/")
+            return if (normalized.startsWith(dataDir)) {
+                normalized.removePrefix(dataDir).removePrefix("/")
+            } else {
+                normalized
+            }
+        }
+
         val pathMapping = mutableMapOf<String, String>()
         val updatedReferenceImages = mutableListOf<String>()
 
@@ -93,7 +107,6 @@ class TemplateRepository(
 
                 when {
                     originalPath.startsWith("http") -> {
-                        AppLogger.d("TemplateRepository", "🌐 正在下载远程参考图: $originalPath")
                         val response = httpClient.get(originalPath)
                         if (response.status.value == 200) {
                             bytes = response.readRawBytes()
@@ -101,7 +114,6 @@ class TemplateRepository(
                         }
                     }
                     originalPath.startsWith("data:image") -> {
-                        AppLogger.d("TemplateRepository", "🖼️ 正在解码 Base64 参考图")
                         val pureBase64 = if (originalPath.contains(",")) originalPath.substringAfter(",") else originalPath
                         @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
                         bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
@@ -114,14 +126,14 @@ class TemplateRepository(
                 }
 
                 if (bytes != null) {
-                    val archivedFileName = "$PROJECTS_DIR/$sanitizedName/assets/reference_$index.$ext"
-                    val savedPath = fileStorage.saveBytesToFile(archivedFileName, bytes)
-                    updatedReferenceImages.add(savedPath)
-                    pathMapping[originalPath] = savedPath
-                    AppLogger.d("TemplateRepository", "📑 参考图归档成功: $savedPath")
-                } else if (originalPath.contains(sanitizedName) && originalPath.contains("assets")) {
-                    updatedReferenceImages.add(originalPath)
-                    pathMapping[originalPath] = originalPath
+                    val relPath = "$PROJECTS_DIR/$sanitizedName/assets/reference_$index.$ext"
+                    TemplateFile(relPath).writeBytes(bytes)
+                    updatedReferenceImages.add(relPath)
+                    pathMapping[originalPath] = relPath
+                } else {
+                    val rel = originalPath.toRelative()
+                    updatedReferenceImages.add(rel)
+                    pathMapping[originalPath] = rel
                 }
             } catch (e: Exception) {
                 AppLogger.e("TemplateRepository", "❌ 归档参考图失败: $originalPath", e)
@@ -129,19 +141,35 @@ class TemplateRepository(
         }
 
         val updatedPages = projectState.pages.map { page ->
-            val mappedPath = pathMapping[page.sourceImageUri] ?: page.sourceImageUri
-            page.copy(sourceImageUri = mappedPath)
+            val mappedSource = pathMapping[page.sourceImageUri] ?: page.sourceImageUri?.toRelative()
+            page.copy(
+                sourceImageUri = mappedSource,
+                blocks = cleanBlockPaths(page.blocks, dataDir)
+            )
         }
 
         val updatedState = projectState.copy(
+            styleReferenceUri = projectState.styleReferenceUri?.toRelative(),
             referenceImages = updatedReferenceImages,
             pages = updatedPages
         )
 
-        val fileName = "$PROJECTS_DIR/$sanitizedName/template.json"
+        val jsonRelPath = "$PROJECTS_DIR/$sanitizedName/template.json"
         val content = json.encodeToString(updatedState)
-        fileStorage.saveToFile(fileName, content)
-        AppLogger.i("TemplateRepository", "✅ 模板 JSON 已更新: $fileName (${content.length / 1024} KB)")
+        fileStorage.saveToFile(jsonRelPath, content)
+        AppLogger.i("TemplateRepository", "✅ 模板 JSON 已更新")
+    }
+
+    private fun cleanBlockPaths(blocks: List<org.gemini.ui.forge.model.ui.UIBlock>, dataDir: String): List<org.gemini.ui.forge.model.ui.UIBlock> {
+        return blocks.map { block ->
+            val cleanedUri = block.currentImageUri?.replace("\\", "/")?.let {
+                if (it.startsWith(dataDir)) it.removePrefix(dataDir).removePrefix("/") else it
+            }
+            block.copy(
+                currentImageUri = cleanedUri,
+                children = cleanBlockPaths(block.children, dataDir)
+            )
+        }
     }
 
     /**

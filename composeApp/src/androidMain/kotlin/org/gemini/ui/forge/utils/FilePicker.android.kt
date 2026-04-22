@@ -36,3 +36,9 @@ actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): 
         launcher.launch(null)
     }
 }
+
+@Composable
+actual fun org.gemini.ui.forge.data.TemplateFile.rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
+    // Android 系统文件选择器暂不支持指定起始本地目录，回退至标准选择器
+    return rememberImagePicker(onResult)
+}

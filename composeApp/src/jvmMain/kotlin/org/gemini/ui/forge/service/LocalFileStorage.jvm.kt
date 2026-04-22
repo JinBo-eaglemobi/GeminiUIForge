@@ -3,6 +3,7 @@ package org.gemini.ui.forge.service
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.gemini.ui.forge.state.GlobalAppEnv
 
 import org.gemini.ui.forge.utils.AppLogger
 
@@ -14,6 +15,9 @@ actual class LocalFileStorage {
             dataDir.mkdirs()
             AppLogger.i("LocalFileStorage", "📂 初始化应用根目录: ${dataDir.absolutePath}")
         }
+        
+        // 关键：初始化全局环境根目录
+        GlobalAppEnv.updateDataRoot(dataDir.absolutePath)
         
         // 确保 templates 目录存在
         val templatesDir = File(dataDir, "templates")
@@ -55,7 +59,9 @@ actual class LocalFileStorage {
                     file.renameTo(File(newDir, file.name))
                 }
             }
+            
             dataDir = newDir
+            GlobalAppEnv.updateDataRoot(dataDir.absolutePath)
             AppLogger.i("LocalFileStorage", "✅ 目录迁移成功")
             return@withContext true
         } catch (e: Exception) {
@@ -70,16 +76,16 @@ actual class LocalFileStorage {
         val target = File(dataDir, fileName)
         target.parentFile.mkdirs()
         target.writeText(content)
-        AppLogger.d("LocalFileStorage", "📝 文本已保存: ${target.absolutePath} (${content.length} chars)")
-        return@withContext target.absolutePath
+        AppLogger.d("LocalFileStorage", "📝 文本已保存: $fileName (${content.length} chars)")
+        return@withContext fileName
     }
 
     actual suspend fun saveBytesToFile(fileName: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
         val target = File(dataDir, fileName)
         target.parentFile.mkdirs()
         target.writeBytes(bytes)
-        AppLogger.d("LocalFileStorage", "🎨 资源已保存: ${target.absolutePath} (${bytes.size / 1024} KB)")
-        return@withContext target.absolutePath
+        AppLogger.d("LocalFileStorage", "🎨 资源已保存: $fileName (${bytes.size / 1024} KB)")
+        return@withContext fileName
     }
 
     actual suspend fun readFromFile(fileName: String): String? = withContext(Dispatchers.IO) {
