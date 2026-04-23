@@ -3,6 +3,7 @@ package org.gemini.ui.forge
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
@@ -27,7 +28,7 @@ expect fun getPlatform(): Platform
  * 获取当前系统的 Unix 时间戳
  * @return 以毫秒为单位的时间戳
  */
-expect fun getCurrentTimeMillis(): Long
+fun getCurrentTimeMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
 /**
  * 跨平台的鼠标水平调整大小图标，主要用于桌面端的边界拖拽
