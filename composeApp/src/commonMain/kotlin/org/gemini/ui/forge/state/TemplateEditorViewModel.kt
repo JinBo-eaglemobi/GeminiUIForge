@@ -453,71 +453,90 @@ class TemplateEditorViewModel(
         val currentState = _state.value
         val currentPage = currentState.currentPage
         val originalImage = currentPage?.sourceImageUri ?: return
+        
         currentGenJob?.cancel()
+        val task = aiService.createTask<ProjectState>("区域重构", viewModelScope)
+        
+        // 同步 AITask 状态到 _state
         currentGenJob = viewModelScope.launch {
-            try {
-                _state.update { it.copy(isGenerating = true, showAITaskDialog = true, generationLogs = emptyList()) }
-                val logger = { msg: String -> addGenLog(msg) }
-                // 1. 根据坐标和原图尺寸进行裁剪
-                val croppedBytes = cropImage(
-                    imageSource = originalImage.getAbsolutePath(),
-                    bounds = bounds,
-                    logicalWidth = currentPage.width,
-                    logicalHeight = currentPage.height
-                ) ?: throw Exception("裁剪失败")
-                val originalBytes = originalImage.readBytes() ?: throw Exception("无法读取原图")
-                val fingerprint = originalBytes.calculateMd5()
-
-                // 2. 检查云端资产库是否已缓存原图
-                var originalFileUri =
-                    cloudAssetManager.assets.value.find { it.displayName?.contains(fingerprint) == true && it.state == "ACTIVE" }?.uri
-                        ?: ""
-                if (originalFileUri.isBlank()) {
-                    originalFileUri = cloudAssetManager.getOrUploadFile(
-                        originalImage.relativePath.substringAfterLast("/"),
-                        originalBytes,
-                        getMimeType(originalImage.getAbsolutePath())
-                    ) { _, status -> logger("[$status]") } ?: ""
+            launch {
+                task.status.collect { status ->
+                    _state.update { it.copy(isGenerating = status == org.gemini.ui.forge.service.AITaskStatus.RUNNING) }
                 }
+            }
+            
+            _state.update { it.copy(isGenerating = true, showAITaskDialog = true, generationLogs = emptyList()) }
+            
+            task.execute {
+                try {
+                    val logger = { msg: String -> addGenLog(msg); log(msg) }
+                    // 1. 根据坐标和原图尺寸进行裁剪
+                    logger("✂️ 正在提取区域图像...")
+                    val croppedBytes = cropImage(
+                        imageSource = originalImage.getAbsolutePath(),
+                        bounds = bounds,
+                        logicalWidth = currentPage.width,
+                        logicalHeight = currentPage.height
+                    ) ?: throw Exception("裁剪失败")
+                    val originalBytes = originalImage.readBytes() ?: throw Exception("无法读取原图")
+                    val fingerprint = originalBytes.calculateMd5()
 
-                // 3. 获取历史上下文
-                val historyKey = blockId ?: "GLOBAL_REFINE"
-                val history = if (useChatContext) {
-                    _state.value.chatHistories[historyKey] ?: emptyList()
-                } else {
-                    emptyList()
-                }
+                    // 2. 检查云端资产库是否已缓存原图
+                    logger("☁️ 正在同步云端原图...")
+                    var originalFileUri =
+                        cloudAssetManager.assets.value.find { it.displayName?.contains(fingerprint) == true && it.state == "ACTIVE" }?.uri
+                            ?: ""
+                    if (originalFileUri.isBlank()) {
+                        originalFileUri = cloudAssetManager.getOrUploadFile(
+                            originalImage.relativePath.substringAfterLast("/"),
+                            originalBytes,
+                            getMimeType(originalImage.getAbsolutePath())
+                        ) { _, status -> logger("[$status]") } ?: ""
+                    }
 
-                // 4. 将当前 JSON 状态传递给 AI，执行重塑
-                val currentJson = Json.encodeToString(ProjectState.serializer(), currentState.project)
-                val updatedProject = aiService.refineAreaForTemplate(
-                    originalImageUri = originalFileUri,
-                    croppedBytes = croppedBytes,
-                    currentJson = currentJson,
-                    userInstruction = userInstruction,
-                    apiKey = apiKey,
-                    history = history,
-                    onLog = logger
-                )
+                    // 3. 获取历史上下文
+                    val historyKey = blockId ?: "GLOBAL_REFINE"
+                    val history = if (useChatContext) {
+                        _state.value.chatHistories[historyKey] ?: emptyList()
+                    } else {
+                        emptyList()
+                    }
 
-                // 5. 更新历史 (无论是否使用旧历史，新对话都记录下来，方便之后开启会话模式)
-                val newUserMsg = org.gemini.ui.forge.model.api.ChatMessage("user", userInstruction)
-                val newModelMsg = org.gemini.ui.forge.model.api.ChatMessage("model", "已重塑 UI 结构。")
-                _state.update { s ->
-                    val newHistory = history + newUserMsg + newModelMsg
-                    s.copy(
-                        project = updatedProject,
-                        chatHistories = s.chatHistories + (historyKey to newHistory)
+                    // 4. 将当前 JSON 状态传递给 AI，执行重塑
+                    logger("🤖 正在向 AI 发送区域重写请求...")
+                    val currentJson = Json.encodeToString(ProjectState.serializer(), currentState.project)
+                    val updatedProject = aiService.refineAreaForTemplate(
+                        originalImageUri = originalFileUri,
+                        croppedBytes = croppedBytes,
+                        currentJson = currentJson,
+                        userInstruction = userInstruction,
+                        apiKey = apiKey,
+                        history = history,
+                        onLog = logger
                     )
+
+                    // 5. 更新历史 (无论是否使用旧历史，新对话都记录下来，方便之后开启会话模式)
+                    val newUserMsg = org.gemini.ui.forge.model.api.ChatMessage("user", userInstruction)
+                    val newModelMsg = org.gemini.ui.forge.model.api.ChatMessage("model", "已重塑 UI 结构。")
+                    _state.update { s ->
+                        val newHistory = history + newUserMsg + newModelMsg
+                        s.copy(
+                            project = updatedProject,
+                            chatHistories = s.chatHistories + (historyKey to newHistory)
+                        )
+                    }
+                    templateRepo.saveTemplate(currentState.projectName, updatedProject)
+                    onComplete(true)
+                    updatedProject
+                } catch (e: Exception) {
+                    if (e !is kotlinx.coroutines.CancellationException) {
+                        val errMsg = "❌ 错误: ${e.message}"
+                        addGenLog(errMsg)
+                        log(errMsg)
+                        onComplete(false)
+                    }
+                    throw e
                 }
-                templateRepo.saveTemplate(currentState.projectName, updatedProject)
-                onComplete(true)
-            } catch (e: Exception) {
-                if (e !is kotlinx.coroutines.CancellationException) {
-                    addGenLog("❌ 错误: ${e.message}"); onComplete(false)
-                }
-            } finally {
-                _state.update { it.copy(isGenerating = false) }
             }
         }
     }
@@ -529,38 +548,54 @@ class TemplateEditorViewModel(
         val block = _state.value.project.pages.flatMap { it.blocks }.let { findBlockById(it, blockId) } ?: return
         val textToOptimize = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
         if (textToOptimize.isBlank()) return
+        
         currentGenJob?.cancel()
+        val task = aiService.createTask<String>("提示词优化", viewModelScope)
+        
+        // 同步 AITask 状态到 _state
         currentGenJob = viewModelScope.launch {
+            launch {
+                task.status.collect { status ->
+                    _state.update { it.copy(isGenerating = status == org.gemini.ui.forge.service.AITaskStatus.RUNNING) }
+                }
+            }
+            
             _state.update { it.copy(isGenerating = true, generationLogs = emptyList(), showAITaskDialog = true) }
-            try {
-                // 根据当前语言获取相应的系统指令设定
-                val systemInstruction = if (currentLang == PromptLanguage.EN) aiService.promptManager.getPrompt("optimize_instruction_en") else aiService.promptManager.getPrompt("optimize_instruction_zh")
-                
-                // 获取历史
-                val historyKey = "PROMPT_$blockId"
-                val history = if (useChatContext) {
-                    _state.value.chatHistories[historyKey] ?: emptyList()
-                } else {
-                    emptyList()
-                }
-                
-                addGenLog(">>> 正在使用 AI 优化提示词 (${currentLang.displayName})...")
-                val optimized = aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, 3, history = history)
-                addGenLog(">>> 优化完成！")
-                
-                onUserPromptChanged(blockId, optimized, currentLang)
+            
+            task.execute {
+                try {
+                    val logger = { msg: String -> addGenLog(msg); log(msg) }
+                    // 根据当前语言获取相应的系统指令设定
+                    val systemInstruction = if (currentLang == PromptLanguage.EN) aiService.promptManager.getPrompt("optimize_instruction_en") else aiService.promptManager.getPrompt("optimize_instruction_zh")
+                    
+                    // 获取历史
+                    val historyKey = "PROMPT_$blockId"
+                    val history = if (useChatContext) {
+                        _state.value.chatHistories[historyKey] ?: emptyList()
+                    } else {
+                        emptyList()
+                    }
+                    
+                    logger(">>> 正在使用 AI 优化提示词 (${currentLang.displayName})...")
+                    val optimized = aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, 3, history = history)
+                    logger(">>> 优化完成！")
+                    
+                    onUserPromptChanged(blockId, optimized, currentLang)
 
-                // 更新历史
-                val newUserMsg = org.gemini.ui.forge.model.api.ChatMessage("user", textToOptimize)
-                val newModelMsg = org.gemini.ui.forge.model.api.ChatMessage("model", optimized)
-                _state.update { s ->
-                    val newHistory = history + newUserMsg + newModelMsg
-                    s.copy(chatHistories = s.chatHistories + (historyKey to newHistory))
+                    // 更新历史
+                    val newUserMsg = org.gemini.ui.forge.model.api.ChatMessage("user", textToOptimize)
+                    val newModelMsg = org.gemini.ui.forge.model.api.ChatMessage("model", optimized)
+                    _state.update { s ->
+                        val newHistory = history + newUserMsg + newModelMsg
+                        s.copy(chatHistories = s.chatHistories + (historyKey to newHistory))
+                    }
+                    optimized
+                } catch (e: Exception) {
+                    val errMsg = ">>> 优化失败: ${e.message} <<<"
+                    addGenLog(errMsg)
+                    log(errMsg)
+                    throw e
                 }
-            } catch (e: Exception) {
-                addGenLog(">>> 优化失败: ${e.message} <<<")
-            } finally {
-                _state.update { it.copy(isGenerating = false) }
             }
         }
     }

@@ -4,8 +4,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material3.*
@@ -15,15 +16,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.formatTimestamp
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.app.AppGlobalState
 import org.gemini.ui.forge.model.ui.ProjectState
-import org.gemini.ui.forge.service.AIGenerationService
-import org.gemini.ui.forge.service.CloudAssetManager
-import org.gemini.ui.forge.service.ConfigManager
+import org.gemini.ui.forge.service.*
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
+import org.gemini.ui.forge.ui.dialog.AITaskProgressDialog
 import org.gemini.ui.forge.ui.dialog.CloudAssetDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.rememberImagePicker
@@ -37,23 +39,82 @@ fun TemplateGeneratorScreen(
     configManager: ConfigManager,
     templateRepo: TemplateRepository
 ) {
-    val apiKey: String = globalState.effectiveApiKey
-    val maxRetries: Int = globalState.maxRetries
     val aiService: AIGenerationService = remember { AIGenerationService(cloudAssetManager, configManager) }
     val coroutineScope = rememberCoroutineScope()
+    
     var inputUris by remember { mutableStateOf("") }
     var templateName by remember { mutableStateOf("") }
-    var generatedState by remember { mutableStateOf<ProjectState?>(null) }
-    var isAnalyzing by remember { mutableStateOf(false) }
-    var saveStatus by remember { mutableStateOf("") }
-    val logs = remember { mutableStateListOf<String>() }
+    var showAssetManager by remember { mutableStateOf(false) }
+
+    // 使用 AITask 统一管理任务状态
+    var currentTask by remember { mutableStateOf<AITask<ProjectState>?>(null) }
+    val taskStatus by (currentTask?.status ?: MutableStateFlow(AITaskStatus.IDLE)).collectAsState()
+    val taskResult by (currentTask?.result ?: MutableStateFlow<ProjectState?>(null)).collectAsState()
+    
+    var showLogs by remember { mutableStateOf(true) }
     var streamedJson by remember { mutableStateOf("") }
-    var showAssetManager by remember { mutableStateOf(false) } // 新增状态：控制资产管理器显示
+
+    // 当任务成功时的自动保存逻辑
+    LaunchedEffect(taskStatus, taskResult) {
+        if (taskStatus == AITaskStatus.SUCCESS && taskResult != null) {
+            val resultState = taskResult!!
+            val finalTemplateName = if (templateName.isBlank()) {
+                inputUris.split("\n")
+                    .firstOrNull { it.isNotBlank() }
+                    ?.substringAfterLast("/")
+                    ?.substringAfterLast("\\")
+                    ?.substringBeforeLast(".")
+                    ?.ifBlank { "NewTemplate_${getCurrentTimeMillis()}" } ?: "NewTemplate"
+            } else {
+                templateName
+            }
+            
+            try {
+                currentTask?.log("💾 正在自动归档参考图并保存模板...")
+                val allImageUris = inputUris.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+                
+                // 先执行归档，获取 TemplateFile 列表
+                val archivedFiles = templateRepo.archiveExternalImages(finalTemplateName, allImageUris)
+                
+                // 更新 ProjectState 中的参考图和页面关联图
+                val stateToSave = resultState.copy(
+                    createdAt = getCurrentTimeMillis(),
+                    referenceImages = archivedFiles,
+                    pages = resultState.pages.mapIndexed { index, page ->
+                        page.copy(sourceImageUri = archivedFiles.getOrNull(index) ?: archivedFiles.firstOrNull())
+                    }
+                )
+                
+                templateRepo.saveTemplate(finalTemplateName, stateToSave)
+                onTemplateSaved(finalTemplateName, stateToSave)
+            } catch (e: Exception) {
+                currentTask?.log("❌ 保存失败: ${e.message}")
+            }
+        }
+    }
 
     if (showAssetManager) {
         CloudAssetDialog(
             cloudAssetManager = cloudAssetManager,
             onDismiss = { showAssetManager = false }
+        )
+    }
+
+    if (currentTask != null && taskStatus != AITaskStatus.IDLE) {
+        AITaskProgressDialog(
+            title = "Gemini 智能 UI 分析中...",
+            logs = currentTask!!.logs,
+            isProcessing = taskStatus == AITaskStatus.RUNNING,
+            isLogVisible = showLogs,
+            onToggleLogVisibility = { showLogs = !showLogs },
+            onActionClick = { 
+                if (taskStatus == AITaskStatus.RUNNING) {
+                    currentTask?.cancel() 
+                } else {
+                    currentTask = null
+                }
+            },
+            onDismiss = { if (taskStatus != AITaskStatus.RUNNING) currentTask = null }
         )
     }
 
@@ -91,19 +152,18 @@ fun TemplateGeneratorScreen(
             label = { Text(stringResource(Res.string.template_gen_input_hint)) },
             modifier = Modifier.fillMaxWidth(),
             maxLines = 3,
-            enabled = !isAnalyzing
+            enabled = taskStatus != AITaskStatus.RUNNING
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 新增：模板名称输入框，提前到分析之前
         OutlinedTextField(
             value = templateName,
             onValueChange = { templateName = it },
             label = { Text("模板名称 (留空则自动根据图片命名)") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            enabled = !isAnalyzing
+            enabled = taskStatus != AITaskStatus.RUNNING
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -111,7 +171,7 @@ fun TemplateGeneratorScreen(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             OutlinedButton(
                 onClick = { imagePicker() },
-                enabled = !isAnalyzing,
+                enabled = taskStatus != AITaskStatus.RUNNING,
                 shape = AppShapes.medium
             ) {
                 Text(stringResource(Res.string.template_gen_pick_local))
@@ -119,121 +179,64 @@ fun TemplateGeneratorScreen(
 
             Button(
                 onClick = {
-                    coroutineScope.launch {
-                        isAnalyzing = true
-                        generatedState = null
-                        saveStatus = ""
-                        streamedJson = ""
-                        logs.clear()
+                    val task = aiService.createTask<ProjectState>("UI 模板分析", coroutineScope)
+                    currentTask = task
+                    streamedJson = ""
+                    
+                    task.execute {
+                        val finalName = if (templateName.isBlank()) "自动命名" else templateName
+                        log("🔍 正在预验证图片资源有效性...")
                         
-                        // 1. 确定最终模板名称
-                        val finalTemplateName = if (templateName.isBlank()) {
-                            inputUris.split("\n")
-                                .firstOrNull { it.isNotBlank() }
-                                ?.substringAfterLast("/")
-                                ?.substringAfterLast("\\")
-                                ?.substringBeforeLast(".")
-                                ?.ifBlank { "NewTemplate_${getCurrentTimeMillis()}" } ?: "NewTemplate"
-                        } else {
-                            templateName
-                        }
-
-                        logs.add("[${formatTimestamp(getCurrentTimeMillis())}] 🔍 正在预验证图片资源有效性...")
                         val allImageUris = inputUris.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
-                        
-                        // 执行预验证 (URL 连通性、Base64 格式、本地文件存在性)
                         val validationError = aiService.validateImageUris(allImageUris)
                         if (validationError != null) {
-                            logs.add("[${formatTimestamp(getCurrentTimeMillis())}] ❌ 验证失败: $validationError")
-                            saveStatus = "验证失败，请修正路径后重试。"
-                            isAnalyzing = false
-                            return@launch
+                            throw Exception("验证失败: $validationError")
                         }
 
-                        logs.add("[${formatTimestamp(getCurrentTimeMillis())}] 🚀 准备分析图片并创建模板 [$finalTemplateName]...")
+                        log("🚀 准备分析图片并创建模板 [$finalName]...")
+                        updateProgress(0.2f)
+
+                        // 执行 AI 分析
+                        val result = aiService.analyzeImagesForTemplate(
+                            imageUris = allImageUris,
+                            apiKey = globalState.effectiveApiKey,
+                            maxRetries = globalState.maxRetries,
+                            onLog = { log(it) },
+                            onChunk = { streamedJson += it }
+                        )
                         
-                        try {
-                            // 2. 执行 AI 分析
-                            val resultState = aiService.analyzeImagesForTemplate(
-                                imageUris = inputUris.split("\n").map { it.trim() }.filter { it.isNotEmpty() },
-                                apiKey = apiKey,
-                                maxRetries = maxRetries,
-                                onLog = { logMsg -> logs.add("[${formatTimestamp(getCurrentTimeMillis())}] $logMsg") },
-                                onChunk = { chunk -> streamedJson += chunk }
-                            )
-                            
-                            generatedState = resultState
-                            logs.add("[${formatTimestamp(getCurrentTimeMillis())}] ✅ 分析成功！")
-
-                            // 3. 立即自动保存到本地缓存目录 (包含全量参考图归档)
-                            logs.add("[${formatTimestamp(getCurrentTimeMillis())}] 💾 正在自动归档参考图并保存模板...")
-                            val allImageUris = inputUris.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
-                            
-                            // 先执行归档，获取 TemplateFile 列表
-                            val archivedFiles = templateRepo.archiveExternalImages(finalTemplateName, allImageUris)
-                            
-                            // 更新 ProjectState 中的参考图和页面关联图
-                            val stateToSave = resultState.copy(
-                                createdAt = getCurrentTimeMillis(),
-                                referenceImages = archivedFiles,
-                                pages = resultState.pages.mapIndexed { index, page ->
-                                    // 假设页面与参考图按索引一一对应（或者取第一个）
-                                    page.copy(sourceImageUri = archivedFiles.getOrNull(index) ?: archivedFiles.firstOrNull())
-                                }
-                            )
-                            
-                            templateRepo.saveTemplate(finalTemplateName, stateToSave)
-                            
-                            // 4. 全部任务成功后，触发自动跳转至编辑器界面
-                            onTemplateSaved(finalTemplateName, stateToSave)
-                            
-                        } catch (e: Exception) {
-                            saveStatus = "分析失败: ${e.message}"
-                            logs.add("[${formatTimestamp(getCurrentTimeMillis())}] ❌ 发生错误: ${e.message}")
-                        }
-                        isAnalyzing = false
+                        updateProgress(1.0f)
+                        result
                     }
                 },
-                enabled = inputUris.isNotBlank() && !isAnalyzing,
+                enabled = inputUris.isNotBlank() && (taskStatus != AITaskStatus.RUNNING),
                 shape = AppShapes.medium,
-                modifier = Modifier.widthIn(min = 120.dp) // 设定最小宽度防止跳变
+                modifier = Modifier.widthIn(min = 120.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    if (isAnalyzing) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                    } else {
-                        Text(stringResource(Res.string.template_gen_analyze))
-                    }
-                }
+                Text(stringResource(Res.string.template_gen_analyze))
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
+        // 下方日志区域可以作为历史记录显示，或者在 AITask 结束后仍能查看
         Surface(
             modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 4.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             shape = MaterialTheme.shapes.small
         ) {
-            if (logs.isEmpty() && !isAnalyzing) {
+            val logs = currentTask?.logs ?: remember { mutableStateListOf<String>() }
+            
+            if (logs.isEmpty() && taskStatus == AITaskStatus.IDLE) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("暂无运行日志", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("等待任务启动...", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 SelectionContainer {
                     val listState = rememberLazyListState()
-
-                    // 智能滚动到最新日志 (仅在新增一行日志时判断，避免流数据高频触发导致强制拉到底部)
                     LaunchedEffect(logs.size) {
                         if (logs.isNotEmpty()) {
-                            // 允许一定的容错范围：如果用户在最底部或只差几个元素，或者是第一条日志，则自动滚动
-                            val isAtBottom = !listState.canScrollForward || 
-                                             (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= listState.layoutInfo.totalItemsCount - 2
-                            
-                            if (isAtBottom || logs.size == 1) {
-                                // 滚动到最后一个元素 (包括可能存在的数据流 item)
-                                listState.animateScrollToItem(listState.layoutInfo.totalItemsCount - 1)
-                            }
+                            listState.animateScrollToItem(logs.size - 1)
                         }
                     }
 
@@ -249,23 +252,7 @@ fun TemplateGeneratorScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-
-                            // 关键：实时展示接收中的 JSON 数据流 (精简版)
-                            if (isAnalyzing && streamedJson.isNotEmpty() && generatedState == null) {
-                                item {
-                                    Text(
-                                        text = "[数据流同步中] 长度: ${streamedJson.length}",
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontFamily = FontFamily.Monospace,
-                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                                        ),
-                                        modifier = Modifier.padding(top = 4.dp)
-                                    )
-                                }
-                            }
                         }
-
-                        // 恢复物理滚动条
                         VerticalScrollbarAdapter(
                             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
                             scrollState = listState
@@ -273,10 +260,6 @@ fun TemplateGeneratorScreen(
                     }
                 }
             }
-        }
-
-        if (saveStatus.isNotBlank()) {
-            Text(saveStatus, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 8.dp))
         }
     }
 }

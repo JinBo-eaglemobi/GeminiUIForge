@@ -5,6 +5,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -36,6 +37,14 @@ class AIGenerationService(
 
     private val imagenGenerator = ImagenGenerator(cloudAssetManager, promptManager)
     private val geminiGenerator = GeminiImageGenerator(cloudAssetManager, promptManager)
+    private val geminiClient = GeminiClient()
+
+    /**
+     * 创建一个新的 AI 任务
+     */
+    fun <T> createTask(name: String, scope: CoroutineScope): AITask<T> {
+        return AITask(name, scope)
+    }
 
     /**
      * 内部辅助方法：同步将日志发送到 UI 回调和磁盘日志系统。
@@ -43,19 +52,6 @@ class AIGenerationService(
     private fun syncLog(message: String, onLog: (String) -> Unit) {
         onLog(message)
         AppLogger.i(TAG, message)
-    }
-
-    /**
-     * 过滤 Base64 数据并统一输出 HTTP 请求日志
-     */
-    private fun logRequest(url: String, requestBody: String, onLog: (String) -> Unit) {
-        val sanitizedBody = requestBody
-            .replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
-            .replace(Regex("\"bytesBase64Encoded\"\\s*:\\s*\"[^\"]+\""), "\"bytesBase64Encoded\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
-            .replace(Regex("\"text\"\\s*:\\s*\"CURRENT_JSON_STATE: [\\s\\S]*?\""), "\"text\": \"CURRENT_JSON_STATE: <HIDDEN_FOR_LOGS>\"")
-        
-        val logMessage = "---- [HTTP REQUEST] ----\nURL: $url\nBody: \n$sanitizedBody\n------------------------"
-        syncLog(logMessage, onLog)
     }
 
     suspend fun validateImageUris(imageUris: List<String>): String? {
@@ -245,8 +241,6 @@ class AIGenerationService(
         }
         
         val url = ApiConfig.getImagenEndpoint(apiKey) 
-        val client = NetworkClient.shared
-
         syncLog("☁️ 启动云端 AI 抠图引擎...", onLog)
 
         @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
@@ -275,31 +269,13 @@ class AIGenerationService(
 
         val startTime = org.gemini.ui.forge.getCurrentTimeMillis()
         return try {
-            logRequest(url, requestBody, onLog)
-            val response = client.post(url) {
-                contentType(ContentType.Application.Json)
-                setBody(requestBody)
-            }
+            val resultBase64 = geminiClient.generateContent(url, requestBody, onLog)
             val duration = org.gemini.ui.forge.getCurrentTimeMillis() - startTime
             
-            if (response.status.isSuccess()) {
-                val responseText = response.bodyAsText()
-                val jsonResponse = jsonConfig.parseToJsonElement(responseText)
-                val resultBase64 = jsonResponse.jsonObject["predictions"]?.jsonArray?.firstOrNull()?.jsonObject?.get("bytesBase64Encoded")?.jsonPrimitive?.content
-                
-                if (resultBase64 != null) {
-                    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-                    val resultBytes = kotlin.io.encoding.Base64.Default.decode(resultBase64)
-                    syncLog("✅ 云端抠图处理完成 (${duration}ms)", onLog)
-                    resultBytes
-                } else {
-                    syncLog("❌ 云端抠图失败: 响应数据为空", onLog)
-                    null
-                }
-            } else {
-                syncLog("❌ 云端抠图失败: 接口状态码 ${response.status}", onLog)
-                null
-            }
+            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+            val resultBytes = kotlin.io.encoding.Base64.Default.decode(resultBase64)
+            syncLog("✅ 云端抠图处理完成 (${duration}ms)", onLog)
+            resultBytes
         } catch (e: Exception) {
             syncLog("❌ 云端抠图异常: ${e.message}", onLog)
             null
@@ -342,21 +318,10 @@ class AIGenerationService(
                             }
                             val displayName = localUri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "image_$index.jpg" }
                             val mime = org.gemini.ui.forge.utils.getMimeType(localUri)
-                            val fileUri = cloudAssetManager.getOrUploadFile(displayName, bytes, mime)
-
-                            if (fileUri != null) {
-                                syncLog("✅ 图 [${index + 1}] 云端同步成功", onLog)
-                                buildJsonObject {
-                                    put("fileData", buildJsonObject { put("mimeType", mime); put("fileUri", fileUri) })
-                                }
-                            } else {
-                                syncLog("⚠️ 图 [${index + 1}] 触发 Base64 降级补偿", onLog)
-                                buildJsonObject {
-                                    put("inlineData", buildJsonObject {
-                                        put("mimeType", mime)
-                                        put("data", kotlin.io.encoding.Base64.Default.encode(bytes))
-                                    })
-                                }
+                            
+                            // 统一调用 CloudAssetManager 的处理逻辑
+                            cloudAssetManager.buildGeminiImagePart(displayName, bytes, mime) { msg ->
+                                syncLog("图 [${index + 1}] $msg", onLog)
                             }
                         } catch (e: Exception) {
                             syncLog("❌ 处理图 ${index + 1} 异常: ${e.message}", onLog)
@@ -373,45 +338,24 @@ class AIGenerationService(
             put("generationConfig", buildJsonObject { put("responseMimeType", "application/json") })
         }.toString()
 
-        logRequest(url, requestBody, onLog)
-
         syncLog("📡 正在向服务器建立安全连接...", onLog)
 
         val accumulatedText = StringBuilder()
         try {
-            client.preparePost(url) {
-                contentType(ContentType.Application.Json)
-                setBody(requestBody)
-                timeout { requestTimeoutMillis = 300_000L }
-            }.execute { response ->
-                syncLog("收到响应，状态: ${response.status}，接收数据流...", onLog)
-                if (response.status.isSuccess()) {
-                    val channel = response.bodyAsChannel()
-                    while (!channel.isClosedForRead) {
-                        val line = channel.readUTF8Line() ?: break
-                        if (line.startsWith("data: ")) {
-                            val dataJson = line.substringAfter("data: ").trim()
-                            if (dataJson.isEmpty() || dataJson == "[DONE]") continue
-                            try {
-                                val textChunk = jsonConfig.parseToJsonElement(dataJson).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
-                                if (textChunk != null) {
-                                    accumulatedText.append(textChunk)
-                                    onChunk(textChunk)
-                                }
-                            } catch (e: Exception) {}
-                        }
-                    }
-                    syncLog("UI 框架解析完毕。", onLog)
-                } else {
-                    val error = response.bodyAsText()
-                    AppLogger.e(TAG, "API 失败: $error")
-                    throw Exception("API 失败: ${response.status}")
+            geminiClient.streamGenerateContent(
+                url = url,
+                requestBody = requestBody,
+                onLog = onLog,
+                onChunk = { chunk ->
+                    accumulatedText.append(chunk)
+                    onChunk(chunk)
                 }
-            }
-
+            )
+            
+            syncLog("UI 框架解析完毕。", onLog)
             val finalString = accumulatedText.toString()
             if (finalString.isEmpty()) throw Exception("响应为空")
-            val cleanJson = finalString.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+            val cleanJson = geminiClient.cleanJson(finalString)
             return jsonConfig.decodeFromString<ProjectState>(cleanJson)
         } catch (e: Exception) {
             AppLogger.e(TAG, "分析异常", e)
@@ -433,10 +377,13 @@ class AIGenerationService(
 
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
-        val client = NetworkClient.shared
 
         val promptTemplate = promptManager.getPrompt("refine_template")
         val fullPrompt = promptTemplate.replace($$"${USER_INSTRUCTION}", userInstruction)
+
+        // 使用统一图片预处理方法处理 croppedBytes
+        val displayName = "cropped_${org.gemini.ui.forge.getCurrentTimeMillis()}.jpg"
+        val imagePart = cloudAssetManager.buildGeminiImagePart(displayName, croppedBytes, "image/jpeg", onLog)
 
         val requestBody = buildJsonObject {
             put("contents", buildJsonArray {
@@ -456,55 +403,29 @@ class AIGenerationService(
                     put("parts", buildJsonArray {
                         add(buildJsonObject { put("text", fullPrompt) })
                         add(buildJsonObject { put("text", "CURRENT_JSON_STATE: \n$currentJson") })
-                        add(buildJsonObject {
-                            put("inlineData", buildJsonObject {
-                                put("mimeType", "image/jpeg")
-                                @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-                                val base64 = kotlin.io.encoding.Base64.Default.encode(croppedBytes)
-                                put("data", base64)
-                            })
-                        })
+                        add(imagePart) // 注入由统一构建方法返回的 JSON 节点
                     })
                 })
             })
             put("generationConfig", buildJsonObject { put("responseMimeType", "application/json") })
         }.toString()
 
-        logRequest(url, requestBody, onLog)
-
         val accumulatedText = StringBuilder()
         try {
-            client.preparePost(url) {
-                contentType(ContentType.Application.Json)
-                setBody(requestBody)
-                timeout { requestTimeoutMillis = 300_000L }
-            }.execute { response ->
-                if (response.status.isSuccess()) {
-                    val channel = response.bodyAsChannel()
-                    while (!channel.isClosedForRead) {
-                        val line = channel.readUTF8Line() ?: break
-                        if (line.startsWith("data: ")) {
-                            val dataJson = line.substringAfter("data: ").trim()
-                            if (dataJson.isEmpty() || dataJson == "[DONE]") continue
-                            try {
-                                val textChunk = jsonConfig.parseToJsonElement(dataJson).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
-                                if (textChunk != null) {
-                                    accumulatedText.append(textChunk)
-                                    onChunk(textChunk)
-                                }
-                            } catch (e: Exception) {}
-                        }
-                    }
-                    syncLog("✅ 重塑结构解析完毕。", onLog)
-                } else {
-                    val err = response.bodyAsText()
-                    AppLogger.e(TAG, "重塑失败: $err")
-                    throw Exception("重塑失败: ${response.status}")
+            geminiClient.streamGenerateContent(
+                url = url,
+                requestBody = requestBody,
+                onLog = onLog,
+                onChunk = { chunk ->
+                    accumulatedText.append(chunk)
+                    onChunk(chunk)
                 }
-            }
+            )
+            
+            syncLog("✅ 重塑结构解析完毕。", onLog)
             val finalString = accumulatedText.toString()
             if (finalString.isEmpty()) throw Exception("响应为空")
-            val cleanJson = finalString.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+            val cleanJson = geminiClient.cleanJson(finalString)
             return jsonConfig.decodeFromString<ProjectState>(cleanJson)
         } catch (e: Exception) {
             AppLogger.e(TAG, "重塑异常", e)
@@ -520,7 +441,6 @@ class AIGenerationService(
     ): String {
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
         val url = ApiConfig.getGenerateContentEndpoint(apiKey)
-        val client = NetworkClient.shared
 
         val promptTemplate = promptManager.getPrompt("ai_optimize_prompt")
         val fullPrompt = promptTemplate.replace("{0}", originalPrompt)
@@ -550,14 +470,10 @@ class AIGenerationService(
         var lastException: Exception? = null
         for (attempt in 0..maxRetries) {
             try {
-                logRequest(url, requestBody, {})
-                val response = client.post(url) { setBody(requestBody); contentType(ContentType.Application.Json) }
-                if (response.status.isSuccess()) {
-                    return jsonConfig.parseToJsonElement(response.bodyAsText()).jsonObject["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content?.trim() ?: ""
-                } else throw Exception("API 错误: ${response.status}")
+                return geminiClient.generateContent(url, requestBody)
             } catch (e: Exception) {
                 lastException = e
-                delay(1000L * attempt)
+                if (attempt < maxRetries) delay(1000L * (attempt + 1))
             }
         }
         throw lastException ?: Exception("优化未知错误")

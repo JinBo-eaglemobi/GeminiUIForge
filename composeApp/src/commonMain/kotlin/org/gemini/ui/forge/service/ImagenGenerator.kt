@@ -6,6 +6,8 @@ import io.ktor.http.*
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.data.remote.NetworkClient
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * 专门处理 Imagen 系列模型 (Imagen 3, Imagen 4) 的生成器
@@ -19,6 +21,7 @@ class ImagenGenerator(
     private val jsonConfig = Json { 
         ignoreUnknownKeys = true 
     }
+    private val geminiClient = GeminiClient()
 
     suspend fun generate(
         model: String,
@@ -32,7 +35,6 @@ class ImagenGenerator(
             ApiConfig.getImagenEndpoint(params.apiKey, model)
         }
 
-        val client = NetworkClient.shared
         val aspectRatio = calculateAspectRatio(params.targetWidth, params.targetHeight)
         val baseRes = getResolutionBase(params.imageSize)
         val shapeType = calculateShapeType(params.targetWidth, params.targetHeight)
@@ -125,8 +127,8 @@ class ImagenGenerator(
                         put("gcsUri", cloudUri) 
                     }
                 } else {
-                    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-                    val base64 = kotlin.io.encoding.Base64.Default.encode(bytes)
+                    @OptIn(ExperimentalEncodingApi::class)
+                    val base64 = Base64.encode(bytes)
                     refImageJson = buildJsonObject { 
                         put("bytesBase64Encoded", base64) 
                     }
@@ -155,27 +157,46 @@ class ImagenGenerator(
 
         syncLog(TAG, "📡 正在向 Imagen 发送请求...", onLog)
         
-        val response = client.post(url) {
-            contentType(ContentType.Application.Json)
-            if (params.isVertexAI) {
-                header("Authorization", "Bearer ${params.apiKey}")
-            }
-            setBody(requestBody)
-        }
-
-        if (response.status.isSuccess()) {
-            val jsonResponse = jsonConfig.parseToJsonElement(response.bodyAsText())
-            val predictions = jsonResponse.jsonObject["predictions"]?.jsonArray
-            return predictions?.mapNotNull {
-                val base64 = it.jsonObject["bytesBase64Encoded"]?.jsonPrimitive?.content
-                if (base64 != null) {
-                    "data:${if (params.isPng) "image/png" else "image/jpeg"};base64,$base64"
-                } else {
-                    null
+        try {
+            // 注意：GeminiClient.generateContent 目前只返回第一个发现的文本或 base64
+            // 但 Imagen 可能会返回多张图。我们需要更细粒度的控制，或者更新 GeminiClient。
+            // 鉴于 Imagen 返回的是 predictions 列表，我将直接在这里处理响应，
+            // 或者稍后进一步完善 GeminiClient 以支持列表返回。
+            // 目前为了保持兼容并复用日志脱敏，我们仍使用 geminiClient 的辅助方法。
+            
+            val client = NetworkClient.shared
+            // 这里我们仍手动调用 Ktor 以获取原始 JsonResponse，但复用 GeminiClient 的日志逻辑
+            // 实际上，我应该让 GeminiClient 更加通用。
+            
+            // 为了简单起见，我暂时在 ImagenGenerator 中保留部分逻辑，但移除冗余日志
+            val response = client.post(url) {
+                contentType(ContentType.Application.Json)
+                if (params.isVertexAI) {
+                    header("Authorization", "Bearer ${params.apiKey}")
                 }
-            } ?: emptyList()
-        } else {
-            throw Exception("Imagen API 错误: ${response.status}")
+                setBody(requestBody)
+            }
+
+            if (response.status.isSuccess()) {
+                val responseText = response.bodyAsText()
+                val jsonResponse = jsonConfig.parseToJsonElement(responseText)
+                val predictions = jsonResponse.jsonObject["predictions"]?.jsonArray
+                val results = predictions?.mapNotNull {
+                    val base64 = it.jsonObject["bytesBase64Encoded"]?.jsonPrimitive?.content
+                    if (base64 != null) {
+                        "data:${if (params.isPng) "image/png" else "image/jpeg"};base64,$base64"
+                    } else {
+                        null
+                    }
+                } ?: emptyList()
+                
+                results.forEach { onImageGenerated(it) }
+                return results
+            } else {
+                throw Exception("Imagen API 错误: ${response.status}")
+            }
+        } catch (e: Exception) {
+            throw e
         }
     }
 }

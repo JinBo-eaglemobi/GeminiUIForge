@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.gemini.ui.forge.utils.calculateMd5
 import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.data.remote.NetworkClient
@@ -196,6 +199,62 @@ class CloudAssetManager(private val configManager: ConfigManager) {
         } catch (e: Exception) {
             AppLogger.e("CloudAssetManager", "Upload error: ${e.message}", e)
             return null
+        }
+    }
+
+    /**
+     * [通用组件] 将图片字节数组包装为适用于 Gemini API 的 JSON Part。
+     * 自动尝试上传云端，如果成功则返回 `fileData` 格式；失败或降级则返回 `inlineData` (Base64) 格式。
+     */
+    suspend fun buildGeminiImagePart(
+        displayName: String,
+        bytes: ByteArray,
+        mimeType: String,
+        onLog: (String) -> Unit = {}
+    ): JsonObject {
+        val fileUri = getOrUploadFile(displayName, bytes, mimeType) { _, status -> onLog("CloudAsset: $status") }
+        return if (fileUri != null) {
+            onLog("✅ 云端同步成功")
+            buildJsonObject {
+                put("fileData", buildJsonObject {
+                    put("mimeType", mimeType)
+                    put("fileUri", fileUri)
+                })
+            }
+        } else {
+            onLog("⚠️ 触发 Base64 降级补偿")
+            buildJsonObject {
+                put("inlineData", buildJsonObject {
+                    put("mimeType", mimeType)
+                    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                    put("data", kotlin.io.encoding.Base64.Default.encode(bytes))
+                })
+            }
+        }
+    }
+
+    /**
+     * [通用组件] 将图片字节数组包装为适用于 Imagen API 的 JSON 对象。
+     * 自动尝试上传云端，如果成功则返回 `gcsUri` 格式；失败或降级则返回 `bytesBase64Encoded` 格式。
+     */
+    suspend fun buildImagenImagePart(
+        displayName: String,
+        bytes: ByteArray,
+        mimeType: String,
+        onLog: (String) -> Unit = {}
+    ): JsonObject {
+        val fileUri = getOrUploadFile(displayName, bytes, mimeType) { _, status -> onLog("CloudAsset: $status") }
+        return if (fileUri != null) {
+            onLog("✅ 云端同步成功 (GCS)")
+            buildJsonObject {
+                put("gcsUri", fileUri)
+            }
+        } else {
+            onLog("⚠️ 触发 Base64 降级补偿")
+            buildJsonObject {
+                @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                put("bytesBase64Encoded", kotlin.io.encoding.Base64.Default.encode(bytes))
+            }
         }
     }
 }

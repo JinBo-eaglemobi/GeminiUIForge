@@ -18,9 +18,7 @@ class GeminiImageGenerator(
 ) : BaseImageGenerator() {
 
     private val TAG = "GeminiImageGenerator"
-    private val jsonConfig = Json { 
-        ignoreUnknownKeys = true 
-    }
+    private val geminiClient = GeminiClient()
 
     suspend fun generate(
         model: String,
@@ -29,7 +27,6 @@ class GeminiImageGenerator(
         onImageGenerated: (String) -> Unit = {}
     ): List<String> {
         val url = ApiConfig.getStreamGenerateContentEndpoint(params.apiKey, model)
-        val client = NetworkClient.shared
         
         val stylePart = if (params.style.isNotBlank()) {
             "Style: ${params.style}."
@@ -76,72 +73,44 @@ class GeminiImageGenerator(
             })
             put("generationConfig", buildJsonObject {
                 // Gemini 2.0 Flash 等模型支持在 generationConfig 中设置候选数量
-                // 暂时注释掉，因为有些模型可能不支持 candidate_count
-                // put("candidate_count", params.count.coerceIn(1, 4))
             })
         }.toString()
 
-        // 过滤请求中的 Base64 数据以进行日志打印
-        val sanitizedRequestBody = requestBody
-            .replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
-            
-        syncLog(TAG, "---- [HTTP REQUEST] ----\nURL: $url\nBody: \n$sanitizedRequestBody\n------------------------", onLog)
         syncLog(TAG, "📡 正在向 Gemini 建立生图流连接 ($model)...", onLog)
         
         val allImages = mutableListOf<String>()
         try {
-            client.preparePost(url) {
-                contentType(ContentType.Application.Json)
-                setBody(requestBody)
-            }.execute { response ->
-                if (response.status.isSuccess()) {
-                    val channel = response.bodyAsChannel()
-                    var chunkIndex = 0
-                    while (!channel.isClosedForRead) {
-                        val line = channel.readUTF8Line() ?: break
-                        if (line.startsWith("data: ")) {
-                            val dataJson = line.substringAfter("data: ").trim()
-                            if (dataJson.isEmpty() || dataJson == "[DONE]") {
-                                if (dataJson == "[DONE]") syncLog(TAG, "🏁 生图任务结束", onLog)
-                                continue
+            geminiClient.streamGenerateContent(
+                url = url,
+                requestBody = requestBody,
+                onLog = onLog,
+                onRawData = { jsonElement ->
+                    try {
+                        val candidates = jsonElement.jsonObject["candidates"]?.jsonArray
+                        val parts = candidates?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray
+                        
+                        parts?.forEach { part ->
+                            // 提取文本（思考过程等）
+                            val textChunk = part.jsonObject["text"]?.jsonPrimitive?.content
+                            if (!textChunk.isNullOrEmpty()) {
+                                syncLog(TAG, "💬 AI: $textChunk", onLog)
                             }
-                            
-                            chunkIndex++
-                            try {
-                                val jsonElement = jsonConfig.parseToJsonElement(dataJson)
-                                val candidates = jsonElement.jsonObject["candidates"]?.jsonArray
-                                val parts = candidates?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray
-                                
-                                parts?.forEach { part ->
-                                    // 仅提取核心文字描述或思考过程
-                                    val textChunk = part.jsonObject["text"]?.jsonPrimitive?.content
-                                    if (!textChunk.isNullOrEmpty()) {
-                                        syncLog(TAG, "💬 AI: $textChunk", onLog)
-                                    }
 
-                                    // 仅提取图片生成成功的状态
-                                    val inlineData = part.jsonObject["inlineData"]?.jsonObject
-                                    val base64 = inlineData?.get("data")?.jsonPrimitive?.content
-                                    val mimeType = inlineData?.get("mimeType")?.jsonPrimitive?.content ?: "image/png"
-                                    
-                                    if (base64 != null) {
-                                        syncLog(TAG, "🖼️ 已接收到第 ${allImages.size + 1} 张图片数据", onLog)
-                                        val dataUri = "data:$mimeType;base64,$base64"
-                                        allImages.add(dataUri)
-                                        onImageGenerated(dataUri)
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                // 静默处理解析异常，保持日志干净
+                            // 提取图片数据 (inlineData)
+                            val inlineData = part.jsonObject["inlineData"]?.jsonObject
+                            val base64 = inlineData?.get("data")?.jsonPrimitive?.content
+                            val mimeType = inlineData?.get("mimeType")?.jsonPrimitive?.content ?: "image/png"
+                            
+                            if (base64 != null) {
+                                syncLog(TAG, "🖼️ 已接收到第 ${allImages.size + 1} 张图片数据", onLog)
+                                val dataUri = "data:$mimeType;base64,$base64"
+                                allImages.add(dataUri)
+                                onImageGenerated(dataUri)
                             }
                         }
-                    }
-                } else {
-                    val errorText = response.bodyAsText()
-                    syncLog(TAG, "❌ Gemini 生图流错误: HTTP ${response.status}\n$errorText", onLog)
-                    throw Exception("Gemini 生图流错误: ${response.status}")
+                    } catch (e: Exception) {}
                 }
-            }
+            )
             return allImages
         } catch (e: Exception) {
             throw e
