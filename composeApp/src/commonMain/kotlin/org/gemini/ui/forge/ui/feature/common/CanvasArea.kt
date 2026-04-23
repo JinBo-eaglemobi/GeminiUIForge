@@ -143,15 +143,13 @@ fun CanvasArea(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(containerWidthPx, containerHeightPx) {
-                                detectTransformGestures { _, panChange, zoomChange, _ ->
-                                    val viewCenterX = containerWidthPx / 2f
-                                    val viewCenterY = containerHeightPx / 2f
-                                    updateZoom(zoom * zoomChange, Offset(viewCenterX, viewCenterY))
+                            .pointerInput(Unit) {
+                                detectTransformGestures { centroid, panChange, zoomChange, _ ->
+                                    updateZoom(zoom * zoomChange, centroid)
                                     pan += panChange
                                 }
                             }
-                            .pointerInput(containerWidthPx, containerHeightPx) {
+                            .pointerInput(Unit) {
                                 awaitPointerEventScope {
                                     while (true) {
                                         val event = awaitPointerEvent()
@@ -160,9 +158,7 @@ fun CanvasArea(
                                             val delta = change.scrollDelta.y
                                             if (delta != 0f) {
                                                 val multiplier = if (delta > 0) 0.9f else 1.1f
-                                                val viewCenterX = containerWidthPx / 2f
-                                                val viewCenterY = containerHeightPx / 2f
-                                                updateZoom(zoom * multiplier, Offset(viewCenterX, viewCenterY))
+                                                updateZoom(zoom * multiplier, change.position)
                                             }
                                             event.changes.forEach { it.consume() }
                                         }
@@ -320,8 +316,9 @@ fun CanvasArea(
         // 全局浮动控制栏
         Surface(modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceVariant, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)), shadowElevation = 6.dp) {
             Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val currentCanvasWeight = if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
                 val viewCenterX = containerWidthPx / 2f
-                val viewCenterY = containerHeightPx / 2f
+                val viewCenterY = (containerHeightPx * currentCanvasWeight) / 2f
                 val centerOffset = Offset(viewCenterX, viewCenterY)
                 IconButton(onClick = { updateZoom(zoom - 0.2f, centerOffset) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Remove, "-", modifier = Modifier.size(16.dp)) }
                 Box(modifier = Modifier.height(28.dp).width(42.dp), contentAlignment = Alignment.Center) { Text("${(zoom * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center) }
