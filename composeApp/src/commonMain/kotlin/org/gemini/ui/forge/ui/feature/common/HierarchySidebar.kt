@@ -46,6 +46,23 @@ import org.gemini.ui.forge.ui.component.getIcon
 import org.gemini.ui.forge.ui.dialog.AddLayerDialog
 import org.gemini.ui.forge.ui.dialog.RenameLayerDialog
 
+/**
+ * UI 图层层级面板组件
+ * 负责渲染应用模块的层级结构（类似 Photoshop / Figma 的图层面板）。
+ * 支持选中、重命名、隐藏/显示控制，以及长按拖拽调整图层层级（排序及父子嵌套关系）。
+ *
+ * @param blocks UI 模块数据列表（树形结构）
+ * @param selectedBlockId 当前全局被选中的模块 ID
+ * @param onBlockClicked 单击选中图层的回调
+ * @param onBlockDoubleClicked 双击图层的回调（通常用于触发进入隔离编辑模式）
+ * @param onMoveBlock 拖拽移动图层结束时的回调，参数：源图层ID, 目标图层ID(可为空代表移至顶层), 拖拽释放位置(Before/After/Inside)
+ * @param onAddCustomBlock 顶部工具栏添加新图层的回调
+ * @param onRenameBlock 触发图层重命名的回调
+ * @param onToggleVisibility 切换单个图层显示/隐藏状态的回调
+ * @param onToggleAllVisibility 批量切换所有图层显示/隐藏状态的回调
+ * @param modifier 外部修饰符
+ * @param isReadOnly 是否为只读模式（如果是，将禁用拖拽、重命名、添加等操作）
+ */
 @Composable
 fun HierarchySidebar(
     blocks: List<UIBlock>,
@@ -60,19 +77,27 @@ fun HierarchySidebar(
     modifier: Modifier = Modifier,
     isReadOnly: Boolean = false
 ) {
-    var draggedBlockId by remember { mutableStateOf<String?>(null) }
-    var hoveredBlockId by remember { mutableStateOf<String?>(null) }
-    var pressedBlockId by remember { mutableStateOf<String?>(null) }
+    // ---- 拖拽与高亮状态 ----
+    var draggedBlockId by remember { mutableStateOf<String?>(null) } // 当前正在拖拽的源图层 ID
+    var hoveredBlockId by remember { mutableStateOf<String?>(null) } // 当前被拖拽到的目标上方图层 ID
+    var pressedBlockId by remember { mutableStateOf<String?>(null) } // 刚被按下但还未触发拖拽的图层 ID（用于防止误触）
+    
+    // ---- 拖拽时的浮动视觉提示状态 ----
     var dragShadowIcon by remember { mutableStateOf<ImageVector?>(null) }
     var dragShadowLabel by remember { mutableStateOf<String?>(null) }
-    var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val itemBounds = remember { mutableMapOf<String, Rect>() }
-    var dragPosition by remember { mutableStateOf<Offset?>(null) }
+    
+    // ---- 坐标映射及碰撞检测缓存 ----
+    var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) } // 面板容器的全局坐标，用于坐标转换
+    val itemBounds = remember { mutableMapOf<String, Rect>() } // 缓存每个图层项渲染后在其 Window 中的位置边界
+    var dragPosition by remember { mutableStateOf<Offset?>(null) } // 当前拖拽手指所处的实时位置
+    
+    // ---- 对话框及面板属性状态 ----
     var showAddDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf<String?>(null) }
-    var isAutoTrackEnabled by remember { mutableStateOf(true) }
-    var locateTrigger by remember { mutableStateOf(0L) }
+    var isAutoTrackEnabled by remember { mutableStateOf(true) } // 是否开启自动定位功能
+    var locateTrigger by remember { mutableStateOf(0L) } // 触发器时间戳：通知内部组件执行自动滚动定位
 
+    // 监听 selectedBlockId 变化：当在外侧画布被选中时，延迟通知列表滚动定位到该图层
     LaunchedEffect(selectedBlockId, isAutoTrackEnabled) {
         if (isAutoTrackEnabled && selectedBlockId != null) {
             delay(100)
@@ -319,149 +344,10 @@ fun HierarchySidebar(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun HierarchyItem(
-    block: UIBlock,
-    depth: Int,
-    isSelected: Boolean,
-    isDragged: Boolean,
-    isHovered: Boolean,
-    dropPosition: DropPosition,
-    locateTrigger: Long,
-    onBlockClicked: (String?) -> Unit,
-    onBlockDoubleClicked: (String) -> Unit,
-    onBoundsCalculated: (String, Rect) -> Unit,
-    selectedBlockId: String?,
-    draggedBlockId: String?,
-    hoveredBlockId: String?,
-    onToggleVisibility: (String, Boolean) -> Unit
-) {
-    var expanded by remember { mutableStateOf(true) }
-    val hasChildren = block.children.isNotEmpty()
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
-
-    LaunchedEffect(selectedBlockId) {
-        if (selectedBlockId != null && hasChildren && isDescendantOfLocal(block, selectedBlockId)) {
-            expanded = true
-        }
-    }
-    LaunchedEffect(locateTrigger) { if (locateTrigger > 0L && isSelected) bringIntoViewRequester.bringIntoView() }
-
-    val indicatorColor = Color(0xFF03A9F4)
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .bringIntoViewRequester(bringIntoViewRequester)
-                .onGloballyPositioned { coords -> onBoundsCalculated(block.id, coords.boundsInWindow()) }
-                .drawWithContent {
-                    drawContent()
-                    if (isHovered && isDragged.not() && draggedBlockId != null) {
-                        when (dropPosition) {
-                            DropPosition.BEFORE -> drawLine(
-                                color = indicatorColor,
-                                start = Offset(0f, 0f),
-                                end = Offset(size.width, 0f),
-                                strokeWidth = 4f
-                            )
-
-                            DropPosition.AFTER -> if (!hasChildren || !expanded) drawLine(
-                                color = indicatorColor,
-                                start = Offset(0f, size.height),
-                                end = Offset(size.width, size.height),
-                                strokeWidth = 4f
-                            )
-
-                            else -> {}
-                        }
-                    }
-                }
-                .background(
-                    when {
-                        isHovered && draggedBlockId != null && dropPosition == DropPosition.INSIDE -> MaterialTheme.colorScheme.secondaryContainer.copy(
-                            alpha = 0.8f
-                        )
-
-                        isDragged -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                        isSelected -> MaterialTheme.colorScheme.primaryContainer
-                        else -> Color.Transparent
-                    }
-                )
-                .combinedClickable(
-                    onClick = { onBlockClicked(block.id) },
-                    onDoubleClick = { onBlockDoubleClicked(block.id) }
-                )
-                .padding(start = (8 + depth * 16).dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (hasChildren) {
-                IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(20.dp)) {
-                    Icon(
-                        if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            } else Spacer(Modifier.width(20.dp))
-            Spacer(Modifier.width(4.dp))
-            Icon(
-                imageVector = block.type.getIcon(),
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = if (isSelected || isHovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.width(6.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(block.type.getDisplayNameRes()),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = block.id,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
-            IconButton(onClick = { onToggleVisibility(block.id, !block.isVisible) }, modifier = Modifier.size(24.dp)) {
-                Icon(
-                    imageVector = if (block.isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                    contentDescription = "Vis",
-                    modifier = Modifier.size(16.dp),
-                    tint = if (block.isVisible) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                        alpha = 0.4f
-                    )
-                )
-            }
-        }
-        if (hasChildren && expanded) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                block.children.forEach { child ->
-                    HierarchyItem(
-                        block = child,
-                        depth = depth + 1,
-                        isSelected = child.id == selectedBlockId,
-                        isDragged = child.id == draggedBlockId,
-                        isHovered = child.id == hoveredBlockId,
-                        dropPosition = dropPosition,
-                        locateTrigger = locateTrigger,
-                        onBlockClicked = onBlockClicked,
-                        onBlockDoubleClicked = onBlockDoubleClicked,
-                        onBoundsCalculated = onBoundsCalculated,
-                        selectedBlockId = selectedBlockId,
-                        draggedBlockId = draggedBlockId,
-                        hoveredBlockId = hoveredBlockId,
-                        onToggleVisibility = onToggleVisibility
-                    )
-                }
-            }
-        }
-    }
-}
-
+/**
+ * 递归查询指定 ID 对应的 UI 节点对象。
+ * 供拖拽开始时收集节点图标和文案信息等。
+ */
 private fun findBlockById(blocks: List<UIBlock>, id: String): UIBlock? {
     for (block in blocks) {
         if (block.id == id) return block
@@ -469,9 +355,4 @@ private fun findBlockById(blocks: List<UIBlock>, id: String): UIBlock? {
         if (found != null) return found
     }
     return null
-}
-
-private fun isDescendantOfLocal(currentBlock: UIBlock, targetId: String): Boolean {
-    if (currentBlock.id == targetId) return true
-    return currentBlock.children.any { isDescendantOfLocal(it, targetId) }
 }
