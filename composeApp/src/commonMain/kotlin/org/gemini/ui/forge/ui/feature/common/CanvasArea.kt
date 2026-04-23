@@ -194,11 +194,11 @@ fun CanvasArea(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .pointerInput(offsetX, offsetY, baseScale) {
+                                .pointerInput(offsetX, offsetY, baseScale, currentBlocks, currentEditingGroupId) {
                                     detectTapGestures(
                                         onDoubleTap = { offset ->
-                                            val lx = ((offset.x - pan.x) / zoom / density.density - offsetX) / baseScale
-                                            val ly = ((offset.y - pan.y) / zoom / density.density - offsetY) / baseScale
+                                            val lx = (offset.x / density.density - offsetX) / baseScale
+                                            val ly = (offset.y / density.density - offsetY) / baseScale
                                             
                                             val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
                                             
@@ -214,22 +214,22 @@ fun CanvasArea(
                                             }
                                         },
                                         onTap = { offset ->
-                                            val lx = ((offset.x - pan.x) / zoom / density.density - offsetX) / baseScale
-                                            val ly = ((offset.y - pan.y) / zoom / density.density - offsetY) / baseScale
+                                            val lx = (offset.x / density.density - offsetX) / baseScale
+                                            val ly = (offset.y / density.density - offsetY) / baseScale
                                             
                                             val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
                                             currentOnBlockClicked(hitBlock?.id)
                                         }
                                     )
                                 }
-                                .pointerInput(isReadOnly, offsetX, offsetY, baseScale) {
+                                .pointerInput(isReadOnly, offsetX, offsetY, baseScale, currentBlocks, currentEditingGroupId) {
                                     if (isReadOnly) return@pointerInput
                                     var dragTargetId: String? = null
                                     var isPanningStage = false 
                                     detectDragGestures(
                                         onDragStart = { offset ->
-                                            val lx = ((offset.x - pan.x) / zoom / density.density - offsetX) / baseScale
-                                            val ly = ((offset.y - pan.y) / zoom / density.density - offsetY) / baseScale
+                                            val lx = (offset.x / density.density - offsetX) / baseScale
+                                            val ly = (offset.y / density.density - offsetY) / baseScale
                                             
                                             val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
                                             
@@ -250,9 +250,8 @@ fun CanvasArea(
                                             if (isPanningStage) {
                                                 pan += dragAmount
                                             } else if (tid != null) {
-                                                // 考虑缩放状态下的逻辑位移
-                                                val logicalDx = dragAmount.x / zoom / density.density / baseScale
-                                                val logicalDy = dragAmount.y / zoom / density.density / baseScale
+                                                val logicalDx = dragAmount.x / density.density / baseScale
+                                                val logicalDy = dragAmount.y / density.density / baseScale
                                                 currentOnBlockDragged(tid, logicalDx, logicalDy)
                                             }
                                         },
