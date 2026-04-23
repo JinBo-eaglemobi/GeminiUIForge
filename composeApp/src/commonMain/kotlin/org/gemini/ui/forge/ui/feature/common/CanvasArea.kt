@@ -558,6 +558,18 @@ fun CanvasArea(
 
 /**
  * 递归渲染 UI 模块组件
+ *
+ * @param block 当前要渲染的 UI 模块数据对象
+ * @param parentX 父容器的绝对 X 坐标
+ * @param parentY 父容器的绝对 Y 坐标
+ * @param baseScale 画布的基础缩放比例（适配不同屏幕尺寸）
+ * @param zoom 用户的实时缩放倍数
+ * @param isSelected 当前模块是否被选中
+ * @param isDimmed 是否因为处于隔离编辑模式而被置灰显示
+ * @param isVisualMode 是否处于视觉预览模式（隐藏线框）
+ * @param density 屏幕密度，用于 dp 转换
+ * @param selectedBlockId 当前全局选中的模块 ID
+ * @param editingGroupId 当前正在编辑的分组 ID
  */
 @Composable
 fun RenderBlock(
@@ -575,20 +587,21 @@ fun RenderBlock(
 ) {
     if (!block.isVisible) return
 
-    // 异步加载图片位图
+    // 1. 异步加载图片位图：根据模块关联的 URI 加载图片
     val imageBitmapState =
         produceState<ImageBitmap?>(null, block.currentImageUri) { value = block.currentImageUri?.decodeToBitmap() }
     val imageBitmap = imageBitmapState.value
 
-    // 计算当前模块在画布上的物理坐标
+    // 2. 计算当前模块在画布上的物理坐标：父坐标 + 模块相对偏移 * 基础缩放
     val currentX = parentX + block.bounds.left * baseScale
     val currentY = parentY + block.bounds.top * baseScale
 
-    // 是否隐藏线框（视觉预览模式且已有图片时）
+    // 3. 视觉状态判断：视觉模式且有图片时隐藏占位线框
     val hidePlaceholder = isVisualMode && imageBitmap != null
 
     val selectionColor = Color(0xFF18A0FB) // Figma 风格的专业选中蓝
 
+    // 4. 渲染模块容器：处理位移、大小、背景和边框
     Box(
         modifier = Modifier
             .offset(x = currentX.dp, y = currentY.dp)
@@ -602,14 +615,14 @@ fun RenderBlock(
             )
             .border(
                 width = if (hidePlaceholder && !isSelected) 0.dp
-                else (1.dp / zoom), // 边框粗细随缩放调整，保持视觉一致性
+                else (1.dp / zoom), // 关键：边框粗细除以缩放比例，确保在任何缩放级别下线条视觉宽度一致
                 color = if (isSelected) selectionColor
                 else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
             ),
         contentAlignment = Alignment.Center
     ) {
         if (imageBitmap != null) {
-            // 渲染已绑定的图片内容
+            // 渲染已生成的 AI 图像内容
             Image(
                 bitmap = imageBitmap,
                 contentDescription = null,
@@ -617,11 +630,11 @@ fun RenderBlock(
                 contentScale = ContentScale.FillBounds
             )
         } else if (block.currentImageUri != null) {
-            // 加载中状态
+            // 图片加载中的反馈
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.dp)
         }
 
-        // 显示模块占位文本
+        // 5. 显示模块占位文本：仅在未隐藏且无图片时显示模块类型
         if (!hidePlaceholder && imageBitmap == null && block.currentImageUri == null) {
             Text(
                 text = stringResource(block.type.getDisplayNameRes()),
@@ -632,7 +645,7 @@ fun RenderBlock(
         }
     }
 
-    // 递归渲染子模块
+    // 6. 递归渲染子模块：保持层级关系并将当前模块坐标作为父坐标传递
     block.children.forEach { child ->
         RenderBlock(
             block = child,
