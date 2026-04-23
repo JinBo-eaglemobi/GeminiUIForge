@@ -54,7 +54,14 @@ fun TemplateEditorScreen(
 
     // 1. 初始化 ViewModel，其生命周期与当前 Screen 绑定
     val viewModel: TemplateEditorViewModel = viewModel(key = initialProjectName) {
-        TemplateEditorViewModel(initialProject, initialProjectName, initialPromptLang, templateRepo, cloudAssetManager, aiService)
+        TemplateEditorViewModel(
+            initialProject,
+            initialProjectName,
+            initialPromptLang,
+            templateRepo,
+            cloudAssetManager,
+            aiService
+        )
     }
     val state by viewModel.state.collectAsState()
 
@@ -277,7 +284,7 @@ private fun PropertyPanel(
                             EditableInfoItem(
                                 label = "宽度 (W)",
                                 value = page.width.toInt().toString(),
-                                onValueChange = { 
+                                onValueChange = {
                                     val w = it.toFloatOrNull() ?: page.width
                                     viewModel.updatePageSize(w, page.height)
                                 },
@@ -286,7 +293,7 @@ private fun PropertyPanel(
                             EditableInfoItem(
                                 label = "高度 (H)",
                                 value = page.height.toInt().toString(),
-                                onValueChange = { 
+                                onValueChange = {
                                     val h = it.toFloatOrNull() ?: page.height
                                     viewModel.updatePageSize(page.width, h)
                                 },
@@ -472,7 +479,7 @@ private fun PropertyPanel(
                 )
                 Text("携带历史上下文 (会话模式)", style = MaterialTheme.typography.bodyMedium)
             }
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -529,7 +536,10 @@ private fun PropertyPanel(
                                 viewModel.deleteBlock(selectedBlock.id)
                             }
                         ) {
-                            Text(stringResource(Res.string.dialog_action_delete), color = MaterialTheme.colorScheme.error)
+                            Text(
+                                stringResource(Res.string.dialog_action_delete),
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
                     },
                     dismissButton = {

@@ -157,7 +157,12 @@ fun CanvasArea(
                     shape = RoundedCornerShape(8.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Image(bitmap = refBitmap, contentDescription = "Ref", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                    Image(
+                        bitmap = refBitmap,
+                        contentDescription = "Ref",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
                 }
                 // 分屏拖拽条
                 Box(
@@ -177,7 +182,8 @@ fun CanvasArea(
             }
 
             // 画布主体部分
-            val canvasWeight = if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
+            val canvasWeight =
+                if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
             Box(modifier = Modifier.weight(canvasWeight).fillMaxWidth().clipToBounds()) {
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                     // 动态计算有效画布区域（取舞台尺寸与所有模块最远边界的最大值，确保溢出模块也能看到）
@@ -189,8 +195,10 @@ fun CanvasArea(
                     // 初始缩放比例：使有效区域自适应容器大小
                     val baseScale = min(maxWidth.value / effectiveWidth, maxHeight.value / effectiveHeight) * 0.9f
                     // 居中偏移量
-                    val offsetX = (maxWidth.value - (effectiveWidth * baseScale)) / 2 + (effectiveWidth - pageWidth) / 2 * baseScale
-                    val offsetY = (maxHeight.value - (effectiveHeight * baseScale)) / 2 + (effectiveHeight - pageHeight) / 2 * baseScale
+                    val offsetX =
+                        (maxWidth.value - (effectiveWidth * baseScale)) / 2 + (effectiveWidth - pageWidth) / 2 * baseScale
+                    val offsetY =
+                        (maxHeight.value - (effectiveHeight * baseScale)) / 2 + (effectiveHeight - pageHeight) / 2 * baseScale
 
                     // 核心交互层：处理手势变换和平移缩放
                     Box(
@@ -233,7 +241,12 @@ fun CanvasArea(
                                 .offset(x = offsetX.dp, y = offsetY.dp)
                                 .size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp)
                                 .background(stageColor)
-                                .border(BorderStroke((1.dp / zoom) / baseScale, MaterialTheme.colorScheme.outlineVariant))
+                                .border(
+                                    BorderStroke(
+                                        (1.dp / zoom) / baseScale,
+                                        MaterialTheme.colorScheme.outlineVariant
+                                    )
+                                )
                         )
 
                         // 叠加模式下的参考图绘制
@@ -259,9 +272,10 @@ fun CanvasArea(
                                         onDoubleTap = { offset ->
                                             val lx = (offset.x / density.density - offsetX) / baseScale
                                             val ly = (offset.y / density.density - offsetY) / baseScale
-                                            
-                                            val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
-                                            
+
+                                            val hitBlock =
+                                                findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
+
                                             if (hitBlock != null) {
                                                 currentOnBlockDoubleClicked(hitBlock.id)
                                             } else {
@@ -276,33 +290,48 @@ fun CanvasArea(
                                         onTap = { offset ->
                                             val lx = (offset.x / density.density - offsetX) / baseScale
                                             val ly = (offset.y / density.density - offsetY) / baseScale
-                                            
-                                            val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
+
+                                            val hitBlock =
+                                                findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
                                             currentOnBlockClicked(hitBlock?.id)
                                         }
                                     )
                                 }
-                                .pointerInput(isReadOnly, offsetX, offsetY, baseScale, currentBlocks, currentEditingGroupId) {
+                                .pointerInput(
+                                    isReadOnly,
+                                    offsetX,
+                                    offsetY,
+                                    baseScale,
+                                    currentBlocks,
+                                    currentEditingGroupId
+                                ) {
                                     if (isReadOnly) return@pointerInput
                                     var dragTargetId: String? = null
-                                    var isPanningStage = false 
+                                    var isPanningStage = false
                                     // 模块拖拽与画布平移逻辑
                                     detectDragGestures(
                                         onDragStart = { offset ->
                                             val lx = (offset.x / density.density - offsetX) / baseScale
                                             val ly = (offset.y / density.density - offsetY) / baseScale
-                                            
-                                            val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
-                                            
+
+                                            val hitBlock =
+                                                findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
+
                                             if (hitBlock != null) {
                                                 dragTargetId = hitBlock.id
                                                 isPanningStage = false
                                                 currentOnBlockDragStart(hitBlock.id)
-                                                org.gemini.ui.forge.utils.AppLogger.d("CanvasArea", "🖱️ 开始拖拽模块: ${hitBlock.id}")
+                                                org.gemini.ui.forge.utils.AppLogger.d(
+                                                    "CanvasArea",
+                                                    "🖱️ 开始拖拽模块: ${hitBlock.id}"
+                                                )
                                             } else {
                                                 dragTargetId = null
                                                 isPanningStage = true
-                                                org.gemini.ui.forge.utils.AppLogger.d("CanvasArea", "✋ 点击空白处，开始拖拽平移舞台")
+                                                org.gemini.ui.forge.utils.AppLogger.d(
+                                                    "CanvasArea",
+                                                    "✋ 点击空白处，开始拖拽平移舞台"
+                                                )
                                             }
                                         },
                                         onDrag = { change, dragAmount ->
@@ -352,21 +381,32 @@ fun CanvasArea(
                 color = MaterialTheme.colorScheme.primary,
                 shadowElevation = 4.dp
             ) {
-                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Layers, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Layers,
+                        null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
                     Spacer(Modifier.width(8.dp))
-                    
+
                     val prefix = stringResource(Res.string.group_editing_indicator_prefix)
                     Text(
                         text = "$prefix $editingGroupId",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onPrimary
                     )
-                    
+
                     Spacer(Modifier.width(12.dp))
-                    VerticalDivider(modifier = Modifier.height(16.dp), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f))
+                    VerticalDivider(
+                        modifier = Modifier.height(16.dp),
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f)
+                    )
                     Spacer(Modifier.width(8.dp))
-                    
+
                     Text(
                         text = stringResource(Res.string.action_exit),
                         style = MaterialTheme.typography.labelLarge,
@@ -388,41 +428,127 @@ fun CanvasArea(
             border = BorderStroke(1.dp, MaterialTheme.outlineVariant().copy(alpha = 0.3f)),
             shadowElevation = 6.dp
         ) {
-            Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                val currentCanvasWeight = if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val currentCanvasWeight =
+                    if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
                 val viewCenterX = containerWidthPx / 2f
                 val viewCenterY = (containerHeightPx * currentCanvasWeight) / 2f
                 val centerOffset = Offset(viewCenterX, viewCenterY)
-                
+
                 // 缩放操作
-                IconButton(onClick = { updateZoom(zoom - 0.2f, centerOffset) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Remove, "-", modifier = Modifier.size(16.dp)) }
-                Box(modifier = Modifier.height(28.dp).width(42.dp), contentAlignment = Alignment.Center) { Text("${(zoom * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center) }
-                IconButton(onClick = { updateZoom(zoom + 0.2f, centerOffset) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Add, "+", modifier = Modifier.size(16.dp)) }
-                
-                VerticalDivider(modifier = Modifier.height(16.dp))
-                
-                // 复位舞台
-                IconButton(onClick = { zoom = 1f; pan = Offset.Zero; org.gemini.ui.forge.utils.AppLogger.d("CanvasArea", "🔄 已还原舞台缩放为100%并居中") }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(18.dp)) }
-                
-                VerticalDivider(modifier = Modifier.height(16.dp))
-                
-                // 切换视觉预览模式
-                IconToggleButton(checked = isVisualMode, onCheckedChange = { onToggleVisualMode() }, modifier = Modifier.size(28.dp)) {
-                    Icon(if (isVisualMode) Icons.Default.AutoFixNormal else Icons.Default.AutoFixOff, "Visual", modifier = Modifier.size(18.dp), tint = if (isVisualMode) MaterialTheme.colorScheme.primary else LocalContentColor.current)
+                IconButton(onClick = { updateZoom(zoom - 0.2f, centerOffset) }, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Default.Remove,
+                        "-",
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
-                
+                Box(
+                    modifier = Modifier.height(28.dp).width(42.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "${(zoom * 100).roundToInt()}%",
+                        style = MaterialTheme.typography.labelMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                IconButton(onClick = { updateZoom(zoom + 0.2f, centerOffset) }, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Default.Add,
+                        "+",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                VerticalDivider(modifier = Modifier.height(16.dp))
+
+                // 复位舞台
+                IconButton(onClick = {
+                    zoom = 1f; pan = Offset.Zero; org.gemini.ui.forge.utils.AppLogger.d(
+                    "CanvasArea",
+                    "🔄 已还原舞台缩放为100%并居中"
+                )
+                }, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        "Reset",
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                VerticalDivider(modifier = Modifier.height(16.dp))
+
+                // 切换视觉预览模式
+                IconToggleButton(
+                    checked = isVisualMode,
+                    onCheckedChange = { onToggleVisualMode() },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        if (isVisualMode) Icons.Default.AutoFixNormal else Icons.Default.AutoFixOff,
+                        "Visual",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (isVisualMode) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                    )
+                }
+
                 // 参考图控制工具
                 if (referenceUri != null) {
                     VerticalDivider(modifier = Modifier.height(16.dp))
                     val isRefEnabled = internalReferenceMode != ReferenceDisplayMode.HIDDEN
-                    IconToggleButton(checked = isRefEnabled, onCheckedChange = { internalReferenceMode = if (it) ReferenceDisplayMode.SPLIT else ReferenceDisplayMode.HIDDEN }, modifier = Modifier.size(28.dp)) {
-                        Icon(if (isRefEnabled) Icons.Default.Image else Icons.Default.VisibilityOff, "Toggle Ref", modifier = Modifier.size(18.dp), tint = if (isRefEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    IconToggleButton(
+                        checked = isRefEnabled,
+                        onCheckedChange = {
+                            internalReferenceMode = if (it) ReferenceDisplayMode.SPLIT else ReferenceDisplayMode.HIDDEN
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            if (isRefEnabled) Icons.Default.Image else Icons.Default.VisibilityOff,
+                            "Toggle Ref",
+                            modifier = Modifier.size(18.dp),
+                            tint = if (isRefEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     if (isRefEnabled) {
                         VerticalDivider(modifier = Modifier.height(16.dp))
-                        IconToggleButton(checked = internalReferenceMode == ReferenceDisplayMode.SPLIT, onCheckedChange = { internalReferenceMode = ReferenceDisplayMode.SPLIT }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.VerticalSplit, "Split", modifier = Modifier.size(18.dp), tint = if (internalReferenceMode == ReferenceDisplayMode.SPLIT) MaterialTheme.colorScheme.primary else LocalContentColor.current) }
-                        IconToggleButton(checked = internalReferenceMode == ReferenceDisplayMode.OVERLAY, onCheckedChange = { internalReferenceMode = ReferenceDisplayMode.OVERLAY }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Layers, "Overlay", modifier = Modifier.size(18.dp), tint = if (internalReferenceMode == ReferenceDisplayMode.OVERLAY) MaterialTheme.colorScheme.primary else LocalContentColor.current) }
-                        if (internalReferenceMode == ReferenceDisplayMode.OVERLAY) { Spacer(modifier = Modifier.width(4.dp)); Slider(value = internalReferenceOpacity, onValueChange = { internalReferenceOpacity = it }, modifier = Modifier.width(100.dp).height(24.dp), valueRange = 0.1f..1f) }
+                        IconToggleButton(
+                            checked = internalReferenceMode == ReferenceDisplayMode.SPLIT,
+                            onCheckedChange = { internalReferenceMode = ReferenceDisplayMode.SPLIT },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.VerticalSplit,
+                                "Split",
+                                modifier = Modifier.size(18.dp),
+                                tint = if (internalReferenceMode == ReferenceDisplayMode.SPLIT) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                            )
+                        }
+                        IconToggleButton(
+                            checked = internalReferenceMode == ReferenceDisplayMode.OVERLAY,
+                            onCheckedChange = { internalReferenceMode = ReferenceDisplayMode.OVERLAY },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Layers,
+                                "Overlay",
+                                modifier = Modifier.size(18.dp),
+                                tint = if (internalReferenceMode == ReferenceDisplayMode.OVERLAY) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                            )
+                        }
+                        if (internalReferenceMode == ReferenceDisplayMode.OVERLAY) {
+                            Spacer(modifier = Modifier.width(4.dp)); Slider(
+                                value = internalReferenceOpacity,
+                                onValueChange = { internalReferenceOpacity = it },
+                                modifier = Modifier.width(100.dp).height(24.dp),
+                                valueRange = 0.1f..1f
+                            )
+                        }
                     }
                 }
             }
@@ -448,15 +574,16 @@ fun RenderBlock(
     editingGroupId: String?
 ) {
     if (!block.isVisible) return
-    
+
     // 异步加载图片位图
-    val imageBitmapState = produceState<ImageBitmap?>(null, block.currentImageUri) { value = block.currentImageUri?.decodeToBitmap() }
+    val imageBitmapState =
+        produceState<ImageBitmap?>(null, block.currentImageUri) { value = block.currentImageUri?.decodeToBitmap() }
     val imageBitmap = imageBitmapState.value
-    
+
     // 计算当前模块在画布上的物理坐标
     val currentX = parentX + block.bounds.left * baseScale
     val currentY = parentY + block.bounds.top * baseScale
-    
+
     // 是否隐藏线框（视觉预览模式且已有图片时）
     val hidePlaceholder = isVisualMode && imageBitmap != null
 
@@ -468,27 +595,32 @@ fun RenderBlock(
             .size(width = (block.bounds.width * baseScale).dp, height = (block.bounds.height * baseScale).dp)
             .clip(RoundedCornerShape(2.dp))
             .background(
-                if (hidePlaceholder) Color.Transparent 
-                else if (isSelected) selectionColor.copy(alpha = 0.15f) 
-                else if (isDimmed) Color.Black.copy(alpha = 0.4f) 
+                if (hidePlaceholder) Color.Transparent
+                else if (isSelected) selectionColor.copy(alpha = 0.15f)
+                else if (isDimmed) Color.Black.copy(alpha = 0.4f)
                 else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
             )
             .border(
-                width = if (hidePlaceholder && !isSelected) 0.dp 
-                        else (1.dp / zoom), // 边框粗细随缩放调整，保持视觉一致性
-                color = if (isSelected) selectionColor 
-                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                width = if (hidePlaceholder && !isSelected) 0.dp
+                else (1.dp / zoom), // 边框粗细随缩放调整，保持视觉一致性
+                color = if (isSelected) selectionColor
+                else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
             ),
         contentAlignment = Alignment.Center
     ) {
         if (imageBitmap != null) {
             // 渲染已绑定的图片内容
-            Image(bitmap = imageBitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
+            Image(
+                bitmap = imageBitmap,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.FillBounds
+            )
         } else if (block.currentImageUri != null) {
             // 加载中状态
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.dp)
-        } 
-        
+        }
+
         // 显示模块占位文本
         if (!hidePlaceholder && imageBitmap == null && block.currentImageUri == null) {
             Text(
@@ -522,7 +654,14 @@ fun RenderBlock(
  * 碰撞检测：查找用户点击位置对应的最深层模块
  * 隔离模式下限制仅能在指定组及其子级中查找
  */
-private fun findHitBlock(blocks: List<UIBlock>, lx: Float, ly: Float, parentLx: Float, parentLy: Float, editingGroupId: String?): UIBlock? {
+private fun findHitBlock(
+    blocks: List<UIBlock>,
+    lx: Float,
+    ly: Float,
+    parentLx: Float,
+    parentLy: Float,
+    editingGroupId: String?
+): UIBlock? {
     if (editingGroupId == null) {
         // 普通模式：从上往下（视觉上）寻找，即列表反向遍历
         for (i in blocks.indices.reversed()) {
@@ -536,11 +675,11 @@ private fun findHitBlock(blocks: List<UIBlock>, lx: Float, ly: Float, parentLx: 
         }
         return null
     }
-    
+
     // 隔离模式：仅在编辑组及其范围内查找
     val targetGroup = findBlockInList(blocks, editingGroupId) ?: return null
     val groupAbsPos = calculateBlockAbsolutePosition(blocks, editingGroupId) ?: Offset.Zero
-    
+
     // 优先匹配子模块
     for (i in targetGroup.children.indices.reversed()) {
         val child = targetGroup.children[i]
@@ -551,7 +690,7 @@ private fun findHitBlock(blocks: List<UIBlock>, lx: Float, ly: Float, parentLx: 
         val absB = groupAbsPos.y + child.bounds.bottom
         if (lx >= absL && lx <= absR && ly >= absT && ly <= absB) return child
     }
-    
+
     // 最后匹配父组自身
     val gL = groupAbsPos.x
     val gT = groupAbsPos.y
@@ -576,7 +715,12 @@ private fun findBlockInList(blocks: List<UIBlock>, id: String): UIBlock? {
 /**
  * 递归计算指定模块在画布上的绝对偏移位置
  */
-private fun calculateBlockAbsolutePosition(blocks: List<UIBlock>, id: String, currentX: Float = 0f, currentY: Float = 0f): Offset? {
+private fun calculateBlockAbsolutePosition(
+    blocks: List<UIBlock>,
+    id: String,
+    currentX: Float = 0f,
+    currentY: Float = 0f
+): Offset? {
     for (block in blocks) {
         val absX = currentX + block.bounds.left
         val absY = currentY + block.bounds.top
