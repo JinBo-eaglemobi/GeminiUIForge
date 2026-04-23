@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.service
+package org.gemini.ui.forge.utils
 
 /**
  * 跨平台的本地文件存储管理抽象类

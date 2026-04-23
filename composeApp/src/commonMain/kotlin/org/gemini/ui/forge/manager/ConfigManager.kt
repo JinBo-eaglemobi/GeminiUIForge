@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.service
+package org.gemini.ui.forge.manager
 
 /**
  * 持久化配置密钥的跨平台管理类

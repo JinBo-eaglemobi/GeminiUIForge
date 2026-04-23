@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.*
-import org.gemini.ui.forge.service.CloudAssetManager
+import org.gemini.ui.forge.manager.CloudAssetManager
 
 import androidx.compose.material.icons.filled.Add
 import org.gemini.ui.forge.utils.rememberImagePicker

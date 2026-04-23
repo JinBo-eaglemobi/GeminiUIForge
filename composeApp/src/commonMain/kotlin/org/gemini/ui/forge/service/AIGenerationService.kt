@@ -20,6 +20,8 @@ import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.model.ui.UIPage
 import org.gemini.ui.forge.utils.AppLogger
 import kotlin.time.Duration.Companion.milliseconds
+import org.gemini.ui.forge.manager.*
+import org.gemini.ui.forge.utils.LocalFileStorage
 
 /**
  * AI 生成服务类（门面），协调 ImagenGenerator 和 GeminiImageGenerator。

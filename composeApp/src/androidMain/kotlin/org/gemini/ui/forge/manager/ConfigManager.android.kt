@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.service
+package org.gemini.ui.forge.manager
 
 import android.content.Context
 import android.content.SharedPreferences

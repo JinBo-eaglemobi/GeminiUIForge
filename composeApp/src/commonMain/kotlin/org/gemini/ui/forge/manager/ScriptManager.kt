@@ -1,8 +1,9 @@
-package org.gemini.ui.forge.service
+package org.gemini.ui.forge.manager
 
 import org.jetbrains.compose.resources.InternalResourceApi
 import org.jetbrains.compose.resources.readResourceBytes
 import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.LocalFileStorage
 
 /**
  * 脚本管理器

@@ -1,6 +1,6 @@
 package org.gemini.ui.forge.utils
 
-import org.gemini.ui.forge.service.LocalFileStorage
+import org.gemini.ui.forge.utils.LocalFileStorage
 import kotlin.math.sin
 
 actual fun Throwable.getPlatformStackTrace(): String {

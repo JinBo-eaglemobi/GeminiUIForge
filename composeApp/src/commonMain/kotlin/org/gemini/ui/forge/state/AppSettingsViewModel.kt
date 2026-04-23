@@ -6,7 +6,7 @@ import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.app.ShortcutAction
-import org.gemini.ui.forge.service.ConfigManager
+import org.gemini.ui.forge.manager.ConfigManager
 
 /**
  * 专门负责应用配置持久化管理的 ViewModel

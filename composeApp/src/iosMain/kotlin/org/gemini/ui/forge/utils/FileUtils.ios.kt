@@ -2,7 +2,7 @@ package org.gemini.ui.forge.utils
 
 import platform.Foundation.*
 import kotlinx.cinterop.*
-import org.gemini.ui.forge.service.LocalFileStorage
+import org.gemini.ui.forge.utils.LocalFileStorage
 import kotlin.experimental.ExperimentalNativeApi
 import platform.CoreCrypto.CC_MD5
 import platform.CoreCrypto.CC_MD5_DIGEST_LENGTH

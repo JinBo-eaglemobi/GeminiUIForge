@@ -13,7 +13,7 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.service.AIGenerationService
-import org.gemini.ui.forge.service.CloudAssetManager
+import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.utils.*
 import kotlin.collections.ArrayDeque
 

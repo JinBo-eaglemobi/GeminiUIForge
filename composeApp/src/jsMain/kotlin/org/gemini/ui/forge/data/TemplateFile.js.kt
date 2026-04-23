@@ -2,7 +2,7 @@ package org.gemini.ui.forge.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import org.gemini.ui.forge.service.LocalFileStorage
+import org.gemini.ui.forge.utils.LocalFileStorage
 
 actual typealias PlatformPath = String
 

@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.service
+package org.gemini.ui.forge.utils
 
 import kotlinx.browser.window
 import kotlinx.coroutines.await

@@ -12,8 +12,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.state.TemplateEditorViewModel
 import org.gemini.ui.forge.data.repository.TemplateRepository
-import org.gemini.ui.forge.service.CloudAssetManager
-import org.gemini.ui.forge.service.ConfigManager
+import org.gemini.ui.forge.manager.CloudAssetManager
+import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.service.AIGenerationService
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier

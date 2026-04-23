@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.service
+package org.gemini.ui.forge.utils
 
 import platform.Foundation.*
 import kotlinx.cinterop.*

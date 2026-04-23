@@ -11,6 +11,7 @@ import org.gemini.ui.forge.utils.getMimeType
 import org.gemini.ui.forge.utils.readLocalFileBytes
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import org.gemini.ui.forge.manager.*
 
 /**
  * 专门处理 Imagen 系列模型 (Imagen 3, Imagen 4) 的生成器

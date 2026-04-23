@@ -7,7 +7,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.runBlocking
-import org.gemini.ui.forge.service.ConfigManager
+import org.gemini.ui.forge.manager.ConfigManager
 
 fun main() {
     val configManager = ConfigManager()

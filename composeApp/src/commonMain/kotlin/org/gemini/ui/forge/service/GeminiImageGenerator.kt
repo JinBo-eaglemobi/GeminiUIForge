@@ -7,6 +7,7 @@ import org.gemini.ui.forge.utils.getMimeType
 import org.gemini.ui.forge.utils.readLocalFileBytes
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import org.gemini.ui.forge.manager.*
 
 /**
  * 专门处理 Gemini 系列模型 (如 Gemini 2.0 Flash) 的生图生成器

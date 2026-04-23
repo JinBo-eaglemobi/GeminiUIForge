@@ -9,7 +9,7 @@ import org.w3c.dom.HTMLInputElement
 import org.w3c.files.FileReader
 import org.w3c.files.get
 import org.gemini.ui.forge.data.TemplateFile
-import org.gemini.ui.forge.service.LocalFileStorage
+import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.getCurrentTimeMillis
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine

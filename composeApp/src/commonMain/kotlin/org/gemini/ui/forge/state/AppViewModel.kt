@@ -11,8 +11,8 @@ import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.service.AIGenerationService
-import org.gemini.ui.forge.service.CloudAssetManager
-import org.gemini.ui.forge.service.ConfigManager
+import org.gemini.ui.forge.manager.CloudAssetManager
+import org.gemini.ui.forge.manager.ConfigManager
 
 import org.gemini.ui.forge.ui.component.ToastData
 import org.gemini.ui.forge.ui.component.ToastType

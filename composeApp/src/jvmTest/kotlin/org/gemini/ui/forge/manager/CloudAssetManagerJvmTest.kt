@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.service
+package org.gemini.ui.forge.manager
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Test

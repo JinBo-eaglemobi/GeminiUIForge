@@ -27,6 +27,8 @@ import org.gemini.ui.forge.service.*
 import kotlin.time.Duration.Companion.milliseconds
 import org.gemini.ui.forge.ui.dialog.AppSettingsDialog
 import org.gemini.ui.forge.ui.dialog.HelpDialog
+import org.gemini.ui.forge.manager.*
+import org.gemini.ui.forge.utils.*
 
 private var originalSystemLanguage: String? = null
 

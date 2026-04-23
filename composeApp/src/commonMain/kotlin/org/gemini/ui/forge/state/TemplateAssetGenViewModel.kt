@@ -19,6 +19,7 @@ import org.gemini.ui.forge.service.*
 import org.gemini.ui.forge.utils.*
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import org.gemini.ui.forge.manager.CloudAssetManager
 
 /**
  * 资产生成器的专属 ViewModel
