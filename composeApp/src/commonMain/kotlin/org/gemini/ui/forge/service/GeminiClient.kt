@@ -190,9 +190,7 @@ class GeminiClient {
             .replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
             // 替换 Imagen 请求中的 bytesBase64Encoded 节点
             .replace(Regex("\"bytesBase64Encoded\"\\s*:\\s*\"[^\"]+\""), "\"bytesBase64Encoded\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
-            // 隐藏可能非常长的历史 JSON 状态
-            .replace(Regex("\"text\"\\s*:\\s*\"CURRENT_JSON_STATE: [\\s\\S]*?\""), "\"text\": \"CURRENT_JSON_STATE: <HIDDEN_FOR_LOGS>\"")
-        
+
         val logMessage = "---- [AI REQUEST] ----\nURL: $url\nBody: \n$sanitizedBody\n------------------------"
         onLog(logMessage)
         AppLogger.i(TAG, logMessage)

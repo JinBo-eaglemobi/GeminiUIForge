@@ -20,6 +20,8 @@ import org.gemini.ui.forge.model.api.gemini.file.GeminiFile
 import org.gemini.ui.forge.model.api.gemini.file.GeminiFileListResponse
 import org.gemini.ui.forge.model.api.gemini.file.GeminiFileUploadResponse
 import org.gemini.ui.forge.utils.AppLogger
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * 云端资产管理器 (Cloud Asset Manager)
@@ -38,8 +40,8 @@ class CloudAssetManager(private val configManager: ConfigManager) {
      * 获取有效的 API Key，如果未配置则抛出异常。
      */
     private suspend fun getApiKeyOrThrow(): String {
-        return configManager.loadKey("GEMINI_API_KEY") 
-            ?: configManager.loadGlobalGeminiKey() 
+        return configManager.loadKey("GEMINI_API_KEY")
+            ?: configManager.loadGlobalGeminiKey()
             ?: throw IllegalStateException("未找到 Gemini API Key，请先配置。")
     }
 
@@ -111,8 +113,8 @@ class CloudAssetManager(private val configManager: ConfigManager) {
      * @return 文件的云端 URI
      */
     suspend fun getOrUploadFile(
-        displayName: String, 
-        fileBytes: ByteArray, 
+        displayName: String,
+        fileBytes: ByteArray,
         mimeType: String = "image/png",
         onProgress: (Float, String) -> Unit = { _, _ -> }
     ): String? {
@@ -124,12 +126,12 @@ class CloudAssetManager(private val configManager: ConfigManager) {
 
         // 2. 计算内容指纹 (MD5) 用于智能匹配
         val fingerprint = fileBytes.calculateMd5()
-        
+
         // 3. 智能匹配：在现有列表中寻找相同指纹且就绪的文件
-        val existingMatch = _assets.value.find { 
-            (it.displayName?.contains(fingerprint) == true) && it.state == "ACTIVE" 
+        val existingMatch = _assets.value.find {
+            (it.displayName?.contains(fingerprint) == true) && it.state == "ACTIVE"
         }
-        
+
         if (existingMatch?.uri != null) {
             AppLogger.d("CloudAssetManager", "Smart Match: Reusing cloud asset with fingerprint $fingerprint")
             onProgress(1.0f, "内容匹配成功，已复用云端资产")
@@ -140,7 +142,7 @@ class CloudAssetManager(private val configManager: ConfigManager) {
         val uniqueDisplayName = "forge_${fingerprint}_$displayName"
         AppLogger.d("CloudAssetManager", "No cloud match. Uploading new file. Fingerprint: $fingerprint")
         val apiKey = getApiKeyOrThrow()
-        
+
         try {
             onProgress(0.05f, "准备初始化上传...")
             // 阶段 1: 初始化会话
@@ -162,7 +164,7 @@ class CloudAssetManager(private val configManager: ConfigManager) {
                 header("X-Goog-Upload-Offset", "0")
                 header("X-Goog-Upload-Command", "upload, finalize")
                 setBody(fileBytes)
-                
+
                 onUpload { bytesSent, totalBytes ->
                     val total = totalBytes ?: 0L
                     if (total > 0L) {
@@ -203,7 +205,7 @@ class CloudAssetManager(private val configManager: ConfigManager) {
     }
 
     /**
-     * [通用组件] 将图片字节数组包装为适用于 Gemini API 的 JSON Part。
+     * 将图片字节数组包装为适用于 Gemini API 的 JSON Part。
      * 自动尝试上传云端，如果成功则返回 `fileData` 格式；失败或降级则返回 `inlineData` (Base64) 格式。
      */
     suspend fun buildGeminiImagePart(
@@ -212,7 +214,16 @@ class CloudAssetManager(private val configManager: ConfigManager) {
         mimeType: String,
         onLog: (String) -> Unit = {}
     ): JsonObject {
-        val fileUri = getOrUploadFile(displayName, bytes, mimeType) { _, status -> onLog("CloudAsset: $status") }
+        // 检查云端资产库是否已缓存原图
+        onLog("☁️ 正在同步云端原图...")
+        var fileUri = assets.value.find {
+            it.displayName?.contains(displayName) == true && it.state == "ACTIVE"
+        }?.uri
+        if (fileUri.isNullOrBlank()) {
+            fileUri = getOrUploadFile(displayName, bytes, mimeType) { _, status ->
+                onLog("CloudAsset: $status")
+            }
+        }
         return if (fileUri != null) {
             onLog("✅ 云端同步成功")
             buildJsonObject {
@@ -226,8 +237,8 @@ class CloudAssetManager(private val configManager: ConfigManager) {
             buildJsonObject {
                 put("inlineData", buildJsonObject {
                     put("mimeType", mimeType)
-                    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-                    put("data", kotlin.io.encoding.Base64.Default.encode(bytes))
+                    @OptIn(ExperimentalEncodingApi::class)
+                    put("data", Base64.encode(bytes))
                 })
             }
         }
@@ -252,8 +263,8 @@ class CloudAssetManager(private val configManager: ConfigManager) {
         } else {
             onLog("⚠️ 触发 Base64 降级补偿")
             buildJsonObject {
-                @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-                put("bytesBase64Encoded", kotlin.io.encoding.Base64.Default.encode(bytes))
+                @OptIn(ExperimentalEncodingApi::class)
+                put("bytesBase64Encoded", Base64.encode(bytes))
             }
         }
     }

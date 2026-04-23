@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -216,7 +217,7 @@ private fun GeneralSettings(
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_appearance_theme)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(themeExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = themeExpanded, onDismissRequest = { themeExpanded = false }) {
@@ -244,7 +245,7 @@ private fun GeneralSettings(
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_language)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(langExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = langExpanded, onDismissRequest = { langExpanded = false }) {
@@ -310,7 +311,7 @@ private fun AISettings(
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_max_retries_title)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(retriesExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = retriesExpanded, onDismissRequest = { retriesExpanded = false }) {
@@ -332,7 +333,7 @@ private fun AISettings(
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_image_gen_count_title)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(genCountExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = genCountExpanded, onDismissRequest = { genCountExpanded = false }) {
@@ -355,7 +356,7 @@ private fun AISettings(
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_prompt_language)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(promptLangExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = promptLangExpanded, onDismissRequest = { promptLangExpanded = false }) {

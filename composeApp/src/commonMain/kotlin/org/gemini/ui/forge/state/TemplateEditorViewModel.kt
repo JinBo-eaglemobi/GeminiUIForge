@@ -74,13 +74,13 @@ class TemplateEditorViewModel(
     /** 强制从外部重载项目状态（解决 ViewModel 缓存导致旧状态残留的问题） */
     fun reload(newProject: ProjectState) {
         if (_state.value.project == newProject) return
-        _state.update { 
+        _state.update {
             it.copy(
                 project = newProject,
                 selectedPageId = newProject.pages.firstOrNull()?.id,
                 selectedBlockId = null,
                 editingGroupId = null
-            ) 
+            )
         }
         undoStack.clear()
         redoStack.clear()
@@ -141,14 +141,18 @@ class TemplateEditorViewModel(
     /** 选中指定的 UI 块。如果再次点击已选中的块，则取消选中 */
     fun onBlockClicked(blockId: String?) {
         _state.update { currentState ->
-            val newSelectedId = if (blockId == null) null else if (currentState.selectedBlockId == blockId) null else blockId
-            
+            val newSelectedId =
+                if (blockId == null) null else if (currentState.selectedBlockId == blockId) null else blockId
+
             // 打印模块详细信息日志
             if (newSelectedId != null) {
                 val block = currentState.project.pages.flatMap { it.blocks }.let { findBlockById(it, newSelectedId) }
                 if (block != null) {
-                    AppLogger.d("TemplateEditorViewModel", "👆 选中模块: ID=[${block.id}], 类型=${block.type}, 坐标=(L:${block.bounds.left}, T:${block.bounds.top}, W:${block.bounds.width}, H:${block.bounds.height}), 隐藏=${!block.isVisible}")
-                    
+                    AppLogger.d(
+                        "TemplateEditorViewModel",
+                        "👆 选中模块: ID=[${block.id}], 类型=${block.type}, 坐标=(L:${block.bounds.left}, T:${block.bounds.top}, W:${block.bounds.width}, H:${block.bounds.height}), 隐藏=${!block.isVisible}"
+                    )
+
                     val uri = block.currentImageUri
                     if (uri != null) {
                         viewModelScope.launch {
@@ -159,9 +163,18 @@ class TemplateEditorViewModel(
                                     val scaleY = block.bounds.height / bitmap.height
                                     val imageRatio = bitmap.width.toFloat() / bitmap.height.toFloat()
                                     val targetRatio = block.bounds.width / block.bounds.height
-                                    AppLogger.d("TemplateEditorViewModel", "🖼️ 图片追踪: 原生像素=${bitmap.width}x${bitmap.height} (比例 $imageRatio)")
-                                    AppLogger.d("TemplateEditorViewModel", "🖼️ 容器追踪: 目标容器=${block.bounds.width}x${block.bounds.height} (比例 $targetRatio)")
-                                    AppLogger.d("TemplateEditorViewModel", "📏 拉伸比例: X轴缩放=$scaleX, Y轴缩放=$scaleY")
+                                    AppLogger.d(
+                                        "TemplateEditorViewModel",
+                                        "🖼️ 图片追踪: 原生像素=${bitmap.width}x${bitmap.height} (比例 $imageRatio)"
+                                    )
+                                    AppLogger.d(
+                                        "TemplateEditorViewModel",
+                                        "🖼️ 容器追踪: 目标容器=${block.bounds.width}x${block.bounds.height} (比例 $targetRatio)"
+                                    )
+                                    AppLogger.d(
+                                        "TemplateEditorViewModel",
+                                        "📏 拉伸比例: X轴缩放=$scaleX, Y轴缩放=$scaleY"
+                                    )
                                 }
                             } catch (e: Exception) {
                                 AppLogger.e("TemplateEditorViewModel", "图片解析追踪异常", e)
@@ -172,7 +185,7 @@ class TemplateEditorViewModel(
             } else {
                 AppLogger.d("TemplateEditorViewModel", "👆 取消选中模块 (点击空白处或反选)")
             }
-            
+
             currentState.copy(selectedBlockId = newSelectedId)
         }
     }
@@ -214,7 +227,10 @@ class TemplateEditorViewModel(
     /** 更新块的物理坐标和尺寸 */
     fun updateBlockBounds(blockId: String, left: Float, top: Float, right: Float, bottom: Float) {
         val pageId = _state.value.selectedPageId ?: return
-        AppLogger.d("TemplateEditorViewModel", "📏 更新模块 [$blockId] 边界 -> L:$left, T:$top, R:$right, B:$bottom | 实际宽高: W=${right - left}, H=${bottom - top}")
+        AppLogger.d(
+            "TemplateEditorViewModel",
+            "📏 更新模块 [$blockId] 边界 -> L:$left, T:$top, R:$right, B:$bottom | 实际宽高: W=${right - left}, H=${bottom - top}"
+        )
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
@@ -304,7 +320,11 @@ class TemplateEditorViewModel(
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
                     if (editingGroupId != null) {
-                        page.copy(blocks = updateBlockInList(page.blocks, editingGroupId) { group -> group.copy(children = group.children + newBlock) })
+                        page.copy(
+                            blocks = updateBlockInList(
+                                page.blocks,
+                                editingGroupId
+                            ) { group -> group.copy(children = group.children + newBlock) })
                     } else {
                         page.copy(blocks = page.blocks + newBlock)
                     }
@@ -333,7 +353,8 @@ class TemplateEditorViewModel(
     fun toggleAllBlocksVisibility(isVisible: Boolean) {
         val pageId = _state.value.selectedPageId ?: return
         _state.update { currentState ->
-            fun updateVis(list: List<UIBlock>): List<UIBlock> = list.map { it.copy(isVisible = isVisible, children = updateVis(it.children)) }
+            fun updateVis(list: List<UIBlock>): List<UIBlock> =
+                list.map { it.copy(isVisible = isVisible, children = updateVis(it.children)) }
 
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
@@ -453,10 +474,10 @@ class TemplateEditorViewModel(
         val currentState = _state.value
         val currentPage = currentState.currentPage
         val originalImage = currentPage?.sourceImageUri ?: return
-        
+
         currentGenJob?.cancel()
         val task = aiService.createTask<ProjectState>("区域重构", viewModelScope)
-        
+
         // 同步 AITask 状态到 _state
         currentGenJob = viewModelScope.launch {
             launch {
@@ -464,9 +485,9 @@ class TemplateEditorViewModel(
                     _state.update { it.copy(isGenerating = status == org.gemini.ui.forge.service.AITaskStatus.RUNNING) }
                 }
             }
-            
+
             _state.update { it.copy(isGenerating = true, showAITaskDialog = true, generationLogs = emptyList()) }
-            
+
             task.execute {
                 try {
                     val logger = { msg: String -> addGenLog(msg); log(msg) }
@@ -483,15 +504,17 @@ class TemplateEditorViewModel(
 
                     // 2. 检查云端资产库是否已缓存原图
                     logger("☁️ 正在同步云端原图...")
-                    var originalFileUri =
-                        cloudAssetManager.assets.value.find { it.displayName?.contains(fingerprint) == true && it.state == "ACTIVE" }?.uri
-                            ?: ""
+                    var originalFileUri = cloudAssetManager.assets.value.find {
+                        it.displayName?.contains(fingerprint) == true && it.state == "ACTIVE"
+                    }?.uri ?: ""
                     if (originalFileUri.isBlank()) {
                         originalFileUri = cloudAssetManager.getOrUploadFile(
                             originalImage.relativePath.substringAfterLast("/"),
                             originalBytes,
                             getMimeType(originalImage.getAbsolutePath())
-                        ) { _, status -> logger("[$status]") } ?: ""
+                        ) { _, status ->
+                            logger("[$status]")
+                        } ?: ""
                     }
 
                     // 3. 获取历史上下文
@@ -548,10 +571,10 @@ class TemplateEditorViewModel(
         val block = _state.value.project.pages.flatMap { it.blocks }.let { findBlockById(it, blockId) } ?: return
         val textToOptimize = if (currentLang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
         if (textToOptimize.isBlank()) return
-        
+
         currentGenJob?.cancel()
         val task = aiService.createTask<String>("提示词优化", viewModelScope)
-        
+
         // 同步 AITask 状态到 _state
         currentGenJob = viewModelScope.launch {
             launch {
@@ -559,15 +582,18 @@ class TemplateEditorViewModel(
                     _state.update { it.copy(isGenerating = status == org.gemini.ui.forge.service.AITaskStatus.RUNNING) }
                 }
             }
-            
+
             _state.update { it.copy(isGenerating = true, generationLogs = emptyList(), showAITaskDialog = true) }
-            
+
             task.execute {
                 try {
                     val logger = { msg: String -> addGenLog(msg); log(msg) }
                     // 根据当前语言获取相应的系统指令设定
-                    val systemInstruction = if (currentLang == PromptLanguage.EN) aiService.promptManager.getPrompt("optimize_instruction_en") else aiService.promptManager.getPrompt("optimize_instruction_zh")
-                    
+                    val systemInstruction =
+                        if (currentLang == PromptLanguage.EN) aiService.promptManager.getPrompt("optimize_instruction_en") else aiService.promptManager.getPrompt(
+                            "optimize_instruction_zh"
+                        )
+
                     // 获取历史
                     val historyKey = "PROMPT_$blockId"
                     val history = if (useChatContext) {
@@ -575,11 +601,12 @@ class TemplateEditorViewModel(
                     } else {
                         emptyList()
                     }
-                    
+
                     logger(">>> 正在使用 AI 优化提示词 (${currentLang.displayName})...")
-                    val optimized = aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, 3, history = history)
+                    val optimized =
+                        aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, 3, history = history)
                     logger(">>> 优化完成！")
-                    
+
                     onUserPromptChanged(blockId, optimized, currentLang)
 
                     // 更新历史

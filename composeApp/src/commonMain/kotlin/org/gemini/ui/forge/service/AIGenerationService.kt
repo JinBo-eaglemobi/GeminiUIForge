@@ -13,9 +13,12 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.data.remote.NetworkClient
+import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.GeminiModel
+import org.gemini.ui.forge.model.api.ChatMessage
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.utils.AppLogger
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * AI 生成服务类（门面），协调 ImagenGenerator 和 GeminiImageGenerator。
@@ -29,15 +32,15 @@ class AIGenerationService(
         ignoreUnknownKeys = true
         prettyPrint = true
     }
-    
+
     // 初始化存储与管理器
     private val storage = LocalFileStorage()
     val promptManager = PromptManager(storage)
     private val scriptManager = ScriptManager(storage)
 
-    private val imagenGenerator = ImagenGenerator(cloudAssetManager, promptManager)
-    private val geminiGenerator = GeminiImageGenerator(cloudAssetManager, promptManager)
     private val geminiClient = GeminiClient()
+    private val imagenGenerator = ImagenGenerator(cloudAssetManager, promptManager, geminiClient)
+    private val geminiGenerator = GeminiImageGenerator(cloudAssetManager, promptManager, geminiClient)
 
     /**
      * 创建一个新的 AI 任务
@@ -112,7 +115,7 @@ class AIGenerationService(
 
         // 单次 API 请求的最大张数限制：Imagen 3 和原生 Gemini 通常单次最高支持 4 张 (candidateCount/sampleCount)
         val maxBatchSize = if (isGeminiNative) 8 else 4
-        
+
         // 计算批次
         val batchCounts = mutableListOf<Int>()
         var remaining = totalCount
@@ -121,7 +124,7 @@ class AIGenerationService(
             batchCounts.add(nextBatch)
             remaining -= nextBatch
         }
-        
+
         syncLog("🚀 开始生图任务: 总数 $totalCount, 拆分为 ${batchCounts.size} 个批次", onLog)
 
         // 并发执行批次
@@ -148,7 +151,7 @@ class AIGenerationService(
                         if (attempt > 0) {
                             syncLog("⚠️ $batchTag 重试中 (${attempt + 1})...", onLog)
                         }
-                        
+
                         val results = if (isGeminiNative) {
                             geminiGenerator.generate(model.modelName, params, onLog) {
                                 onImageGenerated(it)
@@ -196,9 +199,9 @@ class AIGenerationService(
 
         return try {
             storage.saveBytesToFile("temp/input_$timestamp.png", imageBytes)
-            
+
             syncLog("🚀 启动本地 Python 抠图引擎...", onLog)
-            
+
             val commands = listOf("python", "python3")
             var success = false
             for (cmd in commands) {
@@ -239,27 +242,24 @@ class AIGenerationService(
             syncLog("❌ 云端抠图失败: API Key 为空", onLog)
             return null
         }
-        
-        val url = ApiConfig.getImagenEndpoint(apiKey) 
+
+        val url = ApiConfig.getImagenEndpoint(apiKey)
         syncLog("☁️ 启动云端 AI 抠图引擎...", onLog)
 
-        @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-        val base64Image = kotlin.io.encoding.Base64.Default.encode(imageBytes)
-
+        val displayName = "rembg_${getCurrentTimeMillis()}.png"
+        val imagePart = cloudAssetManager.buildImagenImagePart(displayName, imageBytes, "image/png", onLog)
         val prompt = promptManager.getPrompt("cloud_bg_removal")
 
         val requestBody = buildJsonObject {
             put("instances", buildJsonArray {
                 add(buildJsonObject {
-                    put("image", buildJsonObject {
-                        put("bytesBase64Encoded", base64Image)
-                    })
+                    put("image", imagePart)
                     put("prompt", prompt)
                 })
             })
             put("parameters", buildJsonObject {
                 put("editConfig", buildJsonObject {
-                    put("editMode", "background_removal") 
+                    put("editMode", "background_removal")
                 })
                 put("outputOptions", buildJsonObject {
                     put("mimeType", "image/png")
@@ -271,7 +271,7 @@ class AIGenerationService(
         return try {
             val resultBase64 = geminiClient.generateContent(url, requestBody, onLog)
             val duration = org.gemini.ui.forge.getCurrentTimeMillis() - startTime
-            
+
             @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
             val resultBytes = kotlin.io.encoding.Base64.Default.decode(resultBase64)
             syncLog("✅ 云端抠图处理完成 (${duration}ms)", onLog)
@@ -316,9 +316,10 @@ class AIGenerationService(
                                 syncLog("❌ 无法读取图 ${index + 1}", onLog)
                                 return@async null
                             }
-                            val displayName = localUri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "image_$index.jpg" }
+                            val displayName =
+                                localUri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "image_$index.jpg" }
                             val mime = org.gemini.ui.forge.utils.getMimeType(localUri)
-                            
+
                             // 统一调用 CloudAssetManager 的处理逻辑
                             cloudAssetManager.buildGeminiImagePart(displayName, bytes, mime) { msg ->
                                 syncLog("图 [${index + 1}] $msg", onLog)
@@ -351,7 +352,7 @@ class AIGenerationService(
                     onChunk(chunk)
                 }
             )
-            
+
             syncLog("UI 框架解析完毕。", onLog)
             val finalString = accumulatedText.toString()
             if (finalString.isEmpty()) throw Exception("响应为空")
@@ -369,7 +370,7 @@ class AIGenerationService(
         currentJson: String,
         userInstruction: String,
         apiKey: String = "",
-        history: List<org.gemini.ui.forge.model.api.ChatMessage> = emptyList(),
+        history: List<ChatMessage> = emptyList(),
         onLog: (String) -> Unit = {},
         onChunk: (String) -> Unit = {}
     ): ProjectState {
@@ -382,8 +383,13 @@ class AIGenerationService(
         val fullPrompt = promptTemplate.replace($$"${USER_INSTRUCTION}", userInstruction)
 
         // 使用统一图片预处理方法处理 croppedBytes
-        val displayName = "cropped_${org.gemini.ui.forge.getCurrentTimeMillis()}.jpg"
-        val imagePart = cloudAssetManager.buildGeminiImagePart(displayName, croppedBytes, "image/jpeg", onLog)
+        val displayName = "cropped_${getCurrentTimeMillis()}.jpg"
+        val imagePart = cloudAssetManager.buildGeminiImagePart(
+            displayName,
+            croppedBytes,
+            "image/jpeg",
+            onLog
+        )
 
         val requestBody = buildJsonObject {
             put("contents", buildJsonArray {
@@ -392,7 +398,9 @@ class AIGenerationService(
                     add(buildJsonObject {
                         put("role", msg.role)
                         put("parts", buildJsonArray {
-                            add(buildJsonObject { put("text", msg.text) })
+                            add(buildJsonObject {
+                                put("text", msg.text)
+                            })
                         })
                     })
                 }
@@ -401,13 +409,24 @@ class AIGenerationService(
                 add(buildJsonObject {
                     put("role", "user")
                     put("parts", buildJsonArray {
-                        add(buildJsonObject { put("text", fullPrompt) })
-                        add(buildJsonObject { put("text", "CURRENT_JSON_STATE: \n$currentJson") })
+                        add(buildJsonObject {
+                            put("text", fullPrompt)
+                        })
+//                        if (originalImageUri.isNotBlank()) {
+//                            add(buildJsonObject {
+//                                put("text", "ORIGINAL_IMAGE: \n$currentJson")
+//                            })
+//                        }
+                        add(buildJsonObject {
+                            put("text", "CURRENT_JSON: \n$currentJson")
+                        })
                         add(imagePart) // 注入由统一构建方法返回的 JSON 节点
                     })
                 })
             })
-            put("generationConfig", buildJsonObject { put("responseMimeType", "application/json") })
+            put("generationConfig", buildJsonObject {
+                put("responseMimeType", "application/json")
+            })
         }.toString()
 
         val accumulatedText = StringBuilder()
@@ -421,7 +440,7 @@ class AIGenerationService(
                     onChunk(chunk)
                 }
             )
-            
+
             syncLog("✅ 重塑结构解析完毕。", onLog)
             val finalString = accumulatedText.toString()
             if (finalString.isEmpty()) throw Exception("响应为空")
@@ -434,10 +453,10 @@ class AIGenerationService(
     }
 
     suspend fun optimizePrompt(
-        originalPrompt: String, 
-        apiKey: String, 
+        originalPrompt: String,
+        apiKey: String,
         maxRetries: Int = 3,
-        history: List<org.gemini.ui.forge.model.api.ChatMessage> = emptyList()
+        history: List<ChatMessage> = emptyList()
     ): String {
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
         val url = ApiConfig.getGenerateContentEndpoint(apiKey)
@@ -456,7 +475,7 @@ class AIGenerationService(
                         })
                     })
                 }
-                
+
                 // 2. 追加当前最新请求
                 add(buildJsonObject {
                     put("role", "user")
@@ -473,7 +492,7 @@ class AIGenerationService(
                 return geminiClient.generateContent(url, requestBody)
             } catch (e: Exception) {
                 lastException = e
-                if (attempt < maxRetries) delay(1000L * (attempt + 1))
+                if (attempt < maxRetries) delay((1000L * (attempt + 1)).milliseconds)
             }
         }
         throw lastException ?: Exception("优化未知错误")

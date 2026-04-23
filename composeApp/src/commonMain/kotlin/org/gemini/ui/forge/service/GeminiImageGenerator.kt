@@ -1,12 +1,12 @@
 package org.gemini.ui.forge.service
 
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
-import io.ktor.utils.io.*
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.data.remote.ApiConfig
-import org.gemini.ui.forge.data.remote.NetworkClient
+import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.utils.getMimeType
+import org.gemini.ui.forge.utils.readLocalFileBytes
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * 专门处理 Gemini 系列模型 (如 Gemini 2.0 Flash) 的生图生成器
@@ -14,11 +14,11 @@ import org.gemini.ui.forge.data.remote.NetworkClient
  */
 class GeminiImageGenerator(
     private val cloudAssetManager: CloudAssetManager,
-    private val promptManager: PromptManager
+    private val promptManager: PromptManager,
+    private val geminiClient: GeminiClient
 ) : BaseImageGenerator() {
 
     private val TAG = "GeminiImageGenerator"
-    private val geminiClient = GeminiClient()
 
     suspend fun generate(
         model: String,
@@ -54,18 +54,14 @@ class GeminiImageGenerator(
                         })
                         
                         if (!params.referenceImageUri.isNullOrBlank()) {
-                            val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(params.referenceImageUri)
+                            val bytes = readLocalFileBytes(params.referenceImageUri)
                             if (bytes != null) {
-                                val mime = org.gemini.ui.forge.utils.getMimeType(params.referenceImageUri)
-                                @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-                                val base64 = kotlin.io.encoding.Base64.encode(bytes)
-                                
-                                add(buildJsonObject {
-                                    put("inlineData", buildJsonObject {
-                                        put("mimeType", mime)
-                                        put("data", base64)
-                                    })
-                                })
+                                val displayName = params.referenceImageUri.substringAfterLast("/")
+                                    .substringAfterLast("\\")
+                                    .ifEmpty { "ref_${getCurrentTimeMillis()}.jpg" }
+                                val mime = getMimeType(params.referenceImageUri)
+                                val imagePart = cloudAssetManager.buildGeminiImagePart(displayName, bytes, mime, onLog)
+                                add(imagePart)
                             }
                         }
                     })
@@ -108,7 +104,7 @@ class GeminiImageGenerator(
                                 onImageGenerated(dataUri)
                             }
                         }
-                    } catch (e: Exception) {}
+                    } catch (_: Exception) {}
                 }
             )
             return allImages

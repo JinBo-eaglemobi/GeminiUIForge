@@ -6,6 +6,9 @@ import io.ktor.http.*
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.data.remote.NetworkClient
+import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.utils.getMimeType
+import org.gemini.ui.forge.utils.readLocalFileBytes
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -14,14 +17,14 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  */
 class ImagenGenerator(
     private val cloudAssetManager: CloudAssetManager,
-    private val promptManager: PromptManager
+    private val promptManager: PromptManager,
+    private val geminiClient: GeminiClient
 ) : BaseImageGenerator() {
 
     private val TAG = "ImagenGenerator"
     private val jsonConfig = Json { 
         ignoreUnknownKeys = true 
     }
-    private val geminiClient = GeminiClient()
 
     suspend fun generate(
         model: String,
@@ -111,28 +114,16 @@ class ImagenGenerator(
             .replace("{4}", heightStr)
             .replace("{5}", finalLayoutInstruction)
 
-        // 处理参考图：云端优先，Base64 兜底
+        // 处理参考图：统一通过 CloudAssetManager 构建节点
         var refImageJson: JsonObject? = null
         if (!params.referenceImageUri.isNullOrBlank()) {
-            val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(params.referenceImageUri)
+            val bytes = readLocalFileBytes(params.referenceImageUri)
             if (bytes != null) {
                 val displayName = params.referenceImageUri.substringAfterLast("/")
                     .substringAfterLast("\\")
-                    .ifEmpty { "ref_${org.gemini.ui.forge.getCurrentTimeMillis()}.jpg" }
-                val mime = org.gemini.ui.forge.utils.getMimeType(params.referenceImageUri)
-                
-                val cloudUri = cloudAssetManager.getOrUploadFile(displayName, bytes, mime)
-                if (cloudUri != null) {
-                    refImageJson = buildJsonObject { 
-                        put("gcsUri", cloudUri) 
-                    }
-                } else {
-                    @OptIn(ExperimentalEncodingApi::class)
-                    val base64 = Base64.encode(bytes)
-                    refImageJson = buildJsonObject { 
-                        put("bytesBase64Encoded", base64) 
-                    }
-                }
+                    .ifEmpty { "ref_${getCurrentTimeMillis()}.jpg" }
+                val mime = getMimeType(params.referenceImageUri)
+                refImageJson = cloudAssetManager.buildImagenImagePart(displayName, bytes, mime, onLog)
             }
         }
 

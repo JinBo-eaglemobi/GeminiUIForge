@@ -8,6 +8,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -52,7 +53,7 @@ fun AddLayerDialog(onDismiss: () -> Unit, onConfirm: (String, UIBlockType, Float
                         readOnly = true,
                         label = { Text("模块类型") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                         shape = AppShapes.medium
                     )
                     ExposedDropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
