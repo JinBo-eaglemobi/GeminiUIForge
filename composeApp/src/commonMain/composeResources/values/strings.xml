@@ -118,6 +118,9 @@
     <string name="shortcut_save">Save Project</string>
     <string name="shortcut_rename">Rename Layer</string>
     <string name="shortcut_delete">Delete Layer</string>
+    <string name="shortcut_copy">Copy</string>
+    <string name="shortcut_paste">Paste</string>
+    <string name="shortcut_cut">Cut</string>
 
     <!-- New Internationalized Strings -->
     <string name="hierarchy_title">Hierarchy</string>
