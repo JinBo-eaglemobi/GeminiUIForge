@@ -194,7 +194,7 @@ class TemplateAssetGenViewModel(
             _state.update { it.copy(isGenerating = true, generationLogs = emptyList(), showAITaskDialog = true) }
             addGenLog(">>> 开始为模块 [${block.id}] 生成资源 <<<")
             try {
-                val candidatesBase64 = aiService.generateImages(
+                aiService.generateImages(
                     model = selectedModel,
                     apiKey = apiKey,
                     blockType = block.type.name,
@@ -205,54 +205,48 @@ class TemplateAssetGenViewModel(
                     isPng = isTransparent,
                     style = globalStyle,
                     referenceImageUri = refUri?.getAbsolutePath(),
-                    onLog = { addGenLog(it) }
-                )
+                    onLog = { addGenLog(it) },
+                    onImageGenerated = { base64 ->
+                        // 异步处理单张图片，不阻塞后续图片的接收
+                        viewModelScope.launch {
+                            val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
+                            @OptIn(ExperimentalEncodingApi::class)
+                            val bytes = Base64.decode(pure)
+                            val timestamp = getCurrentTimeMillis()
+                            val idx = _state.value.generatedCandidates.size
 
-                val candidatePaths = withContext(Dispatchers.Default) {
-                    candidatesBase64.mapIndexed { index, base64 ->
-                        val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
+                            val originalTFile = templateRepo.saveBlockResource(projectName, block.id, "gen_${idx}_$timestamp", bytes, isPng = false)
+                            var displayFile = originalTFile
 
-                        @OptIn(ExperimentalEncodingApi::class)
-                        val bytes = Base64.decode(pure)
-                        val timestamp = getCurrentTimeMillis()
-                        
-                        // saveBlockResource 内部会调用 saveBytesToFile，后者现已返回 TemplateFile
-                        val originalTFile =
-                            templateRepo.saveBlockResource(projectName, block.id, "gen_${index}_$timestamp", bytes, isPng = false)
-
-                        if (isTransparent) {
-                            var processedBytes: ByteArray? = null
-                            
-                            if (prioritizeCloud && apiKey.isNotBlank()) {
-                                try {
-                                    processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) { addGenLog(it) }
-                                } catch (e: Exception) {
-                                    addGenLog("⚠️ 云端抠图失败: ${e.message}")
+                            if (isTransparent) {
+                                var processedBytes: ByteArray? = null
+                                if (prioritizeCloud && apiKey.isNotBlank()) {
+                                    try {
+                                        processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) { addGenLog(it) }
+                                    } catch (e: Exception) {
+                                        addGenLog("⚠️ 预览图 [${idx+1}] 云端抠图失败: ${e.message}")
+                                    }
+                                }
+                                if (processedBytes == null) {
+                                    try {
+                                        processedBytes = aiService.removeBackgroundLocal(bytes) { addGenLog(it) }
+                                    } catch (e: Exception) {
+                                        addGenLog("❌ 预览图 [${idx+1}] 本地抠图失败")
+                                    }
+                                }
+                                if (processedBytes != null) {
+                                    displayFile = templateRepo.saveBlockResource(projectName, block.id, "processed_${idx}_$timestamp", processedBytes, isPng = true)
                                 }
                             }
-                            
-                            if (processedBytes == null) {
-                                try {
-                                    processedBytes = aiService.removeBackgroundLocal(bytes) { addGenLog(it) }
-                                } catch (e: Exception) {
-                                    addGenLog("❌ 本地抠图也失败了: ${e.message}")
-                                }
-                            }
 
-                            if (processedBytes != null) {
-                                return@mapIndexed templateRepo.saveBlockResource(
-                                    projectName,
-                                    block.id,
-                                    "processed_${index}_$timestamp",
-                                    processedBytes,
-                                    isPng = true
-                                )
+                            // 实时同步到 UI
+                            _state.update { s ->
+                                s.copy(generatedCandidates = s.generatedCandidates + displayFile)
                             }
+                            addGenLog("✅ 预览图 [${idx + 1}] 已生成并就绪")
                         }
-                        originalTFile
                     }
-                }
-                _state.update { it.copy(generatedCandidates = candidatePaths) }
+                )
             } catch (e: Exception) {
                 addGenLog(">>> 生成失败: ${e.message} <<<")
             } finally {

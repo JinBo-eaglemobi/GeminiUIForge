@@ -3,6 +3,7 @@ package org.gemini.ui.forge.service
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.utils.io.*
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.data.remote.NetworkClient
@@ -24,9 +25,10 @@ class GeminiImageGenerator(
     suspend fun generate(
         model: String,
         params: GenParams,
-        onLog: (String) -> Unit
+        onLog: (String) -> Unit,
+        onImageGenerated: (String) -> Unit = {}
     ): List<String> {
-        val url = ApiConfig.getGenerateContentEndpoint(params.apiKey, model)
+        val url = ApiConfig.getStreamGenerateContentEndpoint(params.apiKey, model)
         val client = NetworkClient.shared
         
         val stylePart = if (params.style.isNotBlank()) {
@@ -54,7 +56,6 @@ class GeminiImageGenerator(
                             put("text", fullPrompt) 
                         })
                         
-                        // 如果有参考图，以 inlineData 方式加入 (Gemini 模式常用方式)
                         if (!params.referenceImageUri.isNullOrBlank()) {
                             val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(params.referenceImageUri)
                             if (bytes != null) {
@@ -74,37 +75,76 @@ class GeminiImageGenerator(
                 })
             })
             put("generationConfig", buildJsonObject {
-//                put("n", params.count.coerceIn(1, 8))
+                // Gemini 2.0 Flash 等模型支持在 generationConfig 中设置候选数量
+                // 暂时注释掉，因为有些模型可能不支持 candidate_count
+                // put("candidate_count", params.count.coerceIn(1, 4))
             })
         }.toString()
 
-        syncLog(TAG, "📡 正在向 Gemini 发送生图请求 ($model)...", onLog)
-        
-        val response = client.post(url) {
-            contentType(ContentType.Application.Json)
-            setBody(requestBody)
-        }
-
-        if (response.status.isSuccess()) {
-            val jsonResponse = jsonConfig.parseToJsonElement(response.bodyAsText())
-            val candidates = jsonResponse.jsonObject["candidates"]?.jsonArray
-            val firstCandidate = candidates?.firstOrNull()?.jsonObject
-            val content = firstCandidate?.get("content")?.jsonObject
-            val parts = content?.get("parts")?.jsonArray
+        // 过滤请求中的 Base64 数据以进行日志打印
+        val sanitizedRequestBody = requestBody
+            .replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
             
-            return parts?.mapNotNull { part ->
-                val inlineData = part.jsonObject["inlineData"]?.jsonObject
-                val base64 = inlineData?.get("data")?.jsonPrimitive?.content
-                val mimeType = inlineData?.get("mimeType")?.jsonPrimitive?.content ?: "image/png"
-                
-                if (base64 != null) {
-                    "data:$mimeType;base64,$base64"
+        syncLog(TAG, "---- [HTTP REQUEST] ----\nURL: $url\nBody: \n$sanitizedRequestBody\n------------------------", onLog)
+        syncLog(TAG, "📡 正在向 Gemini 建立生图流连接 ($model)...", onLog)
+        
+        val allImages = mutableListOf<String>()
+        try {
+            client.preparePost(url) {
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+            }.execute { response ->
+                if (response.status.isSuccess()) {
+                    val channel = response.bodyAsChannel()
+                    var chunkIndex = 0
+                    while (!channel.isClosedForRead) {
+                        val line = channel.readUTF8Line() ?: break
+                        if (line.startsWith("data: ")) {
+                            val dataJson = line.substringAfter("data: ").trim()
+                            if (dataJson.isEmpty() || dataJson == "[DONE]") {
+                                if (dataJson == "[DONE]") syncLog(TAG, "🏁 生图任务结束", onLog)
+                                continue
+                            }
+                            
+                            chunkIndex++
+                            try {
+                                val jsonElement = jsonConfig.parseToJsonElement(dataJson)
+                                val candidates = jsonElement.jsonObject["candidates"]?.jsonArray
+                                val parts = candidates?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray
+                                
+                                parts?.forEach { part ->
+                                    // 仅提取核心文字描述或思考过程
+                                    val textChunk = part.jsonObject["text"]?.jsonPrimitive?.content
+                                    if (!textChunk.isNullOrEmpty()) {
+                                        syncLog(TAG, "💬 AI: $textChunk", onLog)
+                                    }
+
+                                    // 仅提取图片生成成功的状态
+                                    val inlineData = part.jsonObject["inlineData"]?.jsonObject
+                                    val base64 = inlineData?.get("data")?.jsonPrimitive?.content
+                                    val mimeType = inlineData?.get("mimeType")?.jsonPrimitive?.content ?: "image/png"
+                                    
+                                    if (base64 != null) {
+                                        syncLog(TAG, "🖼️ 已接收到第 ${allImages.size + 1} 张图片数据", onLog)
+                                        val dataUri = "data:$mimeType;base64,$base64"
+                                        allImages.add(dataUri)
+                                        onImageGenerated(dataUri)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                // 静默处理解析异常，保持日志干净
+                            }
+                        }
+                    }
                 } else {
-                    null
+                    val errorText = response.bodyAsText()
+                    syncLog(TAG, "❌ Gemini 生图流错误: HTTP ${response.status}\n$errorText", onLog)
+                    throw Exception("Gemini 生图流错误: ${response.status}")
                 }
-            } ?: emptyList()
-        } else {
-            throw Exception("Gemini 生图错误: ${response.status}")
+            }
+            return allImages
+        } catch (e: Exception) {
+            throw e
         }
     }
 }

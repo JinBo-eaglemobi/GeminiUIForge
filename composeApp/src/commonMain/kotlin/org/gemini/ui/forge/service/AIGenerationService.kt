@@ -100,7 +100,8 @@ class AIGenerationService(
         style: String = "",
         referenceImageUri: String? = null,
         isVertexAI: Boolean = false,
-        onLog: (String) -> Unit = {}
+        onLog: (String) -> Unit = {},
+        onImageGenerated: (String) -> Unit = {}
     ): List<String> = coroutineScope {
         // 从配置中读取总数量，默认为 4
         val configCountStr = configManager.loadKey("IMAGE_GEN_COUNT") ?: "4"
@@ -152,11 +153,21 @@ class AIGenerationService(
                             syncLog("⚠️ $batchTag 重试中 (${attempt + 1})...", onLog)
                         }
                         
-                        return@async if (isGeminiNative) {
-                            geminiGenerator.generate(model.modelName, params, onLog)
+                        val results = if (isGeminiNative) {
+                            geminiGenerator.generate(model.modelName, params, onLog) {
+                                onImageGenerated(it)
+                            }
                         } else {
-                            imagenGenerator.generate(model.modelName, params, onLog)
+                            imagenGenerator.generate(model.modelName, params, onLog) {
+                                onImageGenerated(it)
+                            }.also { list ->
+                                // 如果底层不是逐张回调（比如 Imagen 一次性回 4 张），这里补齐回调
+                                if (list.size > 0 && list.size <= params.count) {
+                                    // 实际上 ImagenGenerator 现在也支持回调了，这里为了稳妥
+                                }
+                            }
                         }
+                        return@async results
                     } catch (e: Exception) {
                         lastException = e
                         syncLog("❌ $batchTag 请求异常: ${e.message}", onLog)

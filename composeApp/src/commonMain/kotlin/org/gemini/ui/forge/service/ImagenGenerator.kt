@@ -23,7 +23,8 @@ class ImagenGenerator(
     suspend fun generate(
         model: String,
         params: GenParams,
-        onLog: (String) -> Unit
+        onLog: (String) -> Unit,
+        onImageGenerated: (String) -> Unit = {}
     ): List<String> {
         val url = if (params.isVertexAI) {
             "https://us-central1-aiplatform.googleapis.com/v1/projects/unused/locations/us-central1/publishers/google/models/$model:predict"
