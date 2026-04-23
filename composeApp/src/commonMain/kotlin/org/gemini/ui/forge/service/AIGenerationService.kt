@@ -17,6 +17,7 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.api.ChatMessage
 import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.model.ui.UIPage
 import org.gemini.ui.forge.utils.AppLogger
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -373,14 +374,15 @@ class AIGenerationService(
         history: List<ChatMessage> = emptyList(),
         onLog: (String) -> Unit = {},
         onChunk: (String) -> Unit = {}
-    ): ProjectState {
+    ): List<UIPage> {
         syncLog("开始区域重塑流式分析: $userInstruction", onLog)
 
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
 
         val promptTemplate = promptManager.getPrompt("refine_template")
-        val fullPrompt = promptTemplate.replace($$"${USER_INSTRUCTION}", userInstruction)
+        val fullPrompt = promptTemplate.replace("\${USER_INSTRUCTION}", userInstruction)
+
 
         // 使用统一图片预处理方法处理 croppedBytes
         val displayName = "cropped_${getCurrentTimeMillis()}.jpg"
@@ -445,7 +447,7 @@ class AIGenerationService(
             val finalString = accumulatedText.toString()
             if (finalString.isEmpty()) throw Exception("响应为空")
             val cleanJson = geminiClient.cleanJson(finalString)
-            return jsonConfig.decodeFromString<ProjectState>(cleanJson)
+            return jsonConfig.decodeFromString<List<UIPage>>(cleanJson)
         } catch (e: Exception) {
             AppLogger.e(TAG, "重塑异常", e)
             throw e

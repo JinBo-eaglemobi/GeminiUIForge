@@ -527,8 +527,8 @@ class TemplateEditorViewModel(
 
                     // 4. 将当前 JSON 状态传递给 AI，执行重塑
                     logger("🤖 正在向 AI 发送区域重写请求...")
-                    val currentJson = Json.encodeToString(ProjectState.serializer(), currentState.project)
-                    val updatedProject = aiService.refineAreaForTemplate(
+                    val currentJson = Json.encodeToString(currentState.project.pages)
+                    val updatedPages = aiService.refineAreaForTemplate(
                         originalImageUri = originalFileUri,
                         croppedBytes = croppedBytes,
                         currentJson = currentJson,
@@ -544,13 +544,14 @@ class TemplateEditorViewModel(
                     _state.update { s ->
                         val newHistory = history + newUserMsg + newModelMsg
                         s.copy(
-                            project = updatedProject,
+                            project = s.project.copy(pages = updatedPages),
                             chatHistories = s.chatHistories + (historyKey to newHistory)
                         )
                     }
-                    templateRepo.saveTemplate(currentState.projectName, updatedProject)
+                    val finalProject = _state.value.project
+                    templateRepo.saveTemplate(currentState.projectName, finalProject)
                     onComplete(true)
-                    updatedProject
+                    finalProject
                 } catch (e: Exception) {
                     if (e !is kotlinx.coroutines.CancellationException) {
                         val errMsg = "❌ 错误: ${e.message}"

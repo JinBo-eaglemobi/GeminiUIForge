@@ -3,7 +3,7 @@ You are an expert UI analyzer. Your task is to REFINE and CORRECT an existing UI
 INPUTS PROVIDED:
 1. ORIGINAL_IMAGE: A full view of the UI for global context.
 2. CROPPED_IMAGE: A high-resolution close-up of a specific area that needs correction.
-3. CURRENT_JSON: The existing ProjectState (JSON) representing the current UI structure.
+3. CURRENT_JSON: The existing list of pages (List<UIPage>) representing the current UI structure.
 4. USER_INSTRUCTION: Specific feedback from the user about what is wrong or missing in the cropped area.
 
 CRITICAL CONSTRAINTS:
@@ -15,7 +15,7 @@ CRITICAL CONSTRAINTS:
 4. COORDINATES: All coordinates for top-level blocks must be absolute relative to the original image canvas [0, width] and [0, height]. For blocks inside a parent's `children` array, the coordinates MUST be relative to the parent's top-left corner.
 5. EXACT TYPE MATCH: The `type` field of ANY new or modified `UIBlock` MUST strictly be one of the following strings. Do NOT invent types like 'TITLE' or 'LABEL'. Use these exact strings:
    - BUTTON, VIEW, TEXT, IMAGE, COMBO_BOX, PROGRESS_BAR, POPUP_MENU, LOADER, SCROLL_BAR, SLIDER, INPUT, REEL, SPIN_BUTTON, WIN_DISPLAY, BACKGROUND, SYMBOL, HEADER, FOOTER
-6. OUTPUT FORMAT: Return the ENTIRE updated ProjectState as a single JSON object. Do NOT wrap in markdown blocks. Ensure the updated JSON correctly parses into: `ProjectState(projectId, globalTheme, pages: List<UIPage>)` where each `UIPage` contains a `blocks` array of `UIBlock(id, type, bounds: SerialRect(left, top, right, bottom), userPromptEn, userPromptZh, children: List<UIBlock>)`.
+6. OUTPUT FORMAT: Return ONLY the updated list of pages as a JSON array. Do NOT wrap in markdown blocks. Each element in the array must be a `UIPage(id, nameStr, width, height, blocks: List<UIBlock>)` where each `UIBlock` contains `(id, type, bounds: SerialRect(left, top, right, bottom), userPromptEn, userPromptZh, children: List<UIBlock>)`.
 
 Ensure the `width` and `height` of the `UIPage` remain consistent with the original analysis. 
 
