@@ -202,4 +202,15 @@
     <string name="update_latest">Current version is up to date</string>
     <string name="update_error">Update check failed, please check your network</string>
     <string name="action_go_to_settings">Go to Settings</string>
+    
+    <!-- Batch Generation -->
+    <string name="action_batch_gen">Batch Generate</string>
+    <string name="batch_gen_title">Batch Resource Generation</string>
+    <string name="batch_gen_select_hint">Select modules to generate (Only for current page)</string>
+    <string name="batch_gen_select_all">Select All</string>
+    <string name="batch_gen_deselect_all">Deselect All</string>
+    <string name="batch_gen_start">Start Generating</string>
+    <string name="batch_gen_processing">Generating: {0} / {1}</string>
+    <string name="batch_gen_finished">Batch generation finished</string>
+    <string name="batch_gen_empty">No modules missing images in the current page.</string>
 </resources>

@@ -23,3 +23,5 @@ actual fun getPlatform(): Platform = AndroidPlatform()
 
 actual val ResizeHorizontalIcon: PointerIcon = PointerIcon.Default
 actual val ResizeVerticalIcon: PointerIcon = PointerIcon.Default
+
+actual fun getProcessorCount(): Int = Runtime.getRuntime().availableProcessors()

@@ -34,6 +34,8 @@ import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.dialog.AITaskProgressDialog
 import org.gemini.ui.forge.ui.dialog.AssetCropDialog
 import org.gemini.ui.forge.ui.dialog.AssetSelectionDialog
+import org.gemini.ui.forge.ui.dialog.BatchAssetGenDialog
+import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.ui.component.CanvasArea
 import org.gemini.ui.forge.ui.component.HierarchySidebar
 import org.gemini.ui.forge.utils.rememberImagePicker
@@ -90,6 +92,28 @@ fun TemplateAssetGenScreen(
         viewModel.reload(initialProject)
     }
 
+    if (state.showBatchGenDialog) {
+        val currentPageBlocks = state.currentPage?.blocks ?: emptyList()
+        // 递归查找所有缺失图片的 Block
+        fun findAllMissing(blocks: List<UIBlock>): List<UIBlock> {
+            val result = mutableListOf<UIBlock>()
+            for (b in blocks) {
+                if (b.currentImageUri == null) result.add(b)
+                result.addAll(findAllMissing(b.children))
+            }
+            return result
+        }
+        val missingBlocks = findAllMissing(currentPageBlocks)
+
+        BatchAssetGenDialog(
+            blocks = missingBlocks,
+            onCancel = { viewModel.closeBatchGenDialog() },
+            onStartGen = { selected ->
+                viewModel.startBatchGeneration(effectiveApiKey, selected)
+            }
+        )
+    }
+
     var showHistoricalDialog by remember { mutableStateOf(false) }
     var historicalImages by remember { mutableStateOf<List<TemplateFile>>(emptyList()) }
     var pendingCropUri by remember { mutableStateOf<String?>(null) }
@@ -102,7 +126,11 @@ fun TemplateAssetGenScreen(
     }
 
     if (state.showAITaskDialog) {
+        val progressText = state.batchProgress?.let { (curr, total) ->
+            stringResource(Res.string.batch_gen_processing, curr, total)
+        }
         val dialogTitle = when {
+            progressText != null -> progressText
             state.generationLogs.any { it.contains("优化") } -> "智能优化提示词中..."
             state.generationLogs.any { it.contains("抠图") } -> "本地批量处理中..."
             else -> "AI 资源生成中..."
@@ -120,7 +148,7 @@ fun TemplateAssetGenScreen(
     }
 
     var showCurrentGenerationResults by remember { mutableStateOf(false) }
-    LaunchedEffect(state.isGenerating, state.generatedCandidates) {
+    LaunchedEffect(state.isGenerating, state.generatedCandidates, state.batchPendingConfirmBlock) {
         if (!state.isGenerating && state.generatedCandidates.isNotEmpty()) {
             showCurrentGenerationResults = true
         }
@@ -130,8 +158,8 @@ fun TemplateAssetGenScreen(
         var isCropping by remember { mutableStateOf(false) }
         AssetCropDialog(
             imageUri = pendingCropUri!!,
-            targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
-            targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
+            targetWidth = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.width ?: 0f,
+            targetHeight = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.height ?: 0f,
             onConfirm = { rect ->
                 isCropping = true
                 coroutineScope.launch {
@@ -149,23 +177,42 @@ fun TemplateAssetGenScreen(
     }
 
     if (showCurrentGenerationResults) {
+        val pendingBlock = state.batchPendingConfirmBlock
+        val targetBlock = pendingBlock ?: state.selectedBlock
         AssetSelectionDialog(
-            title = "AI 生成资源预览",
+            title = if (pendingBlock != null) 
+                "批量确认 [${pendingBlock.id}] (${state.batchProgress?.first}/${state.batchProgress?.second})" 
+                else "AI 生成资源预览",
             candidates = state.generatedCandidates,
-            initialSelectedUri = state.selectedBlock?.currentImageUri,
-            targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
-            targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
+            initialSelectedUri = targetBlock?.currentImageUri,
+            targetWidth = targetBlock?.bounds?.width ?: 0f,
+            targetHeight = targetBlock?.bounds?.height ?: 0f,
             isProcessing = state.isLocalProcessing,
-            onImageSelected = { viewModel.onImageSelected(it); showCurrentGenerationResults = false },
+            onImageSelected = { 
+                viewModel.onImageSelected(it)
+                showCurrentGenerationResults = false 
+            },
             onCropRequested = { pendingCropUri = it.getAbsolutePath() },
             onDeleteImages = { viewModel.deleteImages(it) },
-            onClearAll = { viewModel.clearCandidates(); showCurrentGenerationResults = false },
+            onClearAll = { 
+                if (pendingBlock != null) {
+                    viewModel.skipCurrentBatchConfirmation()
+                } else {
+                    viewModel.clearCandidates()
+                }
+                showCurrentGenerationResults = false 
+            },
             onBatchRemoveBg = { uris ->
                 viewModel.batchRemoveBackgroundLocal(uris) { newPaths ->
                     viewModel.appendCandidates(newPaths)
                 }
             },
-            onDismiss = { showCurrentGenerationResults = false }
+            onDismiss = { 
+                if (pendingBlock != null) {
+                    viewModel.skipCurrentBatchConfirmation()
+                }
+                showCurrentGenerationResults = false 
+            }
         )
     }
 
@@ -320,42 +367,59 @@ private fun PropertyPanel(
     var showAdvancedSettingsDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(16.dp)) {
+        Text(
+            stringResource(Res.string.editor_gen_settings),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                stringResource(Res.string.editor_gen_settings),
-                style = MaterialTheme.typography.titleMedium
-            )
+            OutlinedButton(
+                onClick = { showAdvancedSettingsDialog = true },
+                modifier = Modifier.weight(1f).height(32.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp),
+                shape = AppShapes.small,
+                enabled = !state.isGenerating
+            ) {
+                Icon(Icons.Default.Palette, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("风格与参考", style = MaterialTheme.typography.labelSmall)
+            }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = { showAdvancedSettingsDialog = true },
-                    modifier = Modifier.height(32.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                    shape = AppShapes.small,
-                    enabled = !state.isGenerating
-                ) {
-                    Icon(Icons.Default.Palette, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("风格与参考", style = MaterialTheme.typography.labelSmall)
-                }
+            OutlinedButton(
+                onClick = { viewModel.openBatchGenDialog() },
+                modifier = Modifier.weight(1f).height(32.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp),
+                shape = AppShapes.small,
+                enabled = !state.isGenerating,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
+                    contentColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(Icons.Default.AutoAwesomeMotion, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(Res.string.action_batch_gen), style = MaterialTheme.typography.labelSmall)
+            }
+        }
 
-                Box {
-                    OutlinedButton(
-                        onClick = { showModelMenu = true },
-                        modifier = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                        shape = AppShapes.small,
-                        enabled = !state.isGenerating
-                    ) {
-                        Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(state.selectedModel.displayName, style = MaterialTheme.typography.labelSmall)
-                        Icon(Icons.Default.ArrowDropDown, null)
-                    }
+        Box(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+            OutlinedButton(
+                onClick = { showModelMenu = true },
+                modifier = Modifier.fillMaxWidth().height(32.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                shape = AppShapes.small,
+                enabled = !state.isGenerating
+            ) {
+                Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(state.selectedModel.displayName, style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Default.ArrowDropDown, null)
+            }
 
                     DropdownMenu(
                         expanded = showModelMenu,
@@ -394,8 +458,6 @@ private fun PropertyPanel(
                                 )
                             }
                     }
-                }
-            }
         }
         
         if (selectedBlock != null) {

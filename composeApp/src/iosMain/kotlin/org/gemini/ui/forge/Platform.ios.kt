@@ -30,3 +30,5 @@ actual fun getCurrentTimeMillis(): Long = (NSDate().timeIntervalSince1970 * 1000
 
 actual val ResizeHorizontalIcon: PointerIcon = PointerIcon.Default
 actual val ResizeVerticalIcon: PointerIcon = PointerIcon.Default
+
+actual fun getProcessorCount(): Int = platform.Foundation.NSProcessInfo.processInfo.processorCount.toInt()

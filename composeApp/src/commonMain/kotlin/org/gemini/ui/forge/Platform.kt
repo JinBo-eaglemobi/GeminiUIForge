@@ -41,6 +41,11 @@ expect val ResizeHorizontalIcon: androidx.compose.ui.input.pointer.PointerIcon
 expect val ResizeVerticalIcon: androidx.compose.ui.input.pointer.PointerIcon
 
 /**
+ * 获取当前设备的逻辑核心数量 (用于并行任务调度)
+ */
+expect fun getProcessorCount(): Int
+
+/**
  * 将给定的时间戳格式化为指定的本地时间字符串格式
  * @param timeMillis 时间戳（毫秒）
  * @param format 目标时间格式，默认 "yyyy-MM-dd HH:mm:ss"

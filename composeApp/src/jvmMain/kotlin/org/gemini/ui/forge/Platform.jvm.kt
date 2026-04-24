@@ -71,3 +71,5 @@ actual fun getPlatform(): Platform = JVMPlatform()
 
 actual val ResizeHorizontalIcon: PointerIcon = PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR))
 actual val ResizeVerticalIcon: PointerIcon = PointerIcon(Cursor(Cursor.N_RESIZE_CURSOR))
+
+actual fun getProcessorCount(): Int = Runtime.getRuntime().availableProcessors()

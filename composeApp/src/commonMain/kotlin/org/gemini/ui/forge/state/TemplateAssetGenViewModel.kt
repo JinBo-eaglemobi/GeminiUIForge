@@ -12,6 +12,7 @@ import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.getProcessorCount
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.model.ui.*
@@ -20,6 +21,12 @@ import org.gemini.ui.forge.utils.*
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import org.gemini.ui.forge.manager.CloudAssetManager
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+
+data class BatchResult(val block: UIBlock, val candidates: List<TemplateFile>)
 
 /**
  * 资产生成器的专属 ViewModel
@@ -52,6 +59,38 @@ class TemplateAssetGenViewModel(
     }
 
     private var generationJob: kotlinx.coroutines.Job? = null
+
+    // --- 批量确认队列机制 ---
+    private val batchResultChannel = Channel<BatchResult>(Channel.UNLIMITED)
+    private var confirmationDeferred: CompletableDeferred<Unit>? = null
+
+    init {
+        // 启动后台结果消费者：负责按顺序驱动 UI 确认弹窗
+        viewModelScope.launch {
+            for (result in batchResultChannel) {
+                // 1. 设置当前待确认的 Block 和候选图
+                _state.update { 
+                    it.copy(
+                        batchPendingConfirmBlock = result.block,
+                        generatedCandidates = result.candidates
+                    ) 
+                }
+                
+                // 2. 创建一个 Deferred 并挂起，等待用户完成选择
+                val deferred = CompletableDeferred<Unit>()
+                confirmationDeferred = deferred
+                deferred.await()
+                
+                // 3. 重置状态，准备处理下一个结果
+                _state.update { 
+                    it.copy(
+                        batchPendingConfirmBlock = null,
+                        generatedCandidates = emptyList()
+                    ) 
+                }
+            }
+        }
+    }
 
     /** 强制重载最新的 ProjectState（解决重入时旧状态残留的问题） */
     fun reload(newProject: ProjectState) {
@@ -263,11 +302,97 @@ class TemplateAssetGenViewModel(
         }
     }
 
+    // --- 批量生成逻辑 ---
+
+    fun openBatchGenDialog() {
+        _state.update { it.copy(showBatchGenDialog = true) }
+    }
+
+    fun closeBatchGenDialog() {
+        _state.update { it.copy(showBatchGenDialog = false) }
+    }
+
+    fun startBatchGeneration(apiKey: String, selectedBlocks: List<UIBlock>) {
+        if (selectedBlocks.isEmpty()) return
+        val projectName = _state.value.projectName
+        val isTransparent = _state.value.isGenerateTransparent
+        val prioritizeCloud = _state.value.isPrioritizeCloudRemoval
+        val globalStyle = _state.value.globalStyle
+        val refUri = _state.value.referenceImageUri
+        val selectedModel = _state.value.selectedModel
+        val coreCount = getProcessorCount().coerceAtLeast(2)
+        val semaphore = Semaphore(coreCount)
+
+        closeBatchGenDialog()
+        generationJob?.cancel()
+        generationJob = viewModelScope.launch {
+            _state.update { it.copy(batchProgress = 0 to selectedBlocks.size, showAITaskDialog = true, generationLogs = emptyList()) }
+            addGenLog("🚀 开始批量任务：共 ${selectedBlocks.size} 个模块，并发限制：$coreCount")
+
+            selectedBlocks.forEach { block ->
+                launch {
+                    semaphore.withPermit {
+                        addGenLog("--- 正在为 [${block.id}] 请求生成 ---")
+                        val currentCandidates = mutableListOf<TemplateFile>()
+                        try {
+                            aiService.generateImages(
+                                model = selectedModel,
+                                apiKey = apiKey,
+                                blockType = block.type.name,
+                                userPrompt = block.fullPrompt,
+                                maxRetries = 3,
+                                targetWidth = block.bounds.width,
+                                targetHeight = block.bounds.height,
+                                isPng = isTransparent,
+                                style = globalStyle,
+                                referenceImageUri = refUri?.getAbsolutePath(),
+                                onLog = { /* 内部静默记录或按需输出 */ },
+                                onImageGenerated = { base64 ->
+                                    val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
+                                    @OptIn(ExperimentalEncodingApi::class)
+                                    val bytes = Base64.decode(pure)
+                                    val timestamp = getCurrentTimeMillis()
+                                    
+                                    viewModelScope.launch {
+                                        val originalTFile = templateRepo.saveBlockResource(projectName, block.id, "batch_gen_${getCurrentTimeMillis()}", bytes, isPng = false)
+                                        var displayFile = originalTFile
+                                        
+                                        if (isTransparent) {
+                                            var processedBytes: ByteArray? = null
+                                            if (prioritizeCloud && apiKey.isNotBlank()) {
+                                                try { processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) } catch (e: Exception) {}
+                                            }
+                                            if (processedBytes == null) {
+                                                try { processedBytes = aiService.removeBackgroundLocal(bytes) } catch (e: Exception) {}
+                                            }
+                                            if (processedBytes != null) {
+                                                displayFile = templateRepo.saveBlockResource(projectName, block.id, "batch_proc_${getCurrentTimeMillis()}", processedBytes, isPng = true)
+                                            }
+                                        }
+                                        currentCandidates.add(displayFile)
+                                    }
+                                }
+                            )
+                            // 等待一小会儿确保保存逻辑完成
+                            kotlinx.coroutines.delay(1000) 
+                            batchResultChannel.send(BatchResult(block, currentCandidates.toList()))
+                            addGenLog("✅ 模块 [${block.id}] 已完成生成，进入待确认队列")
+                        } catch (e: Exception) {
+                            addGenLog("❌ 模块 [${block.id}] 生成失败: ${e.message}")
+                        } finally {
+                            _state.update { s -> s.copy(batchProgress = (s.batchProgress?.first ?: 0) + 1 to selectedBlocks.size) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // --- 资产操作逻辑 ---
 
     fun onImageSelected(imageUri: TemplateFile) {
         val pageId = _state.value.selectedPageId ?: return
-        val blockId = _state.value.selectedBlockId ?: return
+        val blockId = _state.value.batchPendingConfirmBlock?.id ?: _state.value.selectedBlockId ?: return
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) {
@@ -278,10 +403,17 @@ class TemplateAssetGenViewModel(
             }
             currentState.copy(
                 project = currentState.project.copy(pages = updatedPages),
-                generatedCandidates = emptyList()
+                generatedCandidates = if (currentState.batchPendingConfirmBlock != null) currentState.generatedCandidates else emptyList()
             )
         }
         markDirty()
+        
+        // 如果是在批量确认流程中，释放锁，触发下一个弹窗
+        confirmationDeferred?.complete(Unit)
+    }
+
+    fun skipCurrentBatchConfirmation() {
+        confirmationDeferred?.complete(Unit)
     }
 
     /** 

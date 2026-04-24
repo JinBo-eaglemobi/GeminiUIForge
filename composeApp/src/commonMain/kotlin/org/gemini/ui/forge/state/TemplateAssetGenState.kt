@@ -51,7 +51,12 @@ data class TemplateAssetGenState(
     val stageBackgroundColor: String = "#2D2D2D",
 
     /** 当前场景内使用的提示词语言状态 (独立维护，避免跨页面泄漏) */
-    val currentLang: PromptLanguage = PromptLanguage.ZH
+    val currentLang: PromptLanguage = PromptLanguage.ZH,
+
+    /** 批量生成相关 */
+    val showBatchGenDialog: Boolean = false,
+    val batchProgress: Pair<Int, Int>? = null, // (已完成, 总数)
+    val batchPendingConfirmBlock: UIBlock? = null
 ) {
     val currentPage get() = project.pages.find { it.id == selectedPageId }
     val selectedBlock: UIBlock?

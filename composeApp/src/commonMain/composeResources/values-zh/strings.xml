@@ -202,4 +202,15 @@
     <string name="update_latest">当前已是最新版本</string>
     <string name="update_error">检查更新失败，请检查网络</string>
     <string name="action_go_to_settings">前往设置</string>
+    
+    <!-- 批量生成 -->
+    <string name="action_batch_gen">一键批量生成</string>
+    <string name="batch_gen_title">批量资源生成</string>
+    <string name="batch_gen_select_hint">请选择要生成的模块（仅限当前页）</string>
+    <string name="batch_gen_select_all">全选</string>
+    <string name="batch_gen_deselect_all">全取消</string>
+    <string name="batch_gen_start">开始批量生成</string>
+    <string name="batch_gen_processing">正在生成中: {0} / {1}</string>
+    <string name="batch_gen_finished">批量生成任务已完成</string>
+    <string name="batch_gen_empty">当前页面没有缺失图片资源的模块。</string>
 </resources>
