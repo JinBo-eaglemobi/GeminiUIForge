@@ -12,8 +12,10 @@ data class AppState(
     /** 当前项目的基础数据 */
     val projectName: String = "",
     val project: ProjectState = ProjectState(),
-    
+
     /** 应用全局配置状态 (主题、语言、导航等) */
     val globalState: AppGlobalState = AppGlobalState(),
-    
+
+    /** 是否有未保存的修改 */
+    val isDirty: Boolean = false,
 )

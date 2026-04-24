@@ -151,8 +151,40 @@ fun App(typography: Typography? = null) {
         ) {
             val coroutineScope = rememberCoroutineScope()
             val toastData by appViewModel.toastData.collectAsState()
+            var showExitConfirmDialog by remember { mutableStateOf(false) }
 
             Box(modifier = Modifier.fillMaxSize()) {
+                if (showExitConfirmDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showExitConfirmDialog = false },
+                        title = { Text("提醒") },
+                        text = { Text("项目有未保存的修改，是否保存后退出？") },
+                        confirmButton = {
+                            Button(onClick = {
+                                appViewModel.dispatchSaveEvent()
+                                showExitConfirmDialog = false
+                                appViewModel.navigateTo(AppScreen.HOME)
+                            }) {
+                                Text("保存并退出")
+                            }
+                        },
+                        dismissButton = {
+                            Row {
+                                TextButton(onClick = {
+                                    appViewModel.setDirty(false)
+                                    showExitConfirmDialog = false
+                                    appViewModel.navigateTo(AppScreen.HOME)
+                                }) {
+                                    Text("不保存退出")
+                                }
+                                TextButton(onClick = { showExitConfirmDialog = false }) {
+                                    Text("取消")
+                                }
+                            }
+                        }
+                    )
+                }
+
                 if (showCloudAssetDialog) {
                     org.gemini.ui.forge.ui.dialog.CloudAssetDialog(
                         cloudAssetManager = appViewModel.cloudAssetManager,
@@ -222,17 +254,17 @@ fun App(typography: Typography? = null) {
                     topBar = {
                         AppTopBar(
                             currentScreen = globalState.currentScreen,
-                            onNavigateHome = { appViewModel.navigateTo(AppScreen.HOME) },
+                            onNavigateHome = {
+                                if (appState.isDirty) {
+                                    showExitConfirmDialog = true
+                                } else {
+                                    appViewModel.navigateTo(AppScreen.HOME)
+                                }
+                            },
                             onGenerateTemplateClicked = { appViewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
                             onCloudAssetManagerClicked = { showCloudAssetDialog = true },
                             onSaveClicked = {
-                                coroutineScope.launch {
-                                    templateRepo.saveTemplate(appState.projectName, appState.project)
-                                    appViewModel.showToast(
-                                        message = "项目保存成功！",
-                                        type = org.gemini.ui.forge.ui.component.ToastType.SUCCESS
-                                    )
-                                }
+                                appViewModel.dispatchSaveEvent()
                             },
                             onSettingsClicked = {
                                 settingsInitialCategory = SettingCategory.GENERAL;
@@ -286,7 +318,9 @@ fun App(typography: Typography? = null) {
                                     configManager = configManager,
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     initialPromptLang = globalState.promptLangPref,
-                                    onProjectUpdated = { appViewModel.updateProject(it) }
+                                    saveEvent = appViewModel.saveEvent,
+                                    onProjectUpdated = { appViewModel.updateProject(it) },
+                                    onDirtyChanged = { appViewModel.setDirty(it) }
                                 )
                             }
 
@@ -299,9 +333,11 @@ fun App(typography: Typography? = null) {
                                     configManager = configManager,
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     initialPromptLang = globalState.promptLangPref,
+                                    saveEvent = appViewModel.saveEvent,
                                     onProjectUpdated = { updatedProject ->
                                         appViewModel.updateProject(updatedProject)
-                                    }
+                                    },
+                                    onDirtyChanged = { appViewModel.setDirty(it) }
                                 )
                             }
 

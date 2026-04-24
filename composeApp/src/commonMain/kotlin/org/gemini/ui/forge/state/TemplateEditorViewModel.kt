@@ -28,7 +28,8 @@ class TemplateEditorViewModel(
     initialLang: PromptLanguage,
     private val templateRepo: TemplateRepository,
     private val cloudAssetManager: CloudAssetManager,
-    private val aiService: AIGenerationService
+    private val aiService: AIGenerationService,
+    private val onDirtyChanged: (Boolean) -> Unit = {}
 ) : ViewModel() {
 
     // 内部可变状态流，包含当前编辑的页面、块等信息
@@ -45,6 +46,10 @@ class TemplateEditorViewModel(
      * 对外暴露的不可变状态流，供 Compose 监听
      */
     val state: StateFlow<TemplateEditorState> = _state.asStateFlow()
+
+    private fun markDirty() {
+        onDirtyChanged(true)
+    }
 
     fun switchLang(lang: PromptLanguage) {
         _state.update { it.copy(currentLang = lang) }
@@ -115,18 +120,18 @@ class TemplateEditorViewModel(
             redoStack.addLast(currentState) // 将当前状态压入重做栈
             val previousState = undoStack.removeLast()
             _state.update { it.copy(project = previousState) }
+            markDirty()
         }
     }
 
-    /**
-     * 执行重做操作：恢复撤销的状态。
-     */
+    /** 执行重做操作：恢复撤销的状态。 */
     fun redo() {
         if (redoStack.isNotEmpty()) {
             val currentState = _state.value.project
             undoStack.addLast(currentState) // 将当前状态重新压入撤销栈
             val nextState = redoStack.removeLast()
             _state.update { it.copy(project = nextState) }
+            markDirty()
         }
     }
 
@@ -222,6 +227,7 @@ class TemplateEditorViewModel(
                 editingGroupId = if (currentState.editingGroupId == oldId) newId else currentState.editingGroupId
             )
         }
+        markDirty()
     }
 
     /** 更新块的物理坐标和尺寸 */
@@ -241,6 +247,7 @@ class TemplateEditorViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+        markDirty()
     }
 
     /** 更改指定块的组件类型 (例如从 IMAGE 改为 BUTTON) */
@@ -256,6 +263,7 @@ class TemplateEditorViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+        markDirty()
     }
 
     /**
@@ -295,6 +303,7 @@ class TemplateEditorViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = newBlockId)
         }
+        markDirty()
     }
 
     /** 手动添加一个自定义图层块 */
@@ -332,6 +341,7 @@ class TemplateEditorViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = finalId)
         }
+        markDirty()
     }
 
     /** 切换指定块的可见性 */
@@ -347,6 +357,7 @@ class TemplateEditorViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+        markDirty()
     }
 
     /** 切换当前页面所有块的可见性 */
@@ -363,6 +374,7 @@ class TemplateEditorViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+        markDirty()
     }
 
     /** 删除指定的块，同时级联删除它的所有子节点 */
@@ -379,6 +391,7 @@ class TemplateEditorViewModel(
                 editingGroupId = if (currentState.editingGroupId == blockId) null else currentState.editingGroupId
             )
         }
+        markDirty()
     }
 
     /** 处理画布拖拽：按偏移量相对移动块的位置 */
@@ -401,6 +414,7 @@ class TemplateEditorViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+        markDirty()
     }
 
     /** 
@@ -453,6 +467,7 @@ class TemplateEditorViewModel(
                 )
             )
         }
+        markDirty()
     }
 
     // ==========================================
@@ -548,10 +563,9 @@ class TemplateEditorViewModel(
                             chatHistories = s.chatHistories + (historyKey to newHistory)
                         )
                     }
-                    val finalProject = _state.value.project
-                    templateRepo.saveTemplate(currentState.projectName, finalProject)
+                    markDirty()
                     onComplete(true)
-                    finalProject
+                    _state.value.project
                 } catch (e: Exception) {
                     if (e !is kotlinx.coroutines.CancellationException) {
                         val errMsg = "❌ 错误: ${e.message}"
@@ -641,6 +655,7 @@ class TemplateEditorViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+        markDirty()
     }
 
     /** 更新当前页面的尺寸属性 */
@@ -653,6 +668,7 @@ class TemplateEditorViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+        markDirty()
     }
 
     /** 更新舞台的临时背景颜色 */

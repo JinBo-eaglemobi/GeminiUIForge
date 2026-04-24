@@ -16,6 +16,9 @@ import org.gemini.ui.forge.manager.ConfigManager
 
 import org.gemini.ui.forge.ui.component.ToastData
 import org.gemini.ui.forge.ui.component.ToastType
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * 应用的主控制 ViewModel
@@ -30,9 +33,29 @@ class AppViewModel(
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
 
+    // --- 全局事件流 ---
+    private val _saveEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val saveEvent: SharedFlow<Unit> = _saveEvent.asSharedFlow()
+
     // --- 全局 Toast 状态流 ---
     private val _toastData = MutableStateFlow<ToastData?>(null)
     val toastData: StateFlow<ToastData?> = _toastData.asStateFlow()
+
+    /**
+     * 派发保存事件，通知当前活动的 Screen 执行保存逻辑
+     */
+    fun dispatchSaveEvent() {
+        viewModelScope.launch {
+            _saveEvent.emit(Unit)
+        }
+    }
+
+    /**
+     * 设置当前项目的“脏数据”状态
+     */
+    fun setDirty(dirty: Boolean) {
+        _state.update { it.copy(isDirty = dirty) }
+    }
 
     /**
      * 显示全局 Toast

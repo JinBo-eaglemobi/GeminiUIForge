@@ -38,6 +38,8 @@ import org.gemini.ui.forge.ui.feature.common.CanvasArea
 import org.gemini.ui.forge.ui.feature.common.HierarchySidebar
 import org.gemini.ui.forge.utils.rememberImagePicker
 
+import org.gemini.ui.forge.utils.AppLogger
+
 /**
  * 资产生成页面主容器组件。
  */
@@ -50,23 +52,41 @@ fun TemplateAssetGenScreen(
     configManager: ConfigManager,
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
-    onProjectUpdated: (ProjectState) -> Unit
+    saveEvent: kotlinx.coroutines.flow.SharedFlow<Unit>,
+    onProjectUpdated: (ProjectState) -> Unit,
+    onDirtyChanged: (Boolean) -> Unit
 ) {
     val aiService = AIGenerationService(cloudAssetManager, configManager)
     val viewModel: TemplateAssetGenViewModel = viewModel(key = initialProjectName) {
-        TemplateAssetGenViewModel(initialProject, initialProjectName, initialPromptLang, templateRepo, cloudAssetManager, aiService)
+        TemplateAssetGenViewModel(
+            initialProject,
+            initialProjectName,
+            initialPromptLang,
+            templateRepo,
+            cloudAssetManager,
+            aiService,
+            onDirtyChanged = onDirtyChanged
+        )
     }
     val state by viewModel.state.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // 监听全局保存事件
+    LaunchedEffect(saveEvent) {
+        saveEvent.collect {
+            coroutineScope.launch {
+                templateRepo.saveTemplate(initialProjectName, state.project)
+                onProjectUpdated(state.project)
+                onDirtyChanged(false)
+                AppLogger.i("TemplateAssetGenScreen", "💾 项目 [${initialProjectName}] 已保存并同步")
+            }
+        }
+    }
 
     LaunchedEffect(initialProject) {
         viewModel.reload(initialProject)
     }
 
-    LaunchedEffect(state.project) {
-        onProjectUpdated(state.project)
-    }
-
-    val coroutineScope = rememberCoroutineScope()
     var showHistoricalDialog by remember { mutableStateOf(false) }
     var historicalImages by remember { mutableStateOf<List<TemplateFile>>(emptyList()) }
     var pendingCropUri by remember { mutableStateOf<String?>(null) }

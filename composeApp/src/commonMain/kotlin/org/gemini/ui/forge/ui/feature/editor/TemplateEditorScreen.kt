@@ -34,6 +34,10 @@ import org.gemini.ui.forge.ui.dialog.VisualRefineDialog
 import org.gemini.ui.forge.ui.feature.common.CanvasArea
 import org.gemini.ui.forge.ui.feature.common.HierarchySidebar
 
+import org.gemini.ui.forge.utils.AppLogger
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
+
 /**
  * 模板编辑器主页面。
  * 负责初始化 ViewModel、管理 UI 三栏布局结构、处理 AI 交互弹窗以及维护画布/属性面板的同步。
@@ -47,7 +51,9 @@ fun TemplateEditorScreen(
     configManager: ConfigManager,
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
-    onProjectUpdated: (ProjectState) -> Unit
+    saveEvent: kotlinx.coroutines.flow.SharedFlow<Unit>,
+    onProjectUpdated: (ProjectState) -> Unit,
+    onDirtyChanged: (Boolean) -> Unit
 ) {
 
     val aiService = AIGenerationService(cloudAssetManager, configManager)
@@ -60,23 +66,29 @@ fun TemplateEditorScreen(
             initialPromptLang,
             templateRepo,
             cloudAssetManager,
-            aiService
+            aiService,
+            onDirtyChanged = onDirtyChanged
         )
     }
     val state by viewModel.state.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // 监听全局保存事件
+    LaunchedEffect(saveEvent) {
+        saveEvent.collect {
+            coroutineScope.launch {
+                templateRepo.saveTemplate(initialProjectName, state.project)
+                onProjectUpdated(state.project)
+                onDirtyChanged(false)
+                AppLogger.i("TemplateEditorScreen", "💾 项目 [${initialProjectName}] 已保存并同步")
+            }
+        }
+    }
 
     // 监听传入的 initialProject 变化（比如从首页重新进入时强制刷新 ViewModel 状态）
     LaunchedEffect(initialProject) {
         viewModel.reload(initialProject)
     }
-
-    // 监听内部 state.project 变化，向外层同步状态
-    // 注意：在高频操作（如拖拽）时，实时向上传递会导致父级 App.kt 触发全局重组，产生严重性能抖动。
-    // 我们建议在 onDispose 或手动保存时才同步，或者增加 debounce。
-    // 目前先注释掉它以修复拖拽卡顿问题。
-    // LaunchedEffect(state.project) {
-    //     onProjectUpdated(state.project)
-    // }
 
     // --- 内部 UI 状态控制 ---
     var showVisualRefine by remember { mutableStateOf(false) }

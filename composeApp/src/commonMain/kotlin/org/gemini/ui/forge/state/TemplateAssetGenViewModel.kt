@@ -30,7 +30,8 @@ class TemplateAssetGenViewModel(
     initialLang: PromptLanguage,
     private val templateRepo: TemplateRepository,
     private val cloudAssetManager: CloudAssetManager,
-    private val aiService: AIGenerationService
+    private val aiService: AIGenerationService,
+    private val onDirtyChanged: (Boolean) -> Unit = {}
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
@@ -41,6 +42,10 @@ class TemplateAssetGenViewModel(
         )
     )
     val state: StateFlow<TemplateAssetGenState> = _state.asStateFlow()
+
+    private fun markDirty() {
+        onDirtyChanged(true)
+    }
 
     fun switchLang(lang: PromptLanguage) {
         _state.update { it.copy(currentLang = lang) }
@@ -151,7 +156,7 @@ class TemplateAssetGenViewModel(
             )
             
             _state.update { it.copy(project = updatedProject) }
-            templateRepo.saveTemplate(projectName, updatedProject)
+            markDirty()
             
             withContext(Dispatchers.Main) {
                 onComplete()
@@ -161,8 +166,10 @@ class TemplateAssetGenViewModel(
 
     // --- 页面与选择逻辑 ---
 
-    fun onPageSelected(pageId: String) =
+    fun onPageSelected(pageId: String) {
         _state.update { it.copy(selectedPageId = pageId, selectedBlockId = null, generatedCandidates = emptyList()) }
+        markDirty()
+    }
 
     fun onBlockClicked(blockId: String?) =
         _state.update { it.copy(selectedBlockId = if (blockId == null) null else if (it.selectedBlockId == blockId) null else blockId) }
@@ -274,6 +281,7 @@ class TemplateAssetGenViewModel(
                 generatedCandidates = emptyList()
             )
         }
+        markDirty()
     }
 
     /** 
@@ -359,6 +367,7 @@ class TemplateAssetGenViewModel(
             uris.forEach { it.delete() }
             _state.update { currentState -> currentState.copy(generatedCandidates = currentState.generatedCandidates.filter { it !in uris }) }
         }
+        markDirty()
     }
 
     fun batchRemoveBackgroundLocal(uris: List<TemplateFile>, onSuccess: (List<TemplateFile>) -> Unit = {}) {
@@ -458,6 +467,7 @@ class TemplateAssetGenViewModel(
                 ) else it
             }))
         }
+        markDirty()
     }
 
     fun moveBlockBy(blockId: String, dx: Float, dy: Float) {
@@ -480,6 +490,7 @@ class TemplateAssetGenViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+        markDirty()
     }
 
     fun renameBlock(oldId: String, newId: String) {
@@ -493,6 +504,7 @@ class TemplateAssetGenViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+        markDirty()
     }
 
     fun addCustomBlock(id: String, type: UIBlockType, w: Float, h: Float) {
@@ -504,6 +516,7 @@ class TemplateAssetGenViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = finalId)
         }
+        markDirty()
     }
 
     fun toggleBlockVisibility(blockId: String, isVisible: Boolean) {
@@ -517,6 +530,7 @@ class TemplateAssetGenViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+        markDirty()
     }
 
     fun toggleAllBlocksVisibility(isVisible: Boolean) {
@@ -529,6 +543,7 @@ class TemplateAssetGenViewModel(
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
+        markDirty()
     }
 
     // --- UI 辅助 ---
@@ -543,6 +558,7 @@ class TemplateAssetGenViewModel(
 
     fun setGlobalStyle(style: String) {
         _state.update { it.copy(globalStyle = style) }
+        markDirty()
     }
 
     fun setImageGenModel(model: GeminiModel) {
@@ -555,6 +571,7 @@ class TemplateAssetGenViewModel(
     fun setReferenceImageExternal(uriOrPath: String?) {
         if (uriOrPath == null) {
             _state.update { it.copy(referenceImageUri = null) }
+            markDirty()
             return
         }
 
@@ -569,6 +586,7 @@ class TemplateAssetGenViewModel(
 
             if (tFile != null) {
                 _state.update { it.copy(referenceImageUri = tFile) }
+                markDirty()
             }
         }
     }
@@ -576,6 +594,7 @@ class TemplateAssetGenViewModel(
     /** 内部使用的强类型设置方法 */
     fun setReferenceImage(tFile: TemplateFile?) {
         _state.update { it.copy(referenceImageUri = tFile) }
+        markDirty()
     }
 
     fun toggleVisualMode() {
