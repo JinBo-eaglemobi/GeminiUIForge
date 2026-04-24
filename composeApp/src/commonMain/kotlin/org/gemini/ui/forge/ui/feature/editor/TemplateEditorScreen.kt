@@ -70,10 +70,13 @@ fun TemplateEditorScreen(
         viewModel.reload(initialProject)
     }
 
-    // 监听内部 state.project 变化，向外层同步状态，以保证外部顶部导航栏“保存”时拿到最新数据
-    LaunchedEffect(state.project) {
-        onProjectUpdated(state.project)
-    }
+    // 监听内部 state.project 变化，向外层同步状态
+    // 注意：在高频操作（如拖拽）时，实时向上传递会导致父级 App.kt 触发全局重组，产生严重性能抖动。
+    // 我们建议在 onDispose 或手动保存时才同步，或者增加 debounce。
+    // 目前先注释掉它以修复拖拽卡顿问题。
+    // LaunchedEffect(state.project) {
+    //     onProjectUpdated(state.project)
+    // }
 
     // --- 内部 UI 状态控制 ---
     var showVisualRefine by remember { mutableStateOf(false) }

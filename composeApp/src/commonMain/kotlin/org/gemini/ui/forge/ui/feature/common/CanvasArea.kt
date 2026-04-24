@@ -200,13 +200,27 @@ fun CanvasArea(
                     val offsetY =
                         (maxHeight.value - (effectiveHeight * baseScale)) / 2 + (effectiveHeight - pageHeight) / 2 * baseScale
 
+                    // 状态快照与协调
+                    val currentBaseScale by rememberUpdatedState(baseScale)
+                    val currentOffsetX by rememberUpdatedState(offsetX)
+                    val currentOffsetY by rememberUpdatedState(offsetY)
+
+                    // 交互协调状态：标记当前是否正在进行模块操作
+                    var isInteractingWithBlock by remember { mutableStateOf(false) }
+
                     // 核心交互层：处理手势变换和平移缩放
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .pointerInput(Unit) {
                                 detectTransformGestures { centroid, panChange, zoomChange, _ ->
-                                    updateZoom(zoom * zoomChange, centroid)
+                                    // 关键：如果正在拖拽模块，则直接忽略画布变换
+                                    if (isInteractingWithBlock) return@detectTransformGestures
+
+                                    // 增加缩放死区阈值，防止单指微小抖动触发缩放
+                                    val finalZoomChange = if (kotlin.math.abs(zoomChange - 1.0f) < 0.005f) 1.0f else zoomChange
+                                    
+                                    updateZoom(zoom * finalZoomChange, centroid)
                                     pan += panChange
                                 }
                             }
@@ -235,6 +249,7 @@ fun CanvasArea(
                                 transformOrigin = TransformOrigin(0f, 0f)
                             }
                     ) {
+                        // ...（绘制舞台与参考图逻辑保持不变）...
                         // 绘制舞台物理边界背景
                         Box(
                             modifier = Modifier
@@ -266,12 +281,12 @@ fun CanvasArea(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .pointerInput(offsetX, offsetY, baseScale, currentBlocks, currentEditingGroupId) {
+                                .pointerInput(Unit) {
                                     // 点击与双击检测
                                     detectTapGestures(
                                         onDoubleTap = { offset ->
-                                            val lx = (offset.x / density.density - offsetX) / baseScale
-                                            val ly = (offset.y / density.density - offsetY) / baseScale
+                                            val lx = (offset.x / density.density - currentOffsetX) / currentBaseScale
+                                            val ly = (offset.y / density.density - currentOffsetY) / currentBaseScale
 
                                             val hitBlock =
                                                 findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
@@ -288,8 +303,8 @@ fun CanvasArea(
                                             }
                                         },
                                         onTap = { offset ->
-                                            val lx = (offset.x / density.density - offsetX) / baseScale
-                                            val ly = (offset.y / density.density - offsetY) / baseScale
+                                            val lx = (offset.x / density.density - currentOffsetX) / currentBaseScale
+                                            val ly = (offset.y / density.density - currentOffsetY) / currentBaseScale
 
                                             val hitBlock =
                                                 findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
@@ -297,22 +312,16 @@ fun CanvasArea(
                                         }
                                     )
                                 }
-                                .pointerInput(
-                                    isReadOnly,
-                                    offsetX,
-                                    offsetY,
-                                    baseScale,
-                                    currentBlocks,
-                                    currentEditingGroupId
-                                ) {
+                                .pointerInput(isReadOnly) {
                                     if (isReadOnly) return@pointerInput
                                     var dragTargetId: String? = null
                                     var isPanningStage = false
+
                                     // 模块拖拽与画布平移逻辑
                                     detectDragGestures(
                                         onDragStart = { offset ->
-                                            val lx = (offset.x / density.density - offsetX) / baseScale
-                                            val ly = (offset.y / density.density - offsetY) / baseScale
+                                            val lx = (offset.x / density.density - currentOffsetX) / currentBaseScale
+                                            val ly = (offset.y / density.density - currentOffsetY) / currentBaseScale
 
                                             val hitBlock =
                                                 findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
@@ -320,34 +329,36 @@ fun CanvasArea(
                                             if (hitBlock != null) {
                                                 dragTargetId = hitBlock.id
                                                 isPanningStage = false
+                                                isInteractingWithBlock = true // 锁定变换
                                                 currentOnBlockDragStart(hitBlock.id)
-                                                org.gemini.ui.forge.utils.AppLogger.d(
-                                                    "CanvasArea",
-                                                    "🖱️ 开始拖拽模块: ${hitBlock.id}"
-                                                )
                                             } else {
                                                 dragTargetId = null
                                                 isPanningStage = true
-                                                org.gemini.ui.forge.utils.AppLogger.d(
-                                                    "CanvasArea",
-                                                    "✋ 点击空白处，开始拖拽平移舞台"
-                                                )
+                                                isInteractingWithBlock = false
                                             }
                                         },
                                         onDrag = { change, dragAmount ->
-                                            change.consume()
+                                            change.consume() // 消费位移
+
                                             val tid = dragTargetId
                                             if (isPanningStage) {
                                                 pan += dragAmount
                                             } else if (tid != null) {
-                                                // 转换物理位移为逻辑坐标位移
-                                                val logicalDx = dragAmount.x / density.density / baseScale
-                                                val logicalDy = dragAmount.y / density.density / baseScale
+                                                val logicalDx = dragAmount.x / density.density / currentBaseScale
+                                                val logicalDy = dragAmount.y / density.density / currentBaseScale
                                                 currentOnBlockDragged(tid, logicalDx, logicalDy)
                                             }
                                         },
-                                        onDragEnd = { dragTargetId = null; isPanningStage = false },
-                                        onDragCancel = { dragTargetId = null; isPanningStage = false }
+                                        onDragEnd = { 
+                                            dragTargetId = null
+                                            isPanningStage = false
+                                            isInteractingWithBlock = false // 解锁变换
+                                        },
+                                        onDragCancel = { 
+                                            dragTargetId = null
+                                            isPanningStage = false
+                                            isInteractingWithBlock = false // 解锁变换
+                                        }
                                     )
                                 }
                         ) {
