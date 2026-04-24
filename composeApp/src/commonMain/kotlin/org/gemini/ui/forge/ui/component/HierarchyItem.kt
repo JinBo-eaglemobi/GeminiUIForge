@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.common
+package org.gemini.ui.forge.ui.component
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -40,8 +40,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.ui.component.getDisplayNameRes
-import org.gemini.ui.forge.ui.component.getIcon
 import org.jetbrains.compose.resources.stringResource
 
 /**

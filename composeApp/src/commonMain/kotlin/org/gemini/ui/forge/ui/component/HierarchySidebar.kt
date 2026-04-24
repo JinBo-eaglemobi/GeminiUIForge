@@ -1,12 +1,10 @@
-package org.gemini.ui.forge.ui.feature.common
+package org.gemini.ui.forge.ui.component
 
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,31 +16,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
 import kotlin.math.roundToInt
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
-import org.gemini.ui.forge.ui.component.getDisplayNameRes
-import org.gemini.ui.forge.ui.component.getIcon
 import org.gemini.ui.forge.ui.dialog.AddLayerDialog
 import org.gemini.ui.forge.ui.dialog.RenameLayerDialog
 
@@ -74,7 +66,7 @@ fun HierarchySidebar(
     onRenameBlock: (String, String) -> Unit = { _, _ -> },
     onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> },
     onToggleAllVisibility: (Boolean) -> Unit = {},
-    renameRequestEvent: kotlinx.coroutines.flow.SharedFlow<Unit> = kotlinx.coroutines.flow.MutableSharedFlow(),
+    renameRequestEvent: SharedFlow<Unit> = MutableSharedFlow(),
     modifier: Modifier = Modifier,
     isReadOnly: Boolean = false
 ) {
@@ -111,7 +103,7 @@ fun HierarchySidebar(
     LaunchedEffect(selectedBlockId, isAutoTrackEnabled) {
         if (isAutoTrackEnabled && selectedBlockId != null) {
             delay(100)
-            locateTrigger = org.gemini.ui.forge.getCurrentTimeMillis()
+            locateTrigger = getCurrentTimeMillis()
         }
     }
 

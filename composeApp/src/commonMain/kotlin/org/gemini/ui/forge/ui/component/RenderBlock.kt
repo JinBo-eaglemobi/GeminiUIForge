@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.common
+package org.gemini.ui.forge.ui.component
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -23,7 +23,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.utils.decodeToBitmap
 import org.jetbrains.compose.resources.stringResource
 

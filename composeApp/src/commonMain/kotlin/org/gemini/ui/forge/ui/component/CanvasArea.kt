@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.common
+package org.gemini.ui.forge.ui.component
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -14,7 +14,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -28,17 +27,17 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.utils.decodeBase64ToBitmap
-import org.gemini.ui.forge.utils.decodeToBitmap
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
 import kotlin.math.min
 import kotlin.math.roundToInt
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.text.font.FontWeight
 import org.gemini.ui.forge.ResizeVerticalIcon
-import androidx.compose.ui.unit.Density
 import org.gemini.ui.forge.model.app.ReferenceDisplayMode
 import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.ui.component.getDisplayNameRes
+import org.gemini.ui.forge.utils.AppLogger
+import kotlin.math.abs
 
 /**
  * 画布区域组件：负责渲染基础 Slots 模板及已绑定的图片。
@@ -218,7 +217,7 @@ fun CanvasArea(
                                     if (isInteractingWithBlock) return@detectTransformGestures
 
                                     // 增加缩放死区阈值，防止单指微小抖动触发缩放
-                                    val finalZoomChange = if (kotlin.math.abs(zoomChange - 1.0f) < 0.005f) 1.0f else zoomChange
+                                    val finalZoomChange = if (abs(zoomChange - 1.0f) < 0.005f) 1.0f else zoomChange
                                     
                                     updateZoom(zoom * finalZoomChange, centroid)
                                     pan += panChange
@@ -421,7 +420,7 @@ fun CanvasArea(
                     Text(
                         text = stringResource(Res.string.action_exit),
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier
                             .clickable { onExitGroupEdit() }
@@ -480,7 +479,7 @@ fun CanvasArea(
 
                 // 复位舞台
                 IconButton(onClick = {
-                    zoom = 1f; pan = Offset.Zero; org.gemini.ui.forge.utils.AppLogger.d(
+                    zoom = 1f; pan = Offset.Zero; AppLogger.d(
                     "CanvasArea",
                     "🔄 已还原舞台缩放为100%并居中"
                 )

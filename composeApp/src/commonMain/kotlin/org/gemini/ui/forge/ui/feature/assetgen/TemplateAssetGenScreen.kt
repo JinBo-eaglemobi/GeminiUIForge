@@ -34,11 +34,9 @@ import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.dialog.AITaskProgressDialog
 import org.gemini.ui.forge.ui.dialog.AssetCropDialog
 import org.gemini.ui.forge.ui.dialog.AssetSelectionDialog
-import org.gemini.ui.forge.ui.feature.common.CanvasArea
-import org.gemini.ui.forge.ui.feature.common.HierarchySidebar
+import org.gemini.ui.forge.ui.component.CanvasArea
+import org.gemini.ui.forge.ui.component.HierarchySidebar
 import org.gemini.ui.forge.utils.rememberImagePicker
-
-import org.gemini.ui.forge.utils.AppLogger
 
 /**
  * 资产生成页面主容器组件。
