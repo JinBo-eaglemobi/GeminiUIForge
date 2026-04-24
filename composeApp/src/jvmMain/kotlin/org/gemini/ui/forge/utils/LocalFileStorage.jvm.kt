@@ -11,21 +11,37 @@ actual class LocalFileStorage {
     private var dataDir = File(System.getProperty("user.home"), ".geminiuiforge")
 
     init {
+        // 1. 检查并创建应用根存储目录（默认为用户家目录下的 .geminiuiforge）
         if (!dataDir.exists()) {
-            dataDir.mkdirs()
-            AppLogger.i("LocalFileStorage", "📂 初始化应用根目录: ${dataDir.absolutePath}")
+            val success = dataDir.mkdirs()
+            AppLogger.i("LocalFileStorage", "📂 初始化应用根目录: ${dataDir.absolutePath} (创建成功: $success)")
+        } else {
+            AppLogger.d("LocalFileStorage", "📂 应用根目录已存在: ${dataDir.absolutePath}")
         }
         
-        // 关键：初始化全局环境根目录
-        GlobalAppEnv.updateDataRoot(dataDir.absolutePath)
+        // 2. 将确定的存储路径同步至全局环境变量，供其他跨平台模块参考
+        // 关键修复：仅当路径发生实际变化时才通知 GlobalAppEnv，防止因对象重复创建导致的全局重绘死循环
+        val absolutePath = dataDir.absolutePath
+        if (GlobalAppEnv.currentRootPath != absolutePath) {
+            AppLogger.d("LocalFileStorage", "🔗 正在更新 GlobalAppEnv 数据根路径...")
+            GlobalAppEnv.updateDataRoot(absolutePath)
+        } else {
+            AppLogger.d("LocalFileStorage", "🔗 GlobalAppEnv 数据路径未变，跳过更新")
+        }
         
-        // 确保 templates 目录存在
+        // 3. 确保核心子目录 templates 存在，用于存放项目 JSON 定义
         val templatesDir = File(dataDir, "templates")
-        if (!templatesDir.exists()) templatesDir.mkdirs()
+        if (!templatesDir.exists()) {
+            templatesDir.mkdirs()
+            AppLogger.d("LocalFileStorage", "📁 创建 templates 目录")
+        }
 
-        // 迁移逻辑：如果旧的 scripts 或 prompts 还在 templates 内部，则移动出来
+        // 4. 执行目录结构迁移逻辑：将旧版本中嵌套在 templates 内的 scripts 和 prompts 提升至根目录
+        // 这样可以使目录结构更清晰，符合最新的跨平台资源管理规范
+        AppLogger.d("LocalFileStorage", "🚚 开始执行目录结构检查与迁移...")
         migrateInternalDir("templates/scripts", "scripts")
         migrateInternalDir("templates/prompts", "prompts")
+        AppLogger.i("LocalFileStorage", "✅ LocalFileStorage 初始化完成")
     }
 
     private fun migrateInternalDir(oldRelativePath: String, newRelativePath: String) {
