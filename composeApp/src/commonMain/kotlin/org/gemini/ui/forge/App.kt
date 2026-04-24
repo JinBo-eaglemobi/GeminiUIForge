@@ -319,7 +319,9 @@ fun App(typography: Typography? = null) {
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     initialPromptLang = globalState.promptLangPref,
                                     saveEvent = appViewModel.saveEvent,
-                                    onProjectUpdated = { appViewModel.updateProject(it) },
+                                    onSaveRequest = { name, project ->
+                                        appViewModel.saveProject(name, project)
+                                    },
                                     onDirtyChanged = { appViewModel.setDirty(it) }
                                 )
                             }
@@ -334,14 +336,12 @@ fun App(typography: Typography? = null) {
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     initialPromptLang = globalState.promptLangPref,
                                     saveEvent = appViewModel.saveEvent,
-                                    onProjectUpdated = { updatedProject ->
-                                        appViewModel.updateProject(updatedProject)
+                                    onSaveRequest = { name, project ->
+                                        appViewModel.saveProject(name, project)
                                     },
                                     onDirtyChanged = { appViewModel.setDirty(it) }
                                 )
-                            }
-
-                            AppScreen.TEMPLATE_GENERATOR -> {
+                            }                            AppScreen.TEMPLATE_GENERATOR -> {
                                 TemplateGeneratorScreen(
                                     onTemplateSaved = { name, ps ->
                                         appViewModel.loadProject(name, ps);

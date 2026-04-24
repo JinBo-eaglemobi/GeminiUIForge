@@ -52,7 +52,7 @@ fun TemplateEditorScreen(
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
     saveEvent: kotlinx.coroutines.flow.SharedFlow<Unit>,
-    onProjectUpdated: (ProjectState) -> Unit,
+    onSaveRequest: (String, ProjectState) -> Unit,
     onDirtyChanged: (Boolean) -> Unit
 ) {
 
@@ -71,17 +71,11 @@ fun TemplateEditorScreen(
         )
     }
     val state by viewModel.state.collectAsState()
-    val coroutineScope = rememberCoroutineScope()
 
     // 监听全局保存事件
     LaunchedEffect(saveEvent) {
         saveEvent.collect {
-            coroutineScope.launch {
-                templateRepo.saveTemplate(initialProjectName, state.project)
-                onProjectUpdated(state.project)
-                onDirtyChanged(false)
-                AppLogger.i("TemplateEditorScreen", "💾 项目 [${initialProjectName}] 已保存并同步")
-            }
+            onSaveRequest(initialProjectName, state.project)
         }
     }
 

@@ -13,6 +13,7 @@ import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
+import org.gemini.ui.forge.utils.AppLogger
 
 import org.gemini.ui.forge.ui.component.ToastData
 import org.gemini.ui.forge.ui.component.ToastType
@@ -55,6 +56,26 @@ class AppViewModel(
      */
     fun setDirty(dirty: Boolean) {
         _state.update { it.copy(isDirty = dirty) }
+    }
+
+    /**
+     * 统一保存项目方法
+     * @param projectName 项目名称
+     * @param projectState 项目状态数据
+     */
+    fun saveProject(projectName: String, projectState: ProjectState) {
+        viewModelScope.launch {
+            try {
+                templateRepo.saveTemplate(projectName, projectState)
+                updateProject(projectState)
+                setDirty(false)
+                showToast("项目 [$projectName] 已保存", type = ToastType.SUCCESS)
+                AppLogger.i("AppViewModel", "💾 项目 [$projectName] 已保存并同步")
+            } catch (e: Exception) {
+                AppLogger.e("AppViewModel", "❌ 保存项目 [$projectName] 失败", e)
+                showToast("保存失败: ${e.message}", type = ToastType.ERROR)
+            }
+        }
     }
 
     /**

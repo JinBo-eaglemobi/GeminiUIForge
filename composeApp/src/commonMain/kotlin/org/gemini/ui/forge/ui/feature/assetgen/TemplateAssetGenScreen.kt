@@ -53,7 +53,7 @@ fun TemplateAssetGenScreen(
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
     saveEvent: kotlinx.coroutines.flow.SharedFlow<Unit>,
-    onProjectUpdated: (ProjectState) -> Unit,
+    onSaveRequest: (String, ProjectState) -> Unit,
     onDirtyChanged: (Boolean) -> Unit
 ) {
     val aiService = AIGenerationService(cloudAssetManager, configManager)
@@ -74,12 +74,7 @@ fun TemplateAssetGenScreen(
     // 监听全局保存事件
     LaunchedEffect(saveEvent) {
         saveEvent.collect {
-            coroutineScope.launch {
-                templateRepo.saveTemplate(initialProjectName, state.project)
-                onProjectUpdated(state.project)
-                onDirtyChanged(false)
-                AppLogger.i("TemplateAssetGenScreen", "💾 项目 [${initialProjectName}] 已保存并同步")
-            }
+            onSaveRequest(initialProjectName, state.project)
         }
     }
 
