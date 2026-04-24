@@ -11,6 +11,8 @@ actual class LocalFileStorage {
     private var dataDir = File(System.getProperty("user.home"), ".geminiuiforge")
 
     init {
+        AppLogger.d("LocalFileStorage", "🚀 正在启动 LocalFileStorage 初始化... (JVM)")
+        
         // 1. 检查并创建应用根存储目录（默认为用户家目录下的 .geminiuiforge）
         if (!dataDir.exists()) {
             val success = dataDir.mkdirs()

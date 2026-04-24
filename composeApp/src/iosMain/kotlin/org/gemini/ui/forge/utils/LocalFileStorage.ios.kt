@@ -11,6 +11,7 @@ actual class LocalFileStorage {
     private var dataDir: String = ""
 
     init {
+        AppLogger.d("LocalFileStorage", "🚀 正在启动 LocalFileStorage 初始化 (iOS)...")
         // 使用 Document 目录
         val urls = fileManager.URLsForDirectory(NSDocumentDirectory, inDomains = NSUserDomainMask)
         if (urls.isNotEmpty()) {

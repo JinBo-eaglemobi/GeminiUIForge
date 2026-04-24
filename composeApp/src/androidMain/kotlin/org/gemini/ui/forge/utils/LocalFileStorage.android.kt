@@ -20,6 +20,7 @@ actual class LocalFileStorage {
     private var currentDir: File = context?.filesDir ?: File("/data/data/org.gemini.ui.forge/files")
 
     init {
+        AppLogger.d("LocalFileStorage", "🚀 正在启动 LocalFileStorage 初始化 (Android)...")
         if (!currentDir.exists()) {
             currentDir.mkdirs()
         }
