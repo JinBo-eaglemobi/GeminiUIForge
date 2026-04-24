@@ -52,6 +52,7 @@ fun TemplateEditorScreen(
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
     saveEvent: kotlinx.coroutines.flow.SharedFlow<Unit>,
+    shortcutEvent: kotlinx.coroutines.flow.SharedFlow<org.gemini.ui.forge.model.app.ShortcutAction>,
     onSaveRequest: (String, ProjectState) -> Unit,
     onDirtyChanged: (Boolean) -> Unit
 ) {
@@ -76,6 +77,13 @@ fun TemplateEditorScreen(
     LaunchedEffect(saveEvent) {
         saveEvent.collect {
             onSaveRequest(initialProjectName, state.project)
+        }
+    }
+
+    // 监听全局快捷键事件
+    LaunchedEffect(shortcutEvent) {
+        shortcutEvent.collect { action ->
+            viewModel.handleShortcutAction(action)
         }
     }
 
@@ -193,6 +201,7 @@ fun TemplateEditorScreen(
                         onRenameBlock = { old, new -> viewModel.renameBlock(old, new) },
                         onToggleVisibility = { id, visible -> viewModel.toggleBlockVisibility(id, visible) },
                         onToggleAllVisibility = { visible -> viewModel.toggleAllBlocksVisibility(visible) },
+                        renameRequestEvent = viewModel.requestRenameEvent,
                         modifier = Modifier.weight(1f)
                     )
                 }

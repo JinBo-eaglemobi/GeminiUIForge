@@ -74,6 +74,7 @@ fun HierarchySidebar(
     onRenameBlock: (String, String) -> Unit = { _, _ -> },
     onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> },
     onToggleAllVisibility: (Boolean) -> Unit = {},
+    renameRequestEvent: kotlinx.coroutines.flow.SharedFlow<Unit> = kotlinx.coroutines.flow.MutableSharedFlow(),
     modifier: Modifier = Modifier,
     isReadOnly: Boolean = false
 ) {
@@ -96,6 +97,15 @@ fun HierarchySidebar(
     var showRenameDialog by remember { mutableStateOf<String?>(null) }
     var isAutoTrackEnabled by remember { mutableStateOf(true) } // 是否开启自动定位功能
     var locateTrigger by remember { mutableStateOf(0L) } // 触发器时间戳：通知内部组件执行自动滚动定位
+
+    // 监听外部重命名请求
+    LaunchedEffect(renameRequestEvent) {
+        renameRequestEvent.collect {
+            if (selectedBlockId != null && !isReadOnly) {
+                showRenameDialog = selectedBlockId
+            }
+        }
+    }
 
     // 监听 selectedBlockId 变化：当在外侧画布被选中时，延迟通知列表滚动定位到该图层
     LaunchedEffect(selectedBlockId, isAutoTrackEnabled) {

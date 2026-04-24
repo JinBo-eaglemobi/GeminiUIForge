@@ -14,8 +14,8 @@ import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.Toast
 
-import org.gemini.ui.forge.ui.component.ToastData
 import org.gemini.ui.forge.ui.component.ToastType
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -38,16 +38,30 @@ class AppViewModel(
     private val _saveEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val saveEvent: SharedFlow<Unit> = _saveEvent.asSharedFlow()
 
-    // --- 全局 Toast 状态流 ---
-    private val _toastData = MutableStateFlow<ToastData?>(null)
-    val toastData: StateFlow<ToastData?> = _toastData.asStateFlow()
+    private val _shortcutEvent = MutableSharedFlow<ShortcutAction>(extraBufferCapacity = 1)
+    val shortcutEvent: SharedFlow<ShortcutAction> = _shortcutEvent.asSharedFlow()
 
     /**
      * 派发保存事件，通知当前活动的 Screen 执行保存逻辑
      */
     fun dispatchSaveEvent() {
+        AppLogger.d("AppViewModel", "⌨️ 触发全局保存事件 (Ctrl+S 或 点击保存按钮)")
         viewModelScope.launch {
             _saveEvent.emit(Unit)
+            _shortcutEvent.emit(ShortcutAction.SAVE)
+        }
+    }
+
+    /**
+     * 派发通用快捷键事件
+     */
+    fun dispatchShortcutEvent(action: ShortcutAction) {
+        AppLogger.d("AppViewModel", "⌨️ 触发全局快捷键: [${action.label}]")
+        viewModelScope.launch {
+            if (action == ShortcutAction.SAVE) {
+                _saveEvent.emit(Unit)
+            }
+            _shortcutEvent.emit(action)
         }
     }
 
@@ -69,33 +83,13 @@ class AppViewModel(
                 templateRepo.saveTemplate(projectName, projectState)
                 updateProject(projectState)
                 setDirty(false)
-                showToast("项目 [$projectName] 已保存", type = ToastType.SUCCESS)
+                Toast.show("项目 [$projectName] 已保存", type = ToastType.SUCCESS)
                 AppLogger.i("AppViewModel", "💾 项目 [$projectName] 已保存并同步")
             } catch (e: Exception) {
                 AppLogger.e("AppViewModel", "❌ 保存项目 [$projectName] 失败", e)
-                showToast("保存失败: ${e.message}", type = ToastType.ERROR)
+                Toast.show("保存失败: ${e.message}", type = ToastType.ERROR)
             }
         }
-    }
-
-    /**
-     * 显示全局 Toast
-     */
-    fun showToast(
-        message: String,
-        type: ToastType = ToastType.INFO,
-        durationMillis: Long = 3000L,
-        actionLabel: String? = null,
-        onAction: (() -> Unit)? = null
-    ) {
-        _toastData.value = ToastData(message, type, durationMillis, actionLabel, onAction)
-    }
-
-    /**
-     * 清除 Toast（用于手动关闭或动画结束）
-     */
-    fun clearToast() {
-        _toastData.value = null
     }
 
     /**

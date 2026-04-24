@@ -487,6 +487,9 @@ private fun ShortcutSettings(
                 ShortcutAction.SAVE -> stringResource(Res.string.shortcut_save)
                 ShortcutAction.RENAME -> stringResource(Res.string.shortcut_rename)
                 ShortcutAction.DELETE -> stringResource(Res.string.shortcut_delete)
+                ShortcutAction.COPY -> stringResource(Res.string.shortcut_copy)
+                ShortcutAction.PASTE -> stringResource(Res.string.shortcut_paste)
+                ShortcutAction.CUT -> stringResource(Res.string.shortcut_cut)
             }
 
             Column(modifier = Modifier.weight(1f)) {

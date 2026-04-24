@@ -53,6 +53,7 @@ fun TemplateAssetGenScreen(
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
     saveEvent: kotlinx.coroutines.flow.SharedFlow<Unit>,
+    shortcutEvent: kotlinx.coroutines.flow.SharedFlow<org.gemini.ui.forge.model.app.ShortcutAction>,
     onSaveRequest: (String, ProjectState) -> Unit,
     onDirtyChanged: (Boolean) -> Unit
 ) {
@@ -75,6 +76,15 @@ fun TemplateAssetGenScreen(
     LaunchedEffect(saveEvent) {
         saveEvent.collect {
             onSaveRequest(initialProjectName, state.project)
+        }
+    }
+
+    // 监听全局快捷键事件
+    LaunchedEffect(shortcutEvent) {
+        shortcutEvent.collect { action ->
+            if (action == org.gemini.ui.forge.model.app.ShortcutAction.SAVE) {
+                onSaveRequest(initialProjectName, state.project)
+            }
         }
     }
 

@@ -12,6 +12,10 @@ import kotlinx.coroutines.launch
 
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerEventPass
 import kotlinx.coroutines.delay
 import org.gemini.ui.forge.model.ui.ProjectState
 import org.gemini.ui.forge.model.app.*
@@ -93,7 +97,7 @@ fun App(typography: Typography? = null) {
             when (updateStatus) {
                 is UpdateStatus.Available -> {
                     val info = (updateStatus as UpdateStatus.Available).info
-                    appViewModel.showToast(
+                    Toast.show(
                         message = "发现新版本 v${info.version}！",
                         type = org.gemini.ui.forge.ui.component.ToastType.INFO,
                         durationMillis = 10000L, // 显示 10 秒
@@ -106,7 +110,7 @@ fun App(typography: Typography? = null) {
                 is UpdateStatus.Downloading -> {
                     val progress = (updateStatus as UpdateStatus.Downloading).progress
                     if (progress == 0f) {
-                        appViewModel.showToast(
+                        Toast.show(
                             message = "开始后台下载更新...",
                             type = org.gemini.ui.forge.ui.component.ToastType.SUCCESS
                         )
@@ -114,7 +118,7 @@ fun App(typography: Typography? = null) {
                 }
 
                 is UpdateStatus.ReadyToInstall -> {
-                    appViewModel.showToast(
+                    Toast.show(
                         message = "下载完成，准备重启安装！",
                         type = org.gemini.ui.forge.ui.component.ToastType.SUCCESS,
                         durationMillis = 5000L
@@ -123,7 +127,7 @@ fun App(typography: Typography? = null) {
 
                 is UpdateStatus.Error -> {
                     val errorMsg = (updateStatus as UpdateStatus.Error).message
-                    appViewModel.showToast(
+                    Toast.show(
                         message = "更新失败: $errorMsg",
                         type = org.gemini.ui.forge.ui.component.ToastType.ERROR,
                         durationMillis = 8000L
@@ -150,10 +154,39 @@ fun App(typography: Typography? = null) {
             typography = typography ?: androidx.compose.material3.MaterialTheme.typography
         ) {
             val coroutineScope = rememberCoroutineScope()
-            val toastData by appViewModel.toastData.collectAsState()
+            val toastData by Toast.toastData.collectAsState()
             var showExitConfirmDialog by remember { mutableStateOf(false) }
 
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier.fillMaxSize()
+                    .focusRequester(focusRequester)
+                    .focusable()
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                if (event.type == PointerEventType.Press) {
+                                    try {
+                                        focusRequester.requestFocus()
+                                    } catch (e: Exception) {
+                                        // 忽略焦点请求异常
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .onPreviewKeyEvent { event ->
+                        AppLogger.d("App", "⌨️ 捕获到按键: ${event.key}, type: ${event.type}")
+                        // 全局快捷键处理
+                        globalState.shortcuts.forEach { (action, shortcut) ->
+                            if (ShortcutUtils.isMatch(event, shortcut)) {
+                                appViewModel.dispatchShortcutEvent(action)
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                        false
+                    }
+            ) {
                 if (showExitConfirmDialog) {
                     AlertDialog(
                         onDismissRequest = { showExitConfirmDialog = false },
@@ -275,8 +308,7 @@ fun App(typography: Typography? = null) {
                     }
                 ) { innerPadding ->
                     Box(
-                        modifier = Modifier.padding(innerPadding).fillMaxSize().focusRequester(focusRequester)
-                            .focusable()
+                        modifier = Modifier.padding(innerPadding).fillMaxSize()
                     ) {
                         when (globalState.currentScreen) {
                             AppScreen.HOME -> {
@@ -319,6 +351,7 @@ fun App(typography: Typography? = null) {
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     initialPromptLang = globalState.promptLangPref,
                                     saveEvent = appViewModel.saveEvent,
+                                    shortcutEvent = appViewModel.shortcutEvent,
                                     onSaveRequest = { name, project ->
                                         appViewModel.saveProject(name, project)
                                     },
@@ -336,6 +369,7 @@ fun App(typography: Typography? = null) {
                                     effectiveApiKey = globalState.effectiveApiKey,
                                     initialPromptLang = globalState.promptLangPref,
                                     saveEvent = appViewModel.saveEvent,
+                                    shortcutEvent = appViewModel.shortcutEvent,
                                     onSaveRequest = { name, project ->
                                         appViewModel.saveProject(name, project)
                                     },
@@ -362,7 +396,7 @@ fun App(typography: Typography? = null) {
                 // 在所有 UI 的最上层挂载全局 Toast 容器
                 org.gemini.ui.forge.ui.component.AppToastContainer(
                     toastData = toastData,
-                    onDismiss = { appViewModel.clearToast() },
+                    onDismiss = { Toast.hide() },
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
             }
