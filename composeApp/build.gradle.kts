@@ -127,6 +127,7 @@ kotlin {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(libs.ktor.client.cio)
+            implementation(libs.slf4j.api)
         }
     }
 

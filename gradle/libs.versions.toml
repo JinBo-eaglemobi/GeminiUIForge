@@ -68,6 +68,7 @@ material-icons-extended = { module = "org.jetbrains.compose.material:material-ic
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3" }
 coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil3" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4jSimple" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4jSimple" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
