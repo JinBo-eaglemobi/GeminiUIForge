@@ -54,7 +54,7 @@ fun BatchAssetGenDialog(
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
-                
+
                 Text(
                     text = stringResource(Res.string.batch_gen_select_hint),
                     style = MaterialTheme.typography.bodyMedium,
@@ -80,7 +80,7 @@ fun BatchAssetGenDialog(
                             Text(stringResource(Res.string.batch_gen_deselect_all))
                         }
                     }
-                    
+
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton(onClick = { expandedTypes = groupedBlocks.keys.toSet() }) {
                             Icon(Icons.Default.UnfoldMore, null, modifier = Modifier.size(16.dp))
@@ -109,7 +109,7 @@ fun BatchAssetGenDialog(
                         ) {
                             groupedBlocks.forEach { (type, typeBlocks) ->
                                 val isExpanded = type in expandedTypes
-                                
+
                                 item(key = type.name) {
                                     val allOfTypeSelected = typeBlocks.all { it.id in selectedIds }
                                     Row(
@@ -130,9 +130,9 @@ fun BatchAssetGenDialog(
                                             modifier = Modifier.size(20.dp),
                                             tint = MaterialTheme.colorScheme.primary
                                         )
-                                        
+
                                         Spacer(Modifier.width(4.dp))
-                                        
+
                                         // 复选框
                                         IconButton(
                                             onClick = {
@@ -215,7 +215,7 @@ fun BatchAssetGenDialog(
                                 }
                             }
                         }
-                        
+
                         // 滚动条
                         VerticalScrollbarAdapter(
                             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),

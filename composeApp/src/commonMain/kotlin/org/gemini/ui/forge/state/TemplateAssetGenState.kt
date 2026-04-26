@@ -56,7 +56,9 @@ data class TemplateAssetGenState(
     /** 批量生成相关 */
     val showBatchGenDialog: Boolean = false,
     val batchProgress: Pair<Int, Int>? = null, // (已完成, 总数)
-    val batchPendingConfirmBlock: UIBlock? = null
+    val batchPendingConfirmBlock: UIBlock? = null,
+    val currentTaskStatus: String = "", // 实时单行任务状态
+    val activeWorkers: List<WorkerStatus> = emptyList() // 任务 4 新增：并行工作槽位状态
 ) {
     val currentPage get() = project.pages.find { it.id == selectedPageId }
     val selectedBlock: UIBlock?
@@ -73,3 +75,15 @@ data class TemplateAssetGenState(
         return null
     }
 }
+
+/**
+ * 并行工作线程状态模型
+ */
+data class WorkerStatus(
+    val id: Int,             // 槽位索引
+    val blockId: String = "", // 当前正在处理的模块ID
+    val action: String = "",  // 当前动作 (如：生图中、抠图中)
+    val info: String = "",    // 进度或数据大小信息
+    val isBusy: Boolean = false,
+    val isCompleted: Boolean = false
+)

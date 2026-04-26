@@ -23,6 +23,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 import org.gemini.ui.forge.manager.CloudAssetManager
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
@@ -228,7 +229,6 @@ class TemplateAssetGenViewModel(
 
     fun onRequestGeneration(apiKey: String, customPrompt: String) {
         val block = _state.value.selectedBlock ?: return
-        val submitPrompt = customPrompt
         val projectName = _state.value.projectName
         val isTransparent = _state.value.isGenerateTransparent
         val prioritizeCloud = _state.value.isPrioritizeCloudRemoval
@@ -238,64 +238,95 @@ class TemplateAssetGenViewModel(
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
-            _state.update { it.copy(isGenerating = true, generationLogs = emptyList(), showAITaskDialog = true) }
-            addGenLog(">>> 开始为模块 [${block.id}] 生成资源 <<<")
+            _state.update { it.copy(
+                isGenerating = true, 
+                generationLogs = emptyList(), 
+                showAITaskDialog = true,
+                batchProgress = null,
+                currentTaskStatus = "准备环境..."
+            ) }
+            
+            addGenLog(">>> [任务开始] 为模块 [${block.id}] 生成资源 <<<")
+            addGenLog("[配置] 模型: ${selectedModel.modelName}, 透明: $isTransparent, 抠图策略: ${if (prioritizeCloud) "云端优先" else "仅本地"}")
+            addGenLog("[风格] 全局风格: \"$globalStyle\"")
+            addGenLog("[参考图] ${refUri?.getAbsolutePath() ?: "无"}")
+            addGenLog("[提示词] Final Prompt: \"$customPrompt\"")
+            
             try {
                 aiService.generateImages(
                     model = selectedModel,
                     apiKey = apiKey,
                     blockType = block.type.name,
-                    userPrompt = submitPrompt,
+                    userPrompt = customPrompt,
                     maxRetries = 3,
                     targetWidth = block.bounds.width,
                     targetHeight = block.bounds.height,
                     isPng = isTransparent,
                     style = globalStyle,
                     referenceImageUri = refUri?.getAbsolutePath(),
-                    onLog = { addGenLog(it) },
+                    onLog = { 
+                        addGenLog("[AI-SDK] $it")
+                        updateStatus("AI 交互中: $it")
+                    },
                     onImageGenerated = { base64 ->
-                        // 异步处理单张图片，不阻塞后续图片的接收
                         viewModelScope.launch {
                             val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
                             @OptIn(ExperimentalEncodingApi::class)
                             val bytes = Base64.decode(pure)
                             val timestamp = getCurrentTimeMillis()
                             val idx = _state.value.generatedCandidates.size
+                            val sizeStr = formatSize(bytes.size)
 
+                            updateStatus("正在接收数据: $sizeStr")
+                            addGenLog("[IO] 收到原始图像数据 ($sizeStr)，正在保存至磁盘...")
                             val originalTFile = templateRepo.saveBlockResource(projectName, block.id, "gen_${idx}_$timestamp", bytes, isPng = false)
+                            addGenLog("[IO] 底图保存成功: ${originalTFile.getAbsolutePath()}")
+                            
                             var displayFile = originalTFile
 
                             if (isTransparent) {
                                 var processedBytes: ByteArray? = null
                                 if (prioritizeCloud && apiKey.isNotBlank()) {
                                     try {
-                                        processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) { addGenLog(it) }
+                                        updateStatus("云端抠图中...")
+                                        addGenLog("[Cloud] 发起云端抠图请求 [${idx + 1}]...")
+                                        processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) { 
+                                            addGenLog("[Cloud] $it")
+                                            updateStatus("云端状态: $it")
+                                        }
                                     } catch (e: Exception) {
-                                        addGenLog("⚠️ 预览图 [${idx+1}] 云端抠图失败: ${e.message}")
+                                        addGenLog("⚠️ [Cloud] 抠图失败: ${e.message}")
                                     }
                                 }
                                 if (processedBytes == null) {
                                     try {
-                                        processedBytes = aiService.removeBackgroundLocal(bytes) { addGenLog(it) }
+                                        updateStatus("本地抠图中...")
+                                        addGenLog("[Local] 启动本地智能算法 [${idx + 1}]...")
+                                        processedBytes = aiService.removeBackgroundLocal(bytes) { 
+                                            addGenLog("[Local] $it")
+                                            updateStatus("本地状态: $it")
+                                        }
                                     } catch (e: Exception) {
-                                        addGenLog("❌ 预览图 [${idx+1}] 本地抠图失败")
+                                        addGenLog("❌ [Local] 抠图执行异常")
                                     }
                                 }
                                 if (processedBytes != null) {
+                                    val procSizeStr = formatSize(processedBytes.size)
+                                    addGenLog("[IO] 抠图成功 ($procSizeStr)，正在更新资源...")
                                     displayFile = templateRepo.saveBlockResource(projectName, block.id, "processed_${idx}_$timestamp", processedBytes, isPng = true)
+                                    addGenLog("[IO] 抠图资源已落盘: ${displayFile.getAbsolutePath()}")
                                 }
                             }
 
-                            // 实时同步到 UI
-                            _state.update { s ->
-                                s.copy(generatedCandidates = s.generatedCandidates + displayFile)
-                            }
-                            addGenLog("✅ 预览图 [${idx + 1}] 已生成并就绪")
+                            _state.update { s -> s.copy(generatedCandidates = s.generatedCandidates + displayFile) }
+                            addGenLog("✅ [完成] 预览图 [${idx + 1}] 就绪")
+                            updateStatus("任务就绪")
                         }
                     }
                 )
             } catch (e: Exception) {
-                addGenLog(">>> 生成失败: ${e.message} <<<")
+                addGenLog(">>> [致命错误] 生成失败: ${e.message} <<<")
+                updateStatus("生成失败: ${e.message}")
             } finally {
                 _state.update { it.copy(isGenerating = false) }
             }
@@ -312,6 +343,16 @@ class TemplateAssetGenViewModel(
         _state.update { it.copy(showBatchGenDialog = false) }
     }
 
+    private fun updateWorker(slotId: Int, blockId: String = "", action: String = "", info: String = "", isBusy: Boolean = true, isCompleted: Boolean = false) {
+        _state.update { s ->
+            val newWorkers = s.activeWorkers.map { 
+                if (it.id == slotId) it.copy(blockId = blockId, action = action, info = info, isBusy = isBusy, isCompleted = isCompleted) 
+                else it 
+            }
+            s.copy(activeWorkers = newWorkers)
+        }
+    }
+
     fun startBatchGeneration(apiKey: String, selectedBlocks: List<UIBlock>) {
         if (selectedBlocks.isEmpty()) return
         val projectName = _state.value.projectName
@@ -326,136 +367,176 @@ class TemplateAssetGenViewModel(
         closeBatchGenDialog()
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
-            _state.update { it.copy(batchProgress = 0 to selectedBlocks.size, showAITaskDialog = true, generationLogs = emptyList()) }
-            addGenLog("🚀 开始批量任务：共 ${selectedBlocks.size} 个模块，并发限制：$coreCount")
+            val initialWorkers = List(coreCount) { WorkerStatus(id = it) }
+            _state.update { it.copy(
+                batchProgress = 0 to selectedBlocks.size, 
+                showAITaskDialog = true, 
+                generationLogs = emptyList(),
+                isGenerating = true,
+                currentTaskStatus = "分配并行队列...",
+                activeWorkers = initialWorkers
+            ) }
+            
+            addGenLog("🚀 [批量任务启动] 目标模块数: ${selectedBlocks.size}, 并行数限制: $coreCount")
+            addGenLog("[全局配置] 模型: ${selectedModel.displayName}, 透明度: $isTransparent, 风格: \"$globalStyle\"")
 
-            selectedBlocks.forEach { block ->
+            val jobs = selectedBlocks.mapIndexed { index, block ->
                 launch {
                     semaphore.withPermit {
-                        addGenLog("--- 正在为 [${block.id}] 请求生成 ---")
+                        val slotId = _state.value.activeWorkers.find { !it.isBusy }?.id ?: (index % coreCount)
+                        
+                        updateWorker(slotId, blockId = block.id, action = "初始化", isBusy = true)
+                        addGenLog("--- [${block.id}] 进入并行管道 ---")
+                        addGenLog("[${block.id}] 用户描述: \"${block.userPrompt}\"")
+                        addGenLog("[${block.id}] 最终 Prompt: \"${block.fullPrompt}\"")
+                        
                         val currentCandidates = mutableListOf<TemplateFile>()
                         try {
-                            aiService.generateImages(
-                                model = selectedModel,
-                                apiKey = apiKey,
-                                blockType = block.type.name,
-                                userPrompt = block.fullPrompt,
-                                maxRetries = 3,
-                                targetWidth = block.bounds.width,
-                                targetHeight = block.bounds.height,
-                                isPng = isTransparent,
-                                style = globalStyle,
-                                referenceImageUri = refUri?.getAbsolutePath(),
-                                onLog = { /* 内部静默记录或按需输出 */ },
-                                onImageGenerated = { base64 ->
-                                    val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
-                                    @OptIn(ExperimentalEncodingApi::class)
-                                    val bytes = Base64.decode(pure)
-                                    val timestamp = getCurrentTimeMillis()
-                                    
-                                    viewModelScope.launch {
-                                        val originalTFile = templateRepo.saveBlockResource(projectName, block.id, "batch_gen_${getCurrentTimeMillis()}", bytes, isPng = false)
-                                        var displayFile = originalTFile
-                                        
-                                        if (isTransparent) {
-                                            var processedBytes: ByteArray? = null
-                                            if (prioritizeCloud && apiKey.isNotBlank()) {
-                                                try { processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) } catch (e: Exception) {}
+                            kotlinx.coroutines.coroutineScope {
+                                aiService.generateImages(
+                                    model = selectedModel,
+                                    apiKey = apiKey,
+                                    blockType = block.type.name,
+                                    userPrompt = block.fullPrompt,
+                                    maxRetries = 3,
+                                    targetWidth = block.bounds.width,
+                                    targetHeight = block.bounds.height,
+                                    isPng = isTransparent,
+                                    style = globalStyle,
+                                    referenceImageUri = refUri?.getAbsolutePath(),
+                                    onLog = { log ->
+                                        updateWorker(slotId, blockId = block.id, action = "AI 生成中", info = log)
+                                        addGenLog("[${block.id}] SDK: $log")
+                                    },
+                                    onImageGenerated = { base64 ->
+                                        launch {
+                                            val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
+                                            @OptIn(ExperimentalEncodingApi::class)
+                                            val bytes = Base64.decode(pure)
+                                            val sizeStr = formatSize(bytes.size)
+                                            
+                                            updateWorker(slotId, blockId = block.id, action = "保存底图", info = sizeStr)
+                                            addGenLog("[${block.id}] IO: 收到数据 ($sizeStr)，保存原始资源...")
+                                            val originalTFile = templateRepo.saveBlockResource(projectName, block.id, "batch_gen_${getCurrentTimeMillis()}", bytes, isPng = false)
+                                            addGenLog("[${block.id}] IO: 原始资源已保存至 ${originalTFile.getAbsolutePath()}")
+                                            
+                                            var displayFile = originalTFile
+                                            if (isTransparent) {
+                                                var processedBytes: ByteArray? = null
+                                                if (prioritizeCloud && apiKey.isNotBlank()) {
+                                                    try { 
+                                                        updateWorker(slotId, blockId = block.id, action = "云端抠图", info = sizeStr)
+                                                        addGenLog("[${block.id}] Cloud: 请求云端抠图服务...")
+                                                        processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) 
+                                                    } catch (e: Exception) {
+                                                        addGenLog("[${block.id}] Cloud: ⚠️ 失败 - ${e.message}")
+                                                    }
+                                                }
+                                                if (processedBytes == null) {
+                                                    try { 
+                                                        updateWorker(slotId, blockId = block.id, action = "本地抠图", info = sizeStr)
+                                                        addGenLog("[${block.id}] Local: 启动本地智能算法...")
+                                                        processedBytes = aiService.removeBackgroundLocal(bytes) 
+                                                    } catch (e: Exception) {
+                                                        addGenLog("[${block.id}] Local: ❌ 执行异常")
+                                                    }
+                                                }
+                                                if (processedBytes != null) {
+                                                    val procSizeStr = formatSize(processedBytes.size)
+                                                    updateWorker(slotId, blockId = block.id, action = "完成保存", info = procSizeStr)
+                                                    addGenLog("[${block.id}] IO: 抠图完成 ($procSizeStr)，保存 PNG 资源...")
+                                                    displayFile = templateRepo.saveBlockResource(projectName, block.id, "batch_proc_${getCurrentTimeMillis()}", processedBytes, isPng = true)
+                                                    addGenLog("[${block.id}] IO: PNG 资源已落盘: ${displayFile.getAbsolutePath()}")
+                                                }
                                             }
-                                            if (processedBytes == null) {
-                                                try { processedBytes = aiService.removeBackgroundLocal(bytes) } catch (e: Exception) {}
-                                            }
-                                            if (processedBytes != null) {
-                                                displayFile = templateRepo.saveBlockResource(projectName, block.id, "batch_proc_${getCurrentTimeMillis()}", processedBytes, isPng = true)
-                                            }
+                                            currentCandidates.add(displayFile)
                                         }
-                                        currentCandidates.add(displayFile)
                                     }
-                                }
-                            )
-                            // 等待一小会儿确保保存逻辑完成
-                            kotlinx.coroutines.delay(1000) 
+                                )
+                            }
                             batchResultChannel.send(BatchResult(block, currentCandidates.toList()))
-                            addGenLog("✅ 模块 [${block.id}] 已完成生成，进入待确认队列")
+                            addGenLog("✅ [完成] [${block.id}] 生图与处理全流程结束")
+                            updateWorker(slotId, blockId = block.id, action = "✅ 已完成", isBusy = true, isCompleted = true)
                         } catch (e: Exception) {
-                            addGenLog("❌ 模块 [${block.id}] 生成失败: ${e.message}")
+                            addGenLog("❌ [故障] [${block.id}] 任务失败: ${e.message}")
+                            updateWorker(slotId, blockId = block.id, action = "❌ 失败", info = e.message ?: "", isBusy = true)
                         } finally {
                             _state.update { s -> s.copy(batchProgress = (s.batchProgress?.first ?: 0) + 1 to selectedBlocks.size) }
+                            kotlinx.coroutines.delay(1000)
+                            updateWorker(slotId, isBusy = false) 
                         }
                     }
                 }
             }
+            
+            jobs.joinAll()
+            updateStatus("流程已就绪")
+            addGenLog("🏁 [批量任务结束] 所有模块处理完毕，等待用户确认")
+            _state.update { it.copy(isGenerating = false) }
         }
     }
 
     // --- 资产操作逻辑 ---
 
-    fun onImageSelected(imageUri: TemplateFile) {
-        val pageId = _state.value.selectedPageId ?: return
-        val blockId = _state.value.batchPendingConfirmBlock?.id ?: _state.value.selectedBlockId ?: return
-        _state.update { currentState ->
-            val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == pageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) {
-                    it.copy(
-                        currentImageUri = imageUri
-                    )
-                }) else page
-            }
-            currentState.copy(
-                project = currentState.project.copy(pages = updatedPages),
-                generatedCandidates = if (currentState.batchPendingConfirmBlock != null) currentState.generatedCandidates else emptyList()
-            )
-        }
-        markDirty()
-        
-        // 如果是在批量确认流程中，释放锁，触发下一个弹窗
+    private fun notifySelectionHandled() {
+        // 如果是在批量确认流程中，释放挂起锁，让消费者协程处理下一个结果
         confirmationDeferred?.complete(Unit)
     }
 
+    fun onImageSelected(imageUri: TemplateFile) {
+        val pageId = _state.value.selectedPageId ?: return
+        val blockId = _state.value.batchPendingConfirmBlock?.id ?: _state.value.selectedBlockId ?: return
+        
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) {
+                    it.copy(currentImageUri = imageUri)
+                }) else page
+            }
+            // 创建新的 project 实例以强制 Canvas 刷新
+            val newProject = currentState.project.copy(pages = updatedPages)
+            
+            currentState.copy(
+                project = newProject,
+                generatedCandidates = if (currentState.batchPendingConfirmBlock != null) currentState.generatedCandidates else emptyList()
+            )
+        }
+        
+        AppLogger.d("AssetGenVM", "✨ 模块 $blockId 资源更新完成，触发界面同步刷新")
+        markDirty()
+        notifySelectionHandled()
+    }
+
     fun skipCurrentBatchConfirmation() {
-        confirmationDeferred?.complete(Unit)
+        notifySelectionHandled()
     }
 
     /** 
      * 执行真正的图片裁剪，并将裁剪后的新图片保存绑定给当前的 UIBlock。
-     * @param originalUri 原始底图 (注意：这里可能是非 TemplateFile 的路径，如相册路径)
-     * @param cropRect 相对原始尺寸(1.0x1.0) 的裁剪比例坐标 (left, top, right, bottom)
      */
     suspend fun onImageCroppedAndSelected(originalUri: String, cropRect: SerialRect): Boolean {
-        val blockId = _state.value.selectedBlockId ?: return false
+        // 同样优先支持批量确认中的模块
+        val blockId = _state.value.batchPendingConfirmBlock?.id ?: _state.value.selectedBlockId ?: return false
         val projectName = _state.value.projectName
 
         return withContext(Dispatchers.Default) {
             try {
-                AppLogger.i("TemplateAssetGenViewModel", "✂️ 开始执行图片裁剪操作...")
-                AppLogger.d("TemplateAssetGenViewModel", "原图: $originalUri")
-                AppLogger.d("TemplateAssetGenViewModel", "相对裁剪比例: left=${cropRect.left}, top=${cropRect.top}, right=${cropRect.right}, bottom=${cropRect.bottom}")
-
-                // 读取原图实际尺寸
-                val size = getImageSize(originalUri)
-                if (size == null) {
-                    AppLogger.e("TemplateAssetGenViewModel", "❌ 无法读取原图实际尺寸，裁剪失败")
-                    return@withContext false
-                }
+                AppLogger.i("TemplateAssetGenViewModel", "✂️ 开始执行图片裁剪操作 (模块: $blockId)...")
                 
+                val size = getImageSize(originalUri) ?: return@withContext false
                 val originalW = size.first.toFloat()
                 val originalH = size.second.toFloat()
-                AppLogger.d("TemplateAssetGenViewModel", "原图物理像素尺寸: ${size.first}x${size.second}")
 
-                // 根据用户传回的相对比例 (0.0~1.0)，换算为绝对逻辑坐标
                 val absLeft = cropRect.left * originalW
                 val absTop = cropRect.top * originalH
                 val absRight = cropRect.right * originalW
                 val absBottom = cropRect.bottom * originalH
                 val bounds = SerialRect(absLeft, absTop, absRight, absBottom)
-                AppLogger.d("TemplateAssetGenViewModel", "换算后的绝对像素裁剪框: $bounds")
 
-                val targetBlock = _state.value.selectedBlock
+                val targetBlock = _state.value.batchPendingConfirmBlock ?: _state.value.selectedBlock
                 val forceW = targetBlock?.bounds?.width?.toInt()?.coerceAtLeast(1)
                 val forceH = targetBlock?.bounds?.height?.toInt()?.coerceAtLeast(1)
                 
-                AppLogger.d("TemplateAssetGenViewModel", "📏 强制输出尺寸: ${forceW}x${forceH}")
-
                 val croppedBytes = cropImage(
                     imageSource = originalUri,
                     bounds = bounds,
@@ -467,8 +548,6 @@ class TemplateAssetGenViewModel(
                 )
 
                 if (croppedBytes != null) {
-                    AppLogger.i("TemplateAssetGenViewModel", "✅ 像素裁剪成功，正在保存新文件... (${croppedBytes.size / 1024} KB)")
-                    // 保存新生成的裁剪后图片
                     val croppedTFile = templateRepo.saveBlockResource(
                         projectName,
                         blockId,
@@ -477,14 +556,12 @@ class TemplateAssetGenViewModel(
                         isPng = true
                     )
                     
-                    AppLogger.i("TemplateAssetGenViewModel", "✅ 新文件已落盘: ${croppedTFile.relativePath}，正在绑定到模块 $blockId")
-                    // 切换回主线程更新 UI 状态
                     withContext(Dispatchers.Main) {
+                        // 裁剪完成后，调用统一的选择逻辑
                         onImageSelected(croppedTFile)
                     }
                     true
                 } else {
-                    AppLogger.e("TemplateAssetGenViewModel", "❌ 裁剪引擎返回空数据，操作失败")
                     false
                 }
             } catch (e: Exception) {
@@ -746,7 +823,21 @@ class TemplateAssetGenViewModel(
     }
 
     private fun addGenLog(msg: String) {
+        // 任务 4 增强：确保每一条日志都同步输出到磁盘存证
+        AppLogger.i("AssetGen", msg)
         _state.update { it.copy(generationLogs = it.generationLogs + msg, showAITaskDialog = true) }
+    }
+
+    private fun updateStatus(msg: String) {
+        _state.update { it.copy(currentTaskStatus = msg) }
+    }
+
+    private fun formatSize(bytes: Int): String {
+        return if (bytes < 1024 * 1024) {
+            "${bytes / 1024} KB"
+        } else {
+            "${(bytes.toFloat() / (1024 * 1024) * 100).toInt() / 100f} MB"
+        }
     }
 
     private fun findBlockById(blocks: List<UIBlock>, id: String): UIBlock? {

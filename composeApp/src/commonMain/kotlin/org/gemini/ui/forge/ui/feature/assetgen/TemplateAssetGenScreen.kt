@@ -127,7 +127,7 @@ fun TemplateAssetGenScreen(
 
     if (state.showAITaskDialog) {
         val progressText = state.batchProgress?.let { (curr, total) ->
-            stringResource(Res.string.batch_gen_processing, curr, total)
+            "正在批量生成: $curr / $total"
         }
         val dialogTitle = when {
             progressText != null -> progressText
@@ -138,12 +138,90 @@ fun TemplateAssetGenScreen(
         
         AITaskProgressDialog(
             title = dialogTitle,
+            currentStatus = state.currentTaskStatus,
             logs = state.generationLogs,
             isProcessing = state.isGenerating,
-            isLogVisible = showAILogs,
-            onToggleLogVisibility = { showAILogs = !showAILogs },
+            isLogVisible = state.isGenerationLogVisible,
+            onToggleLogVisibility = { viewModel.toggleGenerationLogVisibility() },
             onActionClick = { if (state.isGenerating) viewModel.cancelGeneration() else viewModel.closeAITaskDialog() },
-            onDismiss = { viewModel.closeAITaskDialog() }
+            onDismiss = { viewModel.closeAITaskDialog() },
+            extraContent = {
+                // 任务 4：并行工作看板
+                if (state.activeWorkers.isNotEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        shape = AppShapes.medium,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                "并行任务看板 (并发上限: ${state.activeWorkers.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            
+                            state.activeWorkers.forEach { worker ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = when {
+                                            worker.isCompleted -> Icons.Default.CheckCircle
+                                            worker.isBusy -> Icons.Default.Sync
+                                            else -> Icons.Default.Circle
+                                        },
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = when {
+                                            worker.isCompleted -> Color(0xFF4CAF50)
+                                            worker.isBusy -> MaterialTheme.colorScheme.primary
+                                            else -> MaterialTheme.colorScheme.outline
+                                        }
+                                    )
+                                    
+                                    Spacer(Modifier.width(8.dp))
+                                    
+                                    Text(
+                                        text = if (worker.blockId.isBlank()) "空闲槽位" else worker.blockId,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.width(100.dp),
+                                        color = if (worker.blockId.isBlank()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1
+                                    )
+                                    
+                                    Text(
+                                        text = worker.action,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(1f),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    
+                                    if (worker.info.isNotBlank()) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.surface,
+                                            shape = androidx.compose.foundation.shape.CircleShape,
+                                            border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+                                        ) {
+                                            Text(
+                                                text = worker.info,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                }
+                                if (worker.id < state.activeWorkers.size - 1) {
+                                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         )
     }
 
@@ -319,7 +397,7 @@ fun TemplateAssetGenScreen(
                 color = MaterialTheme.colorScheme.surface
             ) {
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    PropertyPanel(
+                    AssetGenPropertyPanel(
                         state = state,
                         viewModel = viewModel,
                         apiKey = effectiveApiKey,
@@ -337,419 +415,5 @@ fun TemplateAssetGenScreen(
                 }
             }
         }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PropertyPanel(
-    state: TemplateAssetGenState,
-    viewModel: TemplateAssetGenViewModel,
-    apiKey: String,
-    currentEditingLang: PromptLanguage,
-    onSwitchEditingLang: (PromptLanguage) -> Unit,
-    onShowHistory: () -> Unit
-) {
-    val selectedBlock = state.selectedBlock
-    val projectName = state.projectName.replace(" ", "_")
-    
-    // 使用 TemplateFile 定义起点目录
-    val projectAssetsBase = TemplateFile("templates/$projectName/assets")
-    
-    // 获取带初始路径的选择器触发器 (注意这里是在 Composable 顶层调用)
-    val imagePicker = projectAssetsBase.rememberImagePicker { uris ->
-        uris.firstOrNull()?.let { 
-            viewModel.setReferenceImageExternal(it)
-        }
-    }
-    
-    var showModelMenu by remember { mutableStateOf(false) }
-    var showAdvancedSettingsDialog by remember { mutableStateOf(false) }
-
-    Column(modifier = Modifier.padding(16.dp)) {
-        Text(
-            stringResource(Res.string.editor_gen_settings),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = { showAdvancedSettingsDialog = true },
-                modifier = Modifier.weight(1f).height(32.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp),
-                shape = AppShapes.small,
-                enabled = !state.isGenerating
-            ) {
-                Icon(Icons.Default.Palette, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("风格与参考", style = MaterialTheme.typography.labelSmall)
-            }
-
-            OutlinedButton(
-                onClick = { viewModel.openBatchGenDialog() },
-                modifier = Modifier.weight(1f).height(32.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp),
-                shape = AppShapes.small,
-                enabled = !state.isGenerating,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
-                    contentColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Icon(Icons.Default.AutoAwesomeMotion, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(stringResource(Res.string.action_batch_gen), style = MaterialTheme.typography.labelSmall)
-            }
-        }
-
-        Box(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-            OutlinedButton(
-                onClick = { showModelMenu = true },
-                modifier = Modifier.fillMaxWidth().height(32.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp),
-                shape = AppShapes.small,
-                enabled = !state.isGenerating
-            ) {
-                Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(state.selectedModel.displayName, style = MaterialTheme.typography.labelSmall)
-                Spacer(Modifier.weight(1f))
-                Icon(Icons.Default.ArrowDropDown, null)
-            }
-
-                    DropdownMenu(
-                        expanded = showModelMenu,
-                        onDismissRequest = { showModelMenu = false },
-                        modifier = Modifier.width(220.dp)
-                    ) {
-                        GeminiModel.entries
-                            .filter { 
-                                it.supportedMethods.contains("predict") || 
-                                it.modelName.contains("imagen") || 
-                                it.modelName.contains("image") 
-                            }
-                            .forEach { model ->
-                                val isImagen = model.supportedMethods.contains("predict") || model.modelName.contains("imagen")
-                                val modelNameText = model.displayName
-                                val techText = if (isImagen) "Imagen API" else "Native Gemini"
-                                
-                                DropdownMenuItem(
-                                    text = { 
-                                        Column {
-                                            Text(modelNameText, style = MaterialTheme.typography.bodyMedium)
-                                            Text(
-                                                techText, 
-                                                style = MaterialTheme.typography.labelSmall, 
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        viewModel.setImageGenModel(model)
-                                        showModelMenu = false
-                                    },
-                                    leadingIcon = {
-                                        if (state.selectedModel == model) Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
-                                    }
-                                )
-                            }
-                    }
-        }
-        
-        if (selectedBlock != null) {
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = AppShapes.small,
-                modifier = Modifier.padding(bottom = 12.dp)
-            ) {
-                Text(
-                    text = "正在编辑: ${selectedBlock.id}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-            }
-        }
-
-        if (showAdvancedSettingsDialog) {
-            AlertDialog(
-                onDismissRequest = { showAdvancedSettingsDialog = false },
-                properties = androidx.compose.ui.window.DialogProperties(
-                    dismissOnClickOutside = false,
-                    dismissOnBackPress = false
-                ),
-                title = { Text("风格与参考设置", style = MaterialTheme.typography.titleMedium) },
-                text = {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            "风格参考图 (图生图引导)",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier.size(100.dp).padding(4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (state.referenceImageUri != null) {
-                                    AsyncImage(
-                                        model = state.referenceImageUri.getAbsolutePath(),
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                } else {
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.surfaceVariant,
-                                        shape = AppShapes.small,
-                                        modifier = Modifier.fillMaxSize()
-                                    ) {
-                                        Icon(Icons.Default.AddPhotoAlternate, null, modifier = Modifier.padding(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                            }
-                            
-                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                                Button(
-                                    onClick = { imagePicker() },
-                                    modifier = Modifier.height(36.dp),
-                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                                    shape = AppShapes.small,
-                                    enabled = !state.isGenerating
-                                ) {
-                                    Text("更改参考图", style = MaterialTheme.typography.labelSmall)
-                                }
-                                if (state.referenceImageUri != null) {
-                                    Spacer(Modifier.height(8.dp))
-                                    TextButton(
-                                        onClick = { viewModel.setReferenceImage(null) },
-                                        modifier = Modifier.height(28.dp),
-                                        contentPadding = PaddingValues(0.dp)
-                                    ) {
-                                        Text("移除参考", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(20.dp))
-
-                        Text(
-                            "全局风格关键词",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = state.globalStyle,
-                            onValueChange = { viewModel.setGlobalStyle(it) },
-                            placeholder = { Text("例如：Cyberpunk, neon lights...", style = MaterialTheme.typography.bodySmall) },
-                            modifier = Modifier.fillMaxWidth().height(120.dp),
-                            singleLine = false,
-                            textStyle = MaterialTheme.typography.bodySmall,
-                            enabled = !state.isGenerating
-                        )
-                        
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "提示：设置的风格和参考图将在每次生成时自动生效。",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = { 
-                            viewModel.saveStyleSettings {
-                                showAdvancedSettingsDialog = false
-                            }
-                        },
-                        enabled = !state.isGenerating
-                    ) {
-                        Text("保存并完成")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showAdvancedSettingsDialog = false }) {
-                        Text("取消")
-                    }
-                }
-            )
-        }
-
-        if (selectedBlock == null) {
-            Text(stringResource(Res.string.prop_select_block), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                shape = AppShapes.small,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-            ) {
-                Column(Modifier.padding(8.dp)) {
-                    Text(
-                        "模块物理参数 (只读)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        InfoItem("X", selectedBlock.bounds.left.toInt().toString(), Modifier.weight(1f))
-                        InfoItem("Y", selectedBlock.bounds.top.toInt().toString(), Modifier.weight(1f))
-                        InfoItem("W", selectedBlock.bounds.width.toInt().toString(), Modifier.weight(1f))
-                        InfoItem("H", selectedBlock.bounds.height.toInt().toString(), Modifier.weight(1f))
-                    }
-                }
-            }
-
-            Text(
-                text = "当前绑定资源",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            Card(
-                modifier = Modifier.fillMaxWidth().height(160.dp),
-                shape = AppShapes.medium,
-                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))
-            ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (selectedBlock.currentImageUri != null) {
-                        AsyncImage(
-                            model = selectedBlock.currentImageUri.getAbsolutePath(),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize().padding(4.dp),
-                            contentScale = ContentScale.Fit
-                        )
-                    } else {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Default.HideImage,
-                                null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(32.dp)
-                            )
-                            Text(
-                                "尚未绑定任何资源",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(onClick = onShowHistory, modifier = Modifier.weight(1f), shape = AppShapes.medium) {
-                    Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("历史记录")
-                }
-                OutlinedButton(
-                    onClick = { viewModel.clearSelectedImage(selectedBlock.id) },
-                    modifier = Modifier.weight(1f),
-                    shape = AppShapes.medium,
-                    enabled = selectedBlock.currentImageUri != null,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Icon(Icons.Default.LinkOff, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("解绑")
-                }
-            }
-
-            HorizontalDivider(Modifier.padding(vertical = 12.dp))
-
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang ->
-                    SegmentedButton(
-                        selected = currentEditingLang == lang,
-                        onClick = { onSwitchEditingLang(lang) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
-                        label = { Text(lang.displayName) }
-                    )
-                }
-            }
-
-            val displayPrompt = if (currentEditingLang == PromptLanguage.EN) selectedBlock.userPromptEn else selectedBlock.userPromptZh
-            var tempPrompt by remember(selectedBlock.id, currentEditingLang, displayPrompt) { mutableStateOf(displayPrompt) }
-
-            OutlinedTextField(
-                value = tempPrompt,
-                onValueChange = { tempPrompt = it },
-                readOnly = false,
-                label = { Text("${stringResource(Res.string.label_description_content)} (${currentEditingLang.displayName})") },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                maxLines = 8,
-                enabled = !state.isGenerating
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = state.isGenerateTransparent,
-                    onCheckedChange = { viewModel.setGenerateTransparent(it) },
-                    enabled = !state.isGenerating
-                )
-                Column(modifier = Modifier.padding(start = 8.dp)) {
-                    Text("生成透明背景 (PNG)", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "开启后自动处理背景",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            if (state.isGenerateTransparent) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = state.isPrioritizeCloudRemoval,
-                        onCheckedChange = { viewModel.setPrioritizeCloudRemoval(it) },
-                        enabled = !state.isGenerating
-                    )
-                    Column(modifier = Modifier.padding(start = 8.dp)) {
-                        Text("优先云端抠图", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
-                onClick = { viewModel.onRequestGeneration(apiKey, tempPrompt) },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isGenerating && tempPrompt.isNotBlank(),
-                shape = AppShapes.medium
-            ) {
-                if (state.isGenerating)
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
-                    )
-                else
-                    Text(stringResource(Res.string.editor_start_gen))
-            }
-        }
-    }
-}
-
-@Composable
-private fun InfoItem(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
     }
 }
