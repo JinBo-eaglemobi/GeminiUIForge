@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.state
+package org.gemini.ui.forge.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

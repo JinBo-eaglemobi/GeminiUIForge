@@ -14,9 +14,9 @@ import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.app.PromptLanguage
-import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.service.AIGenerationService
-import org.gemini.ui.forge.state.TemplateEditorViewModel
+import org.gemini.ui.forge.viewmodel.TemplateEditorViewModel
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.dialog.AITaskProgressDialog
 import org.gemini.ui.forge.ui.dialog.VisualRefineDialog

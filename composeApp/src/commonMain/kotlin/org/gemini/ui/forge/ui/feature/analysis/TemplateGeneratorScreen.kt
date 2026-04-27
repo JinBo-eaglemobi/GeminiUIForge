@@ -4,9 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material3.*
@@ -17,12 +15,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.repository.TemplateRepository
-import org.gemini.ui.forge.formatTimestamp
 import org.gemini.ui.forge.getCurrentTimeMillis
-import org.gemini.ui.forge.model.app.AppGlobalState
-import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.state.app.AppGlobalState
+import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.service.*
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.dialog.AITaskProgressDialog

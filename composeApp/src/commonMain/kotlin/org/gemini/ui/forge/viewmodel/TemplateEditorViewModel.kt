@@ -1,24 +1,39 @@
-package org.gemini.ui.forge.state
+package org.gemini.ui.forge.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
-import org.gemini.ui.forge.model.ui.*
-import org.gemini.ui.forge.model.app.*
-import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.manager.CloudAssetManager
-import org.gemini.ui.forge.utils.*
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlin.collections.ArrayDeque
+import org.gemini.ui.forge.model.api.ChatMessage
+import org.gemini.ui.forge.model.app.PromptLanguage
+import org.gemini.ui.forge.model.app.ShortcutAction
+import org.gemini.ui.forge.model.ui.DropPosition
+import org.gemini.ui.forge.model.ui.SerialRect
+import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIBlockType
+import org.gemini.ui.forge.service.AIGenerationService
+import org.gemini.ui.forge.service.AITaskStatus
+import org.gemini.ui.forge.state.TemplateEditorState
+import org.gemini.ui.forge.state.ui.ProjectState
+import org.gemini.ui.forge.ui.component.ToastType
+import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.utils.calculateMd5
+import org.gemini.ui.forge.utils.cropImage
+import org.gemini.ui.forge.utils.getMimeType
+import kotlin.collections.plus
 
 /**
  * 布局编辑器的专属 ViewModel。
@@ -56,7 +71,7 @@ class TemplateEditorViewModel(
         _state.update { it.copy(currentLang = lang) }
     }
 
-    private var currentGenJob: kotlinx.coroutines.Job? = null
+    private var currentGenJob: Job? = null
     private val undoStack = ArrayDeque<ProjectState>()
     private val redoStack = ArrayDeque<ProjectState>()
 
@@ -104,7 +119,7 @@ class TemplateEditorViewModel(
             _state.update { it.copy(project = previousState) }
             markDirty()
             AppLogger.d("TemplateEditorViewModel", "↩️ 执行撤销成功，剩余可撤销步数: ${undoStack.size}")
-            Toast.show("已撤销操作", org.gemini.ui.forge.ui.component.ToastType.INFO)
+            Toast.show("已撤销操作", ToastType.INFO)
         } else {
             AppLogger.d("TemplateEditorViewModel", "↩️ 无法撤销：撤销栈为空")
         }
@@ -118,7 +133,7 @@ class TemplateEditorViewModel(
             _state.update { it.copy(project = nextState) }
             markDirty()
             AppLogger.d("TemplateEditorViewModel", "↪️ 执行重做成功，剩余可重做步数: ${redoStack.size}")
-            Toast.show("已重做操作", org.gemini.ui.forge.ui.component.ToastType.INFO)
+            Toast.show("已重做操作", ToastType.INFO)
         } else {
             AppLogger.d("TemplateEditorViewModel", "↪️ 无法重做：重做栈为空")
         }
@@ -311,7 +326,7 @@ class TemplateEditorViewModel(
         }
         markDirty()
         AppLogger.d("TemplateEditorViewModel", "🗑️ 模块 $blockId 及其子节点已成功删除")
-        Toast.show("已删除模块 $blockId", org.gemini.ui.forge.ui.component.ToastType.INFO)
+        Toast.show("已删除模块 $blockId", ToastType.INFO)
     }
 
     private var clipboardBlock: UIBlock? = null
@@ -322,7 +337,7 @@ class TemplateEditorViewModel(
         if (block != null) {
             clipboardBlock = block
             AppLogger.d("TemplateEditorViewModel", "📋 已复制模块: ${block.id}")
-            Toast.show("已复制模块 ${block.id}", org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
+            Toast.show("已复制模块 ${block.id}", ToastType.SUCCESS)
         } else {
             AppLogger.e("TemplateEditorViewModel", "⚠️ 复制失败：找不到指定的模块 $selectedId")
         }
@@ -335,7 +350,7 @@ class TemplateEditorViewModel(
             clipboardBlock = block
             deleteBlock(selectedId)
             AppLogger.d("TemplateEditorViewModel", "✂️ 已剪切模块: ${block.id}")
-            Toast.show("已剪切模块 ${block.id}", org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
+            Toast.show("已剪切模块 ${block.id}", ToastType.SUCCESS)
         } else {
             AppLogger.e("TemplateEditorViewModel", "⚠️ 剪切失败：找不到指定的模块 $selectedId")
         }
@@ -344,7 +359,7 @@ class TemplateEditorViewModel(
     fun paste() {
         val source = clipboardBlock ?: run {
             AppLogger.e("TemplateEditorViewModel", "⚠️ 粘贴失败：剪贴板为空")
-            Toast.show("粘贴失败：剪贴板为空", org.gemini.ui.forge.ui.component.ToastType.ERROR)
+            Toast.show("粘贴失败：剪贴板为空", ToastType.ERROR)
             return
         }
         saveSnapshot()
@@ -380,7 +395,7 @@ class TemplateEditorViewModel(
         }
         markDirty()
         AppLogger.d("TemplateEditorViewModel", "📋 已粘贴模块: ${newBlock.id}")
-        Toast.show("已粘贴模块 ${newBlock.id}", org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
+        Toast.show("已粘贴模块 ${newBlock.id}", ToastType.SUCCESS)
     }
 
     fun handleShortcutAction(action: ShortcutAction) {
@@ -484,7 +499,7 @@ class TemplateEditorViewModel(
         currentGenJob?.cancel()
         val task = aiService.createTask<ProjectState>("区域重构", viewModelScope)
         currentGenJob = viewModelScope.launch {
-            launch { task.status.collect { status -> _state.update { it.copy(isGenerating = status == org.gemini.ui.forge.service.AITaskStatus.RUNNING) } } }
+            launch { task.status.collect { status -> _state.update { it.copy(isGenerating = status == AITaskStatus.RUNNING) } } }
             _state.update { it.copy(isGenerating = true, showAITaskDialog = true, generationLogs = emptyList()) }
             task.execute {
                 try {
@@ -523,8 +538,8 @@ class TemplateEditorViewModel(
                         history = history,
                         onLog = logger
                     )
-                    val newUserMsg = org.gemini.ui.forge.model.api.ChatMessage("user", userInstruction)
-                    val newModelMsg = org.gemini.ui.forge.model.api.ChatMessage("model", "已重塑 UI 结构。")
+                    val newUserMsg = ChatMessage("user", userInstruction)
+                    val newModelMsg = ChatMessage("model", "已重塑 UI 结构。")
                     _state.update { s ->
                         val newHistory = history + newUserMsg + newModelMsg; s.copy(
                         project = s.project.copy(pages = updatedPages),
@@ -535,7 +550,7 @@ class TemplateEditorViewModel(
                     onComplete(true)
                     _state.value.project
                 } catch (e: Exception) {
-                    if (e !is kotlinx.coroutines.CancellationException) {
+                    if (e !is CancellationException) {
                         val errMsg = "❌ 错误: ${e.message}"; addGenLog(errMsg); log(errMsg); onComplete(false)
                     }; throw e
                 }
@@ -550,7 +565,7 @@ class TemplateEditorViewModel(
         currentGenJob?.cancel()
         val task = aiService.createTask<String>("提示词优化", viewModelScope)
         currentGenJob = viewModelScope.launch {
-            launch { task.status.collect { status -> _state.update { it.copy(isGenerating = status == org.gemini.ui.forge.service.AITaskStatus.RUNNING) } } }
+            launch { task.status.collect { status -> _state.update { it.copy(isGenerating = status == AITaskStatus.RUNNING) } } }
             _state.update { it.copy(isGenerating = true, generationLogs = emptyList(), showAITaskDialog = true) }
             task.execute {
                 try {
@@ -567,8 +582,8 @@ class TemplateEditorViewModel(
                         aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, 3, history = history)
                     logger(">>> 优化完成！")
                     onUserPromptChanged(blockId, optimized, currentLang)
-                    val newUserMsg = org.gemini.ui.forge.model.api.ChatMessage("user", textToOptimize)
-                    val newModelMsg = org.gemini.ui.forge.model.api.ChatMessage("model", optimized)
+                    val newUserMsg = ChatMessage("user", textToOptimize)
+                    val newModelMsg = ChatMessage("model", optimized)
                     _state.update { s ->
                         val newHistory =
                             history + newUserMsg + newModelMsg; s.copy(chatHistories = s.chatHistories + (historyKey to newHistory))

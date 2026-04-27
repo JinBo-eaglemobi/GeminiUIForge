@@ -1,8 +1,6 @@
-package org.gemini.ui.forge.state
+package org.gemini.ui.forge.state.app
 
-import org.gemini.ui.forge.model.app.AppGlobalState
-import org.gemini.ui.forge.model.app.PromptLanguage
-import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.state.ui.ProjectState
 
 /**
  * 全局应用状态模型

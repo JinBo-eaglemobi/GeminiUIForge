@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.state
+package org.gemini.ui.forge.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,6 +16,7 @@ import org.gemini.ui.forge.model.app.UpdateStatus
 import org.gemini.ui.forge.model.app.UpdateInfo
 import org.gemini.ui.forge.service.UpdateService
 import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.utils.AppLogger
 
 /**
  * 专门负责软件更新业务的独立 ViewModel
@@ -34,14 +35,14 @@ class AppUpdateViewModel(
      */
     fun checkForUpdates() {
         viewModelScope.launch {
-            org.gemini.ui.forge.utils.AppLogger.i("AppUpdateViewModel", "🔄 正在手动触发更新检查...")
+            AppLogger.i("AppUpdateViewModel", "🔄 正在手动触发更新检查...")
             _status.update { UpdateStatus.Checking }
             val info = updateService.checkUpdate()
             if (info != null) {
-                org.gemini.ui.forge.utils.AppLogger.i("AppUpdateViewModel", "🔔 发现可用更新: v${info.version}")
+                AppLogger.i("AppUpdateViewModel", "🔔 发现可用更新: v${info.version}")
                 _status.update { UpdateStatus.Available(info) }
             } else {
-                org.gemini.ui.forge.utils.AppLogger.i("AppUpdateViewModel", "✅ 检查完成：当前版本已是最新。")
+                AppLogger.i("AppUpdateViewModel", "✅ 检查完成：当前版本已是最新。")
                 _status.update { UpdateStatus.UpToDate }
             }
         }
@@ -52,14 +53,14 @@ class AppUpdateViewModel(
      */
     fun performUpdate(info: UpdateInfo) {
         viewModelScope.launch(Dispatchers.Default) {
-            org.gemini.ui.forge.utils.AppLogger.i("AppUpdateViewModel", "🚀 用户确认更新，开始处理版本: v${info.version}")
+            AppLogger.i("AppUpdateViewModel", "🚀 用户确认更新，开始处理版本: v${info.version}")
             // 立即更新状态为下载中，避免 UI 停留在 Available 导致用户重复点击或认为无响应
             _status.update { UpdateStatus.Downloading(0f) }
             try {
                 // 1. 获取临时存放目录
                 val storageDir = templateRepo.getDataDir()
                 val tempPath = Path(storageDir, "update_" + info.fileName)
-                org.gemini.ui.forge.utils.AppLogger.d("AppUpdateViewModel", "📂 临时更新包路径: $tempPath")
+                AppLogger.d("AppUpdateViewModel", "📂 临时更新包路径: $tempPath")
 
                 // 2. 执行流式下载并报告进度
                 updateService.downloadUpdate(info.downloadUrl, tempPath).collect { progress ->
@@ -67,14 +68,14 @@ class AppUpdateViewModel(
                 }
 
                 // 3. 准备就绪
-                org.gemini.ui.forge.utils.AppLogger.i("AppUpdateViewModel", "💾 更新包下载已校验，准备交由平台接力脚本执行替换重启...")
+                AppLogger.i("AppUpdateViewModel", "💾 更新包下载已校验，准备交由平台接力脚本执行替换重启...")
                 _status.update { UpdateStatus.ReadyToInstall }
                 delay(1500) // 给 UI 一点反馈时间
 
                 // 4. 触发跨平台重启接力
                 getPlatform().applyUpdateAndRestart(tempPath.toString())
             } catch (e: Exception) {
-                org.gemini.ui.forge.utils.AppLogger.e("AppUpdateViewModel", "❌ 更新安装流程中断", e)
+                AppLogger.e("AppUpdateViewModel", "❌ 更新安装流程中断", e)
                 _status.update { UpdateStatus.Error(e.message ?: "Unknown Error") }
             }
         }

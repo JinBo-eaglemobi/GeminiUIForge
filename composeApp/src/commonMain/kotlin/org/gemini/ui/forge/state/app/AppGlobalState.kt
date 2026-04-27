@@ -1,4 +1,9 @@
-package org.gemini.ui.forge.model.app
+package org.gemini.ui.forge.state.app
+
+import org.gemini.ui.forge.model.app.AppScreen
+import org.gemini.ui.forge.model.app.PromptLanguage
+import org.gemini.ui.forge.model.app.ShortcutAction
+import org.gemini.ui.forge.model.app.ThemeMode
 
 /**
  * 应用全局状态模型

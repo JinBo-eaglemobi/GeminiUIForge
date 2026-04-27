@@ -17,10 +17,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import kotlinx.coroutines.delay
-import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
-import org.gemini.ui.forge.state.*
 import org.gemini.ui.forge.ui.feature.home.HomeScreen
 import org.gemini.ui.forge.ui.feature.assetgen.TemplateAssetGenScreen
 import org.gemini.ui.forge.ui.feature.editor.TemplateEditorScreen
@@ -33,6 +32,10 @@ import org.gemini.ui.forge.ui.dialog.AppSettingsDialog
 import org.gemini.ui.forge.ui.dialog.HelpDialog
 import org.gemini.ui.forge.manager.*
 import org.gemini.ui.forge.utils.*
+import org.gemini.ui.forge.viewmodel.AppEnvViewModel
+import org.gemini.ui.forge.viewmodel.AppSettingsViewModel
+import org.gemini.ui.forge.viewmodel.AppUpdateViewModel
+import org.gemini.ui.forge.viewmodel.AppViewModel
 
 private var originalSystemLanguage: String? = null
 
@@ -59,7 +62,12 @@ fun App(typography: Typography? = null) {
                 aiService = AIGenerationService(cloudAssetManager, configManager)
             )
         }
-        val settingsViewModel: AppSettingsViewModel = viewModel { AppSettingsViewModel(templateRepo = templateRepo, configManager = configManager) }
+        val settingsViewModel: AppSettingsViewModel = viewModel {
+            AppSettingsViewModel(
+                templateRepo = templateRepo,
+                configManager = configManager
+            )
+        }
         val updateViewModel: AppUpdateViewModel = viewModel { AppUpdateViewModel(templateRepo = templateRepo) }
         val envViewModel: AppEnvViewModel = viewModel { AppEnvViewModel() }
 

@@ -1,5 +1,5 @@
 package org.gemini.ui.forge.model.app
-import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.state.ui.ProjectState
 
 data class UIModule(
     val id: String,

@@ -3,7 +3,7 @@ package org.gemini.ui.forge.state
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.PromptLanguage
-import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.ui.UIBlock
 
 /**

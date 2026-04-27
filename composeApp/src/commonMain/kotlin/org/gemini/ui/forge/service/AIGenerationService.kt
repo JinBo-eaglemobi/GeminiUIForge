@@ -1,10 +1,7 @@
 package org.gemini.ui.forge.service
 
-import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
-import io.ktor.http.*
-import io.ktor.utils.io.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -16,7 +13,7 @@ import org.gemini.ui.forge.data.remote.NetworkClient
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.api.ChatMessage
-import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.ui.UIPage
 import org.gemini.ui.forge.utils.AppLogger
 import kotlin.time.Duration.Companion.milliseconds

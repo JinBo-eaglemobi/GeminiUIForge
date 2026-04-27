@@ -4,9 +4,8 @@ import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
 import org.gemini.ui.forge.data.remote.NetworkClient
-import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.*
 import org.gemini.ui.forge.data.TemplateFile

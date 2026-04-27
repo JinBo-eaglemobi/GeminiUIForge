@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.state
+package org.gemini.ui.forge.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.app.*
-import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
@@ -20,6 +19,8 @@ import org.gemini.ui.forge.ui.component.ToastType
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import org.gemini.ui.forge.state.app.AppState
+import org.gemini.ui.forge.state.ui.ProjectState
 
 /**
  * 应用的主控制 ViewModel

@@ -1,10 +1,6 @@
 package org.gemini.ui.forge.ui.component
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,23 +17,25 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import org.gemini.ui.forge.utils.decodeBase64ToBitmap
-import org.jetbrains.compose.resources.stringResource
-import geminiuiforge.composeapp.generated.resources.*
-import kotlin.math.min
-import kotlin.math.roundToInt
-import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.text.font.FontWeight
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.action_exit
+import geminiuiforge.composeapp.generated.resources.group_editing_indicator_prefix
 import org.gemini.ui.forge.ResizeVerticalIcon
 import org.gemini.ui.forge.model.app.ReferenceDisplayMode
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.decodeBase64ToBitmap
+import org.jetbrains.compose.resources.stringResource
 import kotlin.math.abs
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * 画布区域组件：负责渲染基础 Slots 模板及已绑定的图片。
@@ -431,138 +429,27 @@ fun CanvasArea(
         }
 
         // 全局浮动控制栏：缩放比例、复位、视觉模式切换、参考图控制
-        Surface(
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            border = BorderStroke(1.dp, MaterialTheme.outlineVariant().copy(alpha = 0.3f)),
-            shadowElevation = 6.dp
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val currentCanvasWeight =
-                    if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
-                val viewCenterX = containerWidthPx / 2f
-                val viewCenterY = (containerHeightPx * currentCanvasWeight) / 2f
-                val centerOffset = Offset(viewCenterX, viewCenterY)
-
-                // 缩放操作
-                IconButton(onClick = { updateZoom(zoom - 0.2f, centerOffset) }, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        Icons.Default.Remove,
-                        "-",
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Box(
-                    modifier = Modifier.height(28.dp).width(42.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "${(zoom * 100).roundToInt()}%",
-                        style = MaterialTheme.typography.labelMedium,
-                        textAlign = TextAlign.Center
-                    )
-                }
-                IconButton(onClick = { updateZoom(zoom + 0.2f, centerOffset) }, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        Icons.Default.Add,
-                        "+",
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                VerticalDivider(modifier = Modifier.height(16.dp))
-
-                // 复位舞台
-                IconButton(onClick = {
-                    zoom = 1f; pan = Offset.Zero; AppLogger.d(
-                    "CanvasArea",
-                    "🔄 已还原舞台缩放为100%并居中"
-                )
-                }, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        Icons.Default.Refresh,
-                        "Reset",
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                VerticalDivider(modifier = Modifier.height(16.dp))
-
-                // 切换视觉预览模式
-                IconToggleButton(
-                    checked = isVisualMode,
-                    onCheckedChange = { onToggleVisualMode() },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        if (isVisualMode) Icons.Default.AutoFixNormal else Icons.Default.AutoFixOff,
-                        "Visual",
-                        modifier = Modifier.size(18.dp),
-                        tint = if (isVisualMode) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                    )
-                }
-
-                // 参考图控制工具
-                if (referenceUri != null) {
-                    VerticalDivider(modifier = Modifier.height(16.dp))
-                    val isRefEnabled = internalReferenceMode != ReferenceDisplayMode.HIDDEN
-                    IconToggleButton(
-                        checked = isRefEnabled,
-                        onCheckedChange = {
-                            internalReferenceMode = if (it) ReferenceDisplayMode.SPLIT else ReferenceDisplayMode.HIDDEN
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            if (isRefEnabled) Icons.Default.Image else Icons.Default.VisibilityOff,
-                            "Toggle Ref",
-                            modifier = Modifier.size(18.dp),
-                            tint = if (isRefEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    if (isRefEnabled) {
-                        VerticalDivider(modifier = Modifier.height(16.dp))
-                        IconToggleButton(
-                            checked = internalReferenceMode == ReferenceDisplayMode.SPLIT,
-                            onCheckedChange = { internalReferenceMode = ReferenceDisplayMode.SPLIT },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.VerticalSplit,
-                                "Split",
-                                modifier = Modifier.size(18.dp),
-                                tint = if (internalReferenceMode == ReferenceDisplayMode.SPLIT) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                            )
-                        }
-                        IconToggleButton(
-                            checked = internalReferenceMode == ReferenceDisplayMode.OVERLAY,
-                            onCheckedChange = { internalReferenceMode = ReferenceDisplayMode.OVERLAY },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Layers,
-                                "Overlay",
-                                modifier = Modifier.size(18.dp),
-                                tint = if (internalReferenceMode == ReferenceDisplayMode.OVERLAY) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                            )
-                        }
-                        if (internalReferenceMode == ReferenceDisplayMode.OVERLAY) {
-                            Spacer(modifier = Modifier.width(4.dp)); Slider(
-                                value = internalReferenceOpacity,
-                                onValueChange = { internalReferenceOpacity = it },
-                                modifier = Modifier.width(100.dp).height(24.dp),
-                                valueRange = 0.1f..1f
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        val currentCanvasWeight =
+            if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
+        val viewCenterX = containerWidthPx / 2f
+        val viewCenterY = (containerHeightPx * currentCanvasWeight) / 2f
+        
+        CanvasFloatingControlBar(
+            zoom = zoom,
+            updateZoom = ::updateZoom,
+            onResetZoom = {
+                zoom = 1f; pan = Offset.Zero; AppLogger.d("CanvasArea", "🔄 已还原舞台缩放为100%并居中")
+            },
+            isVisualMode = isVisualMode,
+            onToggleVisualMode = onToggleVisualMode,
+            referenceUri = referenceUri,
+            internalReferenceMode = internalReferenceMode,
+            onReferenceModeChange = { internalReferenceMode = it },
+            internalReferenceOpacity = internalReferenceOpacity,
+            onReferenceOpacityChange = { internalReferenceOpacity = it },
+            centerOffset = Offset(viewCenterX, viewCenterY),
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 }
 

@@ -1,9 +1,8 @@
 package org.gemini.ui.forge.data
 
-import coil3.toUri
 import kotlinx.coroutines.flow.Flow
 import kotlinx.io.files.SystemPathSeparator
-import org.gemini.ui.forge.state.GlobalAppEnv
+import org.gemini.ui.forge.utils.GlobalAppEnv
 import kotlinx.serialization.Serializable
 
 /**

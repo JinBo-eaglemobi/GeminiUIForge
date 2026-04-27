@@ -3,9 +3,6 @@ package org.gemini.ui.forge.utils
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.gemini.ui.forge.state.GlobalAppEnv
-
-import org.gemini.ui.forge.utils.AppLogger
 
 actual class LocalFileStorage {
     private var dataDir = File(System.getProperty("user.home"), ".geminiuiforge")

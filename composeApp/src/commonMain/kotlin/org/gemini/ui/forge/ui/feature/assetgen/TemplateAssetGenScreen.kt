@@ -10,25 +10,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
-import org.jetbrains.compose.resources.stringResource
-import geminiuiforge.composeapp.generated.resources.Res
-import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
-import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.PromptLanguage
-import org.gemini.ui.forge.model.ui.ProjectState
+import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
-import org.gemini.ui.forge.state.TemplateAssetGenState
-import org.gemini.ui.forge.state.TemplateAssetGenViewModel
+import org.gemini.ui.forge.viewmodel.TemplateAssetGenViewModel
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.dialog.AITaskProgressDialog
@@ -38,7 +31,6 @@ import org.gemini.ui.forge.ui.dialog.BatchAssetGenDialog
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.ui.component.CanvasArea
 import org.gemini.ui.forge.ui.component.HierarchySidebar
-import org.gemini.ui.forge.utils.rememberImagePicker
 
 /**
  * 资产生成页面主容器组件。

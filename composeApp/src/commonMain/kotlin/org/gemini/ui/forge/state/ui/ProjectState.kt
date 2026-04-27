@@ -1,6 +1,8 @@
-package org.gemini.ui.forge.model.ui
-import org.gemini.ui.forge.data.TemplateFile
+package org.gemini.ui.forge.state.ui
+
 import kotlinx.serialization.Serializable
+import org.gemini.ui.forge.data.TemplateFile
+import org.gemini.ui.forge.model.ui.UIPage
 
 /**
  * 顶级数据模型：应用模板工程 (ProjectState)

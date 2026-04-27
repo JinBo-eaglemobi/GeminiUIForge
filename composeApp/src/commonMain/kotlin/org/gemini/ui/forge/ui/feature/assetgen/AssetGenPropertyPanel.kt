@@ -17,7 +17,7 @@ import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.state.TemplateAssetGenState
-import org.gemini.ui.forge.state.TemplateAssetGenViewModel
+import org.gemini.ui.forge.viewmodel.TemplateAssetGenViewModel
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.utils.rememberImagePicker

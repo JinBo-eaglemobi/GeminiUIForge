@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.state
+package org.gemini.ui.forge.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -23,9 +23,15 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 import org.gemini.ui.forge.manager.CloudAssetManager
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import org.gemini.ui.forge.state.TemplateAssetGenState
+import org.gemini.ui.forge.state.WorkerStatus
+import org.gemini.ui.forge.state.ui.ProjectState
 
 data class BatchResult(val block: UIBlock, val candidates: List<TemplateFile>)
 
@@ -59,7 +65,7 @@ class TemplateAssetGenViewModel(
         _state.update { it.copy(currentLang = lang) }
     }
 
-    private var generationJob: kotlinx.coroutines.Job? = null
+    private var generationJob: Job? = null
 
     // --- 批量确认队列机制 ---
     private val batchResultChannel = Channel<BatchResult>(Channel.UNLIMITED)
@@ -144,7 +150,7 @@ class TemplateAssetGenViewModel(
                                     isSame = true
                                     // 转换为 TemplateFile 存储
                                     val rel = oldFilePath.replace("\\", "/").let {
-                                        val root = org.gemini.ui.forge.state.GlobalAppEnv.currentRootPath
+                                        val root = GlobalAppEnv.currentRootPath
                                         if (it.startsWith(root)) it.removePrefix(root).removePrefix("/") else it
                                     }
                                     finalRefUri = TemplateFile(rel)
@@ -392,7 +398,7 @@ class TemplateAssetGenViewModel(
                         
                         val currentCandidates = mutableListOf<TemplateFile>()
                         try {
-                            kotlinx.coroutines.coroutineScope {
+                            coroutineScope {
                                 aiService.generateImages(
                                     model = selectedModel,
                                     apiKey = apiKey,
@@ -462,7 +468,7 @@ class TemplateAssetGenViewModel(
                             updateWorker(slotId, blockId = block.id, action = "❌ 失败", info = e.message ?: "", isBusy = true)
                         } finally {
                             _state.update { s -> s.copy(batchProgress = (s.batchProgress?.first ?: 0) + 1 to selectedBlocks.size) }
-                            kotlinx.coroutines.delay(1000)
+                            delay(1000)
                             updateWorker(slotId, isBusy = false) 
                         }
                     }
@@ -645,7 +651,7 @@ class TemplateAssetGenViewModel(
             .filter { it.endsWith(".png") || it.endsWith(".jpg") }
             .map { absPath ->
                 val rel = absPath.replace("\\", "/").let {
-                    val root = org.gemini.ui.forge.state.GlobalAppEnv.currentRootPath
+                    val root = GlobalAppEnv.currentRootPath
                     if (it.startsWith(root)) it.removePrefix(root).removePrefix("/") else it
                 }
                 TemplateFile(rel)

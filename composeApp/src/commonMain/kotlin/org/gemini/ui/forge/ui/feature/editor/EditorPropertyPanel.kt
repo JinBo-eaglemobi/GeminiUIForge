@@ -18,7 +18,7 @@ import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.TemplateEditorState
-import org.gemini.ui.forge.state.TemplateEditorViewModel
+import org.gemini.ui.forge.viewmodel.TemplateEditorViewModel
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.ui.theme.AppShapes
