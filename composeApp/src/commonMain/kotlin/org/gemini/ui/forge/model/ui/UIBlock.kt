@@ -24,7 +24,8 @@ data class UIBlock(
     val userPromptEn: String = "",
     val userPromptZh: String = "",
     val children: List<UIBlock> = emptyList(),
-    val isVisible: Boolean = true // 新增：图层是否可见
+    val isVisible: Boolean = true, // 新增：图层是否可见
+    val properties: BlockProperties? = null // 新增：不同类型模块的专属属性
 ) {
     /** 自动拼接基础类别描述与英文自定义描述，形成最终发给生图模型的完整 Prompt */
     val fullPrompt: String

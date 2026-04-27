@@ -748,6 +748,172 @@ class TemplateAssetGenViewModel(
         markDirty()
     }
 
+    fun updateBlockProperties(blockId: String, properties: org.gemini.ui.forge.model.ui.BlockProperties) {
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == currentState.selectedPageId) page.copy(
+                    blocks = updateBlockInList(
+                        page.blocks,
+                        blockId
+                    ) { it.copy(properties = properties) }) else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+        markDirty()
+    }
+
+    /**
+     * 以当前绑定的图片为参照，衍生生成点击态和禁用态的按钮图片。
+     */
+    fun generateDerivedButtonStates(apiKey: String) {
+        val block = _state.value.selectedBlock ?: return
+        val projectName = _state.value.projectName
+        val isTransparent = _state.value.isGenerateTransparent
+        val prioritizeCloud = _state.value.isPrioritizeCloudRemoval
+        val globalStyle = _state.value.globalStyle
+        val selectedModel = _state.value.selectedModel
+        
+        // 确保当前有基准图
+        val baseImageUri = block.currentImageUri?.getAbsolutePath()
+        if (baseImageUri == null) {
+            addGenLog("❌ [错误] 请先生成并绑定一张正常的按钮图片作为基准参照。")
+            return
+        }
+
+        val basePrompt = block.fullPrompt
+
+        generationJob?.cancel()
+        generationJob = viewModelScope.launch {
+            _state.update { it.copy(
+                isGenerating = true, 
+                generationLogs = emptyList(), 
+                showAITaskDialog = true,
+                currentTaskStatus = "准备衍生生成..."
+            ) }
+
+            addGenLog("🚀 [开始衍生] 正在以当前图片为基准衍生按钮点击态与禁用态...")
+            
+            try {
+                coroutineScope {
+                    var finalPressedUri: TemplateFile? = null
+                    var finalDisabledUri: TemplateFile? = null
+
+                    // 1. 生成点击态 (Pressed)
+                    val pressedJob = launch {
+                        try {
+                            addGenLog("[Pressed] 正在生成点击态...")
+                            val pressedPrompt = "$basePrompt, pressed state, slightly darker, inner shadow, depressed, active visual feedback"
+                            
+                            val deferredBytes = CompletableDeferred<ByteArray>()
+                            aiService.generateImages(
+                                model = selectedModel,
+                                apiKey = apiKey,
+                                blockType = block.type.name,
+                                userPrompt = pressedPrompt,
+                                maxRetries = 3,
+                                targetWidth = block.bounds.width,
+                                targetHeight = block.bounds.height,
+                                isPng = isTransparent,
+                                style = globalStyle,
+                                referenceImageUri = baseImageUri, // 强制将主图作为参照
+                                onLog = { addGenLog("[Pressed SDK] $it") },
+                                onImageGenerated = { base64 ->
+                                    val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
+                                    @OptIn(ExperimentalEncodingApi::class)
+                                    deferredBytes.complete(Base64.decode(pure))
+                                }
+                            )
+                            
+                            val bytes = deferredBytes.await()
+                            var processedBytes = bytes
+                            if (isTransparent) {
+                                if (prioritizeCloud && apiKey.isNotBlank()) {
+                                    try { processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) ?: bytes } catch (e: Exception) {}
+                                }
+                                if (processedBytes === bytes) {
+                                    try { processedBytes = aiService.removeBackgroundLocal(bytes) ?: bytes } catch (e: Exception) {}
+                                }
+                            }
+                            
+                            finalPressedUri = templateRepo.saveBlockResource(projectName, block.id, "pressed_${getCurrentTimeMillis()}", processedBytes, isPng = isTransparent)
+                            addGenLog("✅ [Pressed] 点击态已保存")
+                        } catch (e: Exception) {
+                            addGenLog("❌ [Pressed] 失败: ${e.message}")
+                        }
+                    }
+
+                    // 2. 生成禁用态 (Disabled)
+                    val disabledJob = launch {
+                        try {
+                            addGenLog("[Disabled] 正在生成禁用态...")
+                            val disabledPrompt = "$basePrompt, disabled state, grayed out, desaturated, lower contrast, unclickable, dull"
+                            
+                            val deferredBytes = CompletableDeferred<ByteArray>()
+                            aiService.generateImages(
+                                model = selectedModel,
+                                apiKey = apiKey,
+                                blockType = block.type.name,
+                                userPrompt = disabledPrompt,
+                                maxRetries = 3,
+                                targetWidth = block.bounds.width,
+                                targetHeight = block.bounds.height,
+                                isPng = isTransparent,
+                                style = globalStyle,
+                                referenceImageUri = baseImageUri, // 强制将主图作为参照
+                                onLog = { addGenLog("[Disabled SDK] $it") },
+                                onImageGenerated = { base64 ->
+                                    val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
+                                    @OptIn(ExperimentalEncodingApi::class)
+                                    deferredBytes.complete(Base64.decode(pure))
+                                }
+                            )
+                            
+                            val bytes = deferredBytes.await()
+                            var processedBytes = bytes
+                            if (isTransparent) {
+                                if (prioritizeCloud && apiKey.isNotBlank()) {
+                                    try { processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) ?: bytes } catch (e: Exception) {}
+                                }
+                                if (processedBytes === bytes) {
+                                    try { processedBytes = aiService.removeBackgroundLocal(bytes) ?: bytes } catch (e: Exception) {}
+                                }
+                            }
+                            
+                            finalDisabledUri = templateRepo.saveBlockResource(projectName, block.id, "disabled_${getCurrentTimeMillis()}", processedBytes, isPng = isTransparent)
+                            addGenLog("✅ [Disabled] 禁用态已保存")
+                        } catch (e: Exception) {
+                            addGenLog("❌ [Disabled] 失败: ${e.message}")
+                        }
+                    }
+
+                    // 等待两张图都生成并处理完毕
+                    pressedJob.join()
+                    disabledJob.join()
+
+                    // 更新到状态流
+                    if (finalPressedUri != null || finalDisabledUri != null) {
+                        val existingProps = block.properties as? org.gemini.ui.forge.model.ui.BlockProperties.ButtonProperties 
+                            ?: org.gemini.ui.forge.model.ui.BlockProperties.ButtonProperties(isMultiState = true)
+                        
+                        val newProps = existingProps.copy(
+                            pressedUri = finalPressedUri ?: existingProps.pressedUri,
+                            disabledUri = finalDisabledUri ?: existingProps.disabledUri
+                        )
+                        updateBlockProperties(block.id, newProps)
+                        addGenLog("🏁 [衍生完成] 多态资源已自动挂载到属性面板")
+                    } else {
+                        addGenLog("⚠️ [衍生结束] 未能成功生成新的状态资源")
+                    }
+                }
+            } catch (e: Exception) {
+                addGenLog(">>> [致命错误] 衍生任务崩溃: ${e.message} <<<")
+                updateStatus("衍生失败: ${e.message}")
+            } finally {
+                _state.update { it.copy(isGenerating = false) }
+            }
+        }
+    }
+
     fun toggleAllBlocksVisibility(isVisible: Boolean) {
         _state.update { currentState ->
             fun updateVis(list: List<UIBlock>): List<UIBlock> =
