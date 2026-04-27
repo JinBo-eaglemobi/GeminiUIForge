@@ -4,7 +4,6 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 pluginManagement {
     repositories {
         mavenLocal()
-        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
         google {
             mavenContent {
                 includeGroupAndSubgroups("androidx")
@@ -12,6 +11,7 @@ pluginManagement {
                 includeGroupAndSubgroups("com.google")
             }
         }
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
         mavenCentral()
         gradlePluginPortal()
     }
