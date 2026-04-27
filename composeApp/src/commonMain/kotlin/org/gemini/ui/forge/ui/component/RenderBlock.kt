@@ -83,11 +83,13 @@ fun RenderBlock(
                 else if (isDimmed) Color.Black.copy(alpha = 0.4f)
                 else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
             )
-            .border(
-                width = if (hidePlaceholder && !isSelected) 0.dp
-                else (1.dp / zoom), // 关键：边框粗细除以缩放比例，确保在任何缩放级别下线条视觉宽度一致
-                color = if (isSelected) selectionColor
-                else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+            .then(
+                if (hidePlaceholder && !isSelected) Modifier
+                else Modifier.border(
+                    width = (1.dp / zoom), // 关键：边框粗细除以缩放比例，确保在任何缩放级别下线条视觉宽度一致
+                    color = if (isSelected) selectionColor
+                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                )
             ),
         contentAlignment = Alignment.Center
     ) {
