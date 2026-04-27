@@ -116,8 +116,8 @@ class AIGenerationService(
         val isImagen = model.supportedMethods.contains("predict") || model.modelName.contains("imagen")
         val isGeminiNative = model.supportedMethods.contains("generateContent") && model.modelName.contains("image")
 
-        // 单次 API 请求的最大张数限制：Imagen 3 和原生 Gemini 通常单次最高支持 4 张 (candidateCount/sampleCount)
-        val maxBatchSize = if (isGeminiNative) 8 else 4
+        // 单次 API 请求的最大张数限制：Imagen 3 和原生 Gemini 通常单次最高支持 1 张 (candidateCount/sampleCount)
+        val maxBatchSize = if (isGeminiNative) 8 else 1
 
         // 计算批次
         val batchCounts = mutableListOf<Int>()

@@ -3,7 +3,9 @@ package org.gemini.ui.forge.ui.dialog
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -20,7 +22,11 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.isAltPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -183,24 +189,96 @@ fun AssetCropDialog(
                                         .align(Alignment.BottomEnd)
                                         .size(36.dp)
                                         .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 12.dp))
-                                        .pointerInput(imageDisplayRect, cropOffset) {
-                                            detectDragGestures { change, dragAmount ->
-                                                change.consume()
-                                                val maxW = imageDisplayRect.right - cropOffset.x
-                                                val maxH = imageDisplayRect.bottom - cropOffset.y
-                                                var deltaX = dragAmount.x
-                                                var deltaY = deltaX / targetRatio
-                                                if (cropSize.width + deltaX > maxW) {
-                                                    deltaX = maxW - cropSize.width
-                                                    deltaY = deltaX / targetRatio
+                                        .pointerInput(imageDisplayRect) {
+                                            awaitPointerEventScope {
+                                                while (true) {
+                                                    val down = awaitFirstDown()
+                                                    var pointerId = down.id
+
+                                                    while (true) {
+                                                        val event = awaitPointerEvent()
+                                                        val change = event.changes.find { it.id == pointerId } ?: break
+                                                        if (change.changedToUp()) break
+
+                                                        val isAltPressed = event.keyboardModifiers.isAltPressed
+                                                        val dragAmount = change.positionChange()
+                                                        change.consume()
+
+                                                        // 读取当前最新的状态值进行计算
+                                                        val currentCropSize = cropSize
+                                                        val currentCropOffset = cropOffset
+
+                                                        if (isAltPressed) {
+                                                            // 居中等比缩放
+                                                            // 使用拖动量中较大的一方作为主导
+                                                            val absDX = kotlin.math.abs(dragAmount.x)
+                                                            val absDY = kotlin.math.abs(dragAmount.y)
+                                                            
+                                                            var deltaX: Float
+                                                            var deltaY: Float
+                                                            
+                                                            if (absDX > absDY) {
+                                                                deltaX = dragAmount.x
+                                                                deltaY = deltaX / targetRatio
+                                                            } else {
+                                                                deltaY = dragAmount.y
+                                                                deltaX = deltaY * targetRatio
+                                                            }
+
+                                                            // 边界检查：必须保证左右、上下都不越界
+                                                            val maxDeltaXLeft = currentCropOffset.x - imageDisplayRect.left
+                                                            val maxDeltaXRight = imageDisplayRect.right - (currentCropOffset.x + currentCropSize.width)
+                                                            val maxDeltaX = maxOf(0f, minOf(maxDeltaXLeft, maxDeltaXRight))
+
+                                                            val maxDeltaYTop = currentCropOffset.y - imageDisplayRect.top
+                                                            val maxDeltaYBottom = imageDisplayRect.bottom - (currentCropOffset.y + currentCropSize.height)
+                                                            val maxDeltaY = maxOf(0f, minOf(maxDeltaYTop, maxDeltaYBottom))
+
+                                                            // 结合等比限制
+                                                            var safeDeltaX = deltaX
+                                                            if (currentCropSize.width + 2 * safeDeltaX < 40f) {
+                                                                safeDeltaX = (40f - currentCropSize.width) / 2f
+                                                            }
+                                                            
+                                                            // 边界限制 (只有放大时 safeDeltaX > 0 才可能越界)
+                                                            if (safeDeltaX > 0) {
+                                                                if (safeDeltaX > maxDeltaX) {
+                                                                    safeDeltaX = maxDeltaX
+                                                                }
+                                                                var safeDeltaY = safeDeltaX / targetRatio
+                                                                if (safeDeltaY > maxDeltaY) {
+                                                                    safeDeltaY = maxDeltaY
+                                                                    safeDeltaX = safeDeltaY * targetRatio
+                                                                }
+                                                            }
+                                                            
+                                                            val finalDeltaY = safeDeltaX / targetRatio
+
+                                                            cropSize = Size(currentCropSize.width + 2 * safeDeltaX, currentCropSize.height + 2 * finalDeltaY)
+                                                            cropOffset = Offset(currentCropOffset.x - safeDeltaX, currentCropOffset.y - finalDeltaY)
+                                                        } else {
+                                                            // 普通等比缩放 (以左上角为原点)
+                                                            val maxW = imageDisplayRect.right - currentCropOffset.x
+                                                            val maxH = imageDisplayRect.bottom - currentCropOffset.y
+                                                            
+                                                            var deltaX = dragAmount.x
+                                                            var deltaY = deltaX / targetRatio
+
+                                                            if (currentCropSize.width + deltaX > maxW) {
+                                                                deltaX = maxW - currentCropSize.width
+                                                                deltaY = deltaX / targetRatio
+                                                            }
+                                                            if (currentCropSize.height + deltaY > maxH) {
+                                                                deltaY = maxH - currentCropSize.height
+                                                                deltaX = deltaY * targetRatio
+                                                            }
+
+                                                            val finalW = (currentCropSize.width + deltaX).coerceAtLeast(40f)
+                                                            val finalH = finalW / targetRatio
+                                                            cropSize = Size(finalW, finalH)
+                                                        }
+                                                    }
                                                 }
-                                                if (cropSize.height + deltaY > maxH) {
-                                                    deltaY = maxH - cropSize.height
-                                                    deltaX = deltaY * targetRatio
-                                                }
-                                                val finalW = (cropSize.width + deltaX).coerceAtLeast(40f)
-                                                val finalH = finalW / targetRatio
-                                                cropSize = Size(finalW, finalH)
                                             }
                                         }
                                 ) {
