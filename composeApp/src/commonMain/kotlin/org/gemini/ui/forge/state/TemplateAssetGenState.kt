@@ -24,7 +24,7 @@ data class TemplateAssetGenState(
     val isGenerating: Boolean = false,
     val generationLogs: List<String> = emptyList(),
     val showAITaskDialog: Boolean = false,
-    val isGenerationLogVisible: Boolean = false,
+    val isGenerationLogVisible: Boolean = true,
 
     /** 本地任务处理状态（如批量抠图） */
     val isLocalProcessing: Boolean = false,

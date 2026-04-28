@@ -897,6 +897,11 @@ class TemplateAssetGenViewModel(
                     try {
                         templateRepo.saveTemplate(projectName, updatedProject)
                         AppLogger.i("AssetGenVM", "✅ 图像固化保存成功: ${newFile.relativePath.substringAfterLast('/')}")
+                        
+                        // 任务 11 修复：固化成功后，必须通知确认队列已处理完成
+                        withContext(Dispatchers.Main) {
+                            notifySelectionHandled()
+                        }
                     } catch (e: Exception) {
                         AppLogger.e("AssetGenVM", "⚠️ 图像已生成但模板 JSON 保存失败", e)
                     }

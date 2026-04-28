@@ -86,7 +86,7 @@ fun TemplateEditorScreen(
     var refineTargetId by remember { mutableStateOf<String?>(null) }
     var showReferenceArea by remember { mutableStateOf(false) }
     var referenceAreaTargetId by remember { mutableStateOf<String?>(null) }
-    var showAILogs by remember { mutableStateOf(false) }
+    var showAILogs by remember { mutableStateOf(true) }
 
     // 当 AI 开始生成时，自动展开日志面板
     LaunchedEffect(state.isGenerating) {
