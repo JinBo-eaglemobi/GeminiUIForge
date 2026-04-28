@@ -6,6 +6,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.gemini.ui.forge.event.LogEvent
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 提取各平台控制台的标准输出（如 Logcat、console.log）
@@ -27,7 +28,7 @@ object AppLogger {
             var lastFlushTime = org.gemini.ui.forge.getCurrentTimeMillis()
             
             while (true) {
-                val event = withTimeoutOrNull(500L) {
+                val event = withTimeoutOrNull(500L.milliseconds) {
                     logChannel.receive()
                 }
 

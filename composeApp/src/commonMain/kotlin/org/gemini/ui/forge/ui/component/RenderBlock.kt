@@ -1,5 +1,6 @@
 package org.gemini.ui.forge.ui.component
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,10 +19,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import org.gemini.ui.forge.model.ui.BlockProperties
+import org.gemini.ui.forge.model.ui.ImageResizeMode
+import org.gemini.ui.forge.model.ui.NinePatchConfig
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.utils.decodeToBitmap
 import org.jetbrains.compose.resources.stringResource
@@ -94,7 +101,9 @@ fun RenderBlock(
         contentAlignment = Alignment.Center
     ) {
         if (imageBitmap != null) {
-            // 渲染已生成的 AI 图像内容
+            // 渲染已固化好的 AI 图像成品。
+            // 由于图片已经在编辑器中按照 bounds 进行了拉伸、补白或九宫格固化，
+            // 这里的渲染逻辑应保持最简。
             Image(
                 bitmap = imageBitmap,
                 contentDescription = null,
@@ -133,4 +142,59 @@ fun RenderBlock(
             editingGroupId = editingGroupId
         )
     }
+}
+
+/**
+ * 手动绘制九宫格图片
+ */
+private fun DrawScope.drawNinePatch(image: ImageBitmap, config: NinePatchConfig) {
+    val srcW = image.width
+    val srcH = image.height
+    val dstW = size.width.toInt()
+    val dstH = size.height.toInt()
+
+    val l = config.left
+    val t = config.top
+    val r = config.right
+    val b = config.bottom
+
+    // 这里的逻辑需要处理目标尺寸小于边距的情况，简单起见直接按比例缩减或截断
+    // 1. Top-Left
+    drawImage(image, 
+        srcOffset = IntOffset(0, 0), srcSize = IntSize(l, t),
+        dstOffset = IntOffset(0, 0), dstSize = IntSize(l, t))
+    // 2. Top-Center
+    drawImage(image,
+        srcOffset = IntOffset(l, 0), srcSize = IntSize(srcW - l - r, t),
+        dstOffset = IntOffset(l, 0), dstSize = IntSize(dstW - l - r, t))
+    // 3. Top-Right
+    drawImage(image,
+        srcOffset = IntOffset(srcW - r, 0), srcSize = IntSize(r, t),
+        dstOffset = IntOffset(dstW - r, 0), dstSize = IntSize(r, t))
+    
+    // 4. Middle-Left
+    drawImage(image,
+        srcOffset = IntOffset(0, t), srcSize = IntSize(l, srcH - t - b),
+        dstOffset = IntOffset(0, t), dstSize = IntSize(l, dstH - t - b))
+    // 5. Middle-Center
+    drawImage(image,
+        srcOffset = IntOffset(l, t), srcSize = IntSize(srcW - l - r, srcH - t - b),
+        dstOffset = IntOffset(l, t), dstSize = IntSize(dstW - l - r, dstH - t - b))
+    // 6. Middle-Right
+    drawImage(image,
+        srcOffset = IntOffset(srcW - r, t), srcSize = IntSize(r, srcH - t - b),
+        dstOffset = IntOffset(dstW - r, t), dstSize = IntSize(r, dstH - t - b))
+
+    // 7. Bottom-Left
+    drawImage(image,
+        srcOffset = IntOffset(0, srcH - b), srcSize = IntSize(l, b),
+        dstOffset = IntOffset(0, dstH - b), dstSize = IntSize(l, b))
+    // 8. Bottom-Center
+    drawImage(image,
+        srcOffset = IntOffset(l, srcH - b), srcSize = IntSize(srcW - l - r, b),
+        dstOffset = IntOffset(l, dstH - b), dstSize = IntSize(dstW - l - r, b))
+    // 9. Bottom-Right
+    drawImage(image,
+        srcOffset = IntOffset(srcW - r, srcH - b), srcSize = IntSize(r, b),
+        dstOffset = IntOffset(dstW - r, dstH - b), dstSize = IntSize(r, b))
 }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.getCurrentTimeMillis
@@ -748,7 +749,7 @@ class TemplateAssetGenViewModel(
         markDirty()
     }
 
-    fun updateBlockProperties(blockId: String, properties: org.gemini.ui.forge.model.ui.BlockProperties) {
+    fun updateBlockProperties(blockId: String, properties: BlockProperties) {
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) page.copy(
@@ -760,6 +761,124 @@ class TemplateAssetGenViewModel(
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
         markDirty()
+    }
+
+    fun updateBlockImageConfig(
+        blockId: String,
+        resizeMode: ImageResizeMode,
+        ninePatchConfig: NinePatchConfig
+    ) {
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == currentState.selectedPageId) page.copy(
+                    blocks = updateBlockInList(
+                        page.blocks,
+                        blockId
+                    ) { it.copy(resizeMode = resizeMode, ninePatchConfig = ninePatchConfig) }) else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+        markDirty()
+    }
+
+    /**
+     * 将当前的图片缩放/九宫格配置“烘焙”成一张新的物理图片，并替换当前绑定的资源。
+     * 这解决了用户希望“修改后直接保存到本地”的需求。
+     */
+    fun bakeBlockImage(
+        blockId: String,
+        resizeMode: ImageResizeMode,
+        ninePatchConfig: NinePatchConfig,
+        targetWidth: Int,
+        targetHeight: Int,
+        contentWidth: Int,
+        contentHeight: Int // 维持外层调用不报错，但底层合并
+    ) {
+        val block = findBlockById(_state.value.project.pages.flatMap { it.blocks }, blockId) ?: run {
+            AppLogger.e("AssetGenVM", "❌ [错误] 找不到目标模块: $blockId")
+            return
+        }
+        val currentUri = block.currentImageUri ?: run {
+            AppLogger.e("AssetGenVM", "❌ [错误] 模块 $blockId 当前未绑定图片，无法固化")
+            return
+        }
+        val projectName = _state.value.projectName
+
+        viewModelScope.launch {
+            _state.update { it.copy(isGenerating = true) } // 仅显示轻量级 Loading（如果不希望阻断，甚至这句也可以优化掉）
+            AppLogger.i("AssetGenVM", "⏳ 开始固化流程: 模式=$resizeMode, 目标尺寸=${targetWidth}x$targetHeight")
+            try {
+                // 调用底层的图像处理逻辑
+                val bytes = withContext(Dispatchers.Default) {
+                    processImageBaking(
+                        sourcePath = currentUri.getAbsolutePath(),
+                        targetWidth = targetWidth.coerceAtLeast(1),
+                        targetHeight = targetHeight.coerceAtLeast(1),
+                        contentWidth = contentWidth.coerceAtLeast(1),
+                        contentHeight = contentHeight.coerceAtLeast(1),
+                        resizeMode = resizeMode,
+                        ninePatchConfig = ninePatchConfig
+                    )
+                }
+
+                if (bytes != null) {
+                    // 保存新文件，注意此处不会删除 sourcePath 对应的旧文件
+                    val newFile = templateRepo.saveBlockResource(
+                        projectName,
+                        blockId,
+                        "baked_${getCurrentTimeMillis()}",
+                        bytes,
+                        isPng = true
+                    )
+                    
+                    // 替换资源并重置缩放模式为 STRETCH，同时更新物理大小
+                    _state.update { currentState ->
+                        val updatedPages = currentState.project.pages.map { page ->
+                            if (page.id == currentState.selectedPageId) page.copy(
+                                blocks = updateBlockInList(page.blocks, blockId) {
+                                    it.copy(
+                                        currentImageUri = newFile,
+                                        resizeMode = ImageResizeMode.STRETCH,
+                                        bounds = it.bounds.copy(right = it.bounds.left + targetWidth.toFloat(), bottom = it.bounds.top + targetHeight.toFloat())
+                                    )
+                                }
+                            ) else page
+                        }
+                        currentState.copy(project = currentState.project.copy(pages = updatedPages))
+                    }
+                    
+                    val updatedProject = _state.value.project
+                    
+                    // 显式执行持久化保存，确保地址信息写入 template.json
+                    try {
+                        templateRepo.saveTemplate(projectName, updatedProject)
+                        AppLogger.i("AssetGenVM", "✅ 图像固化保存成功: ${newFile.relativePath.substringAfterLast('/')}")
+                        AppLogger.d("AssetGenVM", "ℹ️ 旧资源已保留在 assets 目录中")
+                    } catch (e: Exception) {
+                        AppLogger.e("AssetGenVM", "⚠️ 图像已生成但模板 JSON 保存失败", e)
+                    }
+                } else {
+                    AppLogger.e("AssetGenVM", "❌ 图像处理返回数据为空，请检查原图是否损坏或路径是否正确")
+                }
+            } catch (e: Exception) {
+                AppLogger.e("AssetGenVM", "❌ 图像固化抛出异常", e)
+            } finally {
+                _state.update { it.copy(isGenerating = false) }
+                markDirty()
+            }
+        }
+    }
+
+    private suspend fun processImageBaking(
+        sourcePath: String,
+        targetWidth: Int,
+        targetHeight: Int,
+        contentWidth: Int,
+        contentHeight: Int,
+        resizeMode: ImageResizeMode,
+        ninePatchConfig: NinePatchConfig
+    ): ByteArray? {
+        return bakeNinePatchImage(sourcePath, targetWidth, targetHeight, contentWidth, contentHeight, resizeMode, ninePatchConfig)
     }
 
     /**
@@ -795,105 +914,47 @@ class TemplateAssetGenViewModel(
             
             try {
                 coroutineScope {
-                    var finalPressedUri: TemplateFile? = null
-                    var finalDisabledUri: TemplateFile? = null
-
-                    // 1. 生成点击态 (Pressed)
-                    val pressedJob = launch {
-                        try {
-                            addGenLog("[Pressed] 正在生成点击态...")
-                            val pressedPrompt = "$basePrompt, pressed state, slightly darker, inner shadow, depressed, active visual feedback"
-                            
-                            val deferredBytes = CompletableDeferred<ByteArray>()
-                            aiService.generateImages(
-                                model = selectedModel,
-                                apiKey = apiKey,
-                                blockType = block.type.name,
-                                userPrompt = pressedPrompt,
-                                maxRetries = 3,
-                                targetWidth = block.bounds.width,
-                                targetHeight = block.bounds.height,
-                                isPng = isTransparent,
-                                style = globalStyle,
-                                referenceImageUri = baseImageUri, // 强制将主图作为参照
-                                onLog = { addGenLog("[Pressed SDK] $it") },
-                                onImageGenerated = { base64 ->
-                                    val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
-                                    @OptIn(ExperimentalEncodingApi::class)
-                                    deferredBytes.complete(Base64.decode(pure))
-                                }
-                            )
-                            
-                            val bytes = deferredBytes.await()
-                            var processedBytes = bytes
-                            if (isTransparent) {
-                                if (prioritizeCloud && apiKey.isNotBlank()) {
-                                    try { processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) ?: bytes } catch (e: Exception) {}
-                                }
-                                if (processedBytes === bytes) {
-                                    try { processedBytes = aiService.removeBackgroundLocal(bytes) ?: bytes } catch (e: Exception) {}
-                                }
-                            }
-                            
-                            finalPressedUri = templateRepo.saveBlockResource(projectName, block.id, "pressed_${getCurrentTimeMillis()}", processedBytes, isPng = isTransparent)
-                            addGenLog("✅ [Pressed] 点击态已保存")
-                        } catch (e: Exception) {
-                            addGenLog("❌ [Pressed] 失败: ${e.message}")
-                        }
+                    val pressedDeferred = async {
+                        generateSingleDerivedState(
+                            apiKey = apiKey,
+                            basePrompt = basePrompt,
+                            promptSuffix = "pressed state, slightly darker, inner shadow, depressed, active visual feedback",
+                            logPrefix = "[Pressed]",
+                            fileNamePrefix = "pressed",
+                            block = block,
+                            selectedModel = selectedModel,
+                            globalStyle = globalStyle,
+                            baseImageUri = baseImageUri,
+                            isTransparent = isTransparent,
+                            prioritizeCloud = prioritizeCloud,
+                            projectName = projectName
+                        )
                     }
 
-                    // 2. 生成禁用态 (Disabled)
-                    val disabledJob = launch {
-                        try {
-                            addGenLog("[Disabled] 正在生成禁用态...")
-                            val disabledPrompt = "$basePrompt, disabled state, grayed out, desaturated, lower contrast, unclickable, dull"
-                            
-                            val deferredBytes = CompletableDeferred<ByteArray>()
-                            aiService.generateImages(
-                                model = selectedModel,
-                                apiKey = apiKey,
-                                blockType = block.type.name,
-                                userPrompt = disabledPrompt,
-                                maxRetries = 3,
-                                targetWidth = block.bounds.width,
-                                targetHeight = block.bounds.height,
-                                isPng = isTransparent,
-                                style = globalStyle,
-                                referenceImageUri = baseImageUri, // 强制将主图作为参照
-                                onLog = { addGenLog("[Disabled SDK] $it") },
-                                onImageGenerated = { base64 ->
-                                    val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
-                                    @OptIn(ExperimentalEncodingApi::class)
-                                    deferredBytes.complete(Base64.decode(pure))
-                                }
-                            )
-                            
-                            val bytes = deferredBytes.await()
-                            var processedBytes = bytes
-                            if (isTransparent) {
-                                if (prioritizeCloud && apiKey.isNotBlank()) {
-                                    try { processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) ?: bytes } catch (e: Exception) {}
-                                }
-                                if (processedBytes === bytes) {
-                                    try { processedBytes = aiService.removeBackgroundLocal(bytes) ?: bytes } catch (e: Exception) {}
-                                }
-                            }
-                            
-                            finalDisabledUri = templateRepo.saveBlockResource(projectName, block.id, "disabled_${getCurrentTimeMillis()}", processedBytes, isPng = isTransparent)
-                            addGenLog("✅ [Disabled] 禁用态已保存")
-                        } catch (e: Exception) {
-                            addGenLog("❌ [Disabled] 失败: ${e.message}")
-                        }
+                    val disabledDeferred = async {
+                        generateSingleDerivedState(
+                            apiKey = apiKey,
+                            basePrompt = basePrompt,
+                            promptSuffix = "disabled state, grayed out, desaturated, lower contrast, unclickable, dull",
+                            logPrefix = "[Disabled]",
+                            fileNamePrefix = "disabled",
+                            block = block,
+                            selectedModel = selectedModel,
+                            globalStyle = globalStyle,
+                            baseImageUri = baseImageUri,
+                            isTransparent = isTransparent,
+                            prioritizeCloud = prioritizeCloud,
+                            projectName = projectName
+                        )
                     }
 
-                    // 等待两张图都生成并处理完毕
-                    pressedJob.join()
-                    disabledJob.join()
+                    val finalPressedUri = pressedDeferred.await()
+                    val finalDisabledUri = disabledDeferred.await()
 
                     // 更新到状态流
                     if (finalPressedUri != null || finalDisabledUri != null) {
-                        val existingProps = block.properties as? org.gemini.ui.forge.model.ui.BlockProperties.ButtonProperties 
-                            ?: org.gemini.ui.forge.model.ui.BlockProperties.ButtonProperties(isMultiState = true)
+                        val existingProps = block.properties as? BlockProperties.ButtonProperties
+                            ?: BlockProperties.ButtonProperties(isMultiState = true)
                         
                         val newProps = existingProps.copy(
                             pressedUri = finalPressedUri ?: existingProps.pressedUri,
@@ -912,6 +973,64 @@ class TemplateAssetGenViewModel(
                 _state.update { it.copy(isGenerating = false) }
             }
         }
+    }
+
+    private suspend fun generateSingleDerivedState(
+        apiKey: String,
+        basePrompt: String,
+        promptSuffix: String,
+        logPrefix: String,
+        fileNamePrefix: String,
+        block: UIBlock,
+        selectedModel: GeminiModel,
+        globalStyle: String,
+        baseImageUri: String,
+        isTransparent: Boolean,
+        prioritizeCloud: Boolean,
+        projectName: String
+    ): TemplateFile? {
+        var finalUri: TemplateFile? = null
+        try {
+            addGenLog("$logPrefix 正在生成...")
+            val targetPrompt = "$basePrompt, $promptSuffix"
+            
+            val deferredBytes = CompletableDeferred<ByteArray>()
+            aiService.generateImages(
+                model = selectedModel,
+                apiKey = apiKey,
+                blockType = block.type.name,
+                userPrompt = targetPrompt,
+                maxRetries = 3,
+                targetWidth = block.bounds.width,
+                targetHeight = block.bounds.height,
+                isPng = isTransparent,
+                style = globalStyle,
+                referenceImageUri = baseImageUri,
+                onLog = { addGenLog("$logPrefix SDK: $it") },
+                onImageGenerated = { base64 ->
+                    val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
+                    @OptIn(ExperimentalEncodingApi::class)
+                    deferredBytes.complete(Base64.decode(pure))
+                }
+            )
+            
+            val bytes = deferredBytes.await()
+            var processedBytes = bytes
+            if (isTransparent) {
+                if (prioritizeCloud && apiKey.isNotBlank()) {
+                    try { processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) ?: bytes } catch (e: Exception) {}
+                }
+                if (processedBytes === bytes) {
+                    try { processedBytes = aiService.removeBackgroundLocal(bytes) ?: bytes } catch (e: Exception) {}
+                }
+            }
+            
+            finalUri = templateRepo.saveBlockResource(projectName, block.id, "${fileNamePrefix}_${getCurrentTimeMillis()}", processedBytes, isPng = isTransparent)
+            addGenLog("✅ $logPrefix 已保存")
+        } catch (e: Exception) {
+            addGenLog("❌ $logPrefix 失败: ${e.message}")
+        }
+        return finalUri
     }
 
     fun toggleAllBlocksVisibility(isVisible: Boolean) {
