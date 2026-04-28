@@ -25,12 +25,14 @@ sealed class BlockProperties {
     /**
      * 按钮组件的属性配置。
      *
+     * @property text 按钮上显示的文案。
      * @property isMultiState 指示是否为按钮生成多种状态（如：正常、按下、禁用）的图片。
      * @property pressedUri 按钮处于按下状态（Pressed）时的图片资源路径。
      * @property disabledUri 按钮处于禁用状态（Disabled）时的图片资源路径。
      */
     @Serializable
     data class ButtonProperties(
+        val text: String = "",
         val isMultiState: Boolean = false,
         val pressedUri: TemplateFile? = null,
         val disabledUri: TemplateFile? = null

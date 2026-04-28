@@ -108,6 +108,7 @@ fun TemplateAssetGenScreen(
 
     var showHistoricalDialog by remember { mutableStateOf(false) }
     var historicalImages by remember { mutableStateOf<List<TemplateFile>>(emptyList()) }
+    var historySelectionTarget by remember { mutableStateOf(TemplateAssetGenViewModel.ButtonGenTarget.ALL) }
     var pendingCropUri by remember { mutableStateOf<String?>(null) }
     var showAILogs by remember { mutableStateOf(false) }
 
@@ -233,7 +234,7 @@ fun TemplateAssetGenScreen(
             onConfirm = { rect ->
                 isCropping = true
                 coroutineScope.launch {
-                    val success = viewModel.onImageCroppedAndSelected(pendingCropUri!!, rect)
+                    val success = viewModel.onImageCroppedAndSelected(pendingCropUri!!, rect, historySelectionTarget)
                     pendingCropUri = null
                     isCropping = false
                     if (success) {
@@ -262,7 +263,10 @@ fun TemplateAssetGenScreen(
                 viewModel.onImageSelected(it)
                 showCurrentGenerationResults = false 
             },
-            onCropRequested = { pendingCropUri = it.getAbsolutePath() },
+            onCropRequested = { 
+                historySelectionTarget = TemplateAssetGenViewModel.ButtonGenTarget.ALL // Force ALL for AI generated base image crop
+                pendingCropUri = it.getAbsolutePath() 
+            },
             onDeleteImages = { viewModel.deleteImages(it) },
             onClearAll = { 
                 if (pendingBlock != null) {
@@ -288,13 +292,28 @@ fun TemplateAssetGenScreen(
 
     if (showHistoricalDialog) {
         AssetSelectionDialog(
-            title = "历史资源列表",
+            title = when(historySelectionTarget) {
+                TemplateAssetGenViewModel.ButtonGenTarget.PRESSED -> "选择点击态历史资源"
+                TemplateAssetGenViewModel.ButtonGenTarget.DISABLED -> "选择禁用态历史资源"
+                else -> "历史资源列表"
+            },
             candidates = historicalImages,
-            initialSelectedUri = state.selectedBlock?.currentImageUri,
+            initialSelectedUri = when(historySelectionTarget) {
+                TemplateAssetGenViewModel.ButtonGenTarget.PRESSED -> (state.selectedBlock?.properties as? org.gemini.ui.forge.model.ui.BlockProperties.ButtonProperties)?.pressedUri
+                TemplateAssetGenViewModel.ButtonGenTarget.DISABLED -> (state.selectedBlock?.properties as? org.gemini.ui.forge.model.ui.BlockProperties.ButtonProperties)?.disabledUri
+                else -> state.selectedBlock?.currentImageUri
+            },
             targetWidth = state.selectedBlock?.bounds?.width ?: 0f,
             targetHeight = state.selectedBlock?.bounds?.height ?: 0f,
             isProcessing = state.isLocalProcessing,
-            onImageSelected = { viewModel.onImageSelected(it); showHistoricalDialog = false },
+            onImageSelected = { 
+                if (historySelectionTarget == TemplateAssetGenViewModel.ButtonGenTarget.ALL) {
+                    viewModel.onImageSelected(it)
+                } else {
+                    viewModel.onButtonStateImageSelected(it, historySelectionTarget)
+                }
+                showHistoricalDialog = false 
+            },
             onCropRequested = { pendingCropUri = it.getAbsolutePath() },
             onDeleteImages = { uris ->
                 viewModel.deleteImages(uris); historicalImages = historicalImages.filter { it !in uris }
@@ -399,6 +418,25 @@ fun TemplateAssetGenScreen(
                             state.selectedBlock?.let { block ->
                                 coroutineScope.launch {
                                     historicalImages = viewModel.loadHistoricalImages(block.id)
+                                    historySelectionTarget = TemplateAssetGenViewModel.ButtonGenTarget.ALL
+                                    showHistoricalDialog = true
+                                }
+                            }
+                        },
+                        onShowPressedHistory = {
+                            state.selectedBlock?.let { block ->
+                                coroutineScope.launch {
+                                    historicalImages = viewModel.loadHistoricalImages(block.id)
+                                    historySelectionTarget = TemplateAssetGenViewModel.ButtonGenTarget.PRESSED
+                                    showHistoricalDialog = true
+                                }
+                            }
+                        },
+                        onShowDisabledHistory = {
+                            state.selectedBlock?.let { block ->
+                                coroutineScope.launch {
+                                    historicalImages = viewModel.loadHistoricalImages(block.id)
+                                    historySelectionTarget = TemplateAssetGenViewModel.ButtonGenTarget.DISABLED
                                     showHistoricalDialog = true
                                 }
                             }

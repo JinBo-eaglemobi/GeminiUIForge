@@ -36,7 +36,8 @@ fun EditorPropertyPanel(
     apiKey: String,
     currentLang: PromptLanguage,
     onSwitchLang: (PromptLanguage) -> Unit,
-    onRefineClick: (String) -> Unit
+    onRefineClick: (String) -> Unit,
+    onSetReferenceAreaClick: (String) -> Unit
 ) {
     val selectedBlock = state.selectedBlock
 
@@ -286,6 +287,28 @@ fun EditorPropertyPanel(
                     Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
                     Text(stringResource(Res.string.action_refine_area))
+                }
+            }
+            
+            if (state.currentPage?.sourceImageUri != null) {
+                OutlinedButton(
+                    onClick = { onSetReferenceAreaClick(selectedBlock.id) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    enabled = !state.isGenerating,
+                    shape = AppShapes.medium
+                ) {
+                    Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp)) // 可以换个图标，如 Crop
+                    Spacer(Modifier.width(4.dp))
+                    Text("设置区域参考图")
+                }
+                
+                if (selectedBlock.referenceImage != null) {
+                    Text(
+                        "当前已设置局部参考图",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp).align(Alignment.CenterHorizontally)
+                    )
                 }
             }
 

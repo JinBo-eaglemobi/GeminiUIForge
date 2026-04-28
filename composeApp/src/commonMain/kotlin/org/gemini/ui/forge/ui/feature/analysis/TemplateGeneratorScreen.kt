@@ -47,6 +47,7 @@ fun TemplateGeneratorScreen(
     var currentTask by remember { mutableStateOf<AITask<ProjectState>?>(null) }
     val taskStatus by (currentTask?.status ?: MutableStateFlow(AITaskStatus.IDLE)).collectAsState()
     val taskResult by (currentTask?.result ?: MutableStateFlow<ProjectState?>(null)).collectAsState()
+    val aiProgress by (currentTask?.currentStatus ?: MutableStateFlow("")).collectAsState()
     
     var showLogs by remember { mutableStateOf(true) }
     var streamedJson by remember { mutableStateOf("") }
@@ -100,6 +101,7 @@ fun TemplateGeneratorScreen(
     if (currentTask != null && taskStatus != AITaskStatus.IDLE) {
         AITaskProgressDialog(
             title = "Gemini 智能 UI 分析中...",
+            currentStatus = aiProgress,
             logs = currentTask!!.logs,
             isProcessing = taskStatus == AITaskStatus.RUNNING,
             isLogVisible = showLogs,
@@ -194,12 +196,17 @@ fun TemplateGeneratorScreen(
                         updateProgress(0.2f)
 
                         // 执行 AI 分析
+                        var totalChars = 0
                         val result = aiService.analyzeImagesForTemplate(
                             imageUris = allImageUris,
                             apiKey = globalState.effectiveApiKey,
                             maxRetries = globalState.maxRetries,
                             onLog = { log(it) },
-                            onChunk = { streamedJson += it }
+                            onChunk = { 
+                                streamedJson += it 
+                                totalChars += it.length
+                                updateStatus("正在接收 UI 结构数据: $totalChars 字符")
+                            }
                         )
                         
                         updateProgress(1.0f)

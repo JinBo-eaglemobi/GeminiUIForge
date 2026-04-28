@@ -3,6 +3,7 @@ package org.gemini.ui.forge.ui.feature.assetgen
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,12 +25,23 @@ fun BlockSpecificProperties(
     apiKey: String,
     viewModel: TemplateAssetGenViewModel,
     state: TemplateAssetGenState,
+    onShowPressedHistory: () -> Unit = {},
+    onShowDisabledHistory: () -> Unit = {},
     onPropertiesChanged: (BlockProperties) -> Unit
 ) {
     when (blockType) {
         UIBlockType.BUTTON -> {
             val props = properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
-            Text("按钮多态配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text("按钮属性配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = props.text,
+                onValueChange = { onPropertiesChanged(props.copy(text = it)) },
+                label = { Text("按钮文案 (选填)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                enabled = !state.isGenerating
+            )
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(
@@ -47,39 +59,47 @@ fun BlockSpecificProperties(
                 
                 if (hasBaseImage) {
                     Button(
-                        onClick = { viewModel.generateDerivedButtonStates(apiKey) },
+                        onClick = { viewModel.openButtonGenDialog() },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !state.isGenerating,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                     ) {
                         Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("👉 参照当前图片生成点击与禁用态")
+                        Text("👉 准备多态生成 (编辑与预览)")
                     }
                     
                     Spacer(Modifier.height(12.dp))
-                    Text("衍生资源预览", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("当前绑定的多态资源", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
                     
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         // Pressed State Preview
                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                            Card(
-                                modifier = Modifier.fillMaxWidth().aspectRatio(1f),
-                                shape = AppShapes.small,
-                                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))
-                            ) {
-                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    if (props.pressedUri != null) {
-                                        AsyncImage(
-                                            model = props.pressedUri.getAbsolutePath(),
-                                            contentDescription = "Pressed State",
-                                            modifier = Modifier.fillMaxSize().padding(4.dp),
-                                            contentScale = ContentScale.Fit
-                                        )
-                                    } else {
-                                        Text("暂无", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                                Card(
+                                    modifier = Modifier.fillMaxSize(),
+                                    shape = AppShapes.small,
+                                    colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))
+                                ) {
+                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        if (props.pressedUri != null) {
+                                            AsyncImage(
+                                                model = props.pressedUri.getAbsolutePath(),
+                                                contentDescription = "Pressed State",
+                                                modifier = Modifier.fillMaxSize().padding(4.dp),
+                                                contentScale = ContentScale.Fit
+                                            )
+                                        } else {
+                                            Text("暂无", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
                                     }
+                                }
+                                IconButton(
+                                    onClick = onShowPressedHistory,
+                                    modifier = Modifier.align(Alignment.TopEnd).size(24.dp).padding(4.dp)
+                                ) {
+                                    Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                                 }
                             }
                             Text("点击态", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
@@ -87,22 +107,30 @@ fun BlockSpecificProperties(
                         
                         // Disabled State Preview
                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                            Card(
-                                modifier = Modifier.fillMaxWidth().aspectRatio(1f),
-                                shape = AppShapes.small,
-                                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))
-                            ) {
-                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    if (props.disabledUri != null) {
-                                        AsyncImage(
-                                            model = props.disabledUri.getAbsolutePath(),
-                                            contentDescription = "Disabled State",
-                                            modifier = Modifier.fillMaxSize().padding(4.dp),
-                                            contentScale = ContentScale.Fit
-                                        )
-                                    } else {
-                                        Text("暂无", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                                Card(
+                                    modifier = Modifier.fillMaxSize(),
+                                    shape = AppShapes.small,
+                                    colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))
+                                ) {
+                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        if (props.disabledUri != null) {
+                                            AsyncImage(
+                                                model = props.disabledUri.getAbsolutePath(),
+                                                contentDescription = "Disabled State",
+                                                modifier = Modifier.fillMaxSize().padding(4.dp),
+                                                contentScale = ContentScale.Fit
+                                            )
+                                        } else {
+                                            Text("暂无", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
                                     }
+                                }
+                                IconButton(
+                                    onClick = onShowDisabledHistory,
+                                    modifier = Modifier.align(Alignment.TopEnd).size(24.dp).padding(4.dp)
+                                ) {
+                                    Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                                 }
                             }
                             Text("禁用态", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))

@@ -270,7 +270,7 @@ class TemplateAssetGenViewModel(
                     targetHeight = block.bounds.height,
                     isPng = isTransparent,
                     style = globalStyle,
-                    referenceImageUri = refUri?.getAbsolutePath(),
+                    referenceImageUri = block.referenceImage?.getAbsolutePath() ?: refUri?.getAbsolutePath(),
                     onLog = { 
                         addGenLog("[AI-SDK] $it")
                         updateStatus("AI 交互中: $it")
@@ -410,7 +410,7 @@ class TemplateAssetGenViewModel(
                                     targetHeight = block.bounds.height,
                                     isPng = isTransparent,
                                     style = globalStyle,
-                                    referenceImageUri = refUri?.getAbsolutePath(),
+                                    referenceImageUri = block.referenceImage?.getAbsolutePath() ?: refUri?.getAbsolutePath(),
                                     onLog = { log ->
                                         updateWorker(slotId, blockId = block.id, action = "AI 生成中", info = log)
                                         addGenLog("[${block.id}] SDK: $log")
@@ -518,10 +518,35 @@ class TemplateAssetGenViewModel(
         notifySelectionHandled()
     }
 
+    /**
+     * 将选中的图片（通常来自历史记录）绑定到按钮的特定状态。
+     */
+    fun onButtonStateImageSelected(imageUri: TemplateFile, target: ButtonGenTarget) {
+        val block = _state.value.selectedBlock ?: return
+        
+        // 强类型安全锁：如果当前选中的根本不是按钮，直接拦截，防止属性被错误覆盖污染
+        if (block.type != UIBlockType.BUTTON) {
+            AppLogger.e("TemplateAssetGenViewModel", "⚠️ 尝试为非按钮模块绑定多态属性，已拦截！")
+            return
+        }
+        
+        val existingProps = block.properties as? BlockProperties.ButtonProperties
+            ?: BlockProperties.ButtonProperties(isMultiState = true)
+        
+        val newProps = when(target) {
+            ButtonGenTarget.PRESSED -> existingProps.copy(pressedUri = imageUri, isMultiState = true)
+            ButtonGenTarget.DISABLED -> existingProps.copy(disabledUri = imageUri, isMultiState = true)
+            else -> existingProps
+        }
+        
+        updateBlockProperties(block.id, newProps)
+        addGenLog("已从历史记录中恢复按钮的${if(target == ButtonGenTarget.PRESSED) "点击态" else "禁用态"}")
+    }
+
     /** 
      * 执行真正的图片裁剪，并将裁剪后的新图片保存绑定给当前的 UIBlock。
      */
-    suspend fun onImageCroppedAndSelected(originalUri: String, cropRect: SerialRect): Boolean {
+    suspend fun onImageCroppedAndSelected(originalUri: String, cropRect: SerialRect, target: ButtonGenTarget = ButtonGenTarget.ALL): Boolean {
         // 同样优先支持批量确认中的模块
         val blockId = _state.value.batchPendingConfirmBlock?.id ?: _state.value.selectedBlockId ?: return false
         val projectName = _state.value.projectName
@@ -564,8 +589,12 @@ class TemplateAssetGenViewModel(
                     )
                     
                     withContext(Dispatchers.Main) {
-                        // 裁剪完成后，调用统一的选择逻辑
-                        onImageSelected(croppedTFile)
+                        // 裁剪完成后，根据目标调用对应的选择逻辑
+                        if (target == ButtonGenTarget.ALL) {
+                            onImageSelected(croppedTFile)
+                        } else {
+                            onButtonStateImageSelected(croppedTFile, target)
+                        }
                     }
                     true
                 } else {
@@ -882,103 +911,155 @@ class TemplateAssetGenViewModel(
     }
 
     /**
-     * 以当前绑定的图片为参照，衍生生成点击态和禁用态的按钮图片。
+     * 打开按钮多态生成对话框，预置提示词。
      */
-    fun generateDerivedButtonStates(apiKey: String) {
+    fun openButtonGenDialog() {
         val block = _state.value.selectedBlock ?: return
-        val projectName = _state.value.projectName
-        val isTransparent = _state.value.isGenerateTransparent
-        val prioritizeCloud = _state.value.isPrioritizeCloudRemoval
-        val globalStyle = _state.value.globalStyle
-        val selectedModel = _state.value.selectedModel
-        
-        // 确保当前有基准图
-        val baseImageUri = block.currentImageUri?.getAbsolutePath()
-        if (baseImageUri == null) {
+        if (block.currentImageUri == null) {
             addGenLog("❌ [错误] 请先生成并绑定一张正常的按钮图片作为基准参照。")
             return
         }
 
+        val props = block.properties as? BlockProperties.ButtonProperties
         val basePrompt = block.fullPrompt
+        val textOnButton = props?.text ?: ""
+        
+        val pressedSuffix = "pressed state, slightly darker, inner shadow, depressed, active visual feedback"
+        val disabledSuffix = "disabled state, grayed out, desaturated, lower contrast, unclickable, dull"
+        
+        val textSuffix = if (textOnButton.isNotBlank()) ", with text \"$textOnButton\"" else ""
+
+        _state.update { it.copy(
+            showButtonGenDialog = true,
+            buttonPressedPrompt = "$basePrompt, $pressedSuffix$textSuffix",
+            buttonDisabledPrompt = "$basePrompt, $disabledSuffix$textSuffix",
+            buttonPressedCandidate = null,
+            buttonDisabledCandidate = null,
+            isButtonGenInProgress = false
+        ) }
+    }
+
+    fun updateButtonGenPrompts(pressed: String, disabled: String) {
+        _state.update { it.copy(
+            buttonPressedPrompt = pressed,
+            buttonDisabledPrompt = disabled
+        ) }
+    }
+
+    fun closeButtonGenDialog() {
+        _state.update { it.copy(showButtonGenDialog = false) }
+    }
+
+    enum class ButtonGenTarget { ALL, PRESSED, DISABLED }
+
+    /**
+     * 执行按钮状态衍生生成。支持单独生成某个状态。
+     */
+    fun executeButtonStateGen(apiKey: String, target: ButtonGenTarget = ButtonGenTarget.ALL) {
+        val block = _state.value.selectedBlock ?: return
+        val baseImageUri = block.currentImageUri?.getAbsolutePath() ?: return
+        val currentState = _state.value
+        
+        val projectName = currentState.projectName
+        val isTransparent = currentState.isGenerateTransparent
+        val prioritizeCloud = currentState.isPrioritizeCloudRemoval
+        val globalStyle = currentState.globalStyle
+        val selectedModel = currentState.selectedModel
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
-            _state.update { it.copy(
-                isGenerating = true, 
-                generationLogs = emptyList(), 
-                showAITaskDialog = true,
-                currentTaskStatus = "准备衍生生成..."
-            ) }
+            _state.update { it.copy(isButtonGenInProgress = true, showAITaskDialog = true) }
+            val targetName = when(target) {
+                ButtonGenTarget.PRESSED -> "点击态"
+                ButtonGenTarget.DISABLED -> "禁用态"
+                ButtonGenTarget.ALL -> "点击态与禁用态"
+            }
+            addGenLog("🚀 [开始衍生] 正在生成按钮$targetName...")
 
-            addGenLog("🚀 [开始衍生] 正在以当前图片为基准衍生按钮点击态与禁用态...")
-            
             try {
                 coroutineScope {
-                    val pressedDeferred = async {
-                        generateSingleDerivedState(
-                            apiKey = apiKey,
-                            basePrompt = basePrompt,
-                            promptSuffix = "pressed state, slightly darker, inner shadow, depressed, active visual feedback",
-                            logPrefix = "[Pressed]",
-                            fileNamePrefix = "pressed",
-                            block = block,
-                            selectedModel = selectedModel,
-                            globalStyle = globalStyle,
-                            baseImageUri = baseImageUri,
-                            isTransparent = isTransparent,
-                            prioritizeCloud = prioritizeCloud,
-                            projectName = projectName
-                        )
-                    }
+                    val pressedDeferred = if (target == ButtonGenTarget.ALL || target == ButtonGenTarget.PRESSED) {
+                        async {
+                            generateSingleDerivedStateManual(
+                                apiKey = apiKey,
+                                targetPrompt = currentState.buttonPressedPrompt,
+                                logPrefix = "[Pressed]",
+                                fileNamePrefix = "pressed",
+                                block = block,
+                                selectedModel = selectedModel,
+                                globalStyle = globalStyle,
+                                baseImageUri = baseImageUri,
+                                isTransparent = isTransparent,
+                                prioritizeCloud = prioritizeCloud,
+                                projectName = projectName
+                            )
+                        }
+                    } else null
 
-                    val disabledDeferred = async {
-                        generateSingleDerivedState(
-                            apiKey = apiKey,
-                            basePrompt = basePrompt,
-                            promptSuffix = "disabled state, grayed out, desaturated, lower contrast, unclickable, dull",
-                            logPrefix = "[Disabled]",
-                            fileNamePrefix = "disabled",
-                            block = block,
-                            selectedModel = selectedModel,
-                            globalStyle = globalStyle,
-                            baseImageUri = baseImageUri,
-                            isTransparent = isTransparent,
-                            prioritizeCloud = prioritizeCloud,
-                            projectName = projectName
-                        )
-                    }
+                    val disabledDeferred = if (target == ButtonGenTarget.ALL || target == ButtonGenTarget.DISABLED) {
+                        async {
+                            generateSingleDerivedStateManual(
+                                apiKey = apiKey,
+                                targetPrompt = currentState.buttonDisabledPrompt,
+                                logPrefix = "[Disabled]",
+                                fileNamePrefix = "disabled",
+                                block = block,
+                                selectedModel = selectedModel,
+                                globalStyle = globalStyle,
+                                baseImageUri = baseImageUri,
+                                isTransparent = isTransparent,
+                                prioritizeCloud = prioritizeCloud,
+                                projectName = projectName
+                            )
+                        }
+                    } else null
 
-                    val finalPressedUri = pressedDeferred.await()
-                    val finalDisabledUri = disabledDeferred.await()
+                    val finalPressedUri = pressedDeferred?.await() ?: if (target != ButtonGenTarget.ALL) currentState.buttonPressedCandidate else null
+                    val finalDisabledUri = disabledDeferred?.await() ?: if (target != ButtonGenTarget.ALL) currentState.buttonDisabledCandidate else null
 
-                    // 更新到状态流
-                    if (finalPressedUri != null || finalDisabledUri != null) {
-                        val existingProps = block.properties as? BlockProperties.ButtonProperties
-                            ?: BlockProperties.ButtonProperties(isMultiState = true)
-                        
-                        val newProps = existingProps.copy(
-                            pressedUri = finalPressedUri ?: existingProps.pressedUri,
-                            disabledUri = finalDisabledUri ?: existingProps.disabledUri
-                        )
-                        updateBlockProperties(block.id, newProps)
-                        addGenLog("🏁 [衍生完成] 多态资源已自动挂载到属性面板")
-                    } else {
-                        addGenLog("⚠️ [衍生结束] 未能成功生成新的状态资源")
-                    }
+                    _state.update { it.copy(
+                        buttonPressedCandidate = finalPressedUri,
+                        buttonDisabledCandidate = finalDisabledUri,
+                        isButtonGenInProgress = false
+                    ) }
+                    
+                    addGenLog("🏁 [生成完成] 请在对话框中预览并确认是否应用。")
                 }
             } catch (e: Exception) {
-                addGenLog(">>> [致命错误] 衍生任务崩溃: ${e.message} <<<")
-                updateStatus("衍生失败: ${e.message}")
-            } finally {
-                _state.update { it.copy(isGenerating = false) }
+                addGenLog(">>> [错误] 衍生任务异常: ${e.message} <<<")
+                _state.update { it.copy(isButtonGenInProgress = false) }
             }
         }
     }
 
-    private suspend fun generateSingleDerivedState(
+    /**
+     * 确认并应用生成的按钮状态。
+     */
+    fun confirmButtonStates() {
+        val block = _state.value.selectedBlock ?: return
+        val currentState = _state.value
+        val pressedUri = currentState.buttonPressedCandidate
+        val disabledUri = currentState.buttonDisabledCandidate
+
+        if (pressedUri == null && disabledUri == null) return
+
+        val existingProps = block.properties as? BlockProperties.ButtonProperties
+            ?: BlockProperties.ButtonProperties(isMultiState = true)
+        
+        val newProps = existingProps.copy(
+            pressedUri = pressedUri ?: existingProps.pressedUri,
+            disabledUri = disabledUri ?: existingProps.disabledUri,
+            isMultiState = true
+        )
+        updateBlockProperties(block.id, newProps)
+        
+        _state.update { it.copy(showButtonGenDialog = false) }
+        addGenLog("✅ 多态资源已应用到按钮属性")
+    }
+
+    private suspend fun generateSingleDerivedStateManual(
         apiKey: String,
-        basePrompt: String,
-        promptSuffix: String,
+        targetPrompt: String,
         logPrefix: String,
         fileNamePrefix: String,
         block: UIBlock,
@@ -992,7 +1073,6 @@ class TemplateAssetGenViewModel(
         var finalUri: TemplateFile? = null
         try {
             addGenLog("$logPrefix 正在生成...")
-            val targetPrompt = "$basePrompt, $promptSuffix"
             
             val deferredBytes = CompletableDeferred<ByteArray>()
             aiService.generateImages(

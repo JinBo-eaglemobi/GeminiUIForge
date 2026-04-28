@@ -48,7 +48,7 @@ fun AssetSelectionDialog(
     onDismiss: () -> Unit
 ) {
     // 基础状态
-    var tempSelectedUri by remember { mutableStateOf(initialSelectedUri) }
+    var tempSelectedUri by remember(initialSelectedUri) { mutableStateOf(initialSelectedUri) }
     
     // 目标比例
     val targetRatio = if (targetHeight > 0) targetWidth / targetHeight else 1f

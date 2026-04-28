@@ -21,6 +21,8 @@ data class TemplateEditorState(
     val isGenerating: Boolean = false,
     /** AI 任务日志 */
     val generationLogs: List<String> = emptyList(),
+    /** 实时 AI 任务状态文本 (如: 正在读取数据...) */
+    val aiStatus: String = "",
     /** 是否显示 AI 任务进度对话框 */
     val showAITaskDialog: Boolean = false,
     /** AI 优化指令模板 */

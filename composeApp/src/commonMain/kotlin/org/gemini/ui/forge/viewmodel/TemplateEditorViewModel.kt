@@ -485,6 +485,54 @@ class TemplateEditorViewModel(
         markDirty()
     }
 
+    fun onSetReferenceArea(
+        blockId: String,
+        bounds: SerialRect
+    ) {
+        val currentState = _state.value
+        val currentPage = currentState.currentPage
+        val originalImage = currentPage?.sourceImageUri ?: return
+
+        viewModelScope.launch {
+            try {
+                AppLogger.d("TemplateEditorViewModel", "✂️ 正在提取并保存模块 $blockId 的局部参考图...")
+                val croppedBytes = cropImage(
+                    imageSource = originalImage.getAbsolutePath(),
+                    bounds = bounds,
+                    logicalWidth = currentPage.width,
+                    logicalHeight = currentPage.height
+                ) ?: throw Exception("裁剪局部参考图失败")
+
+                val savedFile = templateRepo.saveBlockResource(
+                    templateName = currentState.projectName,
+                    blockId = blockId,
+                    fileNamePrefix = "ref",
+                    bytes = croppedBytes,
+                    isPng = false
+                )
+
+                _state.update { state ->
+                    val updatedPages = state.project.pages.map { page ->
+                        if (page.id == currentPage.id) {
+                            page.copy(
+                                blocks = updateBlockInList(page.blocks, blockId) { block ->
+                                    block.copy(referenceImage = savedFile)
+                                }
+                            )
+                        } else page
+                    }
+                    state.copy(project = state.project.copy(pages = updatedPages))
+                }
+                markDirty()
+                AppLogger.d("TemplateEditorViewModel", "✅ 局部参考图保存成功: ${savedFile.relativePath}")
+                Toast.show("局部参考图设置成功", ToastType.SUCCESS)
+            } catch (e: Exception) {
+                AppLogger.e("TemplateEditorViewModel", "❌ 设置局部参考图失败", e)
+                Toast.show("设置局部参考图失败", ToastType.ERROR)
+            }
+        }
+    }
+
     fun onRefineArea(
         blockId: String?,
         bounds: SerialRect,
@@ -499,8 +547,17 @@ class TemplateEditorViewModel(
         currentGenJob?.cancel()
         val task = aiService.createTask<ProjectState>("区域重构", viewModelScope)
         currentGenJob = viewModelScope.launch {
-            launch { task.status.collect { status -> _state.update { it.copy(isGenerating = status == AITaskStatus.RUNNING) } } }
-            _state.update { it.copy(isGenerating = true, showAITaskDialog = true, generationLogs = emptyList()) }
+            launch { 
+                task.status.collect { status -> 
+                    _state.update { it.copy(isGenerating = status == AITaskStatus.RUNNING) } 
+                } 
+            }
+            launch {
+                task.currentStatus.collect { status ->
+                    _state.update { it.copy(aiStatus = status) }
+                }
+            }
+            _state.update { it.copy(isGenerating = true, showAITaskDialog = true, generationLogs = emptyList(), aiStatus = "准备中...") }
             task.execute {
                 try {
                     val logger = { msg: String -> addGenLog(msg); log(msg) }
@@ -529,6 +586,8 @@ class TemplateEditorViewModel(
                         if (useChatContext) _state.value.chatHistories[historyKey] ?: emptyList() else emptyList()
                     logger("🤖 正在向 AI 发送区域重写请求...")
                     val currentJson = Json.encodeToString(currentState.project.pages)
+                    
+                    var totalBytes = 0
                     val updatedPages = aiService.refineAreaForTemplate(
                         originalImageUri = originalFileUri,
                         croppedBytes = croppedBytes,
@@ -536,7 +595,11 @@ class TemplateEditorViewModel(
                         userInstruction = userInstruction,
                         apiKey = apiKey,
                         history = history,
-                        onLog = logger
+                        onLog = logger,
+                        onChunk = { chunk ->
+                            totalBytes += chunk.length
+                            updateStatus("正在接收流式数据: $totalBytes 字符")
+                        }
                     )
                     val newUserMsg = ChatMessage("user", userInstruction)
                     val newModelMsg = ChatMessage("model", "已重塑 UI 结构。")

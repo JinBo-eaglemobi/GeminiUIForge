@@ -25,6 +25,8 @@ import org.gemini.ui.forge.ui.component.HierarchySidebar
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.jetbrains.compose.resources.stringResource
 
+import org.gemini.ui.forge.ui.dialog.ReferenceAreaCropDialog
+
 /**
  * 模板编辑器主页面。
  * 负责初始化 ViewModel、管理 UI 三栏布局结构、处理 AI 交互弹窗以及维护画布/属性面板的同步。
@@ -82,6 +84,8 @@ fun TemplateEditorScreen(
     // --- 内部 UI 状态控制 ---
     var showVisualRefine by remember { mutableStateOf(false) }
     var refineTargetId by remember { mutableStateOf<String?>(null) }
+    var showReferenceArea by remember { mutableStateOf(false) }
+    var referenceAreaTargetId by remember { mutableStateOf<String?>(null) }
     var showAILogs by remember { mutableStateOf(false) }
 
     // 当 AI 开始生成时，自动展开日志面板
@@ -94,7 +98,8 @@ fun TemplateEditorScreen(
     // 渲染 AI 任务执行进度弹窗
     if (state.showAITaskDialog) {
         AITaskProgressDialog(
-            title = if (state.generationLogs.any { it.contains("优化") || it.contains("润色") }) "智能优化提示词中..." else "正在执行区域重构...",
+            title = if (state.generationLogs.any { it.contains("优化") || it.contains("润色") }) "智能优化提示词中..." else "正在执行任务...",
+            currentStatus = state.aiStatus,
             logs = state.generationLogs,
             isProcessing = state.isGenerating,
             isLogVisible = showAILogs,
@@ -122,6 +127,21 @@ fun TemplateEditorScreen(
                     if (success) {
                         /* ViewModel 内部已处理状态更新，这里可以增加额外的 UI 反馈 */
                     }
+                }
+            }
+        )
+    }
+
+    if (showReferenceArea) {
+        ReferenceAreaCropDialog(
+            imageUri = state.currentPage?.sourceImageUri,
+            pageWidth = state.currentPage?.width ?: 1080f,
+            pageHeight = state.currentPage?.height ?: 1920f,
+            onDismiss = { showReferenceArea = false },
+            onConfirm = { rect ->
+                showReferenceArea = false
+                referenceAreaTargetId?.let { id ->
+                    viewModel.onSetReferenceArea(id, rect)
                 }
             }
         )
@@ -240,7 +260,8 @@ fun TemplateEditorScreen(
                     apiKey = effectiveApiKey,
                     currentLang = state.currentLang,
                     onSwitchLang = { viewModel.switchLang(it) },
-                    onRefineClick = { id -> refineTargetId = id; showVisualRefine = true }
+                    onRefineClick = { id -> refineTargetId = id; showVisualRefine = true },
+                    onSetReferenceAreaClick = { id -> referenceAreaTargetId = id; showReferenceArea = true }
                 )
             }
         }

@@ -58,7 +58,15 @@ data class TemplateAssetGenState(
     val batchProgress: Pair<Int, Int>? = null, // (已完成, 总数)
     val batchPendingConfirmBlock: UIBlock? = null,
     val currentTaskStatus: String = "", // 实时单行任务状态
-    val activeWorkers: List<WorkerStatus> = emptyList() // 任务 4 新增：并行工作槽位状态
+    val activeWorkers: List<WorkerStatus> = emptyList(), // 任务 4 新增：并行工作槽位状态
+
+    /** 按钮多态生成对话框相关 */
+    val showButtonGenDialog: Boolean = false,
+    val buttonPressedPrompt: String = "",
+    val buttonDisabledPrompt: String = "",
+    val buttonPressedCandidate: TemplateFile? = null,
+    val buttonDisabledCandidate: TemplateFile? = null,
+    val isButtonGenInProgress: Boolean = false
 ) {
     val currentPage get() = project.pages.find { it.id == selectedPageId }
     val selectedBlock: UIBlock?

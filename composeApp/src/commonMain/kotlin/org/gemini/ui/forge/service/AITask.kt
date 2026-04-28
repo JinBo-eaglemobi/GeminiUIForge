@@ -52,6 +52,10 @@ class AITask<T>(
     /** 观测当前任务进度，范围为 0.0f 到 1.0f */
     val progress = _progress.asStateFlow()
 
+    private val _currentStatus = MutableStateFlow("")
+    /** 观测当前实时任务状态 (任务 3 新增) */
+    val currentStatus = _currentStatus.asStateFlow()
+
     private val _error = MutableStateFlow<String?>(null)
     /** 观测任务失败时的错误信息，若无错误则为 null */
     val error = _error.asStateFlow()
@@ -135,5 +139,14 @@ class AITask<T>(
      */
     fun updateProgress(value: Float) {
         _progress.value = value.coerceIn(0f, 1f)
+    }
+
+    /**
+     * 更新实时任务状态文本 (任务 3 新增)
+     * 
+     * @param text 简短的状态描述，如 "正在接收数据: 1024 字节"
+     */
+    fun updateStatus(text: String) {
+        _currentStatus.value = text
     }
 }

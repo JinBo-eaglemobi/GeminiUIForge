@@ -23,6 +23,7 @@ import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.utils.rememberImagePicker
 import org.gemini.ui.forge.ui.dialog.ImageEditorDialog
+import org.gemini.ui.forge.ui.dialog.ButtonStateGenDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +34,8 @@ fun AssetGenPropertyPanel(
     currentEditingLang: PromptLanguage,
     onSwitchEditingLang: (PromptLanguage) -> Unit,
     onShowHistory: () -> Unit,
+    onShowPressedHistory: () -> Unit = {},
+    onShowDisabledHistory: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val selectedBlock = state.selectedBlock
@@ -46,6 +49,12 @@ fun AssetGenPropertyPanel(
     var showModelMenu by remember { mutableStateOf(false) }
     var showAdvancedSettingsDialog by remember { mutableStateOf(false) }
     var showImageEditor by remember { mutableStateOf(false) }
+
+    ButtonStateGenDialog(
+        state = state,
+        viewModel = viewModel,
+        apiKey = apiKey
+    )
 
     if (selectedBlock != null && showImageEditor) {
         ImageEditorDialog(
@@ -352,6 +361,8 @@ fun AssetGenPropertyPanel(
                 apiKey = apiKey,
                 viewModel = viewModel,
                 state = state,
+                onShowPressedHistory = onShowPressedHistory,
+                onShowDisabledHistory = onShowDisabledHistory,
                 onPropertiesChanged = { newProps -> viewModel.updateBlockProperties(selectedBlock.id, newProps) }
             )
 
