@@ -36,7 +36,16 @@ object ShortcutUtils {
             "z" -> event.key == Key.Z
             "y" -> event.key == Key.Y
             "f2" -> event.key == Key.F2
-            "delete" -> event.key == Key.Delete || event.key == Key.Backspace // Mac 上经常用 Backspace 充当 Delete
+            "delete" -> {
+                val isMac = try {
+                    org.gemini.ui.forge.getPlatform().name.contains("iOS") || 
+                    // 在 JVM 上通常可以通过系统属性判断
+                    System.getProperty("os.name")?.lowercase()?.contains("mac") == true
+                } catch (e: Exception) {
+                    false
+                }
+                if (isMac) event.key == Key.Delete || event.key == Key.Backspace else event.key == Key.Delete
+            }
             else -> false
         }
 

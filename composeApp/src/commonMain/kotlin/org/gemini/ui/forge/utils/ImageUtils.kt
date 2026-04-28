@@ -68,7 +68,7 @@ suspend fun TemplateFile.getImageSize(): Pair<Int, Int>? = getImageSize(this.get
  * 核心功能：将当前的拉伸/九宫格效果固化导出为一张新的位图字节流。
  */
 suspend fun bakeNinePatchImage(
-    sourcePath: String,
+    imageBytes: ByteArray,
     targetWidth: Int,
     targetHeight: Int,
     contentWidth: Int,
@@ -76,9 +76,8 @@ suspend fun bakeNinePatchImage(
     resizeMode: org.gemini.ui.forge.model.ui.ImageResizeMode,
     ninePatchConfig: org.gemini.ui.forge.model.ui.NinePatchConfig
 ): ByteArray? {
-    val bytes = readLocalFileBytes(sourcePath) ?: return null
     return try {
-        val srcImage = Image.makeFromEncoded(bytes)
+        val srcImage = Image.makeFromEncoded(imageBytes)
         val srcW = srcImage.width
         val srcH = srcImage.height
         
@@ -149,10 +148,26 @@ suspend fun bakeNinePatchImage(
 }
 
 /**
- * 跨平台图像裁剪与缩放逻辑 (基于 Skia)
+ * 核心功能：将当前的拉伸/九宫格效果固化导出为一张新的位图字节流。
+ */
+suspend fun bakeNinePatchImage(
+    sourcePath: String,
+    targetWidth: Int,
+    targetHeight: Int,
+    contentWidth: Int,
+    contentHeight: Int,
+    resizeMode: org.gemini.ui.forge.model.ui.ImageResizeMode,
+    ninePatchConfig: org.gemini.ui.forge.model.ui.NinePatchConfig
+): ByteArray? {
+    val bytes = readLocalFileBytes(sourcePath) ?: return null
+    return bakeNinePatchImage(bytes, targetWidth, targetHeight, contentWidth, contentHeight, resizeMode, ninePatchConfig)
+}
+
+/**
+ * 跨平台图像裁剪与缩放逻辑 (基于 Skia)，使用字节数组
  */
 suspend fun cropImage(
-    imageSource: String,
+    imageBytes: ByteArray,
     bounds: SerialRect,
     logicalWidth: Float,
     logicalHeight: Float,
@@ -160,9 +175,8 @@ suspend fun cropImage(
     forceWidth: Int? = null,
     forceHeight: Int? = null
 ): ByteArray? {
-    val bytes = readLocalFileBytes(imageSource) ?: return null
     return try {
-        val image = Image.makeFromEncoded(bytes)
+        val image = Image.makeFromEncoded(imageBytes)
         
         val scaleX = image.width.toFloat() / logicalWidth
         val scaleY = image.height.toFloat() / logicalHeight
@@ -215,9 +229,25 @@ suspend fun cropImage(
         val format = if (isPng) EncodedImageFormat.PNG else EncodedImageFormat.JPEG
         finalSurface.makeImageSnapshot().encodeToData(format, 100)?.bytes
     } catch (e: Exception) {
-        AppLogger.e("ImageUtils", "❌ 跨平台裁剪失败", e)
+        AppLogger.e("ImageUtils", "❌ 跨平台裁剪失败 (从字节)", e)
         null
     }
+}
+
+/**
+ * 跨平台图像裁剪与缩放逻辑 (基于 Skia)
+ */
+suspend fun cropImage(
+    imageSource: String,
+    bounds: SerialRect,
+    logicalWidth: Float,
+    logicalHeight: Float,
+    isPng: Boolean = true,
+    forceWidth: Int? = null,
+    forceHeight: Int? = null
+): ByteArray? {
+    val bytes = readLocalFileBytes(imageSource) ?: return null
+    return cropImage(bytes, bounds, logicalWidth, logicalHeight, isPng, forceWidth, forceHeight)
 }
 
 /** 扩展：从 TemplateFile 裁剪图片 */
@@ -231,12 +261,11 @@ suspend fun TemplateFile.crop(
 ): ByteArray? = cropImage(this.getAbsolutePath(), bounds, logicalWidth, logicalHeight, isPng, forceWidth, forceHeight)
 
 /**
- * 跨平台透明度边界检测 (基于 Skia)
+ * 跨平台透明度边界检测 (基于 Skia)，使用字节数组
  */
-suspend fun getNonTransparentBounds(imageSource: String): SerialRect? {
-    val bytes = readLocalFileBytes(imageSource) ?: return null
+fun getNonTransparentBounds(imageBytes: ByteArray): SerialRect? {
     return try {
-        val image = Image.makeFromEncoded(bytes)
+        val image = Image.makeFromEncoded(imageBytes)
         val width = image.width
         val height = image.height
         val bitmap = Bitmap()
@@ -256,11 +285,19 @@ suspend fun getNonTransparentBounds(imageSource: String): SerialRect? {
                 }
             }
         }
-        if (found) SerialRect(minX.toFloat(), minY.toFloat(), (maxX - minX + 1).toFloat(), (maxY - minY + 1).toFloat()) else null
+        if (found) SerialRect(minX.toFloat(), minY.toFloat(), maxX.toFloat() + 1f, maxY.toFloat() + 1f) else null
     } catch (e: Exception) {
-        AppLogger.e("ImageUtils", "❌ 边界检测异常", e)
+        AppLogger.e("ImageUtils", "❌ 字节数组边界检测异常", e)
         null
     }
+}
+
+/**
+ * 跨平台透明度边界检测 (基于 Skia)
+ */
+suspend fun getNonTransparentBounds(imageSource: String): SerialRect? {
+    val bytes = readLocalFileBytes(imageSource) ?: return null
+    return getNonTransparentBounds(bytes)
 }
 
 /**

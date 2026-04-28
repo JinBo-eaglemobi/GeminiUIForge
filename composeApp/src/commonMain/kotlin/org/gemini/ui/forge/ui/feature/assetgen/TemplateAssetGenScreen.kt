@@ -25,7 +25,7 @@ import org.gemini.ui.forge.viewmodel.TemplateAssetGenViewModel
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.dialog.AITaskProgressDialog
-import org.gemini.ui.forge.ui.dialog.AssetCropDialog
+import org.gemini.ui.forge.ui.dialog.ImageEditorDialog
 import org.gemini.ui.forge.ui.dialog.AssetSelectionDialog
 import org.gemini.ui.forge.ui.dialog.BatchAssetGenDialog
 import org.gemini.ui.forge.model.ui.UIBlock
@@ -226,24 +226,41 @@ fun TemplateAssetGenScreen(
     }
 
     if (pendingCropUri != null) {
-        var isCropping by remember { mutableStateOf(false) }
-        AssetCropDialog(
-            imageUri = pendingCropUri!!,
+        ImageEditorDialog(
+            initialImageUri = pendingCropUri,
             targetWidth = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.width ?: 0f,
             targetHeight = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.height ?: 0f,
-            onConfirm = { rect ->
-                isCropping = true
+            onDismiss = { pendingCropUri = null },
+            onConfirm = { bytes, mode, config ->
                 coroutineScope.launch {
-                    val success = viewModel.onImageCroppedAndSelected(pendingCropUri!!, rect, historySelectionTarget)
+                    // 由于 ImageEditorDialog 已经返回了裁剪/加工后的 bytes，
+                    // 我们直接调用 bakeBlockImage 来保存这些 bytes 到对应的 block
+                    val blockId = state.batchPendingConfirmBlock?.id ?: state.selectedBlockId
+                    if (blockId != null) {
+                        viewModel.bakeBlockImage(
+                            blockId = blockId,
+                            resizeMode = mode,
+                            ninePatchConfig = config,
+                            targetWidth = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.width?.toInt() ?: 100,
+                            targetHeight = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.height?.toInt() ?: 100,
+                            contentWidth = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.width?.toInt() ?: 100,
+                            contentHeight = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.height?.toInt() ?: 100,
+                            imageBytes = bytes
+                        )
+                    }
+                    
                     pendingCropUri = null
-                    isCropping = false
-                    if (success) {
-                        showCurrentGenerationResults = false
-                        showHistoricalDialog = false
+                    showCurrentGenerationResults = false
+                    showHistoricalDialog = false
+                    
+                    // 如果是多态选择，可能需要特殊处理，但目前先统一按主资源处理
+                    // 若需要恢复原有的 target 支持，可以在这里根据 historySelectionTarget 调用不同方法
+                    if (historySelectionTarget != TemplateAssetGenViewModel.ButtonGenTarget.ALL) {
+                         // TODO: 对于多态，目前的 bakeBlockImage 只支持主资源，这里可能需要补充逻辑
+                         // 但逻辑上，裁剪后的新图应该先作为主资源或者保存为 TemplateFile 后再绑定
                     }
                 }
-            },
-            onDismiss = { if (!isCropping) pendingCropUri = null }
+            }
         )
     }
 

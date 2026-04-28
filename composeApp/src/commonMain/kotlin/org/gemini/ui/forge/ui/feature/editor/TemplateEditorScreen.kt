@@ -147,6 +147,32 @@ fun TemplateEditorScreen(
         )
     }
 
+    // 全局模块删除确认对话框
+    if (state.showDeleteBlockConfirmation) {
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelDeleteBlock() },
+            title = { Text(stringResource(Res.string.action_delete_block)) },
+            text = { 
+                Text("确定要删除模块 \"${state.pendingDeleteBlockId}\" 吗？此操作将同时删除其所有子模块，且无法撤销。") 
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.confirmDeleteBlock() }
+                ) {
+                    Text(
+                        stringResource(Res.string.dialog_action_delete),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelDeleteBlock() }) {
+                    Text(stringResource(Res.string.dialog_action_cancel))
+                }
+            }
+        )
+    }
+
     // --- 主界面布局 ---
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val totalWidthPx = with(LocalDensity.current) { maxWidth.toPx() }

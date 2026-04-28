@@ -821,37 +821,51 @@ class TemplateAssetGenViewModel(
         targetWidth: Int,
         targetHeight: Int,
         contentWidth: Int,
-        contentHeight: Int // 维持外层调用不报错，但底层合并
+        contentHeight: Int,
+        imageBytes: ByteArray? = null // 新增可选字节流
     ) {
         val block = findBlockById(_state.value.project.pages.flatMap { it.blocks }, blockId) ?: run {
             AppLogger.e("AssetGenVM", "❌ [错误] 找不到目标模块: $blockId")
             return
         }
-        val currentUri = block.currentImageUri ?: run {
-            AppLogger.e("AssetGenVM", "❌ [错误] 模块 $blockId 当前未绑定图片，无法固化")
+        val currentUri = block.currentImageUri
+        if (currentUri == null && imageBytes == null) {
+            AppLogger.e("AssetGenVM", "❌ [错误] 模块 $blockId 当前未绑定图片且无字节流，无法固化")
             return
         }
         val projectName = _state.value.projectName
 
         viewModelScope.launch {
-            _state.update { it.copy(isGenerating = true) } // 仅显示轻量级 Loading（如果不希望阻断，甚至这句也可以优化掉）
+            _state.update { it.copy(isGenerating = true) } 
             AppLogger.i("AssetGenVM", "⏳ 开始固化流程: 模式=$resizeMode, 目标尺寸=${targetWidth}x$targetHeight")
             try {
                 // 调用底层的图像处理逻辑
                 val bytes = withContext(Dispatchers.Default) {
-                    processImageBaking(
-                        sourcePath = currentUri.getAbsolutePath(),
-                        targetWidth = targetWidth.coerceAtLeast(1),
-                        targetHeight = targetHeight.coerceAtLeast(1),
-                        contentWidth = contentWidth.coerceAtLeast(1),
-                        contentHeight = contentHeight.coerceAtLeast(1),
-                        resizeMode = resizeMode,
-                        ninePatchConfig = ninePatchConfig
-                    )
+                    if (imageBytes != null) {
+                        bakeNinePatchImage(
+                            imageBytes = imageBytes,
+                            targetWidth = targetWidth.coerceAtLeast(1),
+                            targetHeight = targetHeight.coerceAtLeast(1),
+                            contentWidth = contentWidth.coerceAtLeast(1),
+                            contentHeight = contentHeight.coerceAtLeast(1),
+                            resizeMode = resizeMode,
+                            ninePatchConfig = ninePatchConfig
+                        )
+                    } else {
+                        processImageBaking(
+                            sourcePath = currentUri!!.getAbsolutePath(),
+                            targetWidth = targetWidth.coerceAtLeast(1),
+                            targetHeight = targetHeight.coerceAtLeast(1),
+                            contentWidth = contentWidth.coerceAtLeast(1),
+                            contentHeight = contentHeight.coerceAtLeast(1),
+                            resizeMode = resizeMode,
+                            ninePatchConfig = ninePatchConfig
+                        )
+                    }
                 }
 
                 if (bytes != null) {
-                    // 保存新文件，注意此处不会删除 sourcePath 对应的旧文件
+                    // 保存新文件
                     val newFile = templateRepo.saveBlockResource(
                         projectName,
                         blockId,
@@ -868,6 +882,7 @@ class TemplateAssetGenViewModel(
                                     it.copy(
                                         currentImageUri = newFile,
                                         resizeMode = ImageResizeMode.STRETCH,
+                                        ninePatchConfig = NinePatchConfig(0, 0, 0, 0),
                                         bounds = it.bounds.copy(right = it.bounds.left + targetWidth.toFloat(), bottom = it.bounds.top + targetHeight.toFloat())
                                     )
                                 }
@@ -878,22 +893,23 @@ class TemplateAssetGenViewModel(
                     
                     val updatedProject = _state.value.project
                     
-                    // 显式执行持久化保存，确保地址信息写入 template.json
+                    // 显式执行持久化保存
                     try {
                         templateRepo.saveTemplate(projectName, updatedProject)
                         AppLogger.i("AssetGenVM", "✅ 图像固化保存成功: ${newFile.relativePath.substringAfterLast('/')}")
-                        AppLogger.d("AssetGenVM", "ℹ️ 旧资源已保留在 assets 目录中")
                     } catch (e: Exception) {
                         AppLogger.e("AssetGenVM", "⚠️ 图像已生成但模板 JSON 保存失败", e)
                     }
+                    markDirty()
+                    addGenLog("✅ 物理加工完成并已保存至本地资源库。")
                 } else {
-                    AppLogger.e("AssetGenVM", "❌ 图像处理返回数据为空，请检查原图是否损坏或路径是否正确")
+                    AppLogger.e("AssetGenVM", "❌ 图像处理返回数据为空")
                 }
             } catch (e: Exception) {
-                AppLogger.e("AssetGenVM", "❌ 图像固化抛出异常", e)
+                AppLogger.e("AssetGenVM", "❌ 固化失败", e)
+                addGenLog("❌ 固化操作执行异常: ${e.message}")
             } finally {
                 _state.update { it.copy(isGenerating = false) }
-                markDirty()
             }
         }
     }

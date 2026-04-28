@@ -33,7 +33,11 @@ data class TemplateEditorState(
     /** 模块 AI 会话历史 (Key 为 blockId 或 "GLOBAL") */
     val chatHistories: Map<String, List<org.gemini.ui.forge.model.api.ChatMessage>> = emptyMap(),
     /** 当前场景内使用的提示词语言状态 (独立维护，避免跨页面泄漏) */
-    val currentLang: org.gemini.ui.forge.model.app.PromptLanguage = org.gemini.ui.forge.model.app.PromptLanguage.ZH
+    val currentLang: org.gemini.ui.forge.model.app.PromptLanguage = org.gemini.ui.forge.model.app.PromptLanguage.ZH,
+    /** 是否显示删除确认弹窗 */
+    val showDeleteBlockConfirmation: Boolean = false,
+    /** 待删除的块 ID */
+    val pendingDeleteBlockId: String? = null
 ) {
     val currentPage get() = project.pages.find { it.id == selectedPageId }
     val selectedBlock: UIBlock? get() = currentPage?.let { page -> findBlockById(page.blocks, selectedBlockId ?: editingGroupId ?: "") }

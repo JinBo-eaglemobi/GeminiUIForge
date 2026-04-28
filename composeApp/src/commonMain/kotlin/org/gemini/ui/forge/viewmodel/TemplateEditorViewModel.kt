@@ -310,6 +310,20 @@ class TemplateEditorViewModel(
         markDirty()
     }
 
+    fun requestDeleteBlock(blockId: String) {
+        _state.update { it.copy(showDeleteBlockConfirmation = true, pendingDeleteBlockId = blockId) }
+    }
+
+    fun confirmDeleteBlock() {
+        val blockId = _state.value.pendingDeleteBlockId ?: return
+        deleteBlock(blockId)
+        _state.update { it.copy(showDeleteBlockConfirmation = false, pendingDeleteBlockId = null) }
+    }
+
+    fun cancelDeleteBlock() {
+        _state.update { it.copy(showDeleteBlockConfirmation = false, pendingDeleteBlockId = null) }
+    }
+
     fun deleteBlock(blockId: String) {
         AppLogger.d("TemplateEditorViewModel", "🗑️ 准备删除模块: $blockId")
         saveSnapshot()
@@ -403,7 +417,7 @@ class TemplateEditorViewModel(
         when (action) {
             ShortcutAction.UNDO -> undo()
             ShortcutAction.REDO -> redo()
-            ShortcutAction.DELETE -> _state.value.selectedBlockId?.let { deleteBlock(it) }
+            ShortcutAction.DELETE -> _state.value.selectedBlockId?.let { requestDeleteBlock(it) }
                 ?: AppLogger.d("TemplateEditorViewModel", "没有选中的模块可以删除")
 
             ShortcutAction.COPY -> copy()

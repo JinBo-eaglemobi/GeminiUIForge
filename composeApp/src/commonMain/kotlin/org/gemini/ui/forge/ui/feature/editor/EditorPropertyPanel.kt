@@ -315,10 +315,8 @@ fun EditorPropertyPanel(
             Spacer(Modifier.height(24.dp))
 
             // 块删除
-            var showDeleteConfirmDialog by remember { mutableStateOf(false) }
-
             Button(
-                onClick = { showDeleteConfirmDialog = true },
+                onClick = { viewModel.requestDeleteBlock(selectedBlock.id) },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.fillMaxWidth(),
                 shape = AppShapes.medium,
@@ -327,32 +325,6 @@ fun EditorPropertyPanel(
                 Icon(Icons.Default.Delete, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(Res.string.action_delete_block))
-            }
-
-            if (showDeleteConfirmDialog) {
-                AlertDialog(
-                    onDismissRequest = { showDeleteConfirmDialog = false },
-                    title = { Text(stringResource(Res.string.action_delete_block)) },
-                    text = { Text("确定要删除模块 \"${selectedBlock.id}\" 吗？此操作将同时删除其所有子模块，且无法撤销。") },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                showDeleteConfirmDialog = false
-                                viewModel.deleteBlock(selectedBlock.id)
-                            }
-                        ) {
-                            Text(
-                                stringResource(Res.string.dialog_action_delete),
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showDeleteConfirmDialog = false }) {
-                            Text(stringResource(Res.string.dialog_action_cancel))
-                        }
-                    }
-                )
             }
         }
     }

@@ -213,4 +213,31 @@
     <string name="batch_gen_processing">正在生成中: {0} / {1}</string>
     <string name="batch_gen_finished">批量生成任务已完成</string>
     <string name="batch_gen_empty">当前页面没有缺失图片资源的模块。</string>
+
+    <!-- Image Editor Dialog -->
+    <string name="image_editor_title">图片编辑器</string>
+    <string name="editor_tab_crop">裁剪适配</string>
+    <string name="editor_tab_bake">加工固化</string>
+    <string name="editor_crop_options">裁剪选项</string>
+    <string name="editor_target_ratio">目标比例: {0}</string>
+    <string name="editor_action_auto_fit">一键自动适配内容</string>
+    <string name="editor_action_apply_crop">执行并应用裁剪</string>
+    <string name="editor_bake_mode_title">烘焙模式</string>
+    <string name="editor_resize_stretch">强制拉伸</string>
+    <string name="editor_resize_fit">等比补白</string>
+    <string name="editor_resize_fill">等比铺满</string>
+    <string name="editor_resize_nine_patch">九宫格拉伸</string>
+    <string name="editor_canvas_size_label">1. 画布尺寸 (物理像素)</string>
+    <string name="editor_content_area_label">2. 内容区域 (渲染比例)</string>
+    <string name="editor_nine_patch_lines_label">九宫格边界线 (像素)</string>
+    <string name="editor_action_apply_bake">应用当前加工效果</string>
+    <string name="editor_action_save_final">保存并提交结果</string>
+    <string name="editor_current_base_size">当前底图尺寸: {0} x {1}</string>
+    <string name="editor_no_image">未加载图片</string>
+    <string name="label_left_short">左</string>
+    <string name="label_right_short">右</string>
+    <string name="label_top_short">上</string>
+    <string name="label_bottom_short">下</string>
+    <string name="label_width_short">宽</string>
+    <string name="label_height_short">高</string>
 </resources>

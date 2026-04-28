@@ -212,5 +212,32 @@
     <string name="batch_gen_start">Start Generating</string>
     <string name="batch_gen_processing">Generating: {0} / {1}</string>
     <string name="batch_gen_finished">Batch generation finished</string>
-    <string name="batch_gen_empty">No modules missing images in the current page.</string>
-</resources>
+    <string name="batch_gen_empty">No modules missing image resources on the current page.</string>
+
+    <!-- Image Editor Dialog -->
+    <string name="image_editor_title">Image Editor</string>
+    <string name="editor_tab_crop">Crop Adapt</string>
+    <string name="editor_tab_bake">Bake Process</string>
+    <string name="editor_crop_options">Crop Options</string>
+    <string name="editor_target_ratio">Target Ratio: {0}</string>
+    <string name="editor_action_auto_fit">Auto Fit Content</string>
+    <string name="editor_action_apply_crop">Apply Crop</string>
+    <string name="editor_bake_mode_title">Bake Mode</string>
+    <string name="editor_resize_stretch">Stretch</string>
+    <string name="editor_resize_fit">Fit (Padding)</string>
+    <string name="editor_resize_fill">Fill (Crop)</string>
+    <string name="editor_resize_nine_patch">9-Patch</string>
+    <string name="editor_canvas_size_label">1. Canvas Size (Pixels)</string>
+    <string name="editor_content_area_label">2. Content Area (Ratio)</string>
+    <string name="editor_nine_patch_lines_label">9-Patch Guides (Pixels)</string>
+    <string name="editor_action_apply_bake">Apply Baking</string>
+    <string name="editor_action_save_final">Save Final Result</string>
+    <string name="editor_current_base_size">Base Image: {0} x {1}</string>
+    <string name="editor_no_image">No Image Loaded</string>
+    <string name="label_left_short">L</string>
+    <string name="label_right_short">R</string>
+    <string name="label_top_short">T</string>
+    <string name="label_bottom_short">B</string>
+    <string name="label_width_short">W</string>
+    <string name="label_height_short">H</string>
+    </resources>

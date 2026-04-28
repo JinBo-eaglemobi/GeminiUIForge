@@ -60,13 +60,19 @@ fun AssetGenPropertyPanel(
         ImageEditorDialog(
             block = selectedBlock,
             onDismiss = { showImageEditor = false },
-            onSaveConfig = { newConfig ->
-                viewModel.updateBlockImageConfig(selectedBlock.id, selectedBlock.resizeMode, newConfig)
-                showImageEditor = false
-            },
-            onBakeImage = { mode, config, targetWidth, targetHeight, contentWidth, contentHeight ->
+            onConfirm = { bytes, mode, config ->
                 viewModel.updateBlockImageConfig(selectedBlock.id, mode, config)
-                viewModel.bakeBlockImage(selectedBlock.id, mode, config, targetWidth, targetHeight, contentWidth, contentHeight)
+                // 执行烘焙保存
+                viewModel.bakeBlockImage(
+                    selectedBlock.id, 
+                    mode, 
+                    config, 
+                    selectedBlock.bounds.width.toInt().coerceAtLeast(1), 
+                    selectedBlock.bounds.height.toInt().coerceAtLeast(1),
+                    selectedBlock.bounds.width.toInt().coerceAtLeast(1),
+                    selectedBlock.bounds.height.toInt().coerceAtLeast(1),
+                    bytes // 传字节流
+                )
                 showImageEditor = false
             }
         )

@@ -1,16 +1,17 @@
 package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -19,196 +20,475 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.*
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import org.gemini.ui.forge.model.ui.ImageResizeMode
-import org.gemini.ui.forge.model.ui.NinePatchConfig
-import org.gemini.ui.forge.model.ui.UIBlock
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.utils.AppLogger
-import org.gemini.ui.forge.utils.decodeToBitmap
+import org.gemini.ui.forge.utils.*
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.roundToInt
+import org.jetbrains.compose.resources.stringResource
+import geminiuiforge.composeapp.generated.resources.*
 
 private enum class DragTarget {
     NONE, PAN, LEFT, TOP, RIGHT, BOTTOM
 }
 
+private enum class EditorTab {
+    CROP, BAKE
+}
+
+/**
+ * 统一图片编辑器弹窗
+ * 整合了“适配裁剪区域”和“物理加工 (烘焙)”功能。
+ * 支持链式处理：裁剪后的结果可直接进入加工模式，反之亦然。
+ */
 @Composable
 fun ImageEditorDialog(
-    block: UIBlock,
+    block: UIBlock? = null,
+    initialImageUri: String? = null,
+    targetWidth: Float? = null,
+    targetHeight: Float? = null,
     onDismiss: () -> Unit,
-    onSaveConfig: (NinePatchConfig) -> Unit,
-    onBakeImage: (ImageResizeMode, NinePatchConfig, Int, Int, Int, Int) -> Unit
+    onConfirm: (ByteArray, ImageResizeMode, NinePatchConfig) -> Unit
 ) {
-    val imageBitmapState = produceState<ImageBitmap?>(null, block.currentImageUri) {
-        value = block.currentImageUri?.decodeToBitmap()
-    }
-    val imageBitmap = imageBitmapState.value 
+    val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    
+    // 基础参数初始化
+    val finalTargetW = targetWidth ?: block?.bounds?.width ?: 100f
+    val finalTargetH = targetHeight ?: block?.bounds?.height ?: 100f
+    val targetRatio = finalTargetW / finalTargetH
 
-    LaunchedEffect(imageBitmap) {
-        if (imageBitmap != null) {
-            AppLogger.d("ImageEditor", "✅ 编辑器图像已加载完毕, 尺寸: ${imageBitmap.width}x${imageBitmap.height}")
+    // 核心状态：当前处理中的图片字节流
+    var currentBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var isInitializing by remember { mutableStateOf(true) }
+
+    // 初始化加载
+    LaunchedEffect(Unit) {
+        val uri = initialImageUri ?: block?.currentImageUri?.getAbsolutePath()
+        if (uri != null) {
+            currentBytes = readLocalFileBytes(uri)
         }
+        isInitializing = false
     }
 
-    var editMode by remember { mutableStateOf(block.resizeMode) }
-    var ninePatchConfig by remember(imageBitmap) { 
-        mutableStateOf(
-            if (imageBitmap != null && block.ninePatchConfig.left == 0 && block.ninePatchConfig.right == 0 && block.ninePatchConfig.top == 0 && block.ninePatchConfig.bottom == 0) {
-                AppLogger.d("ImageEditor", "✨ 初始化默认九宫格边界为 1/3")
-                NinePatchConfig(imageBitmap.width / 3, imageBitmap.height / 3, imageBitmap.width / 3, imageBitmap.height / 3)
-            } else {
-                block.ninePatchConfig
-            }
-        ) 
+    // 基于当前字节流生成的预览位图
+    val imageBitmap by produceState<ImageBitmap?>(null, currentBytes) {
+        value = currentBytes?.toImageBitmap()
     }
-    
-    var canvasWidth by remember { mutableStateOf(block.bounds.width.toInt().coerceAtLeast(1)) }
-    var canvasHeight by remember { mutableStateOf(block.bounds.height.toInt().coerceAtLeast(1)) }
-    
-    var contentWidth by remember { mutableStateOf(block.bounds.width.toInt().coerceAtLeast(1)) }
-    var contentHeight by remember { mutableStateOf(block.bounds.height.toInt().coerceAtLeast(1)) }
+
+    // 编辑器状态
+    var selectedTab by remember { mutableStateOf(if (initialImageUri != null) EditorTab.CROP else EditorTab.BAKE) }
+    var isProcessing by remember { mutableStateOf(false) }
+
+    // --- 烘焙模式状态 ---
+    var bakeMode by remember { mutableStateOf(block?.resizeMode ?: ImageResizeMode.STRETCH) }
+    var ninePatchConfig by remember(imageBitmap) {
+        mutableStateOf(
+            if (imageBitmap != null && (block?.ninePatchConfig == null || (block.ninePatchConfig.left == 0 && block.ninePatchConfig.right == 0))) {
+                NinePatchConfig(imageBitmap!!.width / 3, imageBitmap!!.height / 3, imageBitmap!!.width / 3, imageBitmap!!.height / 3)
+            } else {
+                block?.ninePatchConfig ?: NinePatchConfig(0, 0, 0, 0)
+            }
+        )
+    }
+    var canvasWidth by remember { mutableStateOf(finalTargetW.toInt().coerceAtLeast(1)) }
+    var canvasHeight by remember { mutableStateOf(finalTargetH.toInt().coerceAtLeast(1)) }
+    var contentWidth by remember { mutableStateOf(finalTargetW.toInt().coerceAtLeast(1)) }
+    var contentHeight by remember { mutableStateOf(finalTargetH.toInt().coerceAtLeast(1)) }
+
+    // --- 裁剪模式状态 ---
+    var containerSize by remember { mutableStateOf(Size.Zero) }
+    var cropOffset by remember { mutableStateOf(Offset.Zero) }
+    var cropSize by remember { mutableStateOf(Size.Zero) }
+    var imageDisplayRect by remember { mutableStateOf(Rect.Zero) }
+
+    // 当容器尺寸或位图变化时，重新初始化裁剪框
+    LaunchedEffect(containerSize, imageBitmap, selectedTab) {
+        if (selectedTab != EditorTab.CROP) return@LaunchedEffect
+        val img = imageBitmap ?: return@LaunchedEffect
+        if (containerSize.width <= 0 || containerSize.height <= 0) return@LaunchedEffect
+
+        val containerRatio = containerSize.width / containerSize.height
+        val imgRatio = img.width.toFloat() / img.height
+        
+        val displayW: Float
+        val displayH: Float
+        if (imgRatio > containerRatio) {
+            displayW = containerSize.width
+            displayH = displayW / imgRatio
+        } else {
+            displayH = containerSize.height
+            displayW = displayH * imgRatio
+        }
+        
+        val left = (containerSize.width - displayW) / 2f
+        val top = (containerSize.height - displayH) / 2f
+        imageDisplayRect = Rect(left, top, left + displayW, top + displayH)
+
+        val initialW: Float
+        val initialH: Float
+        if (displayW / displayH > targetRatio) {
+            initialH = displayH * 0.9f
+            initialW = initialH * targetRatio
+        } else {
+            initialW = displayW * 0.9f
+            initialH = initialW / targetRatio
+        }
+        
+        cropSize = Size(initialW, initialH)
+        cropOffset = Offset(
+            imageDisplayRect.left + (displayW - initialW) / 2f,
+            imageDisplayRect.top + (displayH - initialH) / 2f
+        )
+    }
 
     Dialog(
-        onDismissRequest = {
-            AppLogger.d("ImageEditor", "关闭编辑器弹窗")
-            onDismiss()
-        },
+        onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(0.98f).fillMaxHeight(0.98f),
-            shape = RoundedCornerShape(8.dp),
+            shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surface
         ) {
-            Row(Modifier.fillMaxSize()) {
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0xFF151515)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (imageBitmap != null) {
-                        EditorStage(
-                            imageBitmap = imageBitmap, mode = editMode, config = ninePatchConfig,
-                            canvasW = canvasWidth, canvasH = canvasHeight, contentW = contentWidth, contentH = contentHeight,
-                            onConfigChange = { ninePatchConfig = it }
-                        )
-                        // 在左上角显示原图尺寸
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(16.dp)
-                                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = "原图尺寸: ${imageBitmap.width} x ${imageBitmap.height}",
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelMedium
-                            )
+            if (isInitializing) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                Row(Modifier.fillMaxSize()) {
+                    // [左侧] 主预览与交互区
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .background(Color(0xFF151515))
+                            .clipToBounds()
+                            .onGloballyPositioned { containerSize = it.size.toSize() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (imageBitmap != null) {
+                            if (selectedTab == EditorTab.BAKE) {
+                                EditorStage(
+                                    imageBitmap = imageBitmap!!, mode = bakeMode, config = ninePatchConfig,
+                                    canvasW = canvasWidth, canvasH = canvasHeight, contentW = contentWidth, contentH = contentHeight,
+                                    onConfigChange = { ninePatchConfig = it }
+                                )
+                            } else {
+                                // 裁剪交互层
+                                Image(
+                                    bitmap = imageBitmap!!,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Fit
+                                )
+                                
+                                if (imageDisplayRect != Rect.Zero && cropSize.width > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopStart)
+                                            .offset { IntOffset(cropOffset.x.roundToInt(), cropOffset.y.roundToInt()) }
+                                            .size(
+                                                width = with(density) { cropSize.width.toDp() },
+                                                height = with(density) { cropSize.height.toDp() }
+                                            )
+                                            .border(2.dp, Color.Cyan, RoundedCornerShape(2.dp))
+                                            .background(Color.Cyan.copy(alpha = 0.15f))
+                                            .pointerInput(imageDisplayRect) {
+                                                detectDragGestures { change, dragAmount ->
+                                                    change.consume()
+                                                    val newX = (cropOffset.x + dragAmount.x).coerceIn(
+                                                        imageDisplayRect.left, 
+                                                        imageDisplayRect.right - cropSize.width
+                                                    )
+                                                    val newY = (cropOffset.y + dragAmount.y).coerceIn(
+                                                        imageDisplayRect.top, 
+                                                        imageDisplayRect.bottom - cropSize.height
+                                                    )
+                                                    cropOffset = Offset(newX, newY)
+                                                }
+                                            }
+                                    ) {
+                                        // 右下角缩放手柄
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .size(32.dp)
+                                                .background(Color.Cyan, RoundedCornerShape(topStart = 8.dp))
+                                                .pointerInput(imageDisplayRect) {
+                                                    awaitPointerEventScope {
+                                                        while (true) {
+                                                            val down = awaitFirstDown()
+                                                            var pointerId = down.id
+                                                            while (true) {
+                                                                val event = awaitPointerEvent()
+                                                                val change = event.changes.find { it.id == pointerId } ?: break
+                                                                if (change.changedToUp()) break
+                                                                val isAlt = event.keyboardModifiers.isAltPressed
+                                                                val dragAmount = change.positionChange()
+                                                                change.consume()
+                                                                
+                                                                val currentS = cropSize
+                                                                val currentO = cropOffset
+                                                                
+                                                                if (isAlt) {
+                                                                    // 居中缩放
+                                                                    val delta = if (abs(dragAmount.x) > abs(dragAmount.y)) dragAmount.x else dragAmount.y * targetRatio
+                                                                    val maxDX = minOf(currentO.x - imageDisplayRect.left, imageDisplayRect.right - (currentO.x + currentS.width))
+                                                                    val maxDY = minOf(currentO.y - imageDisplayRect.top, imageDisplayRect.bottom - (currentO.y + currentS.height))
+                                                                    val safeD = delta.coerceIn(-(currentS.width/2 - 20f), minOf(maxDX, maxDY * targetRatio))
+                                                                    cropSize = Size(currentS.width + 2*safeD, (currentS.width + 2*safeD) / targetRatio)
+                                                                    cropOffset = Offset(currentO.x - safeD, currentO.y - safeD/targetRatio)
+                                                                } else {
+                                                                    // 边缘缩放
+                                                                    val maxW = imageDisplayRect.right - currentO.x
+                                                                    val maxH = imageDisplayRect.bottom - currentO.y
+                                                                    var dX = dragAmount.x
+                                                                    var dY = dX / targetRatio
+                                                                    if (currentS.width + dX > maxW) { dX = maxW - currentS.width; dY = dX / targetRatio }
+                                                                    if (currentS.height + dY > maxH) { dY = maxH - currentS.height; dX = dY * targetRatio }
+                                                                    val finalW = (currentS.width + dX).coerceAtLeast(40f)
+                                                                    cropSize = Size(finalW, finalW / targetRatio)
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                        ) {
+                                            Icon(Icons.Default.AspectRatio, null, Modifier.size(16.dp).align(Alignment.Center), tint = Color.Black)
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // 尺寸信息
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(16.dp)
+                                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                val sizeText = stringResource(Res.string.editor_current_base_size)
+                                    .replace("{0}", imageBitmap!!.width.toString())
+                                    .replace("{1}", imageBitmap!!.height.toString())
+                                Text(sizeText, color = Color.White, style = MaterialTheme.typography.labelSmall)
+                            }
+                        } else {
+                            Text(stringResource(Res.string.editor_no_image), color = Color.Gray)
                         }
-                    } else {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.height(16.dp))
-                            Text("正在加载图片...", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                        
+                        if (isProcessing) {
+                            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
                         }
                     }
-                }
 
-                Surface(
-                    modifier = Modifier.width(340.dp).fillMaxHeight(),
-                    tonalElevation = 2.dp,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                ) {
-                    Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-                        Text("物理加工 (Baking)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(16.dp))
+                    // [右侧] 控制面板
+                    Surface(
+                        modifier = Modifier.width(360.dp).fillMaxHeight(),
+                        tonalElevation = 2.dp,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(Modifier.fillMaxSize()) {
+                            // 标签页切换
+                            TabRow(selectedTabIndex = selectedTab.ordinal) {
+                                Tab(selected = selectedTab == EditorTab.CROP, onClick = { selectedTab = EditorTab.CROP }) {
+                                    Box(Modifier.padding(12.dp)) { Text(stringResource(Res.string.editor_tab_crop)) }
+                                }
+                                Tab(selected = selectedTab == EditorTab.BAKE, onClick = { selectedTab = EditorTab.BAKE }) {
+                                    Box(Modifier.padding(12.dp)) { Text(stringResource(Res.string.editor_tab_bake)) }
+                                }
+                            }
 
-                        Text("加工模式", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(8.dp))
-                        ImageResizeMode.entries.forEach { mode ->
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { 
-                                AppLogger.d("ImageEditor", "👆 切换加工模式: $mode")
-                                editMode = mode 
-                            }) {
-                                RadioButton(selected = editMode == mode, onClick = { 
-                                    AppLogger.d("ImageEditor", "👆 切换加工模式: $mode")
-                                    editMode = mode 
-                                })
-                                Text(when(mode) {
-                                    ImageResizeMode.STRETCH -> "强制拉伸"
-                                    ImageResizeMode.FIT_WITH_PADDING -> "等比补白"
-                                    ImageResizeMode.CROP_TO_FILL -> "等比铺满"
-                                    ImageResizeMode.NINE_PATCH -> "九宫格拉伸"
-                                }, style = MaterialTheme.typography.bodyMedium)
+                            Column(Modifier.weight(1f).padding(16.dp).verticalScroll(rememberScrollState())) {
+                                when (selectedTab) {
+                                    EditorTab.CROP -> {
+                                        Text(stringResource(Res.string.editor_crop_options), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                                        Spacer(Modifier.height(16.dp))
+                                        Text(stringResource(Res.string.editor_target_ratio, ((targetRatio * 100).toInt() / 100f).toString()), style = MaterialTheme.typography.bodyMedium)
+                                        Spacer(Modifier.height(24.dp))
+                                        
+                                        Button(
+                                            onClick = {
+                                                coroutineScope.launch {
+                                                    val bytes = currentBytes ?: return@launch
+                                                    val bounds = getNonTransparentBounds(bytes)
+                                                    val img = imageBitmap ?: return@launch
+                                                    if (bounds != null && imageDisplayRect != Rect.Zero) {
+                                                        val scaleX = imageDisplayRect.width / img.width.toFloat()
+                                                        val scaleY = imageDisplayRect.height / img.height.toFloat()
+                                                        
+                                                        // 内容在显示区域中的绝对位置
+                                                        val subjL = imageDisplayRect.left + bounds.left * scaleX
+                                                        val subjT = imageDisplayRect.top + bounds.top * scaleY
+                                                        val subjW = bounds.width * scaleX
+                                                        val subjH = bounds.height * scaleY
+                                                        
+                                                        // 计算内容中心
+                                                        val contentCenterX = subjL + subjW / 2f
+                                                        val contentCenterY = subjT + subjH / 2f
+                                                        
+                                                        // 初始选框尺寸 (覆盖内容并保持比例)
+                                                        var nW = if (subjW / subjH > targetRatio) subjW else subjH * targetRatio
+                                                        var nH = nW / targetRatio
+                                                        
+                                                        // 增加一点呼吸边距 (5%)
+                                                        nW *= 1.05f
+                                                        nH *= 1.05f
+                                                        
+                                                        // 限制选框不超出图片显示边界
+                                                        if (nW > imageDisplayRect.width) {
+                                                            nW = imageDisplayRect.width
+                                                            nH = nW / targetRatio
+                                                        }
+                                                        if (nH > imageDisplayRect.height) {
+                                                            nH = imageDisplayRect.height
+                                                            nW = nH * targetRatio
+                                                        }
+                                                        
+                                                        // 计算选框左上角坐标，使其中心对齐内容中心
+                                                        var nX = contentCenterX - nW / 2f
+                                                        var nY = contentCenterY - nH / 2f
+                                                        
+                                                        // 最终边界修正，确保不移出图片
+                                                        nX = nX.coerceIn(imageDisplayRect.left, imageDisplayRect.right - nW)
+                                                        nY = nY.coerceIn(imageDisplayRect.top, imageDisplayRect.bottom - nH)
+                                                        
+                                                        cropSize = Size(nW, nH)
+                                                        cropOffset = Offset(nX, nY)
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = AppShapes.medium,
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                                        ) {
+                                            Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(stringResource(Res.string.editor_action_auto_fit))
+                                        }
+                                        
+                                        Spacer(Modifier.height(12.dp))
+                                        
+                                        OutlinedButton(
+                                            onClick = {
+                                                isProcessing = true
+                                                coroutineScope.launch {
+                                                    val bytes = currentBytes ?: return@launch
+                                                    val img = imageBitmap ?: return@launch
+                                                    val relX = (cropOffset.x - imageDisplayRect.left) / imageDisplayRect.width
+                                                    val relY = (cropOffset.y - imageDisplayRect.top) / imageDisplayRect.height
+                                                    val relW = cropSize.width / imageDisplayRect.width
+                                                    val relH = cropSize.height / imageDisplayRect.height
+                                                    
+                                                    val result = cropImage(bytes, SerialRect(relX, relY, relX + relW, relY + relH), img.width.toFloat(), img.height.toFloat(), true, finalTargetW.toInt(), finalTargetH.toInt())
+                                                    if (result != null) {
+                                                        currentBytes = result
+                                                        // 重置烘焙尺寸为新图尺寸
+                                                        canvasWidth = finalTargetW.toInt(); canvasHeight = finalTargetH.toInt()
+                                                        contentWidth = finalTargetW.toInt(); contentHeight = finalTargetH.toInt()
+                                                    }
+                                                    isProcessing = false
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = AppShapes.medium
+                                        ) {
+                                            Icon(Icons.Default.ContentCut, null, Modifier.size(18.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(stringResource(Res.string.editor_action_apply_crop))
+                                        }
+                                    }
+                                    EditorTab.BAKE -> {
+                                        Text(stringResource(Res.string.editor_bake_mode_title), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                                        Spacer(Modifier.height(16.dp))
+                                        ImageResizeMode.entries.forEach { mode ->
+                                            Row(Modifier.fillMaxWidth().clickable { bakeMode = mode }, verticalAlignment = Alignment.CenterVertically) {
+                                                RadioButton(selected = bakeMode == mode, onClick = { bakeMode = mode })
+                                                Text(when(mode) {
+                                                    ImageResizeMode.STRETCH -> stringResource(Res.string.editor_resize_stretch)
+                                                    ImageResizeMode.FIT_WITH_PADDING -> stringResource(Res.string.editor_resize_fit)
+                                                    ImageResizeMode.CROP_TO_FILL -> stringResource(Res.string.editor_resize_fill)
+                                                    ImageResizeMode.NINE_PATCH -> stringResource(Res.string.editor_resize_nine_patch)
+                                                }, style = MaterialTheme.typography.bodyMedium)
+                                            }
+                                        }
+                                        HorizontalDivider(Modifier.padding(vertical = 16.dp))
+                                        Text(stringResource(Res.string.editor_canvas_size_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                        Spacer(Modifier.height(8.dp))
+                                        SizeInputRow(canvasWidth, canvasHeight, { canvasWidth = it }, { canvasHeight = it })
+                                        Spacer(Modifier.height(16.dp))
+                                        Text(stringResource(Res.string.editor_content_area_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                        Spacer(Modifier.height(8.dp))
+                                        SizeInputRow(contentWidth, contentHeight, { contentWidth = it }, { contentHeight = it })
+                                        
+                                        if (bakeMode == ImageResizeMode.NINE_PATCH) {
+                                            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+                                            Text(stringResource(Res.string.editor_nine_patch_lines_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                            Spacer(Modifier.height(12.dp))
+                                            NinePatchInputGrid(ninePatchConfig, imageBitmap?.width ?: 1, imageBitmap?.height ?: 1) { ninePatchConfig = it }
+                                        }
+                                        
+                                        Spacer(Modifier.height(24.dp))
+                                        OutlinedButton(
+                                            onClick = {
+                                                isProcessing = true
+                                                coroutineScope.launch {
+                                                    val bytes = currentBytes ?: return@launch
+                                                    val result = bakeNinePatchImage(bytes, canvasWidth, canvasHeight, contentWidth, contentHeight, bakeMode, ninePatchConfig)
+                                                    if (result != null) {
+                                                        currentBytes = result
+                                                    }
+                                                    isProcessing = false
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = AppShapes.medium
+                                        ) {
+                                            Icon(Icons.Default.Layers, null, Modifier.size(18.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(stringResource(Res.string.editor_action_apply_bake))
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 底部操作栏
+                            Surface(Modifier.fillMaxWidth(), tonalElevation = 8.dp) {
+                                Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    OutlinedButton(onClick = onDismiss, Modifier.weight(1f)) { Text(stringResource(Res.string.prop_cancel)) }
+                                    Button(
+                                        onClick = {
+                                            val bytes = currentBytes ?: return@Button
+                                            onConfirm(bytes, bakeMode, ninePatchConfig)
+                                        },
+                                        Modifier.weight(1f),
+                                        enabled = currentBytes != null && !isProcessing
+                                    ) {
+                                        Icon(Icons.Default.Check, null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(stringResource(Res.string.editor_action_save_final))
+                                    }
+                                }
                             }
                         }
-
-                        HorizontalDivider(Modifier.padding(vertical = 16.dp))
-
-                        Text("1. 画布尺寸 (物理文件)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(8.dp))
-                        SizeInputRow(canvasWidth, canvasHeight, { 
-                            AppLogger.d("ImageEditor", "✏️ 修改画布宽度: $it")
-                            canvasWidth = it 
-                        }, { 
-                            AppLogger.d("ImageEditor", "✏️ 修改画布高度: $it")
-                            canvasHeight = it 
-                        })
-                        
-                        Spacer(Modifier.height(16.dp))
-                        Text("2. 内容比例 (内存放大)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(8.dp))
-                        SizeInputRow(contentWidth, contentHeight, { 
-                            AppLogger.d("ImageEditor", "✏️ 修改内容宽度: $it")
-                            contentWidth = it 
-                        }, { 
-                            AppLogger.d("ImageEditor", "✏️ 修改内容高度: $it")
-                            contentHeight = it 
-                        })
-                        
-                        if (editMode == ImageResizeMode.NINE_PATCH) {
-                            HorizontalDivider(Modifier.padding(vertical = 16.dp))
-                            Text("九宫格边界线 (像素)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.height(12.dp))
-                            val imgW = imageBitmap?.width ?: 1
-                            val imgH = imageBitmap?.height ?: 1
-                            NinePatchInputGrid(ninePatchConfig, imgW, imgH) { 
-                                AppLogger.d("ImageEditor", "✏️ 手动输入九宫格配置: $it")
-                                ninePatchConfig = it 
-                            }
-                        }
-
-                        Spacer(Modifier.weight(1f))
-                        Spacer(Modifier.height(24.dp))
-                        
-                        Button(
-                            onClick = { 
-                                AppLogger.i("ImageEditor", "🚀 点击保存新图片！参数 - 模式:$editMode, 画布:${canvasWidth}x${canvasHeight}, 内容:${contentWidth}x${contentHeight}, 九宫格配置:$ninePatchConfig")
-                                onBakeImage(editMode, ninePatchConfig, canvasWidth, canvasHeight, contentWidth, contentHeight) 
-                            },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = AppShapes.medium,
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                            enabled = imageBitmap != null
-                        ) {
-                            Icon(Icons.Default.Save, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("保存新图片")
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(onClick = {
-                            AppLogger.d("ImageEditor", "点击取消修改")
-                            onDismiss()
-                        }, modifier = Modifier.fillMaxWidth()) { Text("取消修改") }
                     }
                 }
             }
@@ -239,7 +519,6 @@ private fun EditorStage(
                 viewZoom = if (fitScale < 1f) fitScale else 1f
                 viewOffset = Offset((it.size.width - canvasW * viewZoom) / 2f, (it.size.height - canvasH * viewZoom) / 2f)
                 isInitialized = true
-                AppLogger.d("ImageEditor", "👁️ 视口初始化完毕: Zoom=$viewZoom, Offset=$viewOffset")
             }
         }.pointerInput(Unit) {
             awaitPointerEventScope {
@@ -253,7 +532,6 @@ private fun EditorStage(
                         viewZoom = (viewZoom * factor).coerceIn(0.05f, 100f)
                         viewOffset = centroid - (centroid - viewOffset) * (viewZoom / oldZoom)
                         event.changes.first().consume()
-                        AppLogger.d("ImageEditor", "🔍 鼠标滚轮缩放: 新Zoom=$viewZoom")
                     }
                 }
             }
@@ -274,13 +552,8 @@ private fun EditorStage(
                             else -> DragTarget.PAN
                         }
                     } else activeLine = DragTarget.PAN
-                    
-                    AppLogger.d("ImageEditor", "🖐️ 手势拖拽开始, 击中目标: $activeLine")
                 },
-                onDragEnd = { 
-                    AppLogger.d("ImageEditor", "🖐️ 手势拖拽结束. 最新配置: L=${dragL.toInt()}, T=${dragT.toInt()}, R=${dragR.toInt()}, B=${dragB.toInt()}")
-                    activeLine = DragTarget.NONE 
-                },
+                onDragEnd = { activeLine = DragTarget.NONE },
                 onDrag = { change, amt ->
                     change.consume()
                     if (activeLine == DragTarget.PAN) {
@@ -307,7 +580,7 @@ private fun EditorStage(
             drawCheckerboard(Rect(viewOffset, Size(dCanW, dCanH)))
             val dConW = contentW * viewZoom; val dConH = contentH * viewZoom
             val cX = viewOffset.x + (dCanW - dConW) / 2f; val cY = viewOffset.y + (dCanH - dConH) / 2f
-            renderProcessed(imageBitmap, mode, config, cX, cY, dConW, dConH)
+            renderProcessed(imageBitmap!!, mode, config, cX, cY, dConW, dConH)
             if (mode == ImageResizeMode.NINE_PATCH) {
                 val lL = cX + config.left * viewZoom; val lR = cX + (contentW - config.right) * viewZoom
                 val lT = cY + config.top * viewZoom; val lB = cY + (contentH - config.bottom) * viewZoom
@@ -373,8 +646,8 @@ private fun DrawScope.drawCheckerboard(rect: Rect) {
 @Composable
 private fun SizeInputRow(vW: Int, vH: Int, onW: (Int) -> Unit, onH: (Int) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(value = vW.toString(), onValueChange = { onW(it.toIntOrNull() ?: vW) }, label = { Text("宽") }, modifier = Modifier.weight(1f), singleLine = true)
-        OutlinedTextField(value = vH.toString(), onValueChange = { onH(it.toIntOrNull() ?: vH) }, label = { Text("高") }, modifier = Modifier.weight(1f), singleLine = true)
+        OutlinedTextField(value = vW.toString(), onValueChange = { onW(it.toIntOrNull() ?: vW) }, label = { Text(stringResource(Res.string.label_width_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+        OutlinedTextField(value = vH.toString(), onValueChange = { onH(it.toIntOrNull() ?: vH) }, label = { Text(stringResource(Res.string.label_height_short)) }, modifier = Modifier.weight(1f), singleLine = true)
     }
 }
 
@@ -382,12 +655,12 @@ private fun SizeInputRow(vW: Int, vH: Int, onW: (Int) -> Unit, onH: (Int) -> Uni
 private fun NinePatchInputGrid(c: NinePatchConfig, iW: Int, iH: Int, onC: (NinePatchConfig) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = c.left.toString(), onValueChange = { onC(c.copy(left = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) }, label = { Text("左") }, modifier = Modifier.weight(1f), singleLine = true)
-            OutlinedTextField(value = c.right.toString(), onValueChange = { onC(c.copy(right = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) }, label = { Text("右") }, modifier = Modifier.weight(1f), singleLine = true)
+            OutlinedTextField(value = c.left.toString(), onValueChange = { onC(c.copy(left = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) }, label = { Text(stringResource(Res.string.label_left_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+            OutlinedTextField(value = c.right.toString(), onValueChange = { onC(c.copy(right = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) }, label = { Text(stringResource(Res.string.label_right_short)) }, modifier = Modifier.weight(1f), singleLine = true)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = c.top.toString(), onValueChange = { onC(c.copy(top = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) }, label = { Text("上") }, modifier = Modifier.weight(1f), singleLine = true)
-            OutlinedTextField(value = c.bottom.toString(), onValueChange = { onC(c.copy(bottom = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) }, label = { Text("下") }, modifier = Modifier.weight(1f), singleLine = true)
+            OutlinedTextField(value = c.top.toString(), onValueChange = { onC(c.copy(top = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) }, label = { Text(stringResource(Res.string.label_top_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+            OutlinedTextField(value = c.bottom.toString(), onValueChange = { onC(c.copy(bottom = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) }, label = { Text(stringResource(Res.string.label_bottom_short)) }, modifier = Modifier.weight(1f), singleLine = true)
         }
     }
 }
