@@ -156,12 +156,10 @@ fun BlockSpecificProperties(
             val props = properties as? BlockProperties.ViewProperties ?: BlockProperties.ViewProperties()
             Text("视图配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = props.backgroundColor,
-                onValueChange = { onPropertiesChanged(props.copy(backgroundColor = it)) },
-                label = { Text("背景色 (例如: #FFFFFF)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+            org.gemini.ui.forge.ui.component.ColorPickerField(
+                label = "背景色 (Hex)",
+                hexColor = props.backgroundColor,
+                onColorChanged = { onPropertiesChanged(props.copy(backgroundColor = it)) }
             )
         }
         UIBlockType.TEXT -> {
@@ -176,18 +174,44 @@ fun BlockSpecificProperties(
                 singleLine = true
             )
             Spacer(Modifier.height(8.dp))
+            org.gemini.ui.forge.ui.component.TextStyleToolbar(
+                isBold = props.isBold,
+                onBoldChanged = { onPropertiesChanged(props.copy(isBold = it)) },
+                isItalic = props.isItalic,
+                onItalicChanged = { onPropertiesChanged(props.copy(isItalic = it)) },
+                horizontalAlign = props.horizontalAlign,
+                onHorizontalAlignChanged = { onPropertiesChanged(props.copy(horizontalAlign = it)) },
+                verticalAlign = props.verticalAlign,
+                onVerticalAlignChanged = { onPropertiesChanged(props.copy(verticalAlign = it)) }
+            )
+            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = props.textColor,
-                    onValueChange = { onPropertiesChanged(props.copy(textColor = it)) },
-                    label = { Text("文本颜色") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
+                org.gemini.ui.forge.ui.component.ColorPickerField(
+                    label = "文本颜色",
+                    hexColor = props.textColor,
+                    onColorChanged = { onPropertiesChanged(props.copy(textColor = it)) },
+                    modifier = Modifier.weight(1.5f)
                 )
                 OutlinedTextField(
                     value = props.textSize.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(textSize = it.toIntOrNull() ?: props.textSize)) },
                     label = { Text("字号") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                org.gemini.ui.forge.ui.component.ColorPickerField(
+                    label = "描边颜色",
+                    hexColor = props.strokeColor,
+                    onColorChanged = { onPropertiesChanged(props.copy(strokeColor = it)) },
+                    modifier = Modifier.weight(1.5f)
+                )
+                OutlinedTextField(
+                    value = props.strokeWidth.toString(),
+                    onValueChange = { onPropertiesChanged(props.copy(strokeWidth = it.toFloatOrNull() ?: props.strokeWidth)) },
+                    label = { Text("描边宽度") },
                     modifier = Modifier.weight(1f),
                     singleLine = true
                 )
@@ -205,18 +229,44 @@ fun BlockSpecificProperties(
                 singleLine = true
             )
             Spacer(Modifier.height(8.dp))
+            org.gemini.ui.forge.ui.component.TextStyleToolbar(
+                isBold = props.isBold,
+                onBoldChanged = { onPropertiesChanged(props.copy(isBold = it)) },
+                isItalic = props.isItalic,
+                onItalicChanged = { onPropertiesChanged(props.copy(isItalic = it)) },
+                horizontalAlign = props.horizontalAlign,
+                onHorizontalAlignChanged = { onPropertiesChanged(props.copy(horizontalAlign = it)) },
+                verticalAlign = props.verticalAlign,
+                onVerticalAlignChanged = { onPropertiesChanged(props.copy(verticalAlign = it)) }
+            )
+            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = props.textColor,
-                    onValueChange = { onPropertiesChanged(props.copy(textColor = it)) },
-                    label = { Text("文本颜色") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
+                org.gemini.ui.forge.ui.component.ColorPickerField(
+                    label = "文本颜色",
+                    hexColor = props.textColor,
+                    onColorChanged = { onPropertiesChanged(props.copy(textColor = it)) },
+                    modifier = Modifier.weight(1.5f)
                 )
                 OutlinedTextField(
                     value = props.textSize.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(textSize = it.toIntOrNull() ?: props.textSize)) },
                     label = { Text("字号") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                org.gemini.ui.forge.ui.component.ColorPickerField(
+                    label = "描边颜色",
+                    hexColor = props.strokeColor,
+                    onColorChanged = { onPropertiesChanged(props.copy(strokeColor = it)) },
+                    modifier = Modifier.weight(1.5f)
+                )
+                OutlinedTextField(
+                    value = props.strokeWidth.toString(),
+                    onValueChange = { onPropertiesChanged(props.copy(strokeWidth = it.toFloatOrNull() ?: props.strokeWidth)) },
+                    label = { Text("描边宽") },
                     modifier = Modifier.weight(1f),
                     singleLine = true
                 )

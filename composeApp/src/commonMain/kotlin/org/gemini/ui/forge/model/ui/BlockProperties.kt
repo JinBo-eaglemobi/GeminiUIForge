@@ -54,12 +54,24 @@ sealed class BlockProperties {
      * @property text 要显示的文本内容。
      * @property textColor 文本的字体颜色，采用十六进制字符串格式（例如："#000000"）。
      * @property textSize 文本的字体大小（单位通常为 sp 或像素，取决于平台实现）。
+     * @property isBold 是否加粗
+     * @param isItalic 是否倾斜
+     * @param horizontalAlign 水平对齐方式: LEFT, CENTER, RIGHT
+     * @param verticalAlign 垂直对齐方式: TOP, CENTER, BOTTOM
+     * @param strokeColor 描边颜色
+     * @param strokeWidth 描边宽度
      */
     @Serializable
     data class TextProperties(
         val text: String = "",
         val textColor: String = "#000000",
-        val textSize: Int = 14
+        val textSize: Int = 14,
+        val isBold: Boolean = false,
+        val isItalic: Boolean = false,
+        val horizontalAlign: String = "CENTER",
+        val verticalAlign: String = "CENTER",
+        val strokeColor: String = "",
+        val strokeWidth: Float = 0f
     ) : BlockProperties()
 
     /**
@@ -69,13 +81,25 @@ sealed class BlockProperties {
      * @property textColor 输入文本的字体颜色。
      * @property textSize 输入文本的字体大小。
      * @property maxLength 允许输入的最大字符长度，设置为 -1 表示不限制长度。
+     * @param isBold 是否加粗
+     * @param isItalic 是否倾斜
+     * @param horizontalAlign 水平对齐方式: LEFT, CENTER, RIGHT
+     * @param verticalAlign 垂直对齐方式: TOP, CENTER, BOTTOM
+     * @param strokeColor 描边颜色
+     * @param strokeWidth 描边宽度
      */
     @Serializable
     data class InputProperties(
         val hintText: String = "",
-        val textColor: String = "#000000",
+        val textColor: String = "#808080",
         val textSize: Int = 14,
-        val maxLength: Int = -1
+        val maxLength: Int = -1,
+        val isBold: Boolean = false,
+        val isItalic: Boolean = false,
+        val horizontalAlign: String = "LEFT",
+        val verticalAlign: String = "CENTER",
+        val strokeColor: String = "",
+        val strokeWidth: Float = 0f
     ) : BlockProperties()
 }
 
