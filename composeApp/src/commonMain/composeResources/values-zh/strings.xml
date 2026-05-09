@@ -182,6 +182,7 @@
     <string name="env_status_missing">未安装</string>
     <string name="env_action_check">重新检测</string>
     <string name="env_action_install">自动安装</string>
+    <string name="env_action_uninstall">卸载</string>
     <string name="env_error_missing_python">检测到 Python 未安装，请先安装 Python 并添加到 PATH。</string>
     <string name="env_dialog_title">运行环境未准备就绪</string>
     <string name="env_dialog_message">执行本地抠图需要 Python 及相关依赖。是否前往设置页面安装？</string>

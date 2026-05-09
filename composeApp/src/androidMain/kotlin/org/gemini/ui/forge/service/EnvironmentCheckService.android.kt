@@ -14,6 +14,18 @@ class AndroidEnvironmentCheckService : EnvironmentCheckService {
     }
 
     override suspend fun isPythonAvailable(): Boolean = true
+
+    override fun uninstallItem(name: String): Flow<String> = flowOf("Android 环境暂不支持自动卸载")
+
+    override suspend fun listPipPackages(): List<org.gemini.ui.forge.model.app.PipPackageInfo> = emptyList()
+
+    override suspend fun fetchPackageUrl(packageName: String): String? = null
+
+    override fun batchInstallPipPackages(names: List<String>): Flow<String> = flowOf("Android 暂不支持")
+
+    override fun batchUninstallPipPackages(names: List<String>): Flow<String> = flowOf("Android 暂不支持")
+
+    override suspend fun searchPipPackage(query: String): org.gemini.ui.forge.model.app.PipPackageInfo? = null
 }
 
 actual fun createEnvironmentCheckService(): EnvironmentCheckService {

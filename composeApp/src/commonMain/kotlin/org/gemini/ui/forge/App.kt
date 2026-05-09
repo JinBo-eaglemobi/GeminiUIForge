@@ -237,6 +237,13 @@ fun App(typography: Typography? = null) {
                     HelpDialog(onDismiss = { showHelpDialog = false })
                 }
 
+                val pipPackages by envViewModel.pipPackages.collectAsState()
+                val isPipLoading by envViewModel.isPipLoading.collectAsState()
+                val pipLogs by envViewModel.pipLogs.collectAsState()
+                val isPipActionInProgress by envViewModel.isPipActionInProgress.collectAsState()
+                val searchResult by envViewModel.searchResult.collectAsState()
+                val isSearching by envViewModel.isSearching.collectAsState()
+
                 if (showSettingsDialog) {
                     AppSettingsDialog(
                         currentTheme = globalState.themeMode,
@@ -248,6 +255,12 @@ fun App(typography: Typography? = null) {
                         currentPromptLang = globalState.promptLangPref,
                         shortcuts = globalState.shortcuts,
                         envStatus = envStatus,
+                        pipPackages = pipPackages,
+                        isPipLoading = isPipLoading,
+                        pipLogs = pipLogs,
+                        isPipActionInProgress = isPipActionInProgress,
+                        searchResult = searchResult,
+                        isSearching = isSearching,
                         initialCategory = settingsInitialCategory,
                         updateStatus = updateStatus,
                         onDismiss = { showSettingsDialog = false },
@@ -285,6 +298,12 @@ fun App(typography: Typography? = null) {
                         },
                         onCheckEnv = { envViewModel.checkEnvironment() },
                         onInstallEnvItem = { envViewModel.installEnvironmentItem(it) },
+                        onUninstallEnvItem = { envViewModel.uninstallEnvironmentItem(it) },
+                        onBatchInstallPip = { envViewModel.batchInstallPipPackages(it) },
+                        onBatchUninstallPip = { envViewModel.batchUninstallPipPackages(it) },
+                        onOpenPackageUrl = { envViewModel.openPackageReleaseNotes(it) },
+                        onSearchPipPackage = { envViewModel.searchPipPackage(it) },
+                        onClearSearchResult = { envViewModel.clearSearchResult() },
                         onCheckUpdate = { updateViewModel.checkForUpdates() },
                         onStartUpdate = { updateViewModel.performUpdate(it) }
                     )

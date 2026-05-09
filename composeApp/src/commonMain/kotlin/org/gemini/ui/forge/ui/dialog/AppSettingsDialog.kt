@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,6 +31,12 @@ import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.rememberDirectoryPicker
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,6 +50,15 @@ fun AppSettingsDialog(
     currentPromptLang: PromptLanguage = PromptLanguage.AUTO,
     shortcuts: Map<ShortcutAction, String>,
     envStatus: FullEnvironmentStatus,
+    pipPackages: List<PipPackageInfo> = emptyList(),
+    isPipLoading: Boolean = false,
+    pipLogs: List<String> = emptyList(),
+    isPipActionInProgress: Boolean = false,
+    searchResult: PipPackageInfo? = null,
+    isSearching: Boolean = false,
+    topMarketPackages: List<PipPackageInfo> = emptyList(),
+    isMarketLoading: Boolean = false,
+    marketPage: Int = 0,
     initialCategory: SettingCategory = SettingCategory.GENERAL,
     updateStatus: UpdateStatus = UpdateStatus.Idle,
     onDismiss: () -> Unit,
@@ -56,6 +72,13 @@ fun AppSettingsDialog(
     onShortcutSaved: (ShortcutAction, String) -> Unit = { _, _ -> },
     onCheckEnv: () -> Unit = {},
     onInstallEnvItem: (String) -> Unit = {},
+    onUninstallEnvItem: (String) -> Unit = {},
+    onBatchInstallPip: (List<String>) -> Unit = {},
+    onBatchUninstallPip: (List<String>) -> Unit = {},
+    onOpenPackageUrl: (String) -> Unit = {},
+    onSearchPipPackage: (String) -> Unit = {},
+    onClearSearchResult: () -> Unit = {},
+    onLoadMarketPage: (Int) -> Unit = {},
     onCheckUpdate: () -> Unit = {},
     onStartUpdate: (UpdateInfo) -> Unit = {}
 ) {
@@ -66,9 +89,14 @@ fun AppSettingsDialog(
         org.gemini.ui.forge.utils.AppLogger.d("AppSettingsDialog", "Current Project Version: ${ProjectConfig.VERSION}")
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false // 允许自定义超出默认系统宽度的尺寸
+        )
+    ) {
         Card(
-            modifier = Modifier.fillMaxWidth(0.98f).fillMaxHeight(0.9f),
+            modifier = Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.9f),
             shape = RoundedCornerShape(12.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
@@ -171,7 +199,21 @@ fun AppSettingsDialog(
                                     )
 
                                     SettingCategory.ENVIRONMENT -> EnvironmentSettings(
-                                        envStatus, onCheckEnv, onInstallEnvItem
+                                        status = envStatus,
+                                        pipPackages = pipPackages,
+                                        isPipLoading = isPipLoading,
+                                        pipLogs = pipLogs,
+                                        isPipActionInProgress = isPipActionInProgress,
+                                        searchResult = searchResult,
+                                        isSearching = isSearching,
+                                        onCheck = onCheckEnv,
+                                        onInstall = onInstallEnvItem,
+                                        onUninstall = onUninstallEnvItem,
+                                        onBatchInstallPip = onBatchInstallPip,
+                                        onBatchUninstallPip = onBatchUninstallPip,
+                                        onOpenPackageUrl = onOpenPackageUrl,
+                                        onSearchPipPackage = onSearchPipPackage,
+                                        onClearSearchResult = onClearSearchResult
                                     )
 
                                     SettingCategory.SHORTCUTS -> ShortcutSettings(shortcuts, onShortcutSaved)
@@ -373,98 +415,379 @@ private fun AISettings(
 @Composable
 private fun EnvironmentSettings(
     status: FullEnvironmentStatus,
+    pipPackages: List<PipPackageInfo>,
+    isPipLoading: Boolean,
+    pipLogs: List<String>,
+    isPipActionInProgress: Boolean,
+    searchResult: PipPackageInfo?,
+    isSearching: Boolean,
     onCheck: () -> Unit,
-    onInstall: (String) -> Unit
+    onInstall: (String) -> Unit,
+    onUninstall: (String) -> Unit,
+    onBatchInstallPip: (List<String>) -> Unit,
+    onBatchUninstallPip: (List<String>) -> Unit,
+    onOpenPackageUrl: (String) -> Unit,
+    onSearchPipPackage: (String) -> Unit,
+    onClearSearchResult: () -> Unit
 ) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        SettingSectionTitle(stringResource(Res.string.env_python_check_title))
-        TextButton(onClick = onCheck, enabled = !status.isChecking) {
-            if (status.isChecking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-            else Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(stringResource(Res.string.env_action_check))
+    var envTab by remember { mutableStateOf(0) }
+
+    TabRow(selectedTabIndex = envTab, modifier = Modifier.fillMaxWidth().clip(AppShapes.medium)) {
+        Tab(selected = envTab == 0, onClick = { envTab = 0 }) {
+            Text("核心依赖", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)
+        }
+        Tab(selected = envTab == 1, onClick = { envTab = 1 }) {
+            Text("包管理器 (Pip)", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        status.items.forEach { item ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = AppShapes.small,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-            ) {
-                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (item.isInstalled) Icons.Default.CheckCircle else Icons.Default.Error,
-                        contentDescription = null,
-                        tint = if (item.isInstalled) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            stringResource(item.labelRes),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
+    Spacer(Modifier.height(16.dp))
+
+    if (envTab == 0) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SettingSectionTitle(stringResource(Res.string.env_python_check_title))
+            TextButton(onClick = onCheck, enabled = !status.isChecking) {
+                if (status.isChecking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(Res.string.env_action_check))
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            status.items.forEach { item ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AppShapes.small,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (item.isInstalled) Icons.Default.CheckCircle else Icons.Default.Error,
+                            contentDescription = null,
+                            tint = if (item.isInstalled) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp)
                         )
-                        Text(
-                            text = if (item.isInstalled) "${stringResource(Res.string.env_status_installed)}: ${item.version ?: "Unknown"}" else stringResource(
-                                Res.string.env_status_missing
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (item.isInstalled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
-                        )
-                    }
-                    if (!item.isInstalled && item.name != "python") {
-                        Button(
-                            onClick = { onInstall(item.name) },
-                            enabled = !item.isInstalling,
-                            shape = AppShapes.medium,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                            modifier = Modifier.height(32.dp)
-                        ) {
-                            if (item.isInstalling) CircularProgressIndicator(
-                                Modifier.size(14.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                stringResource(item.labelRes),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
                             )
-                            else Text(
-                                stringResource(Res.string.env_action_install),
-                                style = MaterialTheme.typography.labelSmall
+                            Text(
+                                text = if (item.isInstalled) "${stringResource(Res.string.env_status_installed)}: ${item.version ?: "Unknown"}" else stringResource(
+                                    Res.string.env_status_missing
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (item.isInstalled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
                             )
                         }
+                        if (!item.isInstalled) {
+                            Button(
+                                onClick = { onInstall(item.name) },
+                                enabled = !item.isInstalling,
+                                shape = AppShapes.medium,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                if (item.isInstalling) CircularProgressIndicator(
+                                    Modifier.size(14.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                                else Text(
+                                    stringResource(Res.string.env_action_install),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = { onUninstall(item.name) },
+                                enabled = !item.isInstalling,
+                                shape = AppShapes.medium,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier.height(32.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                if (item.isInstalling) CircularProgressIndicator(
+                                    Modifier.size(14.dp),
+                                    color = MaterialTheme.colorScheme.error,
+                                    strokeWidth = 2.dp
+                                )
+                                else Text(
+                                    stringResource(Res.string.env_action_uninstall),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
                     }
-                }
 
-                if (item.isInstalling && item.installLogs.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp).background(Color.Black).padding(8.dp)
-                    ) {
-                        val logScroll = rememberScrollState()
-                        Text(
-                            text = item.installLogs.joinToString("\n"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF00FF00),
-                            modifier = Modifier.verticalScroll(logScroll)
-                        )
-                        LaunchedEffect(item.installLogs.size) { logScroll.animateScrollTo(logScroll.maxValue) }
+                    if (item.isInstalling && item.installLogs.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp).background(Color.Black).padding(8.dp)
+                        ) {
+                            val logScroll = rememberScrollState()
+                            Text(
+                                text = item.installLogs.joinToString("\n"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF00FF00),
+                                modifier = Modifier.verticalScroll(logScroll)
+                            )
+                            LaunchedEffect(item.installLogs.size) { logScroll.animateScrollTo(logScroll.maxValue) }
+                        }
                     }
                 }
             }
         }
-    }
 
-    if (status.items.any { it.name == "python" && !it.isInstalled }) {
-        Text(
-            text = stringResource(Res.string.env_error_missing_python),
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 8.dp)
+        if (status.items.any { it.name == "python" && !it.isInstalled }) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                shape = AppShapes.medium
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            stringResource(Res.string.env_error_missing_python),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = { onInstall("python") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        shape = AppShapes.medium
+                    ) {
+                        Icon(Icons.Default.Download, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(Res.string.env_action_install))
+                    }
+                }
+            }
+        }
+    } else {
+        // Pip Package Manager Tab
+        var selectedPackages by remember { mutableStateOf(setOf<String>()) }
+        var searchQuery by remember { mutableStateOf("") }
+        
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SettingSectionTitle("Python 包管理")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (selectedPackages.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = {
+                            onBatchUninstallPip(selectedPackages.toList())
+                            selectedPackages = emptySet()
+                        },
+                        enabled = !isPipActionInProgress,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("卸载已选 (${selectedPackages.size})", fontSize = 12.sp)
+                    }
+                    Button(
+                        onClick = {
+                            onBatchInstallPip(selectedPackages.toList())
+                            selectedPackages = emptySet()
+                        },
+                        enabled = !isPipActionInProgress
+                    ) {
+                        Text("安装/更新已选 (${selectedPackages.size})", fontSize = 12.sp)
+                    }
+                }
+                TextButton(onClick = onCheck, enabled = !isPipLoading && !isPipActionInProgress) {
+                    if (isPipLoading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("刷新")
+                }
+            }
+        }
+
+        // 搜索框
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = { Text("搜索 PyPI 全网扩展包...") },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            singleLine = true,
+            shape = AppShapes.medium,
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+            trailingIcon = {
+                Row {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = ""; onClearSearchResult() }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+                        }
+                    }
+                    IconButton(onClick = { onSearchPipPackage(searchQuery) }) {
+                        if (isSearching) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Go")
+                    }
+                }
+            }
         )
+
+        if (searchResult != null) {
+            Text("🔍 搜索结果", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                shape = AppShapes.small,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f))
+            ) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(searchResult.name, fontWeight = FontWeight.Bold)
+                        Text(searchResult.description, style = MaterialTheme.typography.labelSmall)
+                        if (!searchResult.latestVersion.isNullOrEmpty()) {
+                            Text("最新版本: ${searchResult.latestVersion}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Button(
+                        onClick = { onBatchInstallPip(listOf(searchResult.name)) },
+                        enabled = !isPipActionInProgress,
+                        shape = AppShapes.medium,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) { Text("安装") }
+                }
+            }
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        } else if (isSearching) {
+            Text("正在全网检索包信息...", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        }
+
+        if (isPipActionInProgress && pipLogs.isNotEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp).background(Color.Black).padding(8.dp)
+            ) {
+                val logScroll = rememberScrollState()
+                Text(
+                    text = pipLogs.joinToString("\n"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF00FF00),
+                    modifier = Modifier.verticalScroll(logScroll)
+                )
+                LaunchedEffect(pipLogs.size) { logScroll.animateScrollTo(logScroll.maxValue) }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        if (pipPackages.isEmpty() && !isPipLoading) {
+            Text("没有检测到 Python 环境或没有安装包。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            // Recommendation Section
+            val recommended = pipPackages.filter { it.isRecommended }
+            val installed = pipPackages.filter { it.isInstalled }
+
+            if (recommended.isNotEmpty()) {
+                Text("⭐ 推荐扩展", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    recommended.forEach { pkg ->
+                        val isSelected = selectedPackages.contains(pkg.name)
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                selectedPackages = if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
+                            },
+                            shape = AppShapes.small,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f))
+                        ) {
+                            Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = isSelected, onCheckedChange = { checked ->
+                                    selectedPackages = if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
+                                })
+                                Column(Modifier.weight(1f)) {
+                                    Text(pkg.name, fontWeight = FontWeight.Bold)
+                                    Text(pkg.description, style = MaterialTheme.typography.labelSmall)
+                                }
+                                Button(
+                                    onClick = { onBatchInstallPip(listOf(pkg.name)) },
+                                    enabled = !isPipActionInProgress,
+                                    shape = AppShapes.medium,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) { Text("一键安装", fontSize = 12.sp) }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+
+            if (installed.isNotEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("📦 已安装的包 (${installed.size})", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(vertical = 4.dp).weight(1f))
+                    TextButton(onClick = {
+                        selectedPackages = if (selectedPackages.containsAll(installed.map { it.name })) emptySet()
+                        else selectedPackages + installed.map { it.name }
+                    }) {
+                        Text(if (selectedPackages.containsAll(installed.map { it.name })) "全不选" else "全选", fontSize = 12.sp)
+                    }
+                }
+                
+                // 为了避免列表过长导致整个对话框卡顿，这里应该嵌套滚动，但父级已经是 scrollable Column 了。
+                // 现有的设置界面使用单个垂直 Scroll，因此直接展开。
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    installed.forEach { pkg ->
+                        val isSelected = selectedPackages.contains(pkg.name)
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                selectedPackages = if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
+                            },
+                            shape = AppShapes.small,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                        ) {
+                            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = isSelected, onCheckedChange = { checked ->
+                                    selectedPackages = if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
+                                })
+                                Column(Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(pkg.name, fontWeight = FontWeight.Medium)
+                                        if (pkg.isOutdated) {
+                                            Spacer(Modifier.width(6.dp))
+                                            Surface(color = MaterialTheme.colorScheme.errorContainer, shape = AppShapes.small) {
+                                                Text("有更新", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                                            }
+                                        }
+                                    }
+                                    Text("版本: ${pkg.version}${if (pkg.isOutdated) " ➜ ${pkg.latestVersion}" else ""}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                
+                                if (pkg.isOutdated) {
+                                    IconButton(onClick = { onOpenPackageUrl(pkg.name) }, modifier = Modifier.size(32.dp)) {
+                                        Icon(Icons.AutoMirrored.Filled.Article, contentDescription = "更新详情", tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                    Spacer(Modifier.width(4.dp))
+                                    Button(
+                                        onClick = { onBatchInstallPip(listOf(pkg.name)) },
+                                        enabled = !isPipActionInProgress,
+                                        shape = AppShapes.medium,
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) { Text("更新", fontSize = 12.sp) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

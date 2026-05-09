@@ -74,7 +74,9 @@ class UpdateService(private val currentVersion: String) {
                 return@withContext null
             }
 
-            val latestVersion = release.tagName.removePrefix("v")
+            val rawLatestVersion = release.tagName.removePrefix("v")
+            val latestVersion = rawLatestVersion.substringBefore("-")
+            
             AppLogger.i("UpdateService", "📡 检查完成。远程最新版本: $latestVersion, 当前本地版本: $currentVersion")
             
             if (isNewer(latestVersion, currentVersion)) {
@@ -151,7 +153,7 @@ class UpdateService(private val currentVersion: String) {
     }.flowOn(Dispatchers.Default)
 
     /**
-     * 比对版本号：latest 是否新于 current
+     * 比对版本号：latest 是否新于 current (基于标准的 SemVer 语义化版本规范)
      */
     private fun isNewer(latest: String, current: String): Boolean {
         val latestClean = normalizeVersion(latest)
@@ -162,19 +164,20 @@ class UpdateService(private val currentVersion: String) {
         val latestParts = latestClean.split(".").mapNotNull { it.toIntOrNull() }
         val currentParts = currentClean.split(".").mapNotNull { it.toIntOrNull() }
         
-        for (i in 0 until min(latestParts.size, currentParts.size)) {
-            if (latestParts[i] > currentParts[i]) return true
-            if (latestParts[i] < currentParts[i]) return false
+        for (i in 0 until maxOf(latestParts.size, currentParts.size)) {
+            val l = latestParts.getOrElse(i) { 0 }
+            val c = currentParts.getOrElse(i) { 0 }
+            if (l > c) return true
+            if (l < c) return false
         }
         
-        // 如果前缀部分完全相同，则更长的版本号被视为更新 (如 1.0.1 > 1.0)
-        return latestParts.size > currentParts.size
+        return false
     }
 
     /**
-     * 标准化版本号：只保留数字和点，移除后缀 (如 1.0.0-win -> 1.0.0)
+     * 标准化版本号：只保留数字和点，移除连字符及后缀 (如 1.0.6-win -> 1.0.6)
      */
     private fun normalizeVersion(v: String): String {
-        return v.split("-").first().filter { it.isDigit() || it == '.' }
+        return v.substringBefore("-").filter { it.isDigit() || it == '.' }
     }
 }

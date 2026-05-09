@@ -180,8 +180,9 @@
     <string name="env_item_pillow">Pillow (Image Library)</string>
     <string name="env_status_installed">Installed</string>
     <string name="env_status_missing">Not Installed</string>
-    <string name="env_action_check">Re-check</string>
+    <string name="env_action_check">Recheck</string>
     <string name="env_action_install">Install</string>
+    <string name="env_action_uninstall">Uninstall</string>
     <string name="env_error_missing_python">Python not found. Please install Python and add it to PATH.</string>
     <string name="env_dialog_title">Environment Not Ready</string>
     <string name="env_dialog_message">Local background removal requires Python and dependencies. Go to settings to install?</string>
