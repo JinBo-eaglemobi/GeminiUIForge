@@ -17,7 +17,9 @@ class AndroidEnvironmentCheckService : EnvironmentCheckService {
 
     override fun uninstallItem(name: String): Flow<String> = flowOf("Android 环境暂不支持自动卸载")
 
-    override suspend fun listPipPackages(): List<org.gemini.ui.forge.model.app.PipPackageInfo> = emptyList()
+    override suspend fun getInstalledPipPackages(): List<org.gemini.ui.forge.model.app.PipPackageInfo> = emptyList()
+
+    override suspend fun fetchOutdatedPipPackages(): Map<String, String> = emptyMap()
 
     override suspend fun fetchPackageUrl(packageName: String): String? = null
 

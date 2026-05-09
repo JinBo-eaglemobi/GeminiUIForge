@@ -9,8 +9,12 @@ data class EnvironmentItemStatus(
     val isInstalled: Boolean = false,
     val version: String? = null,
     val isInstalling: Boolean = false,
-    val installLogs: List<String> = emptyList()
-)
+    val installLogs: List<String> = emptyList(),
+    val latestVersion: String? = null
+) {
+    val isOutdated: Boolean
+        get() = isInstalled && latestVersion != null && version != latestVersion && latestVersion.isNotBlank()
+}
 
 /**
  * 整个 Python 环境的检查结果汇总

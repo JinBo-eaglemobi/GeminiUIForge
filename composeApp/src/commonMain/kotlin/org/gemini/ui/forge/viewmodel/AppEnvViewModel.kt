@@ -62,7 +62,31 @@ class AppEnvViewModel(
         viewModelScope.launch {
             _isPipLoading.value = true
             try {
-                _pipPackages.value = envService.listPipPackages()
+                // 1. 快速读取本地包列表
+                val localPackages = envService.getInstalledPipPackages()
+                _pipPackages.value = localPackages
+                
+                // 2. 异步联网查询过期包
+                val outdatedMap = envService.fetchOutdatedPipPackages()
+                if (outdatedMap.isNotEmpty()) {
+                    // 更新 Pip 面板数据
+                    val updatedPackages = _pipPackages.value.map {
+                        if (outdatedMap.containsKey(it.name)) {
+                            it.copy(latestVersion = outdatedMap[it.name])
+                        } else it
+                    }
+                    _pipPackages.value = updatedPackages
+                    
+                    // 顺带更新“核心依赖”面板中的过期状态
+                    _status.update { s ->
+                        val updatedItems = s.items.map { coreItem ->
+                            if (outdatedMap.containsKey(coreItem.name)) {
+                                coreItem.copy(latestVersion = outdatedMap[coreItem.name])
+                            } else coreItem
+                        }
+                        s.copy(items = updatedItems)
+                    }
+                }
             } finally {
                 _isPipLoading.value = false
             }

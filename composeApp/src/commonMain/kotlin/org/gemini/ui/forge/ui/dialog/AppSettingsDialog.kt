@@ -432,12 +432,32 @@ private fun EnvironmentSettings(
 ) {
     var envTab by remember { mutableStateOf(0) }
 
-    TabRow(selectedTabIndex = envTab, modifier = Modifier.fillMaxWidth().clip(AppShapes.medium)) {
-        Tab(selected = envTab == 0, onClick = { envTab = 0 }) {
-            Text("核心依赖", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)
-        }
-        Tab(selected = envTab == 1, onClick = { envTab = 1 }) {
-            Text("包管理器 (Pip)", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)
+    // Segmented Button 风格的 Tab
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), AppShapes.medium)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        listOf("核心依赖", "本地包管理").forEachIndexed { index, title ->
+            val isSelected = envTab == index
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(AppShapes.small)
+                    .background(if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent)
+                    .clickable { envTab = index }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 
@@ -474,19 +494,38 @@ private fun EnvironmentSettings(
                         )
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    stringResource(item.labelRes),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (item.isOutdated) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = AppShapes.small) {
+                                        Text("有更新", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                                    }
+                                }
+                            }
+                            val verStr = if (item.isInstalled) "${stringResource(Res.string.env_status_installed)}: ${item.version ?: "Unknown"}" else stringResource(Res.string.env_status_missing)
                             Text(
-                                stringResource(item.labelRes),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (item.isInstalled) "${stringResource(Res.string.env_status_installed)}: ${item.version ?: "Unknown"}" else stringResource(
-                                    Res.string.env_status_missing
-                                ),
+                                text = verStr + if (item.isOutdated) " ➜ ${item.latestVersion}" else "",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (item.isInstalled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
                             )
                         }
+                        
+                        if (item.isOutdated && !item.isInstalling) {
+                            Button(
+                                onClick = { onInstall(item.name) },
+                                shape = AppShapes.medium,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier.height(32.dp).padding(end = 8.dp)
+                            ) {
+                                Text("更新", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+
                         if (!item.isInstalled) {
                             Button(
                                 onClick = { onInstall(item.name) },

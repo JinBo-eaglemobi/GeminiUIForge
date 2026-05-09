@@ -110,9 +110,9 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
                     return@flow
                 }
             }
-            "rembg" -> listOf("pip", "install", "rembg", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple")
-            "pillow" -> listOf("pip", "install", "pillow", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple")
-            "onnxruntime" -> listOf("pip", "install", "onnxruntime", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple")
+            "rembg" -> listOf("pip", "install", "--upgrade", "rembg", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple")
+            "pillow" -> listOf("pip", "install", "--upgrade", "pillow", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple")
+            "onnxruntime" -> listOf("pip", "install", "--upgrade", "onnxruntime", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple")
             else -> return@flow
         }
 
@@ -189,11 +189,10 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
         }
     }.flowOn(Dispatchers.IO)
 
-    override suspend fun listPipPackages(): List<PipPackageInfo> = withContext(Dispatchers.IO) {
+    override suspend fun getInstalledPipPackages(): List<PipPackageInfo> = withContext(Dispatchers.IO) {
         val result = mutableListOf<PipPackageInfo>()
         if (!isPythonAvailable()) return@withContext result
 
-        // 1. 获取所有已安装的包
         val installedJsonStr = runCommand("pip list --format=json")
         val installedList = try {
             if (!installedJsonStr.isNullOrBlank()) {
@@ -203,33 +202,19 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
             emptyList()
         }
 
-        // 2. 获取可更新的包
-        val outdatedJsonStr = runCommand("pip list --outdated --format=json")
-        val outdatedMap = try {
-            if (!outdatedJsonStr.isNullOrBlank()) {
-                val outdatedList = json.decodeFromString<List<PipPackageJson>>(outdatedJsonStr)
-                outdatedList.associateBy { it.name }
-            } else emptyMap()
-        } catch (e: Exception) {
-            emptyMap()
-        }
-
-        // 合并已安装包信息
         val installedNames = mutableSetOf<String>()
         installedList.forEach { pkg ->
             installedNames.add(pkg.name.lowercase())
-            val outdatedInfo = outdatedMap[pkg.name]
             result.add(
                 PipPackageInfo(
                     name = pkg.name,
                     version = pkg.version,
-                    latestVersion = outdatedInfo?.latestVersion,
                     isInstalled = true
                 )
             )
         }
 
-        // 3. 追加推荐但未安装的包
+        // 追加推荐但未安装的包
         recommendedPackages.forEach { (name, desc) ->
             if (!installedNames.contains(name.lowercase())) {
                 result.add(
@@ -244,6 +229,20 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
         }
 
         result.sortedBy { it.name }
+    }
+
+    override suspend fun fetchOutdatedPipPackages(): Map<String, String> = withContext(Dispatchers.IO) {
+        if (!isPythonAvailable()) return@withContext emptyMap()
+        
+        val outdatedJsonStr = runCommand("pip list --outdated --format=json")
+        try {
+            if (!outdatedJsonStr.isNullOrBlank()) {
+                val outdatedList = json.decodeFromString<List<PipPackageJson>>(outdatedJsonStr)
+                outdatedList.associate { it.name to (it.latestVersion ?: "") }
+            } else emptyMap()
+        } catch (e: Exception) {
+            emptyMap()
+        }
     }
 
     override suspend fun searchPipPackage(query: String): PipPackageInfo? = withContext(Dispatchers.IO) {

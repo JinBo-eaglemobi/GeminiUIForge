@@ -28,9 +28,14 @@ interface EnvironmentCheckService {
     fun uninstallItem(name: String): Flow<String>
 
     /**
-     * 列出所有的 Pip 包 (包含已安装、可更新、以及推荐未安装的包)
+     * 获取所有已安装和内置推荐的 Pip 包 (本地快速)
      */
-    suspend fun listPipPackages(): List<org.gemini.ui.forge.model.app.PipPackageInfo>
+    suspend fun getInstalledPipPackages(): List<org.gemini.ui.forge.model.app.PipPackageInfo>
+
+    /**
+     * 联网查询有更新的包并返回可更新的映射表 Map<PackageName, LatestVersion> (网络请求慢)
+     */
+    suspend fun fetchOutdatedPipPackages(): Map<String, String>
 
     /**
      * 获取包的 Github / Project URL
