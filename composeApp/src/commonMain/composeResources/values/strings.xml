@@ -32,6 +32,10 @@
     <string name="menu_cloud_assets">Cloud Assets</string>
     <string name="settings_title">Settings</string>
     <string name="settings_language">Language</string>
+    <string name="settings_layout_mode">Layout Mode</string>
+    <string name="layout_mode_auto">Auto Detect</string>
+    <string name="layout_mode_touch">Touch / Mobile</string>
+    <string name="layout_mode_compact">Compact / Desktop</string>
     <string name="language_english">English</string>
     <string name="language_chinese">中文</string>
     <string name="close">Close</string>

@@ -31,7 +31,11 @@
     <string name="menu_settings">设置</string>
     <string name="menu_cloud_assets">云端资产</string>
     <string name="settings_title">设置</string>
-    <string name="settings_language">语言</string>
+    <string name="settings_language">语言偏好</string>
+    <string name="settings_layout_mode">布局模式</string>
+    <string name="layout_mode_auto">自动探测</string>
+    <string name="layout_mode_touch">移动端/触控优先</string>
+    <string name="layout_mode_compact">PC端/高密度</string>
     <string name="language_english">English</string>
     <string name="language_chinese">中文</string>
     <string name="close">关闭</string>

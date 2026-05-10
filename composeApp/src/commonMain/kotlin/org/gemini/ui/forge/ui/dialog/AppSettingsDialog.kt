@@ -283,6 +283,34 @@ private fun GeneralSettings(
         }
     }
 
+    // LayoutMode Dropdown
+    var layoutExpanded by remember { mutableStateOf(false) }
+    val layoutOptions = listOf(
+        org.gemini.ui.forge.model.app.LayoutMode.AUTO to stringResource(Res.string.layout_mode_auto),
+        org.gemini.ui.forge.model.app.LayoutMode.TOUCH to stringResource(Res.string.layout_mode_touch),
+        org.gemini.ui.forge.model.app.LayoutMode.COMPACT to stringResource(Res.string.layout_mode_compact)
+    )
+    val currentLayoutLabel = layoutOptions.find { it.first == currentLayoutMode }?.second ?: ""
+
+    ExposedDropdownMenuBox(expanded = layoutExpanded, onExpandedChange = { layoutExpanded = !layoutExpanded }) {
+        OutlinedTextField(
+            value = currentLayoutLabel,
+            onValueChange = {}, readOnly = true,
+            label = { Text(stringResource(Res.string.settings_layout_mode)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(layoutExpanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            shape = AppShapes.medium
+        )
+        ExposedDropdownMenu(expanded = layoutExpanded, onDismissRequest = { layoutExpanded = false }) {
+            layoutOptions.forEach { (mode, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = { onLayoutModeSelected(mode); layoutExpanded = false }
+                )
+            }
+        }
+    }
+
     // Language Dropdown
     var langExpanded by remember { mutableStateOf(false) }
     val langOptions = listOf(
