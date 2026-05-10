@@ -50,8 +50,14 @@ class AppSettingsViewModel(
         }
     }
 
+    fun saveLayoutMode(mode: org.gemini.ui.forge.model.app.LayoutMode) {
+        viewModelScope.launch {
+            configManager.saveKey("APP_LAYOUT_MODE", mode.name)
+        }
+    }
+
     /**
-     * 保存快捷键配置
+     * 保存快捷键映射
      */
     fun saveShortcut(action: ShortcutAction, keyChord: String) {
         viewModelScope.launch {

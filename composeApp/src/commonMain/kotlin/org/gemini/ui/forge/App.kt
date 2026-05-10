@@ -159,7 +159,7 @@ fun App(typography: Typography? = null) {
 
         AppTheme(
             themeMode = globalState.themeMode,
-            typography = typography ?: androidx.compose.material3.MaterialTheme.typography
+            layoutMode = globalState.layoutMode
         ) {
             val coroutineScope = rememberCoroutineScope()
             val toastData by Toast.toastData.collectAsState()
@@ -250,6 +250,7 @@ fun App(typography: Typography? = null) {
                 if (showSettingsDialog) {
                     AppSettingsDialog(
                         currentTheme = globalState.themeMode,
+                        currentLayoutMode = globalState.layoutMode,
                         currentLanguage = globalState.languageCode,
                         currentApiKey = globalState.apiKey,
                         currentStorageDir = globalState.templateStorageDir,
@@ -273,6 +274,10 @@ fun App(typography: Typography? = null) {
                         onLanguageSelected = {
                             settingsViewModel.saveLanguage(it);
                             appViewModel.setLanguage(it); languageKey++
+                        },
+                        onLayoutModeSelected = {
+                            settingsViewModel.saveLayoutMode(it)
+                            appViewModel.setLayoutMode(it)
                         },
                         onThemeSelected = { appViewModel.setThemeMode(it) },
                         onApiKeySaved = {

@@ -4,6 +4,7 @@ import org.gemini.ui.forge.model.app.AppScreen
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.app.ShortcutAction
 import org.gemini.ui.forge.model.app.ThemeMode
+import org.gemini.ui.forge.model.app.LayoutMode
 
 /**
  * 应用全局状态模型
@@ -27,5 +28,6 @@ data class AppGlobalState(
     val templateStorageDir: String = "",
     val maxRetries: Int = 0,
     val imageGenCount: Int = 4,
-    val shortcuts: Map<ShortcutAction, String> = ShortcutAction.entries.associateWith { it.defaultKey }
+    val shortcuts: Map<ShortcutAction, String> = ShortcutAction.entries.associateWith { it.defaultKey },
+    val layoutMode: LayoutMode = LayoutMode.AUTO
 )

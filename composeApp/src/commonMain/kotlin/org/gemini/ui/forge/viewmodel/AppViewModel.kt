@@ -110,6 +110,8 @@ class AppViewModel(
             val storageDir = templateRepo.getDataDir()
             val retriesStr = configManager.loadKey("API_MAX_RETRIES") ?: "3"
             val imageGenCountStr = configManager.loadKey("IMAGE_GEN_COUNT") ?: "4"
+            val layoutModeStr = configManager.loadKey("APP_LAYOUT_MODE") ?: "AUTO"
+            val layoutMode = try { org.gemini.ui.forge.model.app.LayoutMode.valueOf(layoutModeStr) } catch(e: Exception) { org.gemini.ui.forge.model.app.LayoutMode.AUTO }
 
             _state.update {
                 it.copy(
@@ -120,7 +122,8 @@ class AppViewModel(
                         languageCode = languageCode,
                         promptLangPref = promptLang,
                         maxRetries = retriesStr.toIntOrNull() ?: 3,
-                        imageGenCount = imageGenCountStr.toIntOrNull() ?: 4
+                        imageGenCount = imageGenCountStr.toIntOrNull() ?: 4,
+                        layoutMode = layoutMode
                     )
                 )
             }
@@ -134,6 +137,7 @@ class AppViewModel(
 
     fun setThemeMode(mode: ThemeMode) = _state.update { it.copy(globalState = it.globalState.copy(themeMode = mode)) }
     fun setLanguage(code: String) = _state.update { it.copy(globalState = it.globalState.copy(languageCode = code)) }
+    fun setLayoutMode(mode: org.gemini.ui.forge.model.app.LayoutMode) = _state.update { it.copy(globalState = it.globalState.copy(layoutMode = mode)) }
 
     // --- 数据加载与共享 ---
 

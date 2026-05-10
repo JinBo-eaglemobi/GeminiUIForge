@@ -45,6 +45,7 @@ import androidx.compose.material3.LinearProgressIndicator
 @Composable
 fun AppSettingsDialog(
     currentTheme: ThemeMode,
+    currentLayoutMode: org.gemini.ui.forge.model.app.LayoutMode,
     currentLanguage: String,
     currentApiKey: String,
     currentStorageDir: String,
@@ -66,6 +67,7 @@ fun AppSettingsDialog(
     updateStatus: UpdateStatus = UpdateStatus.Idle,
     onDismiss: () -> Unit,
     onLanguageSelected: (String) -> Unit,
+    onLayoutModeSelected: (org.gemini.ui.forge.model.app.LayoutMode) -> Unit,
     onThemeSelected: (ThemeMode) -> Unit,
     onApiKeySaved: (String) -> Unit,
     onStorageDirSaved: (String) -> Unit,
@@ -192,8 +194,8 @@ fun AppSettingsDialog(
                             ) {
                                 when (selectedCategory) {
                                     SettingCategory.GENERAL -> GeneralSettings(
-                                        currentTheme, currentLanguage, currentStorageDir,
-                                        onThemeSelected, onLanguageSelected, onStorageDirSaved
+                                        currentTheme, currentLayoutMode, currentLanguage, currentStorageDir,
+                                        onThemeSelected, onLayoutModeSelected, onLanguageSelected, onStorageDirSaved
                                     )
 
                                     SettingCategory.AI -> AISettings(
@@ -243,9 +245,11 @@ fun AppSettingsDialog(
 @Composable
 private fun GeneralSettings(
     currentTheme: ThemeMode,
+    currentLayoutMode: org.gemini.ui.forge.model.app.LayoutMode,
     currentLanguage: String,
     currentStorageDir: String,
     onThemeSelected: (ThemeMode) -> Unit,
+    onLayoutModeSelected: (org.gemini.ui.forge.model.app.LayoutMode) -> Unit,
     onLanguageSelected: (String) -> Unit,
     onStorageDirSaved: (String) -> Unit
 ) {
