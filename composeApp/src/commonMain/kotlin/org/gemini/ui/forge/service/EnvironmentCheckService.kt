@@ -56,6 +56,11 @@ interface EnvironmentCheckService {
      * 在线搜索/查询特定的 Pip 包信息
      */
     suspend fun searchPipPackage(query: String): org.gemini.ui.forge.model.app.PipPackageInfo?
+
+    /**
+     * 获取 Top 包列表以供市场分页
+     */
+    suspend fun fetchTopPackages(): List<String>
 }
 
 /**

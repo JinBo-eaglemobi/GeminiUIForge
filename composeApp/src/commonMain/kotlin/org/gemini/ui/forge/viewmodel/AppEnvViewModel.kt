@@ -41,6 +41,15 @@ class AppEnvViewModel(
     private val _isPipActionInProgress = MutableStateFlow(false)
     val isPipActionInProgress: StateFlow<Boolean> = _isPipActionInProgress.asStateFlow()
 
+    // Top Packages 分页缓存
+    private var allTopPackages = emptyList<String>()
+    private val _topMarketPackages = MutableStateFlow<List<org.gemini.ui.forge.model.app.PipPackageInfo>>(emptyList())
+    val topMarketPackages: StateFlow<List<org.gemini.ui.forge.model.app.PipPackageInfo>> = _topMarketPackages.asStateFlow()
+    private val _marketPage = MutableStateFlow(0)
+    val marketPage: StateFlow<Int> = _marketPage.asStateFlow()
+    private val _isMarketLoading = MutableStateFlow(false)
+    val isMarketLoading: StateFlow<Boolean> = _isMarketLoading.asStateFlow()
+
     init {
         // 启动时自动执行静默自检
         checkEnvironment()
@@ -89,6 +98,85 @@ class AppEnvViewModel(
                 }
             } finally {
                 _isPipLoading.value = false
+            }
+        }
+    }
+
+    fun loadMarketPage(pageIndex: Int = 0) {
+        viewModelScope.launch {
+            _isMarketLoading.value = true
+            _marketPage.value = pageIndex
+            org.gemini.ui.forge.utils.AppLogger.i("AppEnvViewModel", "🌐 开始加载探索市场页面: $pageIndex")
+            try {
+                if (allTopPackages.isEmpty()) {
+                    org.gemini.ui.forge.utils.AppLogger.d("AppEnvViewModel", "⏳ 正在从云端拉取 Top 5000 排行榜缓存...")
+                    allTopPackages = envService.fetchTopPackages()
+                    org.gemini.ui.forge.utils.AppLogger.d("AppEnvViewModel", "✅ Top 排行榜拉取成功, 共 ${allTopPackages.size} 条记录")
+                }
+                
+                if (allTopPackages.isNotEmpty()) {
+                    val pageSize = 20
+                    val startIndex = pageIndex * pageSize
+                    val endIndex = minOf(startIndex + pageSize, allTopPackages.size)
+                    if (startIndex < allTopPackages.size) {
+                        val pageNames = allTopPackages.subList(startIndex, endIndex)
+                        
+                        // 1. 瞬时填充占位卡片 (骨架屏)，秒开 UI
+                        val placeholderDetails = pageNames.map { name ->
+                            org.gemini.ui.forge.model.app.PipPackageInfo(
+                                name = name, 
+                                isInstalled = false, 
+                                description = "正在获取包详情..."
+                            )
+                        }
+                        _topMarketPackages.value = placeholderDetails
+                        // 取消遮罩 loading，让用户立刻看到列表骨架
+                        _isMarketLoading.value = false 
+                        
+                        org.gemini.ui.forge.utils.AppLogger.d("AppEnvViewModel", "🚀 已渲染占位符，正在后台并行请求 ${pageNames.size} 个扩展包详情...")
+                        
+                        // 2. 发起非阻塞的并行请求，获取一个就刷新一个 (渐进式更新)
+                        pageNames.forEachIndexed { index, name ->
+                            launch {
+                                try {
+                                    val detail = envService.searchPipPackage(name)
+                                    if (detail != null) {
+                                        // 拿到详情后，无缝替换列表里对应位置的占位符
+                                        _topMarketPackages.update { currentList ->
+                                            val newList = currentList.toMutableList()
+                                            // 防止快速切页导致的越界或数据混乱，通过包名匹配
+                                            val targetIndex = newList.indexOfFirst { it.name == name }
+                                            if (targetIndex != -1) {
+                                                newList[targetIndex] = detail
+                                            }
+                                            newList
+                                        }
+                                    } else {
+                                        _topMarketPackages.update { currentList ->
+                                            val newList = currentList.toMutableList()
+                                            val targetIndex = newList.indexOfFirst { it.name == name }
+                                            if (targetIndex != -1) {
+                                                newList[targetIndex] = newList[targetIndex].copy(description = "无描述信息")
+                                            }
+                                            newList
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    // 忽略单个包请求失败
+                                }
+                            }
+                        }
+                    } else {
+                         _isMarketLoading.value = false 
+                    }
+                } else {
+                     _isMarketLoading.value = false 
+                }
+            } catch (e: Exception) {
+                org.gemini.ui.forge.utils.AppLogger.e("AppEnvViewModel", "❌ 加载探索市场失败", e)
+                _isMarketLoading.value = false 
+            } finally {
+                org.gemini.ui.forge.utils.AppLogger.i("AppEnvViewModel", "🏁 探索市场页面 $pageIndex 初始渲染结束")
             }
         }
     }

@@ -302,6 +302,24 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
         }
     }
 
+    override suspend fun fetchTopPackages(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("https://hugovk.github.io/top-pypi-packages/top-pypi-packages-30-days.min.json")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+
+            if (connection.responseCode == 200) {
+                val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                val response = json.decodeFromString<org.gemini.ui.forge.model.app.TopPipPackagesResponse>(responseText)
+                response.rows.map { it.project }
+            } else emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     override fun batchInstallPipPackages(names: List<String>): Flow<String> = flow {
         if (names.isEmpty()) return@flow
         val commandList = mutableListOf("pip", "install", "--upgrade")

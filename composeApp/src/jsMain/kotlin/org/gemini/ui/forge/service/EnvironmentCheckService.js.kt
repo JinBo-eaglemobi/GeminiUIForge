@@ -20,7 +20,9 @@ actual fun createEnvironmentCheckService(): EnvironmentCheckService {
 
     override fun batchUninstallPipPackages(names: List<String>): Flow<String> = flowOf("Browser 暂不支持")
 
-    override suspend fun searchPipPackage(query: String): org.gemini.ui.forge.model.app.PipPackageInfo? = null        override suspend fun checkAll(): FullEnvironmentStatus {
+    override suspend fun searchPipPackage(query: String): org.gemini.ui.forge.model.app.PipPackageInfo? = null
+
+    override suspend fun fetchTopPackages(): List<String> = emptyList()        override suspend fun checkAll(): FullEnvironmentStatus {
             return FullEnvironmentStatus()
         }
         override fun installItem(name: String): Flow<String> = emptyFlow()

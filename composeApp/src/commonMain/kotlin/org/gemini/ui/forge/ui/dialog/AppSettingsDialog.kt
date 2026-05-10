@@ -33,6 +33,9 @@ import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.rememberDirectoryPicker
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.HorizontalDivider
@@ -206,6 +209,9 @@ fun AppSettingsDialog(
                                         isPipActionInProgress = isPipActionInProgress,
                                         searchResult = searchResult,
                                         isSearching = isSearching,
+                                        topMarketPackages = topMarketPackages,
+                                        isMarketLoading = isMarketLoading,
+                                        marketPage = marketPage,
                                         onCheck = onCheckEnv,
                                         onInstall = onInstallEnvItem,
                                         onUninstall = onUninstallEnvItem,
@@ -213,7 +219,8 @@ fun AppSettingsDialog(
                                         onBatchUninstallPip = onBatchUninstallPip,
                                         onOpenPackageUrl = onOpenPackageUrl,
                                         onSearchPipPackage = onSearchPipPackage,
-                                        onClearSearchResult = onClearSearchResult
+                                        onClearSearchResult = onClearSearchResult,
+                                        onLoadMarketPage = onLoadMarketPage
                                     )
 
                                     SettingCategory.SHORTCUTS -> ShortcutSettings(shortcuts, onShortcutSaved)
@@ -421,6 +428,9 @@ private fun EnvironmentSettings(
     isPipActionInProgress: Boolean,
     searchResult: PipPackageInfo?,
     isSearching: Boolean,
+    topMarketPackages: List<PipPackageInfo>,
+    isMarketLoading: Boolean,
+    marketPage: Int,
     onCheck: () -> Unit,
     onInstall: (String) -> Unit,
     onUninstall: (String) -> Unit,
@@ -428,7 +438,8 @@ private fun EnvironmentSettings(
     onBatchUninstallPip: (List<String>) -> Unit,
     onOpenPackageUrl: (String) -> Unit,
     onSearchPipPackage: (String) -> Unit,
-    onClearSearchResult: () -> Unit
+    onClearSearchResult: () -> Unit,
+    onLoadMarketPage: (Int) -> Unit
 ) {
     var envTab by remember { mutableStateOf(0) }
 
@@ -440,14 +451,17 @@ private fun EnvironmentSettings(
             .padding(4.dp),
         horizontalArrangement = Arrangement.SpaceEvenly
     ) {
-        listOf("核心依赖", "本地包管理").forEachIndexed { index, title ->
+        listOf("核心依赖", "本地扩展管理", "云端探索市场").forEachIndexed { index, title ->
             val isSelected = envTab == index
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .clip(AppShapes.small)
                     .background(if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent)
-                    .clickable { envTab = index }
+                    .clickable { 
+                        envTab = index
+                        if (index == 2 && topMarketPackages.isEmpty()) onLoadMarketPage(0)
+                    }
                     .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -615,17 +629,16 @@ private fun EnvironmentSettings(
                 }
             }
         }
-    } else {
-        // Pip Package Manager Tab
+    } else if (envTab == 1) {
+        // Pip Package Manager Tab - 纯本地管理
         var selectedPackages by remember { mutableStateOf(setOf<String>()) }
-        var searchQuery by remember { mutableStateOf("") }
         
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SettingSectionTitle("Python 包管理")
+            SettingSectionTitle("Python 本地包管理")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (selectedPackages.isNotEmpty()) {
                     OutlinedButton(
@@ -645,7 +658,7 @@ private fun EnvironmentSettings(
                         },
                         enabled = !isPipActionInProgress
                     ) {
-                        Text("安装/更新已选 (${selectedPackages.size})", fontSize = 12.sp)
+                        Text("更新已选 (${selectedPackages.size})", fontSize = 12.sp)
                     }
                 }
                 TextButton(onClick = onCheck, enabled = !isPipLoading && !isPipActionInProgress) {
@@ -653,6 +666,108 @@ private fun EnvironmentSettings(
                     else Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("刷新")
+                }
+            }
+        }
+
+        if (isPipActionInProgress && pipLogs.isNotEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp).background(Color.Black).padding(8.dp)
+            ) {
+                val logScroll = rememberScrollState()
+                Text(
+                    text = pipLogs.joinToString("\n"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF00FF00),
+                    modifier = Modifier.verticalScroll(logScroll)
+                )
+                LaunchedEffect(pipLogs.size) { logScroll.animateScrollTo(logScroll.maxValue) }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        if (pipPackages.isEmpty() && !isPipLoading) {
+            Text("没有检测到 Python 环境或没有安装包。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            val installed = pipPackages.filter { it.isInstalled }
+
+            if (installed.isNotEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("📦 已安装的包 (${installed.size})", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(vertical = 4.dp).weight(1f))
+                    TextButton(onClick = {
+                        selectedPackages = if (selectedPackages.containsAll(installed.map { it.name })) emptySet()
+                        else selectedPackages + installed.map { it.name }
+                    }) {
+                        Text(if (selectedPackages.containsAll(installed.map { it.name })) "全不选" else "全选", fontSize = 12.sp)
+                    }
+                }
+                
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    installed.forEach { pkg ->
+                        val isSelected = selectedPackages.contains(pkg.name)
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                selectedPackages = if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
+                            },
+                            shape = AppShapes.small,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                        ) {
+                            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = isSelected, onCheckedChange = { checked ->
+                                    selectedPackages = if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
+                                })
+                                Column(Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(pkg.name, fontWeight = FontWeight.Medium)
+                                        if (pkg.isOutdated) {
+                                            Spacer(Modifier.width(6.dp))
+                                            Surface(color = MaterialTheme.colorScheme.errorContainer, shape = AppShapes.small) {
+                                                Text("有更新", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                                            }
+                                        }
+                                    }
+                                    Text("版本: ${pkg.version}${if (pkg.isOutdated) " ➜ ${pkg.latestVersion}" else ""}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                
+                                if (pkg.isOutdated) {
+                                    IconButton(onClick = { onOpenPackageUrl(pkg.name) }, modifier = Modifier.size(32.dp)) {
+                                        Icon(Icons.AutoMirrored.Filled.Article, contentDescription = "更新详情", tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                    Spacer(Modifier.width(4.dp))
+                                    Button(
+                                        onClick = { onBatchInstallPip(listOf(pkg.name)) },
+                                        enabled = !isPipActionInProgress,
+                                        shape = AppShapes.medium,
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) { Text("更新", fontSize = 12.sp) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // Tab 2: 云端探索市场 - 网格视图
+        var searchQuery by remember { mutableStateOf("") }
+        var selectedPackages by remember { mutableStateOf(setOf<String>()) }
+        
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SettingSectionTitle("探索 PyPI 扩展市场")
+            if (selectedPackages.isNotEmpty()) {
+                Button(
+                    onClick = {
+                        onBatchInstallPip(selectedPackages.toList())
+                        selectedPackages = emptySet()
+                    },
+                    enabled = !isPipActionInProgress
+                ) {
+                    Text("安装已选 (${selectedPackages.size})", fontSize = 12.sp)
                 }
             }
         }
@@ -706,9 +821,6 @@ private fun EnvironmentSettings(
                 }
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
-        } else if (isSearching) {
-            Text("正在全网检索包信息...", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
         }
 
         if (isPipActionInProgress && pipLogs.isNotEmpty()) {
@@ -727,99 +839,69 @@ private fun EnvironmentSettings(
             Spacer(Modifier.height(8.dp))
         }
 
-        if (pipPackages.isEmpty() && !isPipLoading) {
-            Text("没有检测到 Python 环境或没有安装包。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            // Recommendation Section
-            val recommended = pipPackages.filter { it.isRecommended }
-            val installed = pipPackages.filter { it.isInstalled }
-
-            if (recommended.isNotEmpty()) {
-                Text("⭐ 推荐扩展", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    recommended.forEach { pkg ->
-                        val isSelected = selectedPackages.contains(pkg.name)
-                        Card(
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                selectedPackages = if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
-                            },
-                            shape = AppShapes.small,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f))
-                        ) {
-                            Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(checked = isSelected, onCheckedChange = { checked ->
-                                    selectedPackages = if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
-                                })
-                                Column(Modifier.weight(1f)) {
-                                    Text(pkg.name, fontWeight = FontWeight.Bold)
-                                    Text(pkg.description, style = MaterialTheme.typography.labelSmall)
-                                }
-                                Button(
-                                    onClick = { onBatchInstallPip(listOf(pkg.name)) },
-                                    enabled = !isPipActionInProgress,
-                                    shape = AppShapes.medium,
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(28.dp)
-                                ) { Text("一键安装", fontSize = 12.sp) }
-                            }
-                        }
-                    }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Text("🔥 热门排行榜", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (marketPage > 0) {
+                    TextButton(onClick = { onLoadMarketPage(marketPage - 1) }, enabled = !isMarketLoading) { Text("上一页", fontSize = 12.sp) }
                 }
-                Spacer(Modifier.height(8.dp))
+                Text("第 ${marketPage + 1} 页", style = MaterialTheme.typography.labelSmall)
+                TextButton(onClick = { onLoadMarketPage(marketPage + 1) }, enabled = !isMarketLoading) { Text("下一页", fontSize = 12.sp) }
             }
+        }
 
-            if (installed.isNotEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("📦 已安装的包 (${installed.size})", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(vertical = 4.dp).weight(1f))
-                    TextButton(onClick = {
-                        selectedPackages = if (selectedPackages.containsAll(installed.map { it.name })) emptySet()
-                        else selectedPackages + installed.map { it.name }
-                    }) {
-                        Text(if (selectedPackages.containsAll(installed.map { it.name })) "全不选" else "全选", fontSize = 12.sp)
-                    }
-                }
-                
-                // 为了避免列表过长导致整个对话框卡顿，这里应该嵌套滚动，但父级已经是 scrollable Column 了。
-                // 现有的设置界面使用单个垂直 Scroll，因此直接展开。
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    installed.forEach { pkg ->
-                        val isSelected = selectedPackages.contains(pkg.name)
-                        Card(
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                selectedPackages = if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
-                            },
-                            shape = AppShapes.small,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                        ) {
-                            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(checked = isSelected, onCheckedChange = { checked ->
-                                    selectedPackages = if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
-                                })
-                                Column(Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(pkg.name, fontWeight = FontWeight.Medium)
-                                        if (pkg.isOutdated) {
-                                            Spacer(Modifier.width(6.dp))
-                                            Surface(color = MaterialTheme.colorScheme.errorContainer, shape = AppShapes.small) {
-                                                Text("有更新", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onErrorContainer)
-                                            }
-                                        }
-                                    }
-                                    Text("版本: ${pkg.version}${if (pkg.isOutdated) " ➜ ${pkg.latestVersion}" else ""}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (isMarketLoading) {
+            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 240.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 300.dp, max = 600.dp) // 使用定高避免 Scroll 嵌套 Crash
+            ) {
+                items(topMarketPackages) { pkg ->
+                    val isSelected = selectedPackages.contains(pkg.name)
+                    val isAlreadyInstalled = pipPackages.any { it.name.lowercase() == pkg.name.lowercase() && it.isInstalled }
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            if (!isAlreadyInstalled) selectedPackages = if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
+                        },
+                        shape = AppShapes.small,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isAlreadyInstalled) {
+                                    Icon(Icons.Default.Check, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
+                                } else {
+                                    Checkbox(checked = isSelected, onCheckedChange = { checked ->
+                                        selectedPackages = if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
+                                    }, modifier = Modifier.size(18.dp))
                                 }
+                                Spacer(Modifier.width(8.dp))
+                                Text(pkg.name, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
                                 
-                                if (pkg.isOutdated) {
-                                    IconButton(onClick = { onOpenPackageUrl(pkg.name) }, modifier = Modifier.size(32.dp)) {
-                                        Icon(Icons.AutoMirrored.Filled.Article, contentDescription = "更新详情", tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                    Spacer(Modifier.width(4.dp))
+                                IconButton(onClick = { onOpenPackageUrl(pkg.name) }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.AutoMirrored.Filled.Article, contentDescription = "详情", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(pkg.description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, modifier = Modifier.heightIn(min = 32.dp))
+                            Spacer(Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                if (isAlreadyInstalled) {
+                                    Text("已安装", style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50))
+                                } else {
                                     Button(
                                         onClick = { onBatchInstallPip(listOf(pkg.name)) },
                                         enabled = !isPipActionInProgress,
                                         shape = AppShapes.medium,
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                        modifier = Modifier.height(28.dp)
-                                    ) { Text("更新", fontSize = 12.sp) }
+                                        modifier = Modifier.height(24.dp)
+                                    ) { Text("安装", fontSize = 10.sp) }
                                 }
                             }
                         }

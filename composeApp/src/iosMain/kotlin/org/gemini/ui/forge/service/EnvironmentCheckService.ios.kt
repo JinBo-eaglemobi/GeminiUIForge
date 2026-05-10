@@ -30,6 +30,8 @@ class IosEnvironmentCheckService : EnvironmentCheckService {
     override fun batchUninstallPipPackages(names: List<String>): Flow<String> = flowOf("iOS 暂不支持")
 
     override suspend fun searchPipPackage(query: String): org.gemini.ui.forge.model.app.PipPackageInfo? = null
+
+    override suspend fun fetchTopPackages(): List<String> = emptyList()
 }
 
 actual fun createEnvironmentCheckService(): EnvironmentCheckService = IosEnvironmentCheckService()

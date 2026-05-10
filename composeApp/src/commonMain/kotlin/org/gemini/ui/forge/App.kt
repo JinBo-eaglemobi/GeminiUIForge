@@ -243,6 +243,9 @@ fun App(typography: Typography? = null) {
                 val isPipActionInProgress by envViewModel.isPipActionInProgress.collectAsState()
                 val searchResult by envViewModel.searchResult.collectAsState()
                 val isSearching by envViewModel.isSearching.collectAsState()
+                val topMarketPackages by envViewModel.topMarketPackages.collectAsState()
+                val isMarketLoading by envViewModel.isMarketLoading.collectAsState()
+                val marketPage by envViewModel.marketPage.collectAsState()
 
                 if (showSettingsDialog) {
                     AppSettingsDialog(
@@ -261,6 +264,9 @@ fun App(typography: Typography? = null) {
                         isPipActionInProgress = isPipActionInProgress,
                         searchResult = searchResult,
                         isSearching = isSearching,
+                        topMarketPackages = topMarketPackages,
+                        isMarketLoading = isMarketLoading,
+                        marketPage = marketPage,
                         initialCategory = settingsInitialCategory,
                         updateStatus = updateStatus,
                         onDismiss = { showSettingsDialog = false },
@@ -304,6 +310,7 @@ fun App(typography: Typography? = null) {
                         onOpenPackageUrl = { envViewModel.openPackageReleaseNotes(it) },
                         onSearchPipPackage = { envViewModel.searchPipPackage(it) },
                         onClearSearchResult = { envViewModel.clearSearchResult() },
+                        onLoadMarketPage = { envViewModel.loadMarketPage(it) },
                         onCheckUpdate = { updateViewModel.checkForUpdates() },
                         onStartUpdate = { updateViewModel.performUpdate(it) }
                     )
