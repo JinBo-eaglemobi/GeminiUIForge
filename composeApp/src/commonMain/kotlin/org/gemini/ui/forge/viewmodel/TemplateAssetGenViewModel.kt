@@ -234,6 +234,7 @@ class TemplateAssetGenViewModel(
 
     // --- 资源生成核心逻辑 ---
 
+    @OptIn(kotlin.uuid.ExperimentalUuidApi::class)
     fun onRequestGeneration(apiKey: String, customPrompt: String) {
         val block = _state.value.selectedBlock ?: return
         val projectName = _state.value.projectName
@@ -260,25 +261,26 @@ class TemplateAssetGenViewModel(
             addGenLog("[提示词] Final Prompt: \"$customPrompt\"")
             
             try {
-                aiService.generateImages(
-                    model = selectedModel,
-                    apiKey = apiKey,
-                    blockType = block.type.name,
-                    userPrompt = customPrompt,
-                    maxRetries = 3,
-                    targetWidth = block.bounds.width,
-                    targetHeight = block.bounds.height,
-                    isPng = isTransparent,
-                    style = globalStyle,
-                    referenceImageUri = block.referenceImage?.getAbsolutePath() ?: refUri?.getAbsolutePath(),
-                    onLog = { 
-                        addGenLog("[AI-SDK] $it")
-                        updateStatus("AI 交互中: $it")
-                    },
-                    onImageGenerated = { base64 ->
-                        viewModelScope.launch {
-                            val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
-                            @OptIn(ExperimentalEncodingApi::class)
+                coroutineScope {
+                    aiService.generateImages(
+                        model = selectedModel,
+                        apiKey = apiKey,
+                        blockType = block.type.name,
+                        userPrompt = customPrompt,
+                        maxRetries = 3,
+                        targetWidth = block.bounds.width,
+                        targetHeight = block.bounds.height,
+                        isPng = isTransparent,
+                        style = globalStyle,
+                        referenceImageUri = block.referenceImage?.getAbsolutePath() ?: refUri?.getAbsolutePath(),
+                        onLog = { 
+                            addGenLog("[AI-SDK] $it")
+                            updateStatus("AI 交互中: $it")
+                        },
+                        onImageGenerated = { base64 ->
+                            launch {
+                                val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
+                            @OptIn(ExperimentalEncodingApi::class, kotlin.uuid.ExperimentalUuidApi::class)
                             val bytes = Base64.decode(pure)
                             val timestamp = getCurrentTimeMillis()
                             val idx = _state.value.generatedCandidates.size
@@ -286,7 +288,9 @@ class TemplateAssetGenViewModel(
 
                             updateStatus("正在接收数据: $sizeStr")
                             addGenLog("[IO] 收到原始图像数据 ($sizeStr)，正在保存至磁盘...")
-                            val originalTFile = templateRepo.saveBlockResource(projectName, block.id, "gen_${idx}_$timestamp", bytes, isPng = false)
+                            // 取官方 UUID 的第一段（前 8 位 16 进制字符）以精简文件名
+                            val shortUuid = kotlin.uuid.Uuid.random().toString().substringBefore('-')
+                            val originalTFile = templateRepo.saveBlockResource(projectName, block.id, "gen_${idx}_${timestamp}_$shortUuid", bytes, isPng = false)
                             addGenLog("[IO] 底图保存成功: ${originalTFile.getAbsolutePath()}")
                             
                             var displayFile = originalTFile
@@ -331,6 +335,7 @@ class TemplateAssetGenViewModel(
                         }
                     }
                 )
+                } // end of coroutineScope
             } catch (e: Exception) {
                 addGenLog(">>> [致命错误] 生成失败: ${e.message} <<<")
                 updateStatus("生成失败: ${e.message}")
