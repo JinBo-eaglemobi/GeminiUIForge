@@ -18,6 +18,11 @@ class IOSPlatform: Platform {
         }
     }
 
+    override fun openInFileExplorer(path: String) {
+        // Limited on iOS
+        println("Open path not fully supported on iOS: $path")
+    }
+
     override fun applyUpdateAndRestart(tempFilePath: String) {
         // iOS 平台不支持静默自更新，通常由 App Store 处理
         println("Update not supported on iOS platform: $tempFilePath")

@@ -315,6 +315,10 @@ fun TemplateAssetGenScreen(
                 else -> "历史资源列表"
             },
             candidates = historicalImages,
+            baseDirectoryPath = state.selectedBlock?.let { block ->
+                val rootDir = org.gemini.ui.forge.utils.GlobalAppEnv.currentRootPath
+                "$rootDir/templates/${state.projectName.replace(" ", "_")}/assets/${block.id}"
+            },
             initialSelectedUri = when(historySelectionTarget) {
                 TemplateAssetGenViewModel.ButtonGenTarget.PRESSED -> (state.selectedBlock?.properties as? org.gemini.ui.forge.model.ui.BlockProperties.ButtonProperties)?.pressedUri
                 TemplateAssetGenViewModel.ButtonGenTarget.DISABLED -> (state.selectedBlock?.properties as? org.gemini.ui.forge.model.ui.BlockProperties.ButtonProperties)?.disabledUri

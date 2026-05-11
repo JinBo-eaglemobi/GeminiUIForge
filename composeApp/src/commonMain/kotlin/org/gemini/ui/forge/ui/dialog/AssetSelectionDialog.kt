@@ -28,6 +28,10 @@ import kotlin.math.abs
 
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.isShiftPressed
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.action_open_in_explorer
+import org.gemini.ui.forge.getPlatform
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * 资源选择与管理弹窗 (弹窗 A)。
@@ -55,6 +59,7 @@ fun AssetSelectionDialog(
     targetWidth: Float = 0f,
     targetHeight: Float = 0f,
     isProcessing: Boolean = false, // 新增：正在处理的指示
+    baseDirectoryPath: String? = null, // 新增：显式传入的基础目录
     onImageSelected: (TemplateFile) -> Unit,
     onCropRequested: (TemplateFile) -> Unit = {}, // 新增：请求裁剪
     onDeleteImages: (List<TemplateFile>) -> Unit,
@@ -131,10 +136,30 @@ fun AssetSelectionDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(
-                            text = if (isMultiSelectMode) "批量管理 (${multiSelectedUris.size})" else title,
-                            style = MaterialTheme.typography.headlineSmall
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (isMultiSelectMode) "批量管理 (${multiSelectedUris.size})" else title,
+                                style = MaterialTheme.typography.headlineSmall
+                            )
+                            if (!isMultiSelectMode) {
+                                Spacer(Modifier.width(8.dp))
+                                // 顶栏按钮：打开基础目录 (模块目录)
+                                val dirToOpen = baseDirectoryPath ?: candidates.firstOrNull()?.getAbsolutePath()?.substringBeforeLast("/")
+                                if (dirToOpen != null) {
+                                    IconButton(
+                                        onClick = { getPlatform().openInFileExplorer(dirToOpen) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.FolderOpen,
+                                            contentDescription = stringResource(Res.string.action_open_in_explorer),
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         if (!isMultiSelectMode && targetWidth > 0) {
                             Text(
                                 "目标尺寸: ${targetWidth.toInt()}x${targetHeight.toInt()} (比例: ${((targetRatio * 100).toInt() / 100f)})",
@@ -389,6 +414,19 @@ fun AssetSelectionDialog(
                                         Spacer(Modifier.width(4.dp))
                                         Text(if (isProcessing) "处理中..." else "本地去背景", style = MaterialTheme.typography.labelLarge)
                                     }
+                                }
+
+                                // 任务：在文件夹中显示 (高亮选中)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                OutlinedButton(
+                                    onClick = { getPlatform().openInFileExplorer(tempSelectedUri!!.getAbsolutePath()) },
+                                    enabled = !isProcessing,
+                                    shape = AppShapes.medium,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.TravelExplore, null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("在文件夹中显示", style = MaterialTheme.typography.labelLarge)
                                 }
                             }
                         }

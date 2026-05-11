@@ -11,6 +11,10 @@ class AndroidPlatform : Platform {
         AppLogger.d("AndroidPlatform", "Attempting to open URL: $url")
     }
 
+    override fun openInFileExplorer(path: String) {
+        AppLogger.d("AndroidPlatform", "Attempting to open path: $path")
+    }
+
     override fun applyUpdateAndRestart(tempFilePath: String) {
         val file = File(tempFilePath)
         if (file.exists()) {

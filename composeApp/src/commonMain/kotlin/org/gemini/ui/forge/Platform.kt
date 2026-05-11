@@ -14,6 +14,8 @@ interface Platform {
     val name: String
     /** 在浏览器中打开指定的 URL 链接 */
     fun openInBrowser(url: String)
+    /** 在系统文件管理器中打开指定路径 */
+    fun openInFileExplorer(path: String)
     /** 执行软件更新替换并自动重启：传入下载好的临时文件路径 */
     fun applyUpdateAndRestart(tempFilePath: String)
 }

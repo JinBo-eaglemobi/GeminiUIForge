@@ -17,6 +17,55 @@ class JVMPlatform : Platform {
         }
     }
 
+    override fun openInFileExplorer(path: String) {
+        try {
+            val file = File(path)
+            if (!file.exists()) return
+
+            val isDirectory = file.isDirectory
+            val os = System.getProperty("os.name").lowercase()
+
+            val success = try {
+                when {
+                    // Windows: 如果是文件，尝试打开并高亮选中；如果是目录，直接打开。
+                    os.contains("win") -> {
+                        if (isDirectory) {
+                            ProcessBuilder("explorer.exe", file.absolutePath).start()
+                        } else {
+                            ProcessBuilder("explorer.exe", "/select,", file.absolutePath).start()
+                        }
+                        true
+                    }
+                    // macOS: 尝试打开并高亮选中文件
+                    os.contains("mac") -> {
+                        ProcessBuilder("open", "-R", file.absolutePath).start()
+                        true
+                    }
+                    else -> false
+                }
+            } catch (e: Exception) {
+                // 如果命令行调用失败（例如权限问题或路径特殊字符问题），抛出异常让后备方案接管
+                false
+            }
+
+            // 如果特定平台的命令行执行失败，或者不是 Win/Mac，使用 Java 原生的 Desktop API 作为后备方案
+            if (!success) {
+                if (java.awt.Desktop.isDesktopSupported()) {
+                    val desktop = java.awt.Desktop.getDesktop()
+                    // 尝试高亮选中 (Java 9+)
+                    if (desktop.isSupported(java.awt.Desktop.Action.BROWSE_FILE_DIR)) {
+                        desktop.browseFileDirectory(file)
+                    } else {
+                        // 降级：仅打开所在的文件夹
+                        desktop.open(if (isDirectory) file else file.parentFile)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override fun applyUpdateAndRestart(tempFilePath: String) {
         try {
             // 1. 获取当前程序路径
