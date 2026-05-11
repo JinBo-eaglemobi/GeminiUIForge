@@ -241,6 +241,16 @@ class AppEnvViewModel(
         }
     }
 
+    /** 直接跳转到扩展包的 Home 界面 */
+    fun openPackageHome(packageName: String) {
+        viewModelScope.launch {
+            val url = envService.fetchPackageUrl(packageName)
+            if (url != null) {
+                org.gemini.ui.forge.getPlatform().openInBrowser(url)
+            }
+        }
+    }
+
     /** 安装特定的环境依赖项并记录实时日志 */
     fun installEnvironmentItem(name: String) {
         viewModelScope.launch {

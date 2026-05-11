@@ -248,7 +248,9 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
     override suspend fun searchPipPackage(query: String): PipPackageInfo? = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext null
         try {
-            val url = URL("https://pypi.org/pypi/$query/json")
+            val urlString = "https://pypi.org/pypi/$query/json"
+            val url = URL(urlString)
+            org.gemini.ui.forge.utils.AppLogger.d("JvmEnvironmentCheckService", "🌐 正在请求包详情: $urlString")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 5000
@@ -256,29 +258,48 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
 
             if (connection.responseCode == 200) {
                 val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                org.gemini.ui.forge.utils.AppLogger.d("JvmEnvironmentCheckService", "📥 收到响应 (${responseText.length} bytes): ${responseText.take(200)}...")
+                
                 val descRegex = """"summary"\s*:\s*"([^"]*)"""".toRegex()
                 val versionRegex = """"version"\s*:\s*"([^"]+)"""".toRegex()
                 
+                // 提取 URL
+                val repoRegex = """"Repository"\s*:\s*"([^"]+)"""".toRegex()
+                val homeRegex = """"Homepage"\s*:\s*"([^"]+)"""".toRegex()
+                val sourceRegex = """"Source"\s*:\s*"([^"]+)"""".toRegex()
+
                 val desc = descRegex.find(responseText)?.groups?.get(1)?.value ?: "来自 PyPI 的在线扩展包"
                 val version = versionRegex.find(responseText)?.groups?.get(1)?.value ?: ""
                 
+                val repoMatch = repoRegex.find(responseText)?.groups?.get(1)?.value
+                val sourceMatch = sourceRegex.find(responseText)?.groups?.get(1)?.value
+                val homeMatch = homeRegex.find(responseText)?.groups?.get(1)?.value
+                val projectUrl = repoMatch ?: sourceMatch ?: homeMatch
+
                 PipPackageInfo(
                     name = query,
                     version = null,
                     latestVersion = version,
                     isInstalled = false,
                     isRecommended = false,
-                    description = desc
+                    description = desc,
+                    projectUrl = projectUrl
                 )
-            } else null
+            } else {
+                org.gemini.ui.forge.utils.AppLogger.i("JvmEnvironmentCheckService", "⚠️ 包详情请求失败, 响应码: ${connection.responseCode}")
+                null
+            }
         } catch (e: Exception) {
+            org.gemini.ui.forge.utils.AppLogger.e("JvmEnvironmentCheckService", "❌ 搜索包时出错: ${e.message}", e)
             null
         }
     }
 
     override suspend fun fetchPackageUrl(packageName: String): String? = withContext(Dispatchers.IO) {
         try {
-            val url = URL("https://pypi.org/pypi/$packageName/json")
+            val urlString = "https://pypi.org/pypi/$packageName/json"
+            val url = URL(urlString)
+            org.gemini.ui.forge.utils.AppLogger.d("JvmEnvironmentCheckService", "🌐 正在请求包 URL: $urlString")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 5000
@@ -286,6 +307,7 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
 
             if (connection.responseCode == 200) {
                 val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                org.gemini.ui.forge.utils.AppLogger.d("JvmEnvironmentCheckService", "📥 收到 URL 响应 (${responseText.length} bytes)")
                 // 简单提取 info.project_urls 里的连接
                 val repoRegex = """"Repository"\s*:\s*"([^"]+)"""".toRegex()
                 val homeRegex = """"Homepage"\s*:\s*"([^"]+)"""".toRegex()
@@ -296,15 +318,21 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
                 val homeMatch = homeRegex.find(responseText)?.groups?.get(1)?.value
 
                 repoMatch ?: sourceMatch ?: homeMatch
-            } else null
+            } else {
+                org.gemini.ui.forge.utils.AppLogger.i("JvmEnvironmentCheckService", "⚠️ URL 请求失败, 响应码: ${connection.responseCode}")
+                null
+            }
         } catch (e: Exception) {
+            org.gemini.ui.forge.utils.AppLogger.e("JvmEnvironmentCheckService", "❌ 获取包 URL 时出错: ${e.message}", e)
             null
         }
     }
 
     override suspend fun fetchTopPackages(): List<String> = withContext(Dispatchers.IO) {
         try {
-            val url = URL("https://hugovk.github.io/top-pypi-packages/top-pypi-packages-30-days.min.json")
+            val urlString = "https://hugovk.github.io/top-pypi-packages/top-pypi-packages-30-days.min.json"
+            val url = URL(urlString)
+            org.gemini.ui.forge.utils.AppLogger.d("JvmEnvironmentCheckService", "🌐 正在从云端拉取 Top 排行榜: $urlString")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 5000
@@ -312,10 +340,15 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
 
             if (connection.responseCode == 200) {
                 val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                org.gemini.ui.forge.utils.AppLogger.d("JvmEnvironmentCheckService", "✅ 排行榜拉取成功, 响应长度: ${responseText.length} bytes")
                 val response = json.decodeFromString<org.gemini.ui.forge.model.app.TopPipPackagesResponse>(responseText)
                 response.rows.map { it.project }
-            } else emptyList()
+            } else {
+                org.gemini.ui.forge.utils.AppLogger.i("JvmEnvironmentCheckService", "⚠️ 排行榜拉取失败, 响应码: ${connection.responseCode}")
+                emptyList()
+            }
         } catch (e: Exception) {
+            org.gemini.ui.forge.utils.AppLogger.e("JvmEnvironmentCheckService", "❌ 拉取排行榜时出错: ${e.message}", e)
             emptyList()
         }
     }

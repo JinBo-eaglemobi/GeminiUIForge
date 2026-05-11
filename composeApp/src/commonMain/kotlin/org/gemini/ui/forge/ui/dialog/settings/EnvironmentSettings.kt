@@ -3,6 +3,7 @@ package org.gemini.ui.forge.ui.dialog.settings
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.text.selection.SelectionContainer
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.foundation.layout.*
@@ -96,7 +97,7 @@ fun EnvironmentSettings(
                     .weight(1f)
                     .clip(AppShapes.small)
                     .background(if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent)
-                    .clickable { 
+                    .clickable {
                         envTab = index
                         if (index == 2 && topMarketPackages.isEmpty()) onLoadMarketPage(0)
                     }
@@ -105,7 +106,7 @@ fun EnvironmentSettings(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -123,7 +124,10 @@ fun EnvironmentSettings(
         ) {
             SettingSectionTitle(stringResource(Res.string.env_python_check_title))
             TextButton(onClick = onCheck, enabled = !status.isChecking) {
-                if (status.isChecking) CircularProgressIndicator(Modifier.size(LocalAppSpacing.current.medium), strokeWidth = 2.dp)
+                if (status.isChecking) CircularProgressIndicator(
+                    Modifier.size(LocalAppSpacing.current.medium),
+                    strokeWidth = 2.dp
+                )
                 else Icon(Icons.Default.Refresh, null, Modifier.size(LocalAppSpacing.current.medium))
                 Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                 Text(stringResource(Res.string.env_action_check))
@@ -135,7 +139,11 @@ fun EnvironmentSettings(
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     shape = AppShapes.small,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                            alpha = 0.3f
+                        )
+                    )
                 ) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -155,24 +163,39 @@ fun EnvironmentSettings(
                                 if (item.isOutdated) {
                                     Spacer(Modifier.width(6.dp))
                                     Surface(color = MaterialTheme.colorScheme.errorContainer, shape = AppShapes.small) {
-                                        Text("有更新", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = LocalAppSpacing.current.extraSmall, vertical = 2.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                                        Text(
+                                            "有更新",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            modifier = Modifier.padding(
+                                                horizontal = LocalAppSpacing.current.extraSmall,
+                                                vertical = 2.dp
+                                            ),
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
                                     }
                                 }
                             }
-                            val verStr = if (item.isInstalled) "${stringResource(Res.string.env_status_installed)}: ${item.version ?: "Unknown"}" else stringResource(Res.string.env_status_missing)
+                            val verStr =
+                                if (item.isInstalled) "${stringResource(Res.string.env_status_installed)}: ${item.version ?: "Unknown"}" else stringResource(
+                                    Res.string.env_status_missing
+                                )
                             Text(
                                 text = verStr + if (item.isOutdated) " ➜ ${item.latestVersion}" else "",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (item.isInstalled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
                             )
                         }
-                        
+
                         if (item.isOutdated && !item.isInstalling) {
                             Button(
                                 onClick = { onInstall(item.name) },
                                 shape = AppShapes.medium,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = LocalAppSpacing.current.extraSmall),
-                                modifier = Modifier.height(LocalAppSpacing.current.extraLarge).padding(end = LocalAppSpacing.current.small)
+                                contentPadding = PaddingValues(
+                                    horizontal = 12.dp,
+                                    vertical = LocalAppSpacing.current.extraSmall
+                                ),
+                                modifier = Modifier.height(LocalAppSpacing.current.extraLarge)
+                                    .padding(end = LocalAppSpacing.current.small)
                             ) {
                                 Text("更新", style = MaterialTheme.typography.labelSmall)
                             }
@@ -183,7 +206,10 @@ fun EnvironmentSettings(
                                 onClick = { onInstall(item.name) },
                                 enabled = !item.isInstalling,
                                 shape = AppShapes.medium,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = LocalAppSpacing.current.extraSmall),
+                                contentPadding = PaddingValues(
+                                    horizontal = 12.dp,
+                                    vertical = LocalAppSpacing.current.extraSmall
+                                ),
                                 modifier = Modifier.height(LocalAppSpacing.current.extraLarge)
                             ) {
                                 if (item.isInstalling) CircularProgressIndicator(
@@ -201,7 +227,10 @@ fun EnvironmentSettings(
                                 onClick = { onUninstall(item.name) },
                                 enabled = !item.isInstalling,
                                 shape = AppShapes.medium,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = LocalAppSpacing.current.extraSmall),
+                                contentPadding = PaddingValues(
+                                    horizontal = 12.dp,
+                                    vertical = LocalAppSpacing.current.extraSmall
+                                ),
                                 modifier = Modifier.height(LocalAppSpacing.current.extraLarge),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                             ) {
@@ -220,7 +249,8 @@ fun EnvironmentSettings(
 
                     if (item.isInstalling && item.installLogs.isNotEmpty()) {
                         Box(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp).background(Color.Black).padding(LocalAppSpacing.current.small)
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp)
+                                .background(Color.Black).padding(LocalAppSpacing.current.small)
                         ) {
                             val logScroll = rememberScrollState()
                             Text(
@@ -270,7 +300,7 @@ fun EnvironmentSettings(
     } else if (envTab == 1) {
         // Pip Package Manager Tab - 纯本地管理
         var selectedPackages by remember { mutableStateOf(setOf<String>()) }
-        
+
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -300,7 +330,10 @@ fun EnvironmentSettings(
                     }
                 }
                 TextButton(onClick = onCheck, enabled = !isPipLoading && !isPipActionInProgress) {
-                    if (isPipLoading) CircularProgressIndicator(Modifier.size(LocalAppSpacing.current.medium), strokeWidth = 2.dp)
+                    if (isPipLoading) CircularProgressIndicator(
+                        Modifier.size(LocalAppSpacing.current.medium),
+                        strokeWidth = 2.dp
+                    )
                     else Icon(Icons.Default.Refresh, null, Modifier.size(LocalAppSpacing.current.medium))
                     Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                     Text("刷新")
@@ -310,7 +343,8 @@ fun EnvironmentSettings(
 
         if (isPipActionInProgress && pipLogs.isNotEmpty()) {
             Box(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp).background(Color.Black).padding(LocalAppSpacing.current.small)
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp)
+                    .background(Color.Black).padding(LocalAppSpacing.current.small)
             ) {
                 val logScroll = rememberScrollState()
                 Text(
@@ -331,46 +365,89 @@ fun EnvironmentSettings(
 
             if (installed.isNotEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("📦 已安装的包 (${installed.size})", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(vertical = LocalAppSpacing.current.extraSmall).weight(1f))
+                    Text(
+                        "📦 已安装的包 (${installed.size})",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(vertical = LocalAppSpacing.current.extraSmall).weight(1f)
+                    )
                     TextButton(onClick = {
                         selectedPackages = if (selectedPackages.containsAll(installed.map { it.name })) emptySet()
                         else selectedPackages + installed.map { it.name }
                     }) {
-                        Text(if (selectedPackages.containsAll(installed.map { it.name })) "全不选" else "全选", fontSize = 12.sp)
+                        Text(
+                            if (selectedPackages.containsAll(installed.map { it.name })) "全不选" else "全选",
+                            fontSize = 12.sp
+                        )
                     }
                 }
-                
+
                 Column(verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.extraSmall)) {
                     installed.forEach { pkg ->
                         val isSelected = selectedPackages.contains(pkg.name)
                         Card(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
-                                selectedPackages = if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
+                                selectedPackages =
+                                    if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
                             },
                             shape = AppShapes.small,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                                    alpha = 0.3f
+                                )
+                            )
                         ) {
-                            Row(modifier = Modifier.padding(horizontal = LocalAppSpacing.current.small, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                modifier = Modifier.padding(
+                                    horizontal = LocalAppSpacing.current.small,
+                                    vertical = 6.dp
+                                ), verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Checkbox(checked = isSelected, onCheckedChange = { checked ->
-                                    selectedPackages = if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
+                                    selectedPackages =
+                                        if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
                                 })
                                 Column(Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(pkg.name, fontWeight = FontWeight.Medium)
+                                        SelectionContainer {
+                                            Text(pkg.name, fontWeight = FontWeight.Medium)
+                                        }
                                         if (pkg.isOutdated) {
                                             Spacer(Modifier.width(6.dp))
-                                            Surface(color = MaterialTheme.colorScheme.errorContainer, shape = AppShapes.small) {
-                                                Text("有更新", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = LocalAppSpacing.current.extraSmall, vertical = 2.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.errorContainer,
+                                                shape = AppShapes.small
+                                            ) {
+                                                Text(
+                                                    "有更新",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    modifier = Modifier.padding(
+                                                        horizontal = LocalAppSpacing.current.extraSmall,
+                                                        vertical = 2.dp
+                                                    ),
+                                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                                )
                                             }
                                         }
                                     }
-                                    Text("版本: ${pkg.version}${if (pkg.isOutdated) " ➜ ${pkg.latestVersion}" else ""}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        "版本: ${pkg.version}${if (pkg.isOutdated) " ➜ ${pkg.latestVersion}" else ""}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                                
+
+                                IconButton(
+                                    onClick = { onOpenPackageUrl(pkg.name) },
+                                    modifier = Modifier.size(LocalAppSpacing.current.extraLarge)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Info,
+                                        contentDescription = "详情",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
                                 if (pkg.isOutdated) {
-                                    IconButton(onClick = { onOpenPackageUrl(pkg.name) }, modifier = Modifier.size(LocalAppSpacing.current.extraLarge)) {
-                                        Icon(Icons.AutoMirrored.Filled.Article, contentDescription = "更新详情", tint = MaterialTheme.colorScheme.primary)
-                                    }
                                     Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                                     Button(
                                         onClick = { onBatchInstallPip(listOf(pkg.name)) },
@@ -390,7 +467,7 @@ fun EnvironmentSettings(
         // Tab 2: 云端探索市场 - 网格视图
         var searchQuery by remember { mutableStateOf("") }
         var selectedPackages by remember { mutableStateOf(setOf<String>()) }
-        
+
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -427,7 +504,10 @@ fun EnvironmentSettings(
                         }
                     }
                     IconButton(onClick = { onSearchPipPackage(searchQuery) }) {
-                        if (isSearching) CircularProgressIndicator(Modifier.size(LocalAppSpacing.current.medium), strokeWidth = 2.dp)
+                        if (isSearching) CircularProgressIndicator(
+                            Modifier.size(LocalAppSpacing.current.medium),
+                            strokeWidth = 2.dp
+                        )
                         else Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Go")
                     }
                 }
@@ -435,25 +515,54 @@ fun EnvironmentSettings(
         )
 
         if (searchResult != null) {
-            Text("🔍 搜索结果", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = LocalAppSpacing.current.extraSmall))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = LocalAppSpacing.current.extraSmall),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "🔍 搜索结果",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                IconButton(onClick = onClearSearchResult, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Clear Search", modifier = Modifier.size(16.dp))
+                }
+            }
             Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).padding(bottom = LocalAppSpacing.current.small),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    .padding(bottom = LocalAppSpacing.current.small),
                 shape = AppShapes.small,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f))
             ) {
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(searchResult.name, fontWeight = FontWeight.Bold)
+                        SelectionContainer {
+                            Text(searchResult.name, fontWeight = FontWeight.Bold)
+                        }
                         Text(searchResult.description, style = MaterialTheme.typography.labelSmall)
                         if (!searchResult.latestVersion.isNullOrEmpty()) {
-                            Text("最新版本: ${searchResult.latestVersion}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "最新版本: ${searchResult.latestVersion}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
+                    }
+                    IconButton(
+                        onClick = { onOpenPackageUrl(searchResult.name) },
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Info, "详情", tint = MaterialTheme.colorScheme.primary)
                     }
                     Button(
                         onClick = { onBatchInstallPip(listOf(searchResult.name)) },
                         enabled = !isPipActionInProgress,
                         shape = AppShapes.medium,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = LocalAppSpacing.current.extraSmall),
+                        contentPadding = PaddingValues(
+                            horizontal = 12.dp,
+                            vertical = LocalAppSpacing.current.extraSmall
+                        ),
                         modifier = Modifier.height(LocalAppSpacing.current.extraLarge)
                     ) { Text("安装") }
                 }
@@ -463,7 +572,8 @@ fun EnvironmentSettings(
 
         if (isPipActionInProgress && pipLogs.isNotEmpty()) {
             Box(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp).background(Color.Black).padding(LocalAppSpacing.current.small)
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp)
+                    .background(Color.Black).padding(LocalAppSpacing.current.small)
             ) {
                 val logScroll = rememberScrollState()
                 Text(
@@ -477,19 +587,38 @@ fun EnvironmentSettings(
             Spacer(Modifier.height(LocalAppSpacing.current.small))
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-            Text("🔥 热门排行榜", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+        ) {
+            Text(
+                "🔥 热门排行榜",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (marketPage > 0) {
-                    TextButton(onClick = { onLoadMarketPage(marketPage - 1) }, enabled = !isMarketLoading) { Text("上一页", fontSize = 12.sp) }
+                    TextButton(
+                        onClick = { onLoadMarketPage(marketPage - 1) },
+                        enabled = !isMarketLoading
+                    ) { Text("上一页", fontSize = 12.sp) }
                 }
                 Text("第 ${marketPage + 1} 页", style = MaterialTheme.typography.labelSmall)
-                TextButton(onClick = { onLoadMarketPage(marketPage + 1) }, enabled = !isMarketLoading) { Text("下一页", fontSize = 12.sp) }
+                TextButton(onClick = { onLoadMarketPage(marketPage + 1) }, enabled = !isMarketLoading) {
+                    Text(
+                        "下一页",
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
 
         if (isMarketLoading) {
-            Box(Modifier.fillMaxWidth().padding(LocalAppSpacing.current.extraLarge), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.fillMaxWidth().padding(LocalAppSpacing.current.extraLarge),
+                contentAlignment = Alignment.Center
+            ) {
                 CircularProgressIndicator()
             }
         } else {
@@ -497,49 +626,91 @@ fun EnvironmentSettings(
                 columns = GridCells.Adaptive(minSize = 240.dp),
                 verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small),
                 horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small),
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(min = 300.dp, max = 600.dp) // 使用定高避免 Scroll 嵌套 Crash
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    .heightIn(min = 300.dp, max = 600.dp) // 使用定高避免 Scroll 嵌套 Crash
             ) {
                 items(topMarketPackages) { pkg ->
                     val isSelected = selectedPackages.contains(pkg.name)
-                    val isAlreadyInstalled = pipPackages.any { it.name.equals(pkg.name, ignoreCase = true) && it.isInstalled }
-                    
+                    val isAlreadyInstalled =
+                        pipPackages.any { it.name.equals(pkg.name, ignoreCase = true) && it.isInstalled }
+
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
-                            if (!isAlreadyInstalled) selectedPackages = if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
+                            if (!isAlreadyInstalled) selectedPackages =
+                                if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
                         },
                         shape = AppShapes.small,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                                alpha = 0.3f
+                            )
+                        )
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (isAlreadyInstalled) {
-                                    Icon(Icons.Default.Check, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
+                                    Icon(
+                                        Icons.Default.Check,
+                                        null,
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(24.dp).padding(4.dp)
+                                    )
                                 } else {
                                     Checkbox(checked = isSelected, onCheckedChange = { checked ->
-                                        selectedPackages = if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
-                                    }, modifier = Modifier.size(18.dp))
+                                        selectedPackages =
+                                            if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
+                                    }, modifier = Modifier.padding(end = 4.dp))
                                 }
                                 Spacer(Modifier.width(LocalAppSpacing.current.small))
-                                Text(pkg.name, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
-                                
-                                IconButton(onClick = { onOpenPackageUrl(pkg.name) }, modifier = Modifier.size(LocalAppSpacing.current.large)) {
-                                    Icon(Icons.AutoMirrored.Filled.Article, contentDescription = "详情", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(LocalAppSpacing.current.medium))
+                                SelectionContainer(Modifier.weight(1f)) {
+                                    Text(
+                                        pkg.name,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { onOpenPackageUrl(pkg.name) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Info,
+                                        contentDescription = "详情",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
                             }
                             Spacer(Modifier.height(LocalAppSpacing.current.extraSmall))
-                            Text(pkg.description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, modifier = Modifier.heightIn(min = LocalAppSpacing.current.extraLarge))
+                            Text(
+                                pkg.description,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                modifier = Modifier.heightIn(min = LocalAppSpacing.current.extraLarge)
+                            )
                             Spacer(Modifier.height(LocalAppSpacing.current.small))
-                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.End) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
                                 if (isAlreadyInstalled) {
-                                    Text("已安装", style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50))
+                                    Text(
+                                        "已安装",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF4CAF50)
+                                    )
                                 } else {
                                     Button(
                                         onClick = { onBatchInstallPip(listOf(pkg.name)) },
                                         enabled = !isPipActionInProgress,
                                         shape = AppShapes.medium,
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                        modifier = Modifier.height(LocalAppSpacing.current.large)
-                                    ) { Text("安装", fontSize = 10.sp) }
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text("安装", fontSize = 12.sp)
+                                    }
                                 }
                             }
                         }
