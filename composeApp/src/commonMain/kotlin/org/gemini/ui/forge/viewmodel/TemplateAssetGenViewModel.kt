@@ -888,7 +888,11 @@ class TemplateAssetGenViewModel(
                                 }
                             ) else page
                         }
-                        currentState.copy(project = currentState.project.copy(pages = updatedPages))
+                        currentState.copy(
+                            project = currentState.project.copy(pages = updatedPages),
+                            // 如果不是批量确认，则清理候选图
+                            generatedCandidates = if (currentState.batchPendingConfirmBlock != null) currentState.generatedCandidates else emptyList()
+                        )
                     }
                     
                     val updatedProject = _state.value.project
