@@ -12,6 +12,13 @@ import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 
+/**
+ * 设置区块标题组件
+ *
+ * 用于在设置对话框中统一展示各个区块的标题样式。
+ *
+ * @param title 标题文本内容
+ */
 @Composable
 fun SettingSectionTitle(title: String) {
     val isCompact = LocalMinimumInteractiveComponentSize.current == 0.dp

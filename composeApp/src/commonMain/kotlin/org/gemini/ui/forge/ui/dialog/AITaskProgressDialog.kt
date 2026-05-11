@@ -24,8 +24,19 @@ import androidx.compose.ui.window.DialogProperties
 import org.gemini.ui.forge.ui.theme.AppShapes
 
 /**
- * 通用的 AI 任务执行进度与日志对话框 (共享组件)
+ * 通用的 AI 任务执行进度与日志对话框 (共享组件)。
+ *
  * 经过任务 3 重构：支持实时状态行、语义化日志和组合扩展。
+ * 
+ * @param title 对话框的标题，默认为 "AI 正在处理..."。
+ * @param currentStatus 任务 3 新增：实时单行任务状态文本 (如进度数据大小等)。
+ * @param logs 当前任务的历史执行日志列表。
+ * @param isProcessing 指示任务是否正在运行中。
+ * @param isLogVisible 指示日志列表区域是否可见。
+ * @param onToggleLogVisibility 切换日志区域可见性的回调。
+ * @param onActionClick 点击底部主操作按钮的回调（如“中断所有任务”或“完成并关闭”）。
+ * @param onDismiss 点击取消或忽略返回时的回调，仅在任务非执行状态下有效。
+ * @param extraContent 任务 3 新增：组合扩展点，允许在日志上方插入自定义 UI (如任务 4 的并行列表)。
  */
 @Composable
 fun AITaskProgressDialog(

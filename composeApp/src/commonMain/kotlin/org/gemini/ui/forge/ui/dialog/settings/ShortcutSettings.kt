@@ -18,6 +18,14 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.jetbrains.compose.resources.stringResource
 
 
+/**
+ * 快捷键配置设置区块
+ *
+ * 允许用户查看并修改应用内各种操作（如撤销、重做、保存等）绑定的快捷键。
+ *
+ * @param shortcuts 当前快捷键绑定映射，键为操作类型，值为快捷键组合字符串
+ * @param onShortcutSaved 快捷键修改保存回调
+ */
 @Composable
 fun ShortcutSettings(
     shortcuts: Map<ShortcutAction, String>,

@@ -26,12 +26,21 @@ import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.ui.theme.AppShapes
 
+/**
+ * 云端资产管理对话框。
+ *
+ * 允许用户浏览、批量上传、刷新同步以及批量删除保存在 Gemini 云端的资产文件。
+ *
+ * @param cloudAssetManager 负责管理云端资产状态和操作的管理器实例。
+ * @param onDismiss 点击关闭或取消时的回调。
+ */
 @Composable
 fun CloudAssetDialog(
     cloudAssetManager: CloudAssetManager,
     onDismiss: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
+// ... 内部代码 ...
     val assets by cloudAssetManager.assets.collectAsState()
     var isSyncing by remember { mutableStateOf(false) }
     
@@ -275,6 +284,17 @@ fun CloudAssetDialog(
 
 
 
+/**
+ * 云端资产列表中的单个条目组件。
+ *
+ * 显示资产的名称、ID、状态以及过期时间，并提供选中和删除操作。
+ *
+ * @param asset 云端文件的数据模型。
+ * @param isSelected 当前条目是否被选中。
+ * @param isProcessing 当前条目是否正在处理中（如正在被删除）。
+ * @param onSelectToggle 切换选中状态的回调。
+ * @param onDelete 点击删除按钮时的回调。
+ */
 @Composable
 fun CloudAssetItem(
     asset: org.gemini.ui.forge.model.api.gemini.file.GeminiFile,

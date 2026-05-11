@@ -15,6 +15,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import org.gemini.ui.forge.ui.theme.AppShapes
 
+/**
+ * 重命名图层对话框。
+ *
+ * 允许用户修改现有 UI 图层的 ID 或名称。
+ *
+ * @param initialId 图层当前的 ID 或名称，作为输入框的初始值。
+ * @param onDismiss 点击取消时的回调。
+ * @param onConfirm 点击确认时的回调，返回用户输入的新 ID。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RenameLayerDialog(initialId: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {

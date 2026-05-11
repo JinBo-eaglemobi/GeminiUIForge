@@ -16,6 +16,20 @@ import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.ui.theme.AppShapes
 
 
+/**
+ * AI 相关设置区块
+ *
+ * 提供 Gemini API Key、最大重试次数、单次图片生成数量以及提示词语言偏好的配置选项。
+ *
+ * @param currentApiKey 当前配置的 API Key
+ * @param currentMaxRetries 当前配置的最大重试次数
+ * @param currentImageGenCount 当前配置的单次图片生成数量
+ * @param currentPromptLang 当前选择的提示词语言
+ * @param onApiKeySaved 保存 API Key 回调
+ * @param onMaxRetriesSaved 保存最大重试次数回调
+ * @param onImageGenCountSaved 保存单次图片生成数量回调
+ * @param onPromptLangSelected 选择提示词语言回调
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AISettings(

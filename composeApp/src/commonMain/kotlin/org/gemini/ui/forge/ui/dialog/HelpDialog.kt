@@ -21,6 +21,14 @@ import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.ui.theme.AppShapes
 
+/**
+ * 帮助说明对话框。
+ *
+ * 显示应用程序的核心模式介绍、环境配置说明以及常用的快捷键列表，
+ * 并提供跳转到浏览器查看完整 Markdown 帮助文档的按钮。
+ *
+ * @param onDismiss 点击关闭按钮或取消对话框时的回调。
+ */
 @Composable
 fun HelpDialog(onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
@@ -106,6 +114,12 @@ fun HelpDialog(onDismiss: () -> Unit) {
     }
 }
 
+/**
+ * 帮助说明的独立章节组件。
+ *
+ * @param title 章节标题。
+ * @param desc 章节的详细描述说明。
+ */
 @Composable
 private fun HelpSection(title: String, desc: String) {
     Column(Modifier.padding(vertical = 8.dp)) {
@@ -124,6 +138,12 @@ private fun HelpSection(title: String, desc: String) {
     }
 }
 
+/**
+ * 帮助说明中的具体功能条目组件。
+ *
+ * @param label 条目名称（如快捷键或操作名称）。
+ * @param content 条目的具体说明。
+ */
 @Composable
 private fun HelpItem(label: String, content: String) {
     Row(Modifier.padding(vertical = 4.dp).fillMaxWidth()) {

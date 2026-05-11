@@ -21,6 +21,20 @@ import org.gemini.ui.forge.utils.rememberDirectoryPicker
 import org.jetbrains.compose.resources.stringResource
 
 
+/**
+ * 通用设置区块
+ *
+ * 提供应用主题、布局模式、界面语言以及本地存储目录的配置选项。
+ *
+ * @param currentTheme 当前选择的主题模式
+ * @param currentLayoutMode 当前选择的布局模式
+ * @param currentLanguage 当前选择的界面语言
+ * @param currentStorageDir 当前配置的存储目录
+ * @param onThemeSelected 选择主题模式回调
+ * @param onLayoutModeSelected 选择布局模式回调
+ * @param onLanguageSelected 选择界面语言回调
+ * @param onStorageDirSaved 保存存储目录回调
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeneralSettings(

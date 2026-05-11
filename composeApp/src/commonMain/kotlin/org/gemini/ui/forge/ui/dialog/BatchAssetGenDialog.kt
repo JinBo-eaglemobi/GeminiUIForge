@@ -23,6 +23,16 @@ import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.jetbrains.compose.resources.stringResource
 
+/**
+ * 批量资源生成对话框。
+ *
+ * 允许用户浏览所有支持资源生成的 UI 模块，按照模块类型进行分组显示，
+ * 用户可以勾选部分或全部模块，并发起批量自动生图任务。
+ *
+ * @param blocks 需要展示供用户选择的 UI 模块列表。
+ * @param onCancel 点击取消或关闭对话框时的回调。
+ * @param onStartGen 点击开始生成按钮时的回调，提供用户最终选中的模块列表。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BatchAssetGenDialog(

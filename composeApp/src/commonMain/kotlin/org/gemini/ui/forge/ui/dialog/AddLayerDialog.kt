@@ -26,6 +26,14 @@ import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.jetbrains.compose.resources.stringResource
 
+/**
+ * 添加新图层的对话框。
+ *
+ * 该对话框允许用户输入图层名称、选择图层类型（如 VIEW, BUTTON, IMAGE 等）以及设置初始的宽度和高度。
+ *
+ * @param onDismiss 点击取消或关闭对话框时的回调。
+ * @param onConfirm 点击添加按钮时的回调，提供输入的名称、选择的类型以及解析后的宽度和高度。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddLayerDialog(onDismiss: () -> Unit, onConfirm: (String, UIBlockType, Float, Float) -> Unit) {

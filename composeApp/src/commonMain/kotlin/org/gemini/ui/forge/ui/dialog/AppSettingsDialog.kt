@@ -45,6 +45,54 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 
+/**
+ * 应用程序全局设置对话框。
+ *
+ * 包含常规、AI、环境、快捷键和关于等多个设置分类面板的切换和展示。
+ *
+ * @param currentTheme 当前选中的主题模式。
+ * @param currentLayoutMode 当前选中的布局模式。
+ * @param currentLanguage 当前选中的语言（如 "zh", "en", "auto"）。
+ * @param currentApiKey 当前配置的 Gemini API 密钥。
+ * @param currentStorageDir 当前配置的本地存储目录路径。
+ * @param currentMaxRetries AI 生成失败时的最大重试次数，默认 3。
+ * @param currentImageGenCount 每次批量生图生成的数量，默认 4。
+ * @param currentPromptLang 生成提示词使用的语言偏好，默认为自动。
+ * @param shortcuts 当前快捷键配置的映射。
+ * @param envStatus Python 等环境状态检测结果。
+ * @param pipPackages 本地已安装的 Pip 包列表。
+ * @param isPipLoading 是否正在加载 Pip 包列表。
+ * @param pipLogs Pip 操作执行日志。
+ * @param isPipActionInProgress 是否正在进行 Pip 相关的安装/卸载操作。
+ * @param searchResult 云端市场包的搜索结果。
+ * @param isSearching 是否正在搜索。
+ * @param topMarketPackages 云端市场热门推荐包列表。
+ * @param isMarketLoading 是否正在加载市场数据。
+ * @param marketPage 市场数据的当前分页索引。
+ * @param initialCategory 打开对话框时默认选中的设置分类。
+ * @param updateStatus 应用程序更新状态。
+ * @param onDismiss 关闭对话框的回调。
+ * @param onLanguageSelected 选择语言后的回调。
+ * @param onLayoutModeSelected 选择布局模式后的回调。
+ * @param onThemeSelected 选择主题模式后的回调。
+ * @param onApiKeySaved 保存 API 密钥的回调。
+ * @param onStorageDirSaved 保存存储目录的回调。
+ * @param onMaxRetriesSaved 保存最大重试次数的回调。
+ * @param onImageGenCountSaved 保存每次生图数量的回调。
+ * @param onPromptLangSelected 选择提示词语言的回调。
+ * @param onShortcutSaved 保存修改后的快捷键的回调。
+ * @param onCheckEnv 触发重新检测环境状态的回调。
+ * @param onInstallEnvItem 安装指定环境组件（如 Python）的回调。
+ * @param onUninstallEnvItem 卸载指定环境组件的回调。
+ * @param onBatchInstallPip 批量安装 Pip 包的回调。
+ * @param onBatchUninstallPip 批量卸载 Pip 包的回调。
+ * @param onOpenPackageUrl 在浏览器中打开 Pip 包详情链接的回调。
+ * @param onSearchPipPackage 在云端市场搜索 Pip 包的回调。
+ * @param onClearSearchResult 清除搜索结果的回调。
+ * @param onLoadMarketPage 加载市场指定分页数据的回调。
+ * @param onCheckUpdate 触发检查应用更新的回调。
+ * @param onStartUpdate 确认开始下载并更新应用的回调。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppSettingsDialog(

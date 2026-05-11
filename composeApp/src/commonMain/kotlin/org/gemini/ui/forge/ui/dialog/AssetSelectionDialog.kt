@@ -30,7 +30,22 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.isShiftPressed
 
 /**
- * 资源选择与管理弹窗 (弹窗 A)
+ * 资源选择与管理弹窗 (弹窗 A)。
+ *
+ * 提供资源列表浏览、多选批量管理、裁剪适配请求以及本地自动去背景功能。
+ *
+ * @param title 弹窗标题。
+ * @param candidates 供选择或管理的本地资源列表。
+ * @param initialSelectedUri 初始被选中的资源（单选模式下）。
+ * @param targetWidth 预期适配的宽度（用于提示和比例校验）。
+ * @param targetHeight 预期适配的高度（用于提示和比例校验）。
+ * @param isProcessing 指示当前是否正在执行耗时处理（如批量去背景）。
+ * @param onImageSelected 确认选中某张图片并应用时的回调。
+ * @param onCropRequested 当图片比例不符，用户请求裁剪处理时的回调。
+ * @param onDeleteImages 请求删除选中的一张或多张图片时的回调。
+ * @param onClearAll 请求清除当前所有候选资源时的回调。
+ * @param onBatchRemoveBg 请求对选中的图片执行本地自动去背景操作的回调。
+ * @param onDismiss 请求关闭弹窗时的回调。
  */
 @Composable
 fun AssetSelectionDialog(

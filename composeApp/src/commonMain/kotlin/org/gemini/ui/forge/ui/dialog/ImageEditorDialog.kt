@@ -53,9 +53,17 @@ private enum class EditorTab {
 }
 
 /**
- * 统一图片编辑器弹窗
+ * 统一图片编辑器弹窗。
+ * 
  * 整合了“适配裁剪区域”和“物理加工 (烘焙)”功能。
  * 支持链式处理：裁剪后的结果可直接进入加工模式，反之亦然。
+ *
+ * @param block 关联的 UIBlock 对象，提供尺寸和拉伸模式等初始参数。
+ * @param initialImageUri 初始加载的图片 URI。
+ * @param targetWidth 目标的预期宽度，优先于 block 的宽度。
+ * @param targetHeight 目标的预期高度，优先于 block 的高度。
+ * @param onDismiss 点击取消时的回调。
+ * @param onConfirm 确认应用编辑时的回调，返回处理后的图片字节流、尺寸调整模式和九宫格配置。
  */
 @Composable
 fun ImageEditorDialog(
@@ -66,6 +74,8 @@ fun ImageEditorDialog(
     onDismiss: () -> Unit,
     onConfirm: (ByteArray, ImageResizeMode, NinePatchConfig) -> Unit
 ) {
+// ...
+
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     

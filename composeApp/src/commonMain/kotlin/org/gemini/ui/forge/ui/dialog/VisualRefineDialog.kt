@@ -23,6 +23,16 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * 视觉框选重塑对话框
+ *
+ * 提供一个界面让用户在模板图片上框选特定区域，并输入重塑指令。
+ * 支持设置是否携带会话历史上下文。
+ *
+ * @param imageUri 待重塑的模板文件信息
+ * @param pageWidth 页面原始宽度
+ * @param pageHeight 页面原始高度
+ * @param initialInstruction 初始重塑指令文案
+ * @param onDismiss 对话框关闭回调
+ * @param onConfirm 确认重塑回调，返回框选区域、指令、是否携带上下文及状态更新回调
  */
 @Composable
 fun VisualRefineDialog(

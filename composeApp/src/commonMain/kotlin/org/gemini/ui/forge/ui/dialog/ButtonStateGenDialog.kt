@@ -18,6 +18,16 @@ import org.gemini.ui.forge.viewmodel.TemplateAssetGenViewModel
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.model.ui.BlockProperties
 
+/**
+ * 按钮多态生成配置对话框。
+ *
+ * 专门用于为按钮组件（Button）生成额外的状态图像（如按下态 Pressed、禁用态 Disabled）。
+ * 用户可以分别输入不同状态的提示词，预览生成的新图与当前图的对比，并确认应用。
+ *
+ * @param state 当前模板资产生成状态流的最新值，包含所有状态数据。
+ * @param viewModel 负责处理生成逻辑和状态管理的 ViewModel。
+ * @param apiKey 用于调用 Gemini 生图 API 的密钥。
+ */
 @Composable
 fun ButtonStateGenDialog(
     state: TemplateAssetGenState,
@@ -25,6 +35,10 @@ fun ButtonStateGenDialog(
     apiKey: String
 ) {
     if (!state.showButtonGenDialog) return
+    // ... 原有逻辑 ...
+// 这里因为替换内容包含了很多内部代码，我应该用缩小范围的 replace 方式，或者重新生成整个函数。
+// 为了避免省略导致的问题，我将通过替换部分代码段来添加。
+
 
     Dialog(
         onDismissRequest = { if (!state.isButtonGenInProgress) viewModel.closeButtonGenDialog() },
@@ -186,6 +200,16 @@ fun ButtonStateGenDialog(
     }
 }
 
+/**
+ * 图像预览卡片组件。
+ *
+ * 用于在对比区域中展示图像（如当前图片和新生成的图片），并带有标签说明。
+ *
+ * @param uri 图像文件的 URI 包装对象，若为 null 则显示占位文本。
+ * @param label 显示在图像下方的描述性标签文本。
+ * @param modifier 修饰符。
+ * @param isNew 是否为新生成的图像，若为 true 则在视觉上进行强调（如不同的背景色和边框）。
+ */
 @Composable
 fun PreviewCard(
     uri: org.gemini.ui.forge.data.TemplateFile?,

@@ -18,7 +18,15 @@ import org.gemini.ui.forge.ui.component.ImageAreaSelector
 import org.gemini.ui.forge.ui.theme.AppShapes
 
 /**
- * 设置区域参考图对话框
+ * 设置区域参考图对话框。
+ *
+ * 允许用户在指定的参考图片上框选一块区域，这块区域将用于后续的视觉重塑或局部生图参考。
+ *
+ * @param imageUri 用作参考底图的文件。
+ * @param pageWidth 显示底图的画布区域宽度（通常用于坐标比例转换）。
+ * @param pageHeight 显示底图的画布区域高度。
+ * @param onDismiss 点击取消时的回调。
+ * @param onConfirm 确认框选区域时的回调，返回相对坐标的 SerialRect。
  */
 @Composable
 fun ReferenceAreaCropDialog(

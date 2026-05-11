@@ -27,6 +27,16 @@ import androidx.compose.material3.LinearProgressIndicator
 
 
 
+/**
+ * “关于”设置区块
+ *
+ * 展示应用图标、名称、当前版本号、版权信息以及更新检测界面。
+ * 支持手动检测更新和下载更新。
+ *
+ * @param updateStatus 当前更新状态（空闲、检查中、有可用更新、下载中等）
+ * @param onCheckUpdate 触发检查更新的回调
+ * @param onStartUpdate 触发开始下载更新的回调
+ */
 @Composable
 fun AboutSection(
     updateStatus: UpdateStatus,

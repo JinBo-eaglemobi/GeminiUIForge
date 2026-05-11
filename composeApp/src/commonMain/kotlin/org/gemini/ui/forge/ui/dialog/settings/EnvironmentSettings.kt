@@ -29,6 +29,32 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.HorizontalDivider
 
 
+/**
+ * 环境依赖与 Python 包管理设置区块
+ *
+ * 分为三个选项卡：核心依赖、本地扩展管理和云端探索市场。
+ * 支持检测系统环境、管理本地 Pip 包以及搜索和安装 PyPI 上的扩展包。
+ *
+ * @param status 核心依赖的状态信息
+ * @param pipPackages 本地已安装的 Pip 包列表
+ * @param isPipLoading 是否正在加载本地 Pip 包
+ * @param pipLogs Pip 安装/卸载过程的日志
+ * @param isPipActionInProgress 是否正在执行 Pip 操作
+ * @param searchResult 云端搜索到的 Pip 包信息
+ * @param isSearching 是否正在搜索云端 Pip 包
+ * @param topMarketPackages 云端市场热门包列表
+ * @param isMarketLoading 是否正在加载云端市场数据
+ * @param marketPage 云端市场当前页码
+ * @param onCheck 触发重新检测环境的回调
+ * @param onInstall 单个包安装回调
+ * @param onUninstall 单个包卸载回调
+ * @param onBatchInstallPip 批量安装 Pip 包回调
+ * @param onBatchUninstallPip 批量卸载 Pip 包回调
+ * @param onOpenPackageUrl 在浏览器中打开包详情页的回调
+ * @param onSearchPipPackage 搜索云端 Pip 包回调
+ * @param onClearSearchResult 清除搜索结果回调
+ * @param onLoadMarketPage 加载云端市场指定页码回调
+ */
 @Composable
 fun EnvironmentSettings(
     status: FullEnvironmentStatus,
