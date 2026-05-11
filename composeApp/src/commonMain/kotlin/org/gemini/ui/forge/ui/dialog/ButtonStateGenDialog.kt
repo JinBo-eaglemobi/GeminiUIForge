@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.BorderStroke
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -48,7 +49,7 @@ fun ButtonStateGenDialog(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
-                OutlinedTextField(
+                SelectAllOutlinedTextField(
                     value = state.buttonPressedPrompt,
                     onValueChange = { viewModel.updateButtonGenPrompts(it, state.buttonDisabledPrompt) },
                     modifier = Modifier.fillMaxWidth().height(100.dp),
@@ -62,7 +63,7 @@ fun ButtonStateGenDialog(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
-                OutlinedTextField(
+                SelectAllOutlinedTextField(
                     value = state.buttonDisabledPrompt,
                     onValueChange = { viewModel.updateButtonGenPrompts(state.buttonPressedPrompt, it) },
                     modifier = Modifier.fillMaxWidth().height(100.dp),

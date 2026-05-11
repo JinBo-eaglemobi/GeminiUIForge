@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.feature.analysis
 
 import androidx.compose.foundation.layout.*
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -145,7 +146,7 @@ fun TemplateGeneratorScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        OutlinedTextField(
+        SelectAllOutlinedTextField(
             value = inputUris,
             onValueChange = { inputUris = it },
             label = { Text(stringResource(Res.string.template_gen_input_hint)) },
@@ -156,7 +157,7 @@ fun TemplateGeneratorScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedTextField(
+        SelectAllOutlinedTextField(
             value = templateName,
             onValueChange = { templateName = it },
             label = { Text("模板名称 (留空则自动根据图片命名)") },

@@ -1,6 +1,8 @@
 package org.gemini.ui.forge.ui.feature.assetgen
 
 import androidx.compose.foundation.layout.*
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -78,7 +80,7 @@ fun AssetGenPropertyPanel(
         )
     }
 
-    Column(modifier = modifier.padding(16.dp)) {
+    Column(modifier = modifier.padding(LocalAppSpacing.current.medium)) {
         Text(
             stringResource(Res.string.editor_gen_settings),
             style = MaterialTheme.typography.titleMedium,
@@ -86,25 +88,25 @@ fun AssetGenPropertyPanel(
         )
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().padding(bottom = LocalAppSpacing.current.small),
+            horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)
         ) {
             OutlinedButton(
                 onClick = { showAdvancedSettingsDialog = true },
-                modifier = Modifier.weight(1f).height(32.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp),
+                modifier = Modifier.weight(1f).height(LocalAppSpacing.current.extraLarge),
+                contentPadding = PaddingValues(horizontal = LocalAppSpacing.current.extraSmall),
                 shape = AppShapes.small,
                 enabled = !state.isGenerating
             ) {
-                Icon(Icons.Default.Palette, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Default.Palette, null, modifier = Modifier.size(LocalAppSpacing.current.medium))
+                Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                 Text("风格与参考", style = MaterialTheme.typography.labelSmall)
             }
 
             OutlinedButton(
                 onClick = { viewModel.openBatchGenDialog() },
-                modifier = Modifier.weight(1f).height(32.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp),
+                modifier = Modifier.weight(1f).height(LocalAppSpacing.current.extraLarge),
+                contentPadding = PaddingValues(horizontal = LocalAppSpacing.current.extraSmall),
                 shape = AppShapes.small,
                 enabled = !state.isGenerating,
                 colors = ButtonDefaults.outlinedButtonColors(
@@ -112,22 +114,22 @@ fun AssetGenPropertyPanel(
                     contentColor = MaterialTheme.colorScheme.primary
                 )
             ) {
-                Icon(Icons.Default.AutoAwesomeMotion, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Default.AutoAwesomeMotion, null, modifier = Modifier.size(LocalAppSpacing.current.medium))
+                Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                 Text(stringResource(Res.string.action_batch_gen), style = MaterialTheme.typography.labelSmall)
             }
         }
 
-        Box(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().padding(bottom = LocalAppSpacing.current.medium)) {
             OutlinedButton(
                 onClick = { showModelMenu = true },
-                modifier = Modifier.fillMaxWidth().height(32.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp),
+                modifier = Modifier.fillMaxWidth().height(LocalAppSpacing.current.extraLarge),
+                contentPadding = PaddingValues(horizontal = LocalAppSpacing.current.small),
                 shape = AppShapes.small,
                 enabled = !state.isGenerating
             ) {
-                Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(LocalAppSpacing.current.medium))
+                Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                 Text(state.selectedModel.displayName, style = MaterialTheme.typography.labelSmall)
                 Spacer(Modifier.weight(1f))
                 Icon(Icons.Default.ArrowDropDown, null)
@@ -168,7 +170,7 @@ fun AssetGenPropertyPanel(
                                 if (state.selectedModel == model) Icon(
                                     Icons.Default.Check,
                                     null,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(LocalAppSpacing.current.medium)
                                 )
                             }
                         )
@@ -186,7 +188,7 @@ fun AssetGenPropertyPanel(
                     text = "正在编辑: ${selectedBlock.id}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = LocalAppSpacing.current.small, vertical = LocalAppSpacing.current.extraSmall)
                 )
             }
         }
@@ -202,10 +204,10 @@ fun AssetGenPropertyPanel(
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text("风格参考图 (图生图引导)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(LocalAppSpacing.current.small))
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.size(100.dp).padding(4.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.size(100.dp).padding(LocalAppSpacing.current.extraSmall), contentAlignment = Alignment.Center) {
                                 if (state.referenceImageUri != null) {
                                     AsyncImage(
                                         model = state.referenceImageUri.getAbsolutePath(),
@@ -215,7 +217,7 @@ fun AssetGenPropertyPanel(
                                     )
                                 } else {
                                     Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = AppShapes.small, modifier = Modifier.fillMaxSize()) {
-                                        Icon(Icons.Default.AddPhotoAlternate, null, modifier = Modifier.padding(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Icon(Icons.Default.AddPhotoAlternate, null, modifier = Modifier.padding(LocalAppSpacing.current.large), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                             }
@@ -224,14 +226,14 @@ fun AssetGenPropertyPanel(
                                 Button(
                                     onClick = { imagePicker() },
                                     modifier = Modifier.height(36.dp),
-                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                                    contentPadding = PaddingValues(horizontal = LocalAppSpacing.current.medium, vertical = 0.dp),
                                     shape = AppShapes.small,
                                     enabled = !state.isGenerating
                                 ) {
                                     Text("更改参考图", style = MaterialTheme.typography.labelSmall)
                                 }
                                 if (state.referenceImageUri != null) {
-                                    Spacer(Modifier.height(8.dp))
+                                    Spacer(Modifier.height(LocalAppSpacing.current.small))
                                     TextButton(
                                         onClick = { viewModel.setReferenceImage(null) },
                                         modifier = Modifier.height(28.dp),
@@ -246,8 +248,8 @@ fun AssetGenPropertyPanel(
                         Spacer(Modifier.height(20.dp))
 
                         Text("全局风格关键词", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
+                        Spacer(Modifier.height(LocalAppSpacing.current.small))
+                        SelectAllOutlinedTextField(
                             value = state.globalStyle,
                             onValueChange = { viewModel.setGlobalStyle(it) },
                             placeholder = { Text("例如：Cyberpunk, neon lights...", style = MaterialTheme.typography.bodySmall) },
@@ -280,10 +282,10 @@ fun AssetGenPropertyPanel(
                 shape = AppShapes.small,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
             ) {
-                Column(Modifier.padding(8.dp)) {
+                Column(Modifier.padding(LocalAppSpacing.current.small)) {
                     Text("模块物理参数 (只读)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(4.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Spacer(Modifier.height(LocalAppSpacing.current.extraSmall))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                         InfoItem("X", selectedBlock.bounds.left.toInt().toString(), Modifier.weight(1f))
                         InfoItem("Y", selectedBlock.bounds.top.toInt().toString(), Modifier.weight(1f))
                         InfoItem("W", selectedBlock.bounds.width.toInt().toString(), Modifier.weight(1f))
@@ -292,7 +294,7 @@ fun AssetGenPropertyPanel(
                 }
             }
 
-            Text("当前绑定资源", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp))
+            Text("当前绑定资源", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = LocalAppSpacing.current.small))
             Card(
                 modifier = Modifier.fillMaxWidth().height(160.dp),
                 shape = AppShapes.medium,
@@ -303,29 +305,29 @@ fun AssetGenPropertyPanel(
                         AsyncImage(
                             model = selectedBlock.currentImageUri.getAbsolutePath(),
                             contentDescription = null,
-                            modifier = Modifier.fillMaxSize().padding(4.dp),
+                            modifier = Modifier.fillMaxSize().padding(LocalAppSpacing.current.extraSmall),
                             contentScale = ContentScale.Fit
                         )
                     } else {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.HideImage, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Default.HideImage, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(LocalAppSpacing.current.extraLarge))
                             Text("尚未绑定任何资源", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
             }
 
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = LocalAppSpacing.current.small), horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                 OutlinedButton(onClick = onShowHistory, modifier = Modifier.weight(1f), shape = AppShapes.medium) {
-                    Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Default.History, null, modifier = Modifier.size(LocalAppSpacing.current.medium))
+                    Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                     Text("历史/切换", style = MaterialTheme.typography.labelSmall)
                 }
 
                 if (selectedBlock.currentImageUri != null) {
                     OutlinedButton(onClick = { viewModel.setReferenceImage(selectedBlock.currentImageUri) }, modifier = Modifier.weight(1f), shape = AppShapes.medium) {
-                        Icon(Icons.Default.AutoFixHigh, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Default.AutoFixHigh, null, modifier = Modifier.size(LocalAppSpacing.current.medium))
+                        Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                         Text("设为参考", style = MaterialTheme.typography.labelSmall)
                     }
                 }
@@ -337,14 +339,14 @@ fun AssetGenPropertyPanel(
                     enabled = selectedBlock.currentImageUri != null,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Icon(Icons.Default.LinkOff, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Default.LinkOff, null, modifier = Modifier.size(LocalAppSpacing.current.medium))
+                    Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                     Text("解绑", style = MaterialTheme.typography.labelSmall)
                 }
             }
 
             // --- 图片编辑入口 ---
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
             Button(
                 onClick = { showImageEditor = true },
                 modifier = Modifier.fillMaxWidth().height(40.dp),
@@ -353,7 +355,7 @@ fun AssetGenPropertyPanel(
                 enabled = selectedBlock.currentImageUri != null
             ) {
                 Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(LocalAppSpacing.current.small))
                 val btnText = if (selectedBlock.currentImageUri != null) "物理加工与固化 (九宫格/拉伸)" else "请先生成或绑定图片"
                 Text(btnText, style = MaterialTheme.typography.labelMedium)
             }
@@ -373,7 +375,7 @@ fun AssetGenPropertyPanel(
             )
 
             Spacer(Modifier.height(12.dp))
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(bottom = LocalAppSpacing.current.small)) {
                 PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang ->
                     SegmentedButton(
                         selected = currentEditingLang == lang,
@@ -387,7 +389,7 @@ fun AssetGenPropertyPanel(
             val displayPrompt = if (currentEditingLang == PromptLanguage.EN) selectedBlock.userPromptEn else selectedBlock.userPromptZh
             var tempPrompt by remember(selectedBlock.id, currentEditingLang, displayPrompt) { mutableStateOf(displayPrompt) }
 
-            OutlinedTextField(
+            SelectAllOutlinedTextField(
                 value = tempPrompt,
                 onValueChange = { tempPrompt = it },
                 readOnly = false,
@@ -396,23 +398,23 @@ fun AssetGenPropertyPanel(
                 maxLines = 8,
                 enabled = !state.isGenerating
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(LocalAppSpacing.current.medium))
 
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = state.isGenerateTransparent, onCheckedChange = { viewModel.setGenerateTransparent(it) }, enabled = !state.isGenerating)
-                Column(modifier = Modifier.padding(start = 8.dp)) {
+                Column(modifier = Modifier.padding(start = LocalAppSpacing.current.small)) {
                     Text("生成透明背景 (PNG)", style = MaterialTheme.typography.bodyMedium)
                     Text("开启后自动处理背景", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
             if (state.isGenerateTransparent) {
-                Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(modifier = Modifier.fillMaxWidth().padding(start = LocalAppSpacing.current.medium), verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = state.isPrioritizeCloudRemoval, onCheckedChange = { viewModel.setPrioritizeCloudRemoval(it) }, enabled = !state.isGenerating)
-                    Column(modifier = Modifier.padding(start = 8.dp)) { Text("优先云端抠图", style = MaterialTheme.typography.bodyMedium) }
+                    Column(modifier = Modifier.padding(start = LocalAppSpacing.current.small)) { Text("优先云端抠图", style = MaterialTheme.typography.bodyMedium) }
                 }
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(LocalAppSpacing.current.large))
 
             Button(
                 onClick = { viewModel.onRequestGeneration(apiKey, tempPrompt) },

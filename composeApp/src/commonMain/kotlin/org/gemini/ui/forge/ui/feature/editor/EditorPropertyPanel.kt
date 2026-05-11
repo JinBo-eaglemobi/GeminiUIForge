@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.feature.editor
 
 import androidx.compose.foundation.layout.*
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -41,11 +42,11 @@ fun EditorPropertyPanel(
 ) {
     val selectedBlock = state.selectedBlock
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.fillMaxSize().padding(LocalAppSpacing.current.medium).verticalScroll(rememberScrollState())) {
         Text(
             stringResource(Res.string.editor_properties),
             style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = LocalAppSpacing.current.medium)
         )
 
         if (selectedBlock == null) {
@@ -62,8 +63,8 @@ fun EditorPropertyPanel(
                     shape = AppShapes.small,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
                 ) {
-                    Column(Modifier.padding(8.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.padding(LocalAppSpacing.current.small)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                             EditableInfoItem(
                                 label = "宽度 (W)",
                                 value = page.width.toInt().toString(),
@@ -83,8 +84,8 @@ fun EditorPropertyPanel(
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
+                        Spacer(Modifier.height(LocalAppSpacing.current.small))
+                        SelectAllOutlinedTextField(
                             value = state.stageBackgroundColor,
                             onValueChange = { viewModel.updateStageBackgroundColor(it) },
                             label = { Text("临时背景色 (HEX)", style = MaterialTheme.typography.labelSmall) },
@@ -100,7 +101,7 @@ fun EditorPropertyPanel(
             }
         } else {
             // ID 编辑
-            OutlinedTextField(
+            SelectAllOutlinedTextField(
                 value = selectedBlock.id,
                 onValueChange = { if (it.isNotBlank()) viewModel.renameBlock(selectedBlock.id, it) },
                 label = { Text(stringResource(Res.string.prop_block_id)) },
@@ -116,14 +117,14 @@ fun EditorPropertyPanel(
                 shape = AppShapes.small,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
             ) {
-                Column(Modifier.padding(8.dp)) {
+                Column(Modifier.padding(LocalAppSpacing.current.small)) {
                     Text(
                         "物理坐标与尺寸",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Spacer(Modifier.height(LocalAppSpacing.current.small))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                         EditableInfoItem(
                             label = "X",
                             value = selectedBlock.bounds.left.toInt().toString(),
@@ -155,8 +156,8 @@ fun EditorPropertyPanel(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Spacer(Modifier.height(LocalAppSpacing.current.small))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                         EditableInfoItem(
                             label = "W",
                             value = selectedBlock.bounds.width.toInt().toString(),
@@ -197,14 +198,14 @@ fun EditorPropertyPanel(
                 stringResource(Res.string.prop_type),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 4.dp)
+                modifier = Modifier.padding(bottom = LocalAppSpacing.current.extraSmall)
             )
             ExposedDropdownMenuBox(
                 expanded = expanded,
                 onExpandedChange = { expanded = it },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                modifier = Modifier.fillMaxWidth().padding(bottom = LocalAppSpacing.current.medium)
             ) {
-                OutlinedTextField(
+                SelectAllOutlinedTextField(
                     value = stringResource(selectedBlock.type.getDisplayNameRes()),
                     onValueChange = {},
                     readOnly = true,
@@ -228,9 +229,9 @@ fun EditorPropertyPanel(
                 text = stringResource(Res.string.editor_prompt_lang),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 4.dp)
+                modifier = Modifier.padding(bottom = LocalAppSpacing.current.extraSmall)
             )
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(bottom = LocalAppSpacing.current.small)) {
                 PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang ->
                     SegmentedButton(
                         selected = currentLang == lang,
@@ -243,7 +244,7 @@ fun EditorPropertyPanel(
 
             val displayPrompt =
                 if (currentLang == PromptLanguage.EN) selectedBlock.userPromptEn else selectedBlock.userPromptZh
-            OutlinedTextField(
+            SelectAllOutlinedTextField(
                 value = displayPrompt,
                 onValueChange = { viewModel.onUserPromptChanged(selectedBlock.id, it, currentLang) },
                 label = { Text("${stringResource(Res.string.label_description_content)} (${currentLang.displayName})") },
@@ -264,8 +265,8 @@ fun EditorPropertyPanel(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth().padding(top = LocalAppSpacing.current.extraSmall),
+                horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)
             ) {
                 Button(
                     onClick = { viewModel.optimizePrompt(selectedBlock.id, apiKey, currentLang, useChatContext) },
@@ -274,7 +275,7 @@ fun EditorPropertyPanel(
                     shape = AppShapes.medium
                 ) {
                     Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                     Text(stringResource(Res.string.prop_optimize_prompt))
                 }
 
@@ -285,7 +286,7 @@ fun EditorPropertyPanel(
                     shape = AppShapes.medium
                 ) {
                     Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                     Text(stringResource(Res.string.action_refine_area))
                 }
             }
@@ -293,12 +294,12 @@ fun EditorPropertyPanel(
             if (state.currentPage?.sourceImageUri != null) {
                 OutlinedButton(
                     onClick = { onSetReferenceAreaClick(selectedBlock.id) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = LocalAppSpacing.current.small),
                     enabled = !state.isGenerating,
                     shape = AppShapes.medium
                 ) {
                     Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp)) // 可以换个图标，如 Crop
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                     Text("设置区域参考图")
                 }
                 
@@ -307,12 +308,12 @@ fun EditorPropertyPanel(
                         "当前已设置局部参考图",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 4.dp).align(Alignment.CenterHorizontally)
+                        modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall).align(Alignment.CenterHorizontally)
                     )
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(LocalAppSpacing.current.large))
 
             // 块删除
             Button(
@@ -323,7 +324,7 @@ fun EditorPropertyPanel(
                 enabled = !state.isGenerating
             ) {
                 Icon(Icons.Default.Delete, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(LocalAppSpacing.current.small))
                 Text(stringResource(Res.string.action_delete_block))
             }
         }

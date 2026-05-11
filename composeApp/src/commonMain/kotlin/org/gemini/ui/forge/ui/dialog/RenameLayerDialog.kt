@@ -1,10 +1,10 @@
 package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -23,7 +23,7 @@ fun RenameLayerDialog(initialId: String, onDismiss: () -> Unit, onConfirm: (Stri
         onDismissRequest = onDismiss,
         title = { Text("重命名图层") },
         text = {
-            OutlinedTextField(
+            SelectAllOutlinedTextField(
                 value = newId,
                 onValueChange = { newId = it },
                 label = { Text("新 ID/名称") },

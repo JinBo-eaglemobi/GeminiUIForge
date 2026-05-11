@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.background
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -57,7 +58,7 @@ fun VisualRefineDialog(
                 )
 
                 Spacer(Modifier.height(16.dp))
-                OutlinedTextField(
+                SelectAllOutlinedTextField(
                     value = instruction,
                     onValueChange = { instruction = it },
                     label = { Text("重塑指令") },

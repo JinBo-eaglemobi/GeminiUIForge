@@ -1,6 +1,8 @@
 package org.gemini.ui.forge.ui.feature.assetgen
 
 import androidx.compose.foundation.layout.*
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.History
@@ -33,8 +35,8 @@ fun BlockSpecificProperties(
         UIBlockType.BUTTON -> {
             val props = properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
             Text("按钮属性配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
+            SelectAllOutlinedTextField(
                 value = props.text,
                 onValueChange = { onPropertiesChanged(props.copy(text = it)) },
                 label = { Text("按钮文案 (选填)") },
@@ -42,19 +44,19 @@ fun BlockSpecificProperties(
                 singleLine = true,
                 enabled = !state.isGenerating
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(
                     checked = props.isMultiState,
                     onCheckedChange = { onPropertiesChanged(props.copy(isMultiState = it)) },
                     enabled = !state.isGenerating
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(LocalAppSpacing.current.small))
                 Text("启用多态资源 (点击/禁用)", style = MaterialTheme.typography.bodySmall)
             }
             
             if (props.isMultiState) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(LocalAppSpacing.current.small))
                 val hasBaseImage = state.selectedBlock?.currentImageUri != null
                 
                 if (hasBaseImage) {
@@ -64,16 +66,16 @@ fun BlockSpecificProperties(
                         enabled = !state.isGenerating,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                     ) {
-                        Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(LocalAppSpacing.current.medium))
+                        Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                         Text("👉 准备多态生成 (编辑与预览)")
                     }
                     
                     Spacer(Modifier.height(12.dp))
                     Text("当前绑定的多态资源", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(LocalAppSpacing.current.extraSmall))
                     
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                         // Pressed State Preview
                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
                             Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
@@ -87,7 +89,7 @@ fun BlockSpecificProperties(
                                             AsyncImage(
                                                 model = props.pressedUri.getAbsolutePath(),
                                                 contentDescription = "Pressed State",
-                                                modifier = Modifier.fillMaxSize().padding(4.dp),
+                                                modifier = Modifier.fillMaxSize().padding(LocalAppSpacing.current.extraSmall),
                                                 contentScale = ContentScale.Fit
                                             )
                                         } else {
@@ -97,12 +99,12 @@ fun BlockSpecificProperties(
                                 }
                                 IconButton(
                                     onClick = onShowPressedHistory,
-                                    modifier = Modifier.align(Alignment.TopEnd).size(24.dp).padding(4.dp)
+                                    modifier = Modifier.align(Alignment.TopEnd).size(LocalAppSpacing.current.large).padding(LocalAppSpacing.current.extraSmall)
                                 ) {
                                     Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                                 }
                             }
-                            Text("点击态", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
+                            Text("点击态", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall))
                         }
                         
                         // Disabled State Preview
@@ -118,7 +120,7 @@ fun BlockSpecificProperties(
                                             AsyncImage(
                                                 model = props.disabledUri.getAbsolutePath(),
                                                 contentDescription = "Disabled State",
-                                                modifier = Modifier.fillMaxSize().padding(4.dp),
+                                                modifier = Modifier.fillMaxSize().padding(LocalAppSpacing.current.extraSmall),
                                                 contentScale = ContentScale.Fit
                                             )
                                         } else {
@@ -128,25 +130,25 @@ fun BlockSpecificProperties(
                                 }
                                 IconButton(
                                     onClick = onShowDisabledHistory,
-                                    modifier = Modifier.align(Alignment.TopEnd).size(24.dp).padding(4.dp)
+                                    modifier = Modifier.align(Alignment.TopEnd).size(LocalAppSpacing.current.large).padding(LocalAppSpacing.current.extraSmall)
                                 ) {
                                     Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                                 }
                             }
-                            Text("禁用态", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
+                            Text("禁用态", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall))
                         }
                     }
                 } else {
                     Surface(
                         color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
                         shape = AppShapes.small,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        modifier = Modifier.fillMaxWidth().padding(vertical = LocalAppSpacing.current.extraSmall)
                     ) {
                         Text(
                             text = "请先在下方生成或绑定一张普通状态的按钮图片作为基准参照图。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(8.dp)
+                            modifier = Modifier.padding(LocalAppSpacing.current.small)
                         )
                     }
                 }
@@ -155,7 +157,7 @@ fun BlockSpecificProperties(
         UIBlockType.VIEW -> {
             val props = properties as? BlockProperties.ViewProperties ?: BlockProperties.ViewProperties()
             Text("视图配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
             org.gemini.ui.forge.ui.component.ColorPickerField(
                 label = "背景色 (Hex)",
                 hexColor = props.backgroundColor,
@@ -165,15 +167,15 @@ fun BlockSpecificProperties(
         UIBlockType.TEXT -> {
             val props = properties as? BlockProperties.TextProperties ?: BlockProperties.TextProperties()
             Text("文本配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
+            SelectAllOutlinedTextField(
                 value = props.text,
                 onValueChange = { onPropertiesChanged(props.copy(text = it)) },
                 label = { Text("文本内容") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
             org.gemini.ui.forge.ui.component.TextStyleToolbar(
                 isBold = props.isBold,
                 onBoldChanged = { onPropertiesChanged(props.copy(isBold = it)) },
@@ -184,15 +186,15 @@ fun BlockSpecificProperties(
                 verticalAlign = props.verticalAlign,
                 onVerticalAlignChanged = { onPropertiesChanged(props.copy(verticalAlign = it)) }
             )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
+            Row(horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                 org.gemini.ui.forge.ui.component.ColorPickerField(
                     label = "文本颜色",
                     hexColor = props.textColor,
                     onColorChanged = { onPropertiesChanged(props.copy(textColor = it)) },
                     modifier = Modifier.weight(1.5f)
                 )
-                OutlinedTextField(
+                SelectAllOutlinedTextField(
                     value = props.textSize.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(textSize = it.toIntOrNull() ?: props.textSize)) },
                     label = { Text("字号") },
@@ -200,15 +202,15 @@ fun BlockSpecificProperties(
                     singleLine = true
                 )
             }
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
+            Row(horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                 org.gemini.ui.forge.ui.component.ColorPickerField(
                     label = "描边颜色",
                     hexColor = props.strokeColor,
                     onColorChanged = { onPropertiesChanged(props.copy(strokeColor = it)) },
                     modifier = Modifier.weight(1.5f)
                 )
-                OutlinedTextField(
+                SelectAllOutlinedTextField(
                     value = props.strokeWidth.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(strokeWidth = it.toFloatOrNull() ?: props.strokeWidth)) },
                     label = { Text("描边宽度") },
@@ -220,15 +222,15 @@ fun BlockSpecificProperties(
         UIBlockType.INPUT -> {
             val props = properties as? BlockProperties.InputProperties ?: BlockProperties.InputProperties()
             Text("输入框配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
+            SelectAllOutlinedTextField(
                 value = props.hintText,
                 onValueChange = { onPropertiesChanged(props.copy(hintText = it)) },
                 label = { Text("默认提示文案 (Hint)") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
             org.gemini.ui.forge.ui.component.TextStyleToolbar(
                 isBold = props.isBold,
                 onBoldChanged = { onPropertiesChanged(props.copy(isBold = it)) },
@@ -239,15 +241,15 @@ fun BlockSpecificProperties(
                 verticalAlign = props.verticalAlign,
                 onVerticalAlignChanged = { onPropertiesChanged(props.copy(verticalAlign = it)) }
             )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
+            Row(horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                 org.gemini.ui.forge.ui.component.ColorPickerField(
                     label = "文本颜色",
                     hexColor = props.textColor,
                     onColorChanged = { onPropertiesChanged(props.copy(textColor = it)) },
                     modifier = Modifier.weight(1.5f)
                 )
-                OutlinedTextField(
+                SelectAllOutlinedTextField(
                     value = props.textSize.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(textSize = it.toIntOrNull() ?: props.textSize)) },
                     label = { Text("字号") },
@@ -255,15 +257,15 @@ fun BlockSpecificProperties(
                     singleLine = true
                 )
             }
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
+            Row(horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                 org.gemini.ui.forge.ui.component.ColorPickerField(
                     label = "描边颜色",
                     hexColor = props.strokeColor,
                     onColorChanged = { onPropertiesChanged(props.copy(strokeColor = it)) },
                     modifier = Modifier.weight(1.5f)
                 )
-                OutlinedTextField(
+                SelectAllOutlinedTextField(
                     value = props.strokeWidth.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(strokeWidth = it.toFloatOrNull() ?: props.strokeWidth)) },
                     label = { Text("描边宽") },
@@ -271,8 +273,8 @@ fun BlockSpecificProperties(
                     singleLine = true
                 )
             }
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
+            SelectAllOutlinedTextField(
                 value = if (props.maxLength == -1) "" else props.maxLength.toString(),
                 onValueChange = { 
                     val maxLen = if (it.isBlank()) -1 else it.toIntOrNull() ?: props.maxLength

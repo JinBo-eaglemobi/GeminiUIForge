@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.component
 
 import androidx.compose.foundation.background
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -73,7 +74,7 @@ fun ColorPickerField(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        OutlinedTextField(
+        SelectAllOutlinedTextField(
             value = hexColor,
             onValueChange = onColorChanged,
             label = { Text(label) },

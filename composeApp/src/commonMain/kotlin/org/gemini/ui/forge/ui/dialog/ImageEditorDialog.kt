@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.*
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
@@ -646,8 +647,8 @@ private fun DrawScope.drawCheckerboard(rect: Rect) {
 @Composable
 private fun SizeInputRow(vW: Int, vH: Int, onW: (Int) -> Unit, onH: (Int) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(value = vW.toString(), onValueChange = { onW(it.toIntOrNull() ?: vW) }, label = { Text(stringResource(Res.string.label_width_short)) }, modifier = Modifier.weight(1f), singleLine = true)
-        OutlinedTextField(value = vH.toString(), onValueChange = { onH(it.toIntOrNull() ?: vH) }, label = { Text(stringResource(Res.string.label_height_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+        SelectAllOutlinedTextField(value = vW.toString(), onValueChange = { onW(it.toIntOrNull() ?: vW) }, label = { Text(stringResource(Res.string.label_width_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+        SelectAllOutlinedTextField(value = vH.toString(), onValueChange = { onH(it.toIntOrNull() ?: vH) }, label = { Text(stringResource(Res.string.label_height_short)) }, modifier = Modifier.weight(1f), singleLine = true)
     }
 }
 
@@ -655,12 +656,12 @@ private fun SizeInputRow(vW: Int, vH: Int, onW: (Int) -> Unit, onH: (Int) -> Uni
 private fun NinePatchInputGrid(c: NinePatchConfig, iW: Int, iH: Int, onC: (NinePatchConfig) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = c.left.toString(), onValueChange = { onC(c.copy(left = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) }, label = { Text(stringResource(Res.string.label_left_short)) }, modifier = Modifier.weight(1f), singleLine = true)
-            OutlinedTextField(value = c.right.toString(), onValueChange = { onC(c.copy(right = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) }, label = { Text(stringResource(Res.string.label_right_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+            SelectAllOutlinedTextField(value = c.left.toString(), onValueChange = { onC(c.copy(left = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) }, label = { Text(stringResource(Res.string.label_left_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+            SelectAllOutlinedTextField(value = c.right.toString(), onValueChange = { onC(c.copy(right = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) }, label = { Text(stringResource(Res.string.label_right_short)) }, modifier = Modifier.weight(1f), singleLine = true)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = c.top.toString(), onValueChange = { onC(c.copy(top = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) }, label = { Text(stringResource(Res.string.label_top_short)) }, modifier = Modifier.weight(1f), singleLine = true)
-            OutlinedTextField(value = c.bottom.toString(), onValueChange = { onC(c.copy(bottom = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) }, label = { Text(stringResource(Res.string.label_bottom_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+            SelectAllOutlinedTextField(value = c.top.toString(), onValueChange = { onC(c.copy(top = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) }, label = { Text(stringResource(Res.string.label_top_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+            SelectAllOutlinedTextField(value = c.bottom.toString(), onValueChange = { onC(c.copy(bottom = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) }, label = { Text(stringResource(Res.string.label_bottom_short)) }, modifier = Modifier.weight(1f), singleLine = true)
         }
     }
 }

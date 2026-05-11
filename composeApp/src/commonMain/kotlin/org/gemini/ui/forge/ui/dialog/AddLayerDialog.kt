@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.layout.Arrangement
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,7 +12,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,7 +39,7 @@ fun AddLayerDialog(onDismiss: () -> Unit, onConfirm: (String, UIBlockType, Float
         title = { Text("添加新图层") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedTextField(
+                SelectAllOutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("图层名称/ID (可选)") },
@@ -47,7 +47,7 @@ fun AddLayerDialog(onDismiss: () -> Unit, onConfirm: (String, UIBlockType, Float
                     shape = AppShapes.medium
                 )
                 ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = { expandedType = !expandedType }) {
-                    OutlinedTextField(
+                    SelectAllOutlinedTextField(
                         value = stringResource(selectedType.getDisplayNameRes()),
                         onValueChange = {},
                         readOnly = true,
@@ -65,14 +65,14 @@ fun AddLayerDialog(onDismiss: () -> Unit, onConfirm: (String, UIBlockType, Float
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
+                    SelectAllOutlinedTextField(
                         value = widthStr,
                         onValueChange = { widthStr = it },
                         label = { Text("宽度") },
                         modifier = Modifier.weight(1f),
                         shape = AppShapes.medium
                     )
-                    OutlinedTextField(
+                    SelectAllOutlinedTextField(
                         value = heightStr,
                         onValueChange = { heightStr = it },
                         label = { Text("高度") },

@@ -1,6 +1,9 @@
 package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.PaddingValues
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.foundation.gestures.*
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.foundation.layout.*
@@ -37,7 +40,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 
@@ -108,7 +110,7 @@ fun AppSettingsDialog(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Header
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).padding(horizontal = LocalAppSpacing.current.medium, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -117,7 +119,7 @@ fun AppSettingsDialog(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Close, null) }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(LocalAppSpacing.current.extraLarge)) { Icon(Icons.Default.Close, null) }
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -130,8 +132,8 @@ fun AppSettingsDialog(
                         Box(modifier = Modifier.weight(leftWeight).fillMaxHeight()) {
                             val leftScrollState = rememberScrollState()
                             Column(
-                                modifier = Modifier.fillMaxSize().verticalScroll(leftScrollState).padding(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                modifier = Modifier.fillMaxSize().verticalScroll(leftScrollState).padding(LocalAppSpacing.current.small),
+                                verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.extraSmall)
                             ) {
                                 SettingCategory.entries.forEach { category ->
                                     val isSelected = selectedCategory == category
@@ -172,7 +174,7 @@ fun AppSettingsDialog(
                         // Draggable Divider
                         Box(
                             modifier = Modifier
-                                .width(4.dp)
+                                .width(LocalAppSpacing.current.extraSmall)
                                 .fillMaxHeight()
                                 .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                                 .pointerHoverIcon(ResizeHorizontalIcon)
@@ -189,8 +191,8 @@ fun AppSettingsDialog(
                         Box(modifier = Modifier.weight(1f - leftWeight).fillMaxHeight()) {
                             val rightScrollState = rememberScrollState()
                             Column(
-                                modifier = Modifier.fillMaxSize().verticalScroll(rightScrollState).padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                                modifier = Modifier.fillMaxSize().verticalScroll(rightScrollState).padding(LocalAppSpacing.current.medium),
+                                verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.medium)
                             ) {
                                 when (selectedCategory) {
                                     SettingCategory.GENERAL -> GeneralSettings(
@@ -253,6 +255,8 @@ private fun GeneralSettings(
     onLanguageSelected: (String) -> Unit,
     onStorageDirSaved: (String) -> Unit
 ) {
+    val isCompact = androidx.compose.material3.LocalMinimumInteractiveComponentSize.current == 0.dp
+
     SettingSectionTitle(stringResource(Res.string.settings_category_general))
 
     // Theme Dropdown
@@ -265,12 +269,12 @@ private fun GeneralSettings(
     val currentThemeLabel = themeOptions.find { it.first == currentTheme }?.second ?: ""
 
     ExposedDropdownMenuBox(expanded = themeExpanded, onExpandedChange = { themeExpanded = !themeExpanded }) {
-        OutlinedTextField(
+        SelectAllOutlinedTextField(
             value = currentThemeLabel,
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_appearance_theme)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(themeExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = themeExpanded, onDismissRequest = { themeExpanded = false }) {
@@ -278,7 +282,7 @@ private fun GeneralSettings(
                 DropdownMenuItem(
                     text = { Text(label) },
                     onClick = { onThemeSelected(mode); themeExpanded = false }
-                )
+                , contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else androidx.compose.material3.MenuDefaults.DropdownMenuItemContentPadding, modifier = if (isCompact) Modifier.height(32.dp) else Modifier)
             }
         }
     }
@@ -293,12 +297,12 @@ private fun GeneralSettings(
     val currentLayoutLabel = layoutOptions.find { it.first == currentLayoutMode }?.second ?: ""
 
     ExposedDropdownMenuBox(expanded = layoutExpanded, onExpandedChange = { layoutExpanded = !layoutExpanded }) {
-        OutlinedTextField(
+        SelectAllOutlinedTextField(
             value = currentLayoutLabel,
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_layout_mode)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(layoutExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = layoutExpanded, onDismissRequest = { layoutExpanded = false }) {
@@ -306,7 +310,7 @@ private fun GeneralSettings(
                 DropdownMenuItem(
                     text = { Text(label) },
                     onClick = { onLayoutModeSelected(mode); layoutExpanded = false }
-                )
+                , contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else androidx.compose.material3.MenuDefaults.DropdownMenuItemContentPadding, modifier = if (isCompact) Modifier.height(32.dp) else Modifier)
             }
         }
     }
@@ -321,12 +325,12 @@ private fun GeneralSettings(
     val displayLangLabel = langOptions.find { it.first == currentLanguage }?.second ?: currentLanguage
 
     ExposedDropdownMenuBox(expanded = langExpanded, onExpandedChange = { langExpanded = !langExpanded }) {
-        OutlinedTextField(
+        SelectAllOutlinedTextField(
             value = displayLangLabel,
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_language)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(langExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = langExpanded, onDismissRequest = { langExpanded = false }) {
@@ -334,7 +338,7 @@ private fun GeneralSettings(
                 DropdownMenuItem(
                     text = { Text(label) },
                     onClick = { onLanguageSelected(code); langExpanded = false }
-                )
+                , contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else androidx.compose.material3.MenuDefaults.DropdownMenuItemContentPadding, modifier = if (isCompact) Modifier.height(32.dp) else Modifier)
             }
         }
     }
@@ -347,11 +351,11 @@ private fun GeneralSettings(
                 pathInput = path; onStorageDirSaved(path)
             }
         }
-        OutlinedTextField(
+        SelectAllOutlinedTextField(
             value = pathInput,
             onValueChange = { pathInput = it; onStorageDirSaved(it) },
             label = { Text(stringResource(Res.string.settings_storage_dir_title)) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             trailingIcon = { IconButton(onClick = { dirPicker() }) { Icon(Icons.Default.Folder, null) } },
             shape = AppShapes.medium
         )
@@ -370,14 +374,16 @@ private fun AISettings(
     onImageGenCountSaved: (Int) -> Unit,
     onPromptLangSelected: (PromptLanguage) -> Unit
 ) {
+    val isCompact = androidx.compose.material3.LocalMinimumInteractiveComponentSize.current == 0.dp
+
     SettingSectionTitle(stringResource(Res.string.settings_category_ai))
 
     var keyInput by remember { mutableStateOf(currentApiKey) }
-    OutlinedTextField(
+    SelectAllOutlinedTextField(
         value = keyInput,
         onValueChange = { keyInput = it; onApiKeySaved(it) },
         label = { Text(stringResource(Res.string.settings_gemini_key_title)) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         visualTransformation = PasswordVisualTransformation(),
         placeholder = { Text(stringResource(Res.string.settings_gemini_key_placeholder)) },
         shape = AppShapes.medium
@@ -387,12 +393,12 @@ private fun AISettings(
     val retryOptions = listOf(0, 1, 2, 3, 5, 10)
 
     ExposedDropdownMenuBox(expanded = retriesExpanded, onExpandedChange = { retriesExpanded = !retriesExpanded }) {
-        OutlinedTextField(
+        SelectAllOutlinedTextField(
             value = currentMaxRetries.toString(),
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_max_retries_title)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(retriesExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = retriesExpanded, onDismissRequest = { retriesExpanded = false }) {
@@ -409,12 +415,12 @@ private fun AISettings(
     val genCountOptions = listOf(1, 2, 4, 8, 12, 16)
 
     ExposedDropdownMenuBox(expanded = genCountExpanded, onExpandedChange = { genCountExpanded = !genCountExpanded }) {
-        OutlinedTextField(
+        SelectAllOutlinedTextField(
             value = currentImageGenCount.toString(),
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_image_gen_count_title)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(genCountExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = genCountExpanded, onDismissRequest = { genCountExpanded = false }) {
@@ -432,12 +438,12 @@ private fun AISettings(
     ExposedDropdownMenuBox(
         expanded = promptLangExpanded,
         onExpandedChange = { promptLangExpanded = !promptLangExpanded }) {
-        OutlinedTextField(
+        SelectAllOutlinedTextField(
             value = currentPromptLang.displayName,
             onValueChange = {}, readOnly = true,
             label = { Text(stringResource(Res.string.settings_prompt_language)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(promptLangExpanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             shape = AppShapes.medium
         )
         ExposedDropdownMenu(expanded = promptLangExpanded, onDismissRequest = { promptLangExpanded = false }) {
@@ -445,7 +451,7 @@ private fun AISettings(
                 DropdownMenuItem(
                     text = { Text(lang.displayName) },
                     onClick = { onPromptLangSelected(lang); promptLangExpanded = false }
-                )
+                , contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else androidx.compose.material3.MenuDefaults.DropdownMenuItemContentPadding, modifier = if (isCompact) Modifier.height(32.dp) else Modifier)
             }
         }
     }
@@ -473,6 +479,8 @@ private fun EnvironmentSettings(
     onClearSearchResult: () -> Unit,
     onLoadMarketPage: (Int) -> Unit
 ) {
+    val isCompact = androidx.compose.material3.LocalMinimumInteractiveComponentSize.current == 0.dp
+
     var envTab by remember { mutableStateOf(0) }
 
     // Segmented Button 风格的 Tab
@@ -480,7 +488,7 @@ private fun EnvironmentSettings(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), AppShapes.medium)
-            .padding(4.dp),
+            .padding(LocalAppSpacing.current.extraSmall),
         horizontalArrangement = Arrangement.SpaceEvenly
     ) {
         listOf("核心依赖", "本地扩展管理", "云端探索市场").forEachIndexed { index, title ->
@@ -494,7 +502,7 @@ private fun EnvironmentSettings(
                         envTab = index
                         if (index == 2 && topMarketPackages.isEmpty()) onLoadMarketPage(0)
                     }
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = LocalAppSpacing.current.small),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -507,7 +515,7 @@ private fun EnvironmentSettings(
         }
     }
 
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(LocalAppSpacing.current.medium))
 
     if (envTab == 0) {
         Row(
@@ -517,17 +525,17 @@ private fun EnvironmentSettings(
         ) {
             SettingSectionTitle(stringResource(Res.string.env_python_check_title))
             TextButton(onClick = onCheck, enabled = !status.isChecking) {
-                if (status.isChecking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                else Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
+                if (status.isChecking) CircularProgressIndicator(Modifier.size(LocalAppSpacing.current.medium), strokeWidth = 2.dp)
+                else Icon(Icons.Default.Refresh, null, Modifier.size(LocalAppSpacing.current.medium))
+                Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                 Text(stringResource(Res.string.env_action_check))
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
             status.items.forEach { item ->
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     shape = AppShapes.small,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 ) {
@@ -536,7 +544,7 @@ private fun EnvironmentSettings(
                             imageVector = if (item.isInstalled) Icons.Default.CheckCircle else Icons.Default.Error,
                             contentDescription = null,
                             tint = if (item.isInstalled) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(LocalAppSpacing.current.large)
                         )
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
@@ -549,7 +557,7 @@ private fun EnvironmentSettings(
                                 if (item.isOutdated) {
                                     Spacer(Modifier.width(6.dp))
                                     Surface(color = MaterialTheme.colorScheme.errorContainer, shape = AppShapes.small) {
-                                        Text("有更新", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                                        Text("有更新", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = LocalAppSpacing.current.extraSmall, vertical = 2.dp), color = MaterialTheme.colorScheme.onErrorContainer)
                                     }
                                 }
                             }
@@ -565,8 +573,8 @@ private fun EnvironmentSettings(
                             Button(
                                 onClick = { onInstall(item.name) },
                                 shape = AppShapes.medium,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                modifier = Modifier.height(32.dp).padding(end = 8.dp)
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = LocalAppSpacing.current.extraSmall),
+                                modifier = Modifier.height(LocalAppSpacing.current.extraLarge).padding(end = LocalAppSpacing.current.small)
                             ) {
                                 Text("更新", style = MaterialTheme.typography.labelSmall)
                             }
@@ -577,8 +585,8 @@ private fun EnvironmentSettings(
                                 onClick = { onInstall(item.name) },
                                 enabled = !item.isInstalling,
                                 shape = AppShapes.medium,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                modifier = Modifier.height(32.dp)
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = LocalAppSpacing.current.extraSmall),
+                                modifier = Modifier.height(LocalAppSpacing.current.extraLarge)
                             ) {
                                 if (item.isInstalling) CircularProgressIndicator(
                                     Modifier.size(14.dp),
@@ -595,8 +603,8 @@ private fun EnvironmentSettings(
                                 onClick = { onUninstall(item.name) },
                                 enabled = !item.isInstalling,
                                 shape = AppShapes.medium,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                modifier = Modifier.height(32.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = LocalAppSpacing.current.extraSmall),
+                                modifier = Modifier.height(LocalAppSpacing.current.extraLarge),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                             ) {
                                 if (item.isInstalling) CircularProgressIndicator(
@@ -614,7 +622,7 @@ private fun EnvironmentSettings(
 
                     if (item.isInstalling && item.installLogs.isNotEmpty()) {
                         Box(
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp).background(Color.Black).padding(8.dp)
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp).background(Color.Black).padding(LocalAppSpacing.current.small)
                         ) {
                             val logScroll = rememberScrollState()
                             Text(
@@ -632,14 +640,14 @@ private fun EnvironmentSettings(
 
         if (status.items.any { it.name == "python" && !it.isInstalled }) {
             Card(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).padding(top = 12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                 shape = AppShapes.medium
             ) {
-                Column(Modifier.padding(16.dp)) {
+                Column(Modifier.padding(LocalAppSpacing.current.medium)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(LocalAppSpacing.current.small))
                         Text(
                             stringResource(Res.string.env_error_missing_python),
                             style = MaterialTheme.typography.bodyMedium,
@@ -650,12 +658,12 @@ private fun EnvironmentSettings(
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = { onInstall("python") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                         shape = AppShapes.medium
                     ) {
                         Icon(Icons.Default.Download, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(LocalAppSpacing.current.small))
                         Text(stringResource(Res.string.env_action_install))
                     }
                 }
@@ -671,7 +679,7 @@ private fun EnvironmentSettings(
             verticalAlignment = Alignment.CenterVertically
         ) {
             SettingSectionTitle("Python 本地包管理")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                 if (selectedPackages.isNotEmpty()) {
                     OutlinedButton(
                         onClick = {
@@ -694,9 +702,9 @@ private fun EnvironmentSettings(
                     }
                 }
                 TextButton(onClick = onCheck, enabled = !isPipLoading && !isPipActionInProgress) {
-                    if (isPipLoading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
+                    if (isPipLoading) CircularProgressIndicator(Modifier.size(LocalAppSpacing.current.medium), strokeWidth = 2.dp)
+                    else Icon(Icons.Default.Refresh, null, Modifier.size(LocalAppSpacing.current.medium))
+                    Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                     Text("刷新")
                 }
             }
@@ -704,7 +712,7 @@ private fun EnvironmentSettings(
 
         if (isPipActionInProgress && pipLogs.isNotEmpty()) {
             Box(
-                modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp).background(Color.Black).padding(8.dp)
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp).background(Color.Black).padding(LocalAppSpacing.current.small)
             ) {
                 val logScroll = rememberScrollState()
                 Text(
@@ -715,7 +723,7 @@ private fun EnvironmentSettings(
                 )
                 LaunchedEffect(pipLogs.size) { logScroll.animateScrollTo(logScroll.maxValue) }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
         }
 
         if (pipPackages.isEmpty() && !isPipLoading) {
@@ -725,7 +733,7 @@ private fun EnvironmentSettings(
 
             if (installed.isNotEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("📦 已安装的包 (${installed.size})", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(vertical = 4.dp).weight(1f))
+                    Text("📦 已安装的包 (${installed.size})", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(vertical = LocalAppSpacing.current.extraSmall).weight(1f))
                     TextButton(onClick = {
                         selectedPackages = if (selectedPackages.containsAll(installed.map { it.name })) emptySet()
                         else selectedPackages + installed.map { it.name }
@@ -734,17 +742,17 @@ private fun EnvironmentSettings(
                     }
                 }
                 
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.extraSmall)) {
                     installed.forEach { pkg ->
                         val isSelected = selectedPackages.contains(pkg.name)
                         Card(
-                            modifier = Modifier.fillMaxWidth().clickable {
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
                                 selectedPackages = if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
                             },
                             shape = AppShapes.small,
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                         ) {
-                            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(modifier = Modifier.padding(horizontal = LocalAppSpacing.current.small, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Checkbox(checked = isSelected, onCheckedChange = { checked ->
                                     selectedPackages = if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
                                 })
@@ -754,7 +762,7 @@ private fun EnvironmentSettings(
                                         if (pkg.isOutdated) {
                                             Spacer(Modifier.width(6.dp))
                                             Surface(color = MaterialTheme.colorScheme.errorContainer, shape = AppShapes.small) {
-                                                Text("有更新", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                                                Text("有更新", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = LocalAppSpacing.current.extraSmall, vertical = 2.dp), color = MaterialTheme.colorScheme.onErrorContainer)
                                             }
                                         }
                                     }
@@ -762,10 +770,10 @@ private fun EnvironmentSettings(
                                 }
                                 
                                 if (pkg.isOutdated) {
-                                    IconButton(onClick = { onOpenPackageUrl(pkg.name) }, modifier = Modifier.size(32.dp)) {
+                                    IconButton(onClick = { onOpenPackageUrl(pkg.name) }, modifier = Modifier.size(LocalAppSpacing.current.extraLarge)) {
                                         Icon(Icons.AutoMirrored.Filled.Article, contentDescription = "更新详情", tint = MaterialTheme.colorScheme.primary)
                                     }
-                                    Spacer(Modifier.width(4.dp))
+                                    Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                                     Button(
                                         onClick = { onBatchInstallPip(listOf(pkg.name)) },
                                         enabled = !isPipActionInProgress,
@@ -805,11 +813,11 @@ private fun EnvironmentSettings(
         }
 
         // 搜索框
-        OutlinedTextField(
+        SelectAllOutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             placeholder = { Text("搜索 PyPI 全网扩展包...") },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).padding(bottom = LocalAppSpacing.current.small),
             singleLine = true,
             shape = AppShapes.medium,
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
@@ -821,7 +829,7 @@ private fun EnvironmentSettings(
                         }
                     }
                     IconButton(onClick = { onSearchPipPackage(searchQuery) }) {
-                        if (isSearching) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                        if (isSearching) CircularProgressIndicator(Modifier.size(LocalAppSpacing.current.medium), strokeWidth = 2.dp)
                         else Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Go")
                     }
                 }
@@ -829,9 +837,9 @@ private fun EnvironmentSettings(
         )
 
         if (searchResult != null) {
-            Text("🔍 搜索结果", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+            Text("🔍 搜索结果", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = LocalAppSpacing.current.extraSmall))
             Card(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).padding(bottom = LocalAppSpacing.current.small),
                 shape = AppShapes.small,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f))
             ) {
@@ -847,17 +855,17 @@ private fun EnvironmentSettings(
                         onClick = { onBatchInstallPip(listOf(searchResult.name)) },
                         enabled = !isPipActionInProgress,
                         shape = AppShapes.medium,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = LocalAppSpacing.current.extraSmall),
+                        modifier = Modifier.height(LocalAppSpacing.current.extraLarge)
                     ) { Text("安装") }
                 }
             }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(Modifier.padding(vertical = LocalAppSpacing.current.small))
         }
 
         if (isPipActionInProgress && pipLogs.isNotEmpty()) {
             Box(
-                modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp).background(Color.Black).padding(8.dp)
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp).background(Color.Black).padding(LocalAppSpacing.current.small)
             ) {
                 val logScroll = rememberScrollState()
                 Text(
@@ -868,10 +876,10 @@ private fun EnvironmentSettings(
                 )
                 LaunchedEffect(pipLogs.size) { logScroll.animateScrollTo(logScroll.maxValue) }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
             Text("🔥 热门排行榜", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (marketPage > 0) {
@@ -883,22 +891,22 @@ private fun EnvironmentSettings(
         }
 
         if (isMarketLoading) {
-            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxWidth().padding(LocalAppSpacing.current.extraLarge), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 240.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth().heightIn(min = 300.dp, max = 600.dp) // 使用定高避免 Scroll 嵌套 Crash
+                verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small),
+                horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(min = 300.dp, max = 600.dp) // 使用定高避免 Scroll 嵌套 Crash
             ) {
                 items(topMarketPackages) { pkg ->
                     val isSelected = selectedPackages.contains(pkg.name)
                     val isAlreadyInstalled = pipPackages.any { it.name.lowercase() == pkg.name.lowercase() && it.isInstalled }
                     
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable {
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
                             if (!isAlreadyInstalled) selectedPackages = if (isSelected) selectedPackages - pkg.name else selectedPackages + pkg.name
                         },
                         shape = AppShapes.small,
@@ -913,17 +921,17 @@ private fun EnvironmentSettings(
                                         selectedPackages = if (checked) selectedPackages + pkg.name else selectedPackages - pkg.name
                                     }, modifier = Modifier.size(18.dp))
                                 }
-                                Spacer(Modifier.width(8.dp))
+                                Spacer(Modifier.width(LocalAppSpacing.current.small))
                                 Text(pkg.name, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
                                 
-                                IconButton(onClick = { onOpenPackageUrl(pkg.name) }, modifier = Modifier.size(24.dp)) {
-                                    Icon(Icons.AutoMirrored.Filled.Article, contentDescription = "详情", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                IconButton(onClick = { onOpenPackageUrl(pkg.name) }, modifier = Modifier.size(LocalAppSpacing.current.large)) {
+                                    Icon(Icons.AutoMirrored.Filled.Article, contentDescription = "详情", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(LocalAppSpacing.current.medium))
                                 }
                             }
-                            Spacer(Modifier.height(4.dp))
-                            Text(pkg.description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, modifier = Modifier.heightIn(min = 32.dp))
-                            Spacer(Modifier.height(8.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            Spacer(Modifier.height(LocalAppSpacing.current.extraSmall))
+                            Text(pkg.description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, modifier = Modifier.heightIn(min = LocalAppSpacing.current.extraLarge))
+                            Spacer(Modifier.height(LocalAppSpacing.current.small))
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.End) {
                                 if (isAlreadyInstalled) {
                                     Text("已安装", style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50))
                                 } else {
@@ -932,7 +940,7 @@ private fun EnvironmentSettings(
                                         enabled = !isPipActionInProgress,
                                         shape = AppShapes.medium,
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                        modifier = Modifier.height(24.dp)
+                                        modifier = Modifier.height(LocalAppSpacing.current.large)
                                     ) { Text("安装", fontSize = 10.sp) }
                                 }
                             }
@@ -949,11 +957,13 @@ private fun ShortcutSettings(
     shortcuts: Map<ShortcutAction, String>,
     onShortcutSaved: (ShortcutAction, String) -> Unit
 ) {
+    val isCompact = androidx.compose.material3.LocalMinimumInteractiveComponentSize.current == 0.dp
+
     SettingSectionTitle(stringResource(Res.string.settings_shortcuts_title))
 
     shortcuts.forEach { (action, currentKey) ->
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).padding(vertical = LocalAppSpacing.current.extraSmall),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -979,7 +989,7 @@ private fun ShortcutSettings(
 
             var editingKey by remember(currentKey) { mutableStateOf(currentKey) }
 
-            OutlinedTextField(
+            SelectAllOutlinedTextField(
                 value = editingKey,
                 onValueChange = {
                     editingKey = it
@@ -1000,10 +1010,12 @@ private fun AboutSection(
     onCheckUpdate: () -> Unit,
     onStartUpdate: (UpdateInfo) -> Unit
 ) {
+    val isCompact = androidx.compose.material3.LocalMinimumInteractiveComponentSize.current == 0.dp
+
     SettingSectionTitle(stringResource(Res.string.settings_category_about))
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
@@ -1016,7 +1028,7 @@ private fun AboutSection(
             Icon(
                 Icons.Default.AutoAwesome,
                 null,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(LocalAppSpacing.current.extraLarge),
                 tint = MaterialTheme.colorScheme.primary
             )
         }
@@ -1036,30 +1048,30 @@ private fun AboutSection(
             color = MaterialTheme.colorScheme.primary
         )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(LocalAppSpacing.current.medium))
 
         // 更新检测区域
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
             shape = AppShapes.medium
         ) {
-            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.padding(LocalAppSpacing.current.medium), horizontalAlignment = Alignment.CenterHorizontally) {
                 when (updateStatus) {
                     is UpdateStatus.Idle -> {
                         Button(onClick = onCheckUpdate, shape = AppShapes.medium) {
                             Icon(Icons.Default.SystemUpdateAlt, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.width(LocalAppSpacing.current.small))
                             Text(stringResource(Res.string.update_check_action))
                         }
                     }
 
                     is UpdateStatus.Checking -> {
-                        CircularProgressIndicator(Modifier.size(24.dp))
+                        CircularProgressIndicator(Modifier.size(LocalAppSpacing.current.large))
                         Text(
                             stringResource(Res.string.update_checking),
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp)
+                            modifier = Modifier.padding(top = LocalAppSpacing.current.small)
                         )
                     }
 
@@ -1072,7 +1084,7 @@ private fun AboutSection(
                         Text(
                             updateStatus.info.releaseNotes,
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(vertical = 8.dp)
+                            modifier = Modifier.padding(vertical = LocalAppSpacing.current.small)
                         )
                         Button(onClick = { onStartUpdate(updateStatus.info) }, shape = AppShapes.medium) {
                             Text(stringResource(Res.string.update_action_now))
@@ -1082,21 +1094,21 @@ private fun AboutSection(
                     is UpdateStatus.Downloading -> {
                         LinearProgressIndicator(
                             progress = { updateStatus.progress },
-                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape)
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).height(LocalAppSpacing.current.small).clip(CircleShape)
                         )
                         Text(
                             stringResource(Res.string.update_downloading, (updateStatus.progress * 100).toInt()),
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp)
+                            modifier = Modifier.padding(top = LocalAppSpacing.current.small)
                         )
                     }
 
                     is UpdateStatus.ReadyToInstall -> {
-                        CircularProgressIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.primary)
+                        CircularProgressIndicator(Modifier.size(LocalAppSpacing.current.large), color = MaterialTheme.colorScheme.primary)
                         Text(
                             stringResource(Res.string.update_preparing),
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp)
+                            modifier = Modifier.padding(top = LocalAppSpacing.current.small)
                         )
                     }
 
@@ -1106,7 +1118,7 @@ private fun AboutSection(
                             color = Color(0xFF4CAF50),
                             style = MaterialTheme.typography.bodyMedium
                         )
-                        TextButton(onClick = onCheckUpdate, modifier = Modifier.padding(top = 4.dp)) {
+                        TextButton(onClick = onCheckUpdate, modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall)) {
                             Text(
                                 stringResource(Res.string.update_check_action),
                                 style = MaterialTheme.typography.labelSmall
@@ -1118,7 +1130,7 @@ private fun AboutSection(
                         Text(updateStatus.message, color = MaterialTheme.colorScheme.error)
                         Button(
                             onClick = onCheckUpdate,
-                            modifier = Modifier.padding(top = 8.dp),
+                            modifier = Modifier.padding(top = LocalAppSpacing.current.small),
                             shape = AppShapes.medium
                         ) { Text(stringResource(Res.string.update_check_action)) }
                     }
@@ -1126,7 +1138,7 @@ private fun AboutSection(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(LocalAppSpacing.current.medium))
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             shape = AppShapes.medium
@@ -1139,7 +1151,7 @@ private fun AboutSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(LocalAppSpacing.current.medium))
         Text(
             stringResource(Res.string.about_copyright),
             style = MaterialTheme.typography.labelSmall,
@@ -1150,11 +1162,13 @@ private fun AboutSection(
 
 @Composable
 private fun SettingSectionTitle(title: String) {
+    val isCompact = androidx.compose.material3.LocalMinimumInteractiveComponentSize.current == 0.dp
+
     Text(
         text = title,
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.primary,
         fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(bottom = 8.dp)
+        modifier = Modifier.padding(bottom = LocalAppSpacing.current.small)
     )
 }

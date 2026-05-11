@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.model.app.ThemeMode
@@ -38,6 +39,7 @@ private val CompactTypography = Typography(
     labelSmall = DefaultTypography.labelSmall.copy(fontSize = 10.sp, lineHeight = 14.sp)
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppTheme(
     themeMode: ThemeMode,
@@ -64,10 +66,19 @@ fun AppTheme(
         DefaultTypography
     }
 
-    MaterialTheme(
-        colorScheme = colors,
-        shapes = AppShapes,
-        typography = currentTypography,
-        content = content
-    )
+    // 在高密度/PC模式下，禁用M3默认的48dp最小触摸目标限制，并使用紧凑间距
+    val isCompact = actualLayoutMode == LayoutMode.COMPACT
+    val currentSpacing = if (isCompact) CompactSpacing else DefaultSpacing
+
+    CompositionLocalProvider(
+        LocalMinimumInteractiveComponentSize provides if (isCompact) 0.dp else 48.dp,
+        LocalAppSpacing provides currentSpacing
+    ) {
+        MaterialTheme(
+            colorScheme = colors,
+            shapes = AppShapes,
+            typography = currentTypography,
+            content = content
+        )
+    }
 }
