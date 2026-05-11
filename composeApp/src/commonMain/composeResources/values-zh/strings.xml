@@ -147,10 +147,10 @@
     <string name="cloud_assets_title">云端资产管理器</string>
     <string name="cloud_assets_empty">暂无云端资产</string>
     <string name="cloud_assets_select_all">全选</string>
-    <string name="cloud_assets_selected">已选中 {0} 个文件</string>
+    <string name="cloud_assets_selected">已选中 %1$s 个文件</string>
     <string name="cloud_assets_uploading_prepare">准备上传...</string>
-    <string name="cloud_assets_upload_failed">上传失败: {0}</string>
-    <string name="cloud_assets_expire">过期: {0}</string>
+    <string name="cloud_assets_upload_failed">上传失败: %1$s</string>
+    <string name="cloud_assets_expire">过期: %1$s</string>
     <string name="action_close">关闭</string>
     <string name="asset_unnamed">未命名文件</string>
     <string name="action_exit">退出</string>
@@ -192,7 +192,7 @@
     <string name="env_dialog_message">执行本地抠图需要 Python 及相关依赖。是否前往设置页面安装？</string>
     <string name="settings_category_about">关于软件</string>
     <string name="about_title">关于 Gemini UI Forge</string>
-    <string name="about_version">版本 v{0}</string>
+    <string name="about_version">版本 v%1$s</string>
     <string name="about_description">Gemini UI Forge 是一款基于 Google Gemini AI 与 Compose Multiplatform 打造的次世代游戏 UI 辅助开发工具。它旨在通过 AI 的视觉理解与内容生成能力，帮助开发者快速完成从视觉设计到可交互 UI 资源的转化。</string>
     <string name="about_copyright">© 2026 Gemini UI Forge Team. 保留所有权利。</string>
     <string name="menu_help">帮助手册</string>
@@ -200,7 +200,7 @@
     <string name="help_action_open_browser">在浏览器中打开</string>
     <string name="update_check_action">检查更新</string>
     <string name="update_checking">正在检查新版本...</string>
-    <string name="update_available_title">发现新版本: {0}</string>
+    <string name="update_available_title">发现新版本: %1$s</string>
     <string name="update_action_now">立即更新</string>
     <string name="update_downloading">正在下载更新包: %d%%</string>
     <string name="update_preparing">更新包已就绪，准备重启安装...</string>
@@ -215,7 +215,7 @@
     <string name="batch_gen_select_all">全选</string>
     <string name="batch_gen_deselect_all">全取消</string>
     <string name="batch_gen_start">开始批量生成</string>
-    <string name="batch_gen_processing">正在生成中: {0} / {1}</string>
+    <string name="batch_gen_processing">正在生成中: %1$s / %2$s</string>
     <string name="batch_gen_finished">批量生成任务已完成</string>
     <string name="batch_gen_empty">当前页面没有缺失图片资源的模块。</string>
 
@@ -224,7 +224,7 @@
     <string name="editor_tab_crop">裁剪适配</string>
     <string name="editor_tab_bake">加工固化</string>
     <string name="editor_crop_options">裁剪选项</string>
-    <string name="editor_target_ratio">目标比例: {0}</string>
+    <string name="editor_target_ratio">目标比例: %1$s</string>
     <string name="editor_action_auto_fit">一键自动适配内容</string>
     <string name="editor_action_apply_crop">执行并应用裁剪</string>
     <string name="editor_bake_mode_title">烘焙模式</string>
@@ -237,7 +237,7 @@
     <string name="editor_nine_patch_lines_label">九宫格边界线 (像素)</string>
     <string name="editor_action_apply_bake">应用当前加工效果</string>
     <string name="editor_action_save_final">保存并提交结果</string>
-    <string name="editor_current_base_size">当前底图尺寸: {0} x {1}</string>
+    <string name="editor_current_base_size">当前底图尺寸: %1$s x %2$s</string>
     <string name="editor_no_image">未加载图片</string>
     <string name="label_left_short">左</string>
     <string name="label_right_short">右</string>

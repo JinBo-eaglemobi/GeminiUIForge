@@ -147,10 +147,10 @@
     <string name="cloud_assets_title">Cloud Asset Manager</string>
     <string name="cloud_assets_empty">No Cloud Assets Found</string>
     <string name="cloud_assets_select_all">Select All</string>
-    <string name="cloud_assets_selected">{0} files selected</string>
+    <string name="cloud_assets_selected">%1$s files selected</string>
     <string name="cloud_assets_uploading_prepare">Preparing upload...</string>
-    <string name="cloud_assets_upload_failed">Upload failed: {0}</string>
-    <string name="cloud_assets_expire">Expires: {0}</string>
+    <string name="cloud_assets_upload_failed">Upload failed: %1$s</string>
+    <string name="cloud_assets_expire">Expires: %1$s</string>
     <string name="action_close">Close</string>
     <string name="asset_unnamed">Unnamed File</string>
     <string name="action_exit">Exit</string>
@@ -192,7 +192,7 @@
     <string name="env_dialog_message">Local background removal requires Python and dependencies. Go to settings to install?</string>
     <string name="settings_category_about">About</string>
     <string name="about_title">About Gemini UI Forge</string>
-    <string name="about_version">Version v{0}</string>
+    <string name="about_version">Version v%1$s</string>
     <string name="about_description">Gemini UI Forge is a next-generation game UI assistant tool built with Google Gemini AI and Compose Multiplatform. It leverages AI visual understanding and content generation to help developers rapidly transform visual designs into interactive UI assets.</string>
     <string name="about_copyright">© 2026 Gemini UI Forge Team. All rights reserved.</string>
     <string name="menu_help">Help Center</string>
@@ -200,7 +200,7 @@
     <string name="help_action_open_browser">Open in Browser</string>
     <string name="update_check_action">Check for Updates</string>
     <string name="update_checking">Checking for updates...</string>
-    <string name="update_available_title">New version found: {0}</string>
+    <string name="update_available_title">New version found: %1$s</string>
     <string name="update_action_now">Update Now</string>
     <string name="update_downloading">Downloading update: %d%%</string>
     <string name="update_preparing">Update ready, preparing to install...</string>
@@ -215,7 +215,7 @@
     <string name="batch_gen_select_all">Select All</string>
     <string name="batch_gen_deselect_all">Deselect All</string>
     <string name="batch_gen_start">Start Generating</string>
-    <string name="batch_gen_processing">Generating: {0} / {1}</string>
+    <string name="batch_gen_processing">Generating: %1$s / %2$s</string>
     <string name="batch_gen_finished">Batch generation finished</string>
     <string name="batch_gen_empty">No modules missing image resources on the current page.</string>
 
@@ -224,7 +224,7 @@
     <string name="editor_tab_crop">Crop Adapt</string>
     <string name="editor_tab_bake">Bake Process</string>
     <string name="editor_crop_options">Crop Options</string>
-    <string name="editor_target_ratio">Target Ratio: {0}</string>
+    <string name="editor_target_ratio">Target Ratio: %1$s</string>
     <string name="editor_action_auto_fit">Auto Fit Content</string>
     <string name="editor_action_apply_crop">Apply Crop</string>
     <string name="editor_bake_mode_title">Bake Mode</string>
@@ -237,7 +237,7 @@
     <string name="editor_nine_patch_lines_label">9-Patch Guides (Pixels)</string>
     <string name="editor_action_apply_bake">Apply Baking</string>
     <string name="editor_action_save_final">Save Final Result</string>
-    <string name="editor_current_base_size">Base Image: {0} x {1}</string>
+    <string name="editor_current_base_size">Base Image: %1$s x %2$s</string>
     <string name="editor_no_image">No Image Loaded</string>
     <string name="label_left_short">L</string>
     <string name="label_right_short">R</string>
