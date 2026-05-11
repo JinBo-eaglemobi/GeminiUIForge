@@ -237,7 +237,7 @@
     <string name="editor_nine_patch_lines_label">九宫格边界线 (像素)</string>
     <string name="editor_action_apply_bake">应用当前加工效果</string>
     <string name="editor_action_save_final">保存并提交结果</string>
-    <string name="editor_current_base_size">当前底图尺寸: %1$s x %2$s</string>
+    <string name="editor_current_base_size">当前底图尺寸: %1$d x %2$d</string>
     <string name="editor_no_image">未加载图片</string>
     <string name="label_left_short">左</string>
     <string name="label_right_short">右</string>
@@ -245,4 +245,7 @@
     <string name="label_bottom_short">下</string>
     <string name="label_width_short">宽</string>
     <string name="label_height_short">高</string>
+    <string name="log_title">历史执行日志 ({0})</string>
+    <string name="action_copy_log">复制日志</string>
+    <string name="toast_log_copied">日志已复制到剪贴板。</string>
 </resources>

@@ -204,11 +204,16 @@ class AIGenerationService(
 
             val commands = listOf("python", "python3")
             var success = false
+            val executionLogs = StringBuilder()
+            
             for (cmd in commands) {
                 success = org.gemini.ui.forge.utils.executeSystemCommand(
                     command = cmd,
                     args = listOf(scriptPath, inputPath, outputPath),
-                    onLog = { syncLog("[LocalRembg] $it", onLog) }
+                    onLog = { 
+                        syncLog("[LocalRembg] $it", onLog)
+                        executionLogs.appendLine(it)
+                    }
                 )
                 if (success) break
             }
@@ -218,11 +223,11 @@ class AIGenerationService(
                 syncLog("✅ 本地抠图处理完成", onLog)
                 result
             } else {
-                syncLog("❌ 本地抠图脚本执行失败", onLog)
+                syncLog("❌ 本地抠图脚本执行失败。可能的原因如下:\n$executionLogs", onLog)
                 null
             }
         } catch (e: Exception) {
-            syncLog("❌ 本地抠图异常: ${e.message}", onLog)
+            syncLog("❌ 本地抠图异常: ${e.message}\n${e.stackTraceToString()}", onLog)
             null
         } finally {
             org.gemini.ui.forge.utils.deleteLocalFile(inputPath)

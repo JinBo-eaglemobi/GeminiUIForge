@@ -237,7 +237,7 @@
     <string name="editor_nine_patch_lines_label">9-Patch Guides (Pixels)</string>
     <string name="editor_action_apply_bake">Apply Baking</string>
     <string name="editor_action_save_final">Save Final Result</string>
-    <string name="editor_current_base_size">Base Image: %1$s x %2$s</string>
+    <string name="editor_current_base_size">Base Image: %1$d x %2$d</string>
     <string name="editor_no_image">No Image Loaded</string>
     <string name="label_left_short">L</string>
     <string name="label_right_short">R</string>
@@ -245,4 +245,7 @@
     <string name="label_bottom_short">B</string>
     <string name="label_width_short">W</string>
     <string name="label_height_short">H</string>
+    <string name="log_title">History Logs ({0})</string>
+    <string name="action_copy_log">Copy Log</string>
+    <string name="toast_log_copied">Log copied to clipboard.</string>
     </resources>

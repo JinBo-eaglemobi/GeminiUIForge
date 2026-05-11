@@ -12,19 +12,28 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import geminiuiforge.composeapp.generated.resources.*
+import kotlinx.coroutines.launch
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.ui.component.ToastType
+import org.gemini.ui.forge.utils.Toast
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * 通用的 AI 任务执行进度与日志对话框 (共享组件)。
+
  *
  * 经过任务 3 重构：支持实时状态行、语义化日志和组合扩展。
  * 
@@ -51,6 +60,8 @@ fun AITaskProgressDialog(
     // 任务 3 新增：组合扩展点，允许在日志上方插入自定义 UI (如任务 4 的并行列表)
     extraContent: (@Composable ColumnScope.() -> Unit)? = null 
 ) {
+    val scope = rememberCoroutineScope()
+    
     Dialog(
         onDismissRequest = { if (!isProcessing) onDismiss() },
         properties = DialogProperties(
@@ -124,16 +135,36 @@ fun AITaskProgressDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "历史执行日志 (${logs.size})", 
+                        stringResource(Res.string.log_title, logs.size.toString()), 
                         style = MaterialTheme.typography.labelMedium, 
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    IconButton(onClick = onToggleLogVisibility) {
-                        Icon(
-                            if (isLogVisible) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // 复制按钮
+                        val clipboardManager = LocalClipboardManager.current
+                        IconButton(onClick = {
+                            val logContent = logs.joinToString("\n")
+                            clipboardManager.setText(AnnotatedString(logContent))
+                            scope.launch {
+                                val message = org.jetbrains.compose.resources.getString(Res.string.toast_log_copied)
+                                Toast.show(message, ToastType.SUCCESS)
+                            }
+                        }) {
+                            Icon(
+                                Icons.Default.ContentCopy,
+                                contentDescription = stringResource(Res.string.action_copy_log),
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        
+                        IconButton(onClick = onToggleLogVisibility) {
+                            Icon(
+                                if (isLogVisible) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
 

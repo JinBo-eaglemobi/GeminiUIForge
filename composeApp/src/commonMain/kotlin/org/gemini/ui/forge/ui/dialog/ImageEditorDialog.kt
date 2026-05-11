@@ -78,7 +78,7 @@ fun ImageEditorDialog(
 
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
-    
+
     // 基础参数初始化
     val finalTargetW = targetWidth ?: block?.bounds?.width ?: 100f
     val finalTargetH = targetHeight ?: block?.bounds?.height ?: 100f
@@ -111,7 +111,12 @@ fun ImageEditorDialog(
     var ninePatchConfig by remember(imageBitmap) {
         mutableStateOf(
             if (imageBitmap != null && (block?.ninePatchConfig == null || (block.ninePatchConfig.left == 0 && block.ninePatchConfig.right == 0))) {
-                NinePatchConfig(imageBitmap!!.width / 3, imageBitmap!!.height / 3, imageBitmap!!.width / 3, imageBitmap!!.height / 3)
+                NinePatchConfig(
+                    imageBitmap!!.width / 3,
+                    imageBitmap!!.height / 3,
+                    imageBitmap!!.width / 3,
+                    imageBitmap!!.height / 3
+                )
             } else {
                 block?.ninePatchConfig ?: NinePatchConfig(0, 0, 0, 0)
             }
@@ -136,7 +141,7 @@ fun ImageEditorDialog(
 
         val containerRatio = containerSize.width / containerSize.height
         val imgRatio = img.width.toFloat() / img.height
-        
+
         val displayW: Float
         val displayH: Float
         if (imgRatio > containerRatio) {
@@ -146,7 +151,7 @@ fun ImageEditorDialog(
             displayH = containerSize.height
             displayW = displayH * imgRatio
         }
-        
+
         val left = (containerSize.width - displayW) / 2f
         val top = (containerSize.height - displayH) / 2f
         imageDisplayRect = Rect(left, top, left + displayW, top + displayH)
@@ -160,7 +165,7 @@ fun ImageEditorDialog(
             initialW = displayW * 0.9f
             initialH = initialW / targetRatio
         }
-        
+
         cropSize = Size(initialW, initialH)
         cropOffset = Offset(
             imageDisplayRect.left + (displayW - initialW) / 2f,
@@ -196,8 +201,13 @@ fun ImageEditorDialog(
                         if (imageBitmap != null) {
                             if (selectedTab == EditorTab.BAKE) {
                                 EditorStage(
-                                    imageBitmap = imageBitmap!!, mode = bakeMode, config = ninePatchConfig,
-                                    canvasW = canvasWidth, canvasH = canvasHeight, contentW = contentWidth, contentH = contentHeight,
+                                    imageBitmap = imageBitmap!!,
+                                    mode = bakeMode,
+                                    config = ninePatchConfig,
+                                    canvasW = canvasWidth,
+                                    canvasH = canvasHeight,
+                                    contentW = contentWidth,
+                                    contentH = contentHeight,
                                     onConfigChange = { ninePatchConfig = it }
                                 )
                             } else {
@@ -208,7 +218,7 @@ fun ImageEditorDialog(
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Fit
                                 )
-                                
+
                                 if (imageDisplayRect != Rect.Zero && cropSize.width > 0) {
                                     Box(
                                         modifier = Modifier
@@ -224,11 +234,11 @@ fun ImageEditorDialog(
                                                 detectDragGestures { change, dragAmount ->
                                                     change.consume()
                                                     val newX = (cropOffset.x + dragAmount.x).coerceIn(
-                                                        imageDisplayRect.left, 
+                                                        imageDisplayRect.left,
                                                         imageDisplayRect.right - cropSize.width
                                                     )
                                                     val newY = (cropOffset.y + dragAmount.y).coerceIn(
-                                                        imageDisplayRect.top, 
+                                                        imageDisplayRect.top,
                                                         imageDisplayRect.bottom - cropSize.height
                                                     )
                                                     cropOffset = Offset(newX, newY)
@@ -248,32 +258,56 @@ fun ImageEditorDialog(
                                                             var pointerId = down.id
                                                             while (true) {
                                                                 val event = awaitPointerEvent()
-                                                                val change = event.changes.find { it.id == pointerId } ?: break
+                                                                val change =
+                                                                    event.changes.find { it.id == pointerId } ?: break
                                                                 if (change.changedToUp()) break
                                                                 val isAlt = event.keyboardModifiers.isAltPressed
                                                                 val dragAmount = change.positionChange()
                                                                 change.consume()
-                                                                
+
                                                                 val currentS = cropSize
                                                                 val currentO = cropOffset
-                                                                
+
                                                                 if (isAlt) {
                                                                     // 居中缩放
-                                                                    val delta = if (abs(dragAmount.x) > abs(dragAmount.y)) dragAmount.x else dragAmount.y * targetRatio
-                                                                    val maxDX = minOf(currentO.x - imageDisplayRect.left, imageDisplayRect.right - (currentO.x + currentS.width))
-                                                                    val maxDY = minOf(currentO.y - imageDisplayRect.top, imageDisplayRect.bottom - (currentO.y + currentS.height))
-                                                                    val safeD = delta.coerceIn(-(currentS.width/2 - 20f), minOf(maxDX, maxDY * targetRatio))
-                                                                    cropSize = Size(currentS.width + 2*safeD, (currentS.width + 2*safeD) / targetRatio)
-                                                                    cropOffset = Offset(currentO.x - safeD, currentO.y - safeD/targetRatio)
+                                                                    val delta =
+                                                                        if (abs(dragAmount.x) > abs(dragAmount.y)) dragAmount.x else dragAmount.y * targetRatio
+                                                                    val maxDX = minOf(
+                                                                        currentO.x - imageDisplayRect.left,
+                                                                        imageDisplayRect.right - (currentO.x + currentS.width)
+                                                                    )
+                                                                    val maxDY = minOf(
+                                                                        currentO.y - imageDisplayRect.top,
+                                                                        imageDisplayRect.bottom - (currentO.y + currentS.height)
+                                                                    )
+                                                                    val safeD = delta.coerceIn(
+                                                                        -(currentS.width / 2 - 20f),
+                                                                        minOf(maxDX, maxDY * targetRatio)
+                                                                    )
+                                                                    cropSize = Size(
+                                                                        currentS.width + 2 * safeD,
+                                                                        (currentS.width + 2 * safeD) / targetRatio
+                                                                    )
+                                                                    cropOffset = Offset(
+                                                                        currentO.x - safeD,
+                                                                        currentO.y - safeD / targetRatio
+                                                                    )
                                                                 } else {
                                                                     // 边缘缩放
                                                                     val maxW = imageDisplayRect.right - currentO.x
                                                                     val maxH = imageDisplayRect.bottom - currentO.y
                                                                     var dX = dragAmount.x
                                                                     var dY = dX / targetRatio
-                                                                    if (currentS.width + dX > maxW) { dX = maxW - currentS.width; dY = dX / targetRatio }
-                                                                    if (currentS.height + dY > maxH) { dY = maxH - currentS.height; dX = dY * targetRatio }
-                                                                    val finalW = (currentS.width + dX).coerceAtLeast(40f)
+                                                                    if (currentS.width + dX > maxW) {
+                                                                        dX = maxW - currentS.width; dY =
+                                                                            dX / targetRatio
+                                                                    }
+                                                                    if (currentS.height + dY > maxH) {
+                                                                        dY = maxH - currentS.height; dX =
+                                                                            dY * targetRatio
+                                                                    }
+                                                                    val finalW =
+                                                                        (currentS.width + dX).coerceAtLeast(40f)
                                                                     cropSize = Size(finalW, finalW / targetRatio)
                                                                 }
                                                             }
@@ -281,12 +315,17 @@ fun ImageEditorDialog(
                                                     }
                                                 }
                                         ) {
-                                            Icon(Icons.Default.AspectRatio, null, Modifier.size(16.dp).align(Alignment.Center), tint = Color.Black)
+                                            Icon(
+                                                Icons.Default.AspectRatio,
+                                                null,
+                                                Modifier.size(16.dp).align(Alignment.Center),
+                                                tint = Color.Black
+                                            )
                                         }
                                     }
                                 }
                             }
-                            
+
                             // 尺寸信息
                             Box(
                                 modifier = Modifier
@@ -295,17 +334,22 @@ fun ImageEditorDialog(
                                     .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
                                     .padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
-                                val sizeText = stringResource(Res.string.editor_current_base_size)
-                                    .replace("{0}", imageBitmap!!.width.toString())
-                                    .replace("{1}", imageBitmap!!.height.toString())
+                                val sizeText = stringResource(
+                                    Res.string.editor_current_base_size,
+                                    imageBitmap!!.width,
+                                    imageBitmap!!.height
+                                )
                                 Text(sizeText, color = Color.White, style = MaterialTheme.typography.labelSmall)
                             }
                         } else {
                             Text(stringResource(Res.string.editor_no_image), color = Color.Gray)
                         }
-                        
+
                         if (isProcessing) {
-                            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 CircularProgressIndicator()
                             }
                         }
@@ -320,10 +364,14 @@ fun ImageEditorDialog(
                         Column(Modifier.fillMaxSize()) {
                             // 标签页切换
                             TabRow(selectedTabIndex = selectedTab.ordinal) {
-                                Tab(selected = selectedTab == EditorTab.CROP, onClick = { selectedTab = EditorTab.CROP }) {
+                                Tab(
+                                    selected = selectedTab == EditorTab.CROP,
+                                    onClick = { selectedTab = EditorTab.CROP }) {
                                     Box(Modifier.padding(12.dp)) { Text(stringResource(Res.string.editor_tab_crop)) }
                                 }
-                                Tab(selected = selectedTab == EditorTab.BAKE, onClick = { selectedTab = EditorTab.BAKE }) {
+                                Tab(
+                                    selected = selectedTab == EditorTab.BAKE,
+                                    onClick = { selectedTab = EditorTab.BAKE }) {
                                     Box(Modifier.padding(12.dp)) { Text(stringResource(Res.string.editor_tab_bake)) }
                                 }
                             }
@@ -331,11 +379,20 @@ fun ImageEditorDialog(
                             Column(Modifier.weight(1f).padding(16.dp).verticalScroll(rememberScrollState())) {
                                 when (selectedTab) {
                                     EditorTab.CROP -> {
-                                        Text(stringResource(Res.string.editor_crop_options), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                                        Text(
+                                            stringResource(Res.string.editor_crop_options),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
                                         Spacer(Modifier.height(16.dp))
-                                        Text(stringResource(Res.string.editor_target_ratio, ((targetRatio * 100).toInt() / 100f).toString()), style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            stringResource(
+                                                Res.string.editor_target_ratio,
+                                                ((targetRatio * 100).toInt() / 100f).toString()
+                                            ), style = MaterialTheme.typography.bodyMedium
+                                        )
                                         Spacer(Modifier.height(24.dp))
-                                        
+
                                         Button(
                                             onClick = {
                                                 coroutineScope.launch {
@@ -345,25 +402,26 @@ fun ImageEditorDialog(
                                                     if (bounds != null && imageDisplayRect != Rect.Zero) {
                                                         val scaleX = imageDisplayRect.width / img.width.toFloat()
                                                         val scaleY = imageDisplayRect.height / img.height.toFloat()
-                                                        
+
                                                         // 内容在显示区域中的绝对位置
                                                         val subjL = imageDisplayRect.left + bounds.left * scaleX
                                                         val subjT = imageDisplayRect.top + bounds.top * scaleY
                                                         val subjW = bounds.width * scaleX
                                                         val subjH = bounds.height * scaleY
-                                                        
+
                                                         // 计算内容中心
                                                         val contentCenterX = subjL + subjW / 2f
                                                         val contentCenterY = subjT + subjH / 2f
-                                                        
+
                                                         // 初始选框尺寸 (覆盖内容并保持比例)
-                                                        var nW = if (subjW / subjH > targetRatio) subjW else subjH * targetRatio
+                                                        var nW =
+                                                            if (subjW / subjH > targetRatio) subjW else subjH * targetRatio
                                                         var nH = nW / targetRatio
-                                                        
+
                                                         // 增加一点呼吸边距 (5%)
                                                         nW *= 1.05f
                                                         nH *= 1.05f
-                                                        
+
                                                         // 限制选框不超出图片显示边界
                                                         if (nW > imageDisplayRect.width) {
                                                             nW = imageDisplayRect.width
@@ -373,15 +431,21 @@ fun ImageEditorDialog(
                                                             nH = imageDisplayRect.height
                                                             nW = nH * targetRatio
                                                         }
-                                                        
+
                                                         // 计算选框左上角坐标，使其中心对齐内容中心
                                                         var nX = contentCenterX - nW / 2f
                                                         var nY = contentCenterY - nH / 2f
-                                                        
+
                                                         // 最终边界修正，确保不移出图片
-                                                        nX = nX.coerceIn(imageDisplayRect.left, imageDisplayRect.right - nW)
-                                                        nY = nY.coerceIn(imageDisplayRect.top, imageDisplayRect.bottom - nH)
-                                                        
+                                                        nX = nX.coerceIn(
+                                                            imageDisplayRect.left,
+                                                            imageDisplayRect.right - nW
+                                                        )
+                                                        nY = nY.coerceIn(
+                                                            imageDisplayRect.top,
+                                                            imageDisplayRect.bottom - nH
+                                                        )
+
                                                         cropSize = Size(nW, nH)
                                                         cropOffset = Offset(nX, nY)
                                                     }
@@ -395,26 +459,38 @@ fun ImageEditorDialog(
                                             Spacer(Modifier.width(8.dp))
                                             Text(stringResource(Res.string.editor_action_auto_fit))
                                         }
-                                        
+
                                         Spacer(Modifier.height(12.dp))
-                                        
+
                                         OutlinedButton(
                                             onClick = {
                                                 isProcessing = true
                                                 coroutineScope.launch {
                                                     val bytes = currentBytes ?: return@launch
                                                     val img = imageBitmap ?: return@launch
-                                                    val relX = (cropOffset.x - imageDisplayRect.left) / imageDisplayRect.width
-                                                    val relY = (cropOffset.y - imageDisplayRect.top) / imageDisplayRect.height
+                                                    val relX =
+                                                        (cropOffset.x - imageDisplayRect.left) / imageDisplayRect.width
+                                                    val relY =
+                                                        (cropOffset.y - imageDisplayRect.top) / imageDisplayRect.height
                                                     val relW = cropSize.width / imageDisplayRect.width
                                                     val relH = cropSize.height / imageDisplayRect.height
-                                                    
-                                                    val result = cropImage(bytes, SerialRect(relX, relY, relX + relW, relY + relH), img.width.toFloat(), img.height.toFloat(), true, finalTargetW.toInt(), finalTargetH.toInt())
+
+                                                    val result = cropImage(
+                                                        bytes,
+                                                        SerialRect(relX, relY, relX + relW, relY + relH),
+                                                        img.width.toFloat(),
+                                                        img.height.toFloat(),
+                                                        true,
+                                                        finalTargetW.toInt(),
+                                                        finalTargetH.toInt()
+                                                    )
                                                     if (result != null) {
                                                         currentBytes = result
                                                         // 重置烘焙尺寸为新图尺寸
-                                                        canvasWidth = finalTargetW.toInt(); canvasHeight = finalTargetH.toInt()
-                                                        contentWidth = finalTargetW.toInt(); contentHeight = finalTargetH.toInt()
+                                                        canvasWidth = finalTargetW.toInt(); canvasHeight =
+                                                            finalTargetH.toInt()
+                                                        contentWidth = finalTargetW.toInt(); contentHeight =
+                                                            finalTargetH.toInt()
                                                     }
                                                     isProcessing = false
                                                 }
@@ -427,43 +503,85 @@ fun ImageEditorDialog(
                                             Text(stringResource(Res.string.editor_action_apply_crop))
                                         }
                                     }
+
                                     EditorTab.BAKE -> {
-                                        Text(stringResource(Res.string.editor_bake_mode_title), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                                        Text(
+                                            stringResource(Res.string.editor_bake_mode_title),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
                                         Spacer(Modifier.height(16.dp))
                                         ImageResizeMode.entries.forEach { mode ->
-                                            Row(Modifier.fillMaxWidth().clickable { bakeMode = mode }, verticalAlignment = Alignment.CenterVertically) {
+                                            Row(
+                                                Modifier.fillMaxWidth().clickable { bakeMode = mode },
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
                                                 RadioButton(selected = bakeMode == mode, onClick = { bakeMode = mode })
-                                                Text(when(mode) {
-                                                    ImageResizeMode.STRETCH -> stringResource(Res.string.editor_resize_stretch)
-                                                    ImageResizeMode.FIT_WITH_PADDING -> stringResource(Res.string.editor_resize_fit)
-                                                    ImageResizeMode.CROP_TO_FILL -> stringResource(Res.string.editor_resize_fill)
-                                                    ImageResizeMode.NINE_PATCH -> stringResource(Res.string.editor_resize_nine_patch)
-                                                }, style = MaterialTheme.typography.bodyMedium)
+                                                Text(
+                                                    when (mode) {
+                                                        ImageResizeMode.STRETCH -> stringResource(Res.string.editor_resize_stretch)
+                                                        ImageResizeMode.FIT_WITH_PADDING -> stringResource(Res.string.editor_resize_fit)
+                                                        ImageResizeMode.CROP_TO_FILL -> stringResource(Res.string.editor_resize_fill)
+                                                        ImageResizeMode.NINE_PATCH -> stringResource(Res.string.editor_resize_nine_patch)
+                                                    }, style = MaterialTheme.typography.bodyMedium
+                                                )
                                             }
                                         }
                                         HorizontalDivider(Modifier.padding(vertical = 16.dp))
-                                        Text(stringResource(Res.string.editor_canvas_size_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                        Text(
+                                            stringResource(Res.string.editor_canvas_size_label),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
                                         Spacer(Modifier.height(8.dp))
-                                        SizeInputRow(canvasWidth, canvasHeight, { canvasWidth = it }, { canvasHeight = it })
+                                        SizeInputRow(
+                                            canvasWidth,
+                                            canvasHeight,
+                                            { canvasWidth = it },
+                                            { canvasHeight = it })
                                         Spacer(Modifier.height(16.dp))
-                                        Text(stringResource(Res.string.editor_content_area_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                        Text(
+                                            stringResource(Res.string.editor_content_area_label),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
                                         Spacer(Modifier.height(8.dp))
-                                        SizeInputRow(contentWidth, contentHeight, { contentWidth = it }, { contentHeight = it })
-                                        
+                                        SizeInputRow(
+                                            contentWidth,
+                                            contentHeight,
+                                            { contentWidth = it },
+                                            { contentHeight = it })
+
                                         if (bakeMode == ImageResizeMode.NINE_PATCH) {
                                             HorizontalDivider(Modifier.padding(vertical = 16.dp))
-                                            Text(stringResource(Res.string.editor_nine_patch_lines_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                            Text(
+                                                stringResource(Res.string.editor_nine_patch_lines_label),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.secondary
+                                            )
                                             Spacer(Modifier.height(12.dp))
-                                            NinePatchInputGrid(ninePatchConfig, imageBitmap?.width ?: 1, imageBitmap?.height ?: 1) { ninePatchConfig = it }
+                                            NinePatchInputGrid(
+                                                ninePatchConfig,
+                                                imageBitmap?.width ?: 1,
+                                                imageBitmap?.height ?: 1
+                                            ) { ninePatchConfig = it }
                                         }
-                                        
+
                                         Spacer(Modifier.height(24.dp))
                                         OutlinedButton(
                                             onClick = {
                                                 isProcessing = true
                                                 coroutineScope.launch {
                                                     val bytes = currentBytes ?: return@launch
-                                                    val result = bakeNinePatchImage(bytes, canvasWidth, canvasHeight, contentWidth, contentHeight, bakeMode, ninePatchConfig)
+                                                    val result = bakeNinePatchImage(
+                                                        bytes,
+                                                        canvasWidth,
+                                                        canvasHeight,
+                                                        contentWidth,
+                                                        contentHeight,
+                                                        bakeMode,
+                                                        ninePatchConfig
+                                                    )
                                                     if (result != null) {
                                                         currentBytes = result
                                                     }
@@ -484,7 +602,10 @@ fun ImageEditorDialog(
                             // 底部操作栏
                             Surface(Modifier.fillMaxWidth(), tonalElevation = 8.dp) {
                                 Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    OutlinedButton(onClick = onDismiss, Modifier.weight(1f)) { Text(stringResource(Res.string.prop_cancel)) }
+                                    OutlinedButton(
+                                        onClick = onDismiss,
+                                        Modifier.weight(1f)
+                                    ) { Text(stringResource(Res.string.prop_cancel)) }
                                     Button(
                                         onClick = {
                                             val bytes = currentBytes ?: return@Button
@@ -528,7 +649,8 @@ private fun EditorStage(
             if (!isInitialized && it.size.width > 0) {
                 val fitScale = minOf(it.size.width.toFloat() / canvasW, it.size.height.toFloat() / canvasH) * 0.9f
                 viewZoom = if (fitScale < 1f) fitScale else 1f
-                viewOffset = Offset((it.size.width - canvasW * viewZoom) / 2f, (it.size.height - canvasH * viewZoom) / 2f)
+                viewOffset =
+                    Offset((it.size.width - canvasW * viewZoom) / 2f, (it.size.height - canvasH * viewZoom) / 2f)
                 isInitialized = true
             }
         }.pointerInput(Unit) {
@@ -570,7 +692,8 @@ private fun EditorStage(
                     if (activeLine == DragTarget.PAN) {
                         viewOffset += amt
                     } else if (mode == ImageResizeMode.NINE_PATCH) {
-                        val dx = amt.x / viewZoom; val dy = amt.y / viewZoom
+                        val dx = amt.x / viewZoom;
+                        val dy = amt.y / viewZoom
                         when (activeLine) {
                             DragTarget.LEFT -> dragL = (dragL + dx).coerceIn(0f, contentW - dragR - 10f)
                             DragTarget.RIGHT -> dragR = (dragR - dx).coerceIn(0f, contentW - dragL - 10f)
@@ -585,40 +708,69 @@ private fun EditorStage(
         }
     ) {
         if (!isInitialized) return@Canvas
-        val dCanW = canvasW * viewZoom; val dCanH = canvasH * viewZoom
-        drawRect(Color.Black.copy(alpha=0.5f), viewOffset, Size(dCanW, dCanH))
+        val dCanW = canvasW * viewZoom;
+        val dCanH = canvasH * viewZoom
+        drawRect(Color.Black.copy(alpha = 0.5f), viewOffset, Size(dCanW, dCanH))
         clipRect(viewOffset.x, viewOffset.y, viewOffset.x + dCanW, viewOffset.y + dCanH) {
             drawCheckerboard(Rect(viewOffset, Size(dCanW, dCanH)))
-            val dConW = contentW * viewZoom; val dConH = contentH * viewZoom
-            val cX = viewOffset.x + (dCanW - dConW) / 2f; val cY = viewOffset.y + (dCanH - dConH) / 2f
+            val dConW = contentW * viewZoom;
+            val dConH = contentH * viewZoom
+            val cX = viewOffset.x + (dCanW - dConW) / 2f;
+            val cY = viewOffset.y + (dCanH - dConH) / 2f
             renderProcessed(imageBitmap!!, mode, config, cX, cY, dConW, dConH)
             if (mode == ImageResizeMode.NINE_PATCH) {
-                val lL = cX + config.left * viewZoom; val lR = cX + (contentW - config.right) * viewZoom
-                val lT = cY + config.top * viewZoom; val lB = cY + (contentH - config.bottom) * viewZoom
-                fun dG(s: Offset, e: Offset, a: Boolean) = drawLine(if(a) Color.Cyan else Color.Green, s, e, if(a) 3.dp.toPx() else 1.dp.toPx())
+                val lL = cX + config.left * viewZoom;
+                val lR = cX + (contentW - config.right) * viewZoom
+                val lT = cY + config.top * viewZoom;
+                val lB = cY + (contentH - config.bottom) * viewZoom
+                fun dG(s: Offset, e: Offset, a: Boolean) =
+                    drawLine(if (a) Color.Cyan else Color.Green, s, e, if (a) 3.dp.toPx() else 1.dp.toPx())
                 dG(Offset(lL, cY), Offset(lL, cY + dConH), activeLine == DragTarget.LEFT)
                 dG(Offset(lR, cY), Offset(lR, cY + dConH), activeLine == DragTarget.RIGHT)
                 dG(Offset(cX, lT), Offset(cX + dConW, lT), activeLine == DragTarget.TOP)
                 dG(Offset(cX, lB), Offset(cX + dConW, lB), activeLine == DragTarget.BOTTOM)
             }
         }
-        drawRect(Color.White.copy(alpha=0.3f), viewOffset, Size(dCanW, dCanH), style = Stroke(1.dp.toPx()))
+        drawRect(Color.White.copy(alpha = 0.3f), viewOffset, Size(dCanW, dCanH), style = Stroke(1.dp.toPx()))
     }
 }
 
-private fun DrawScope.renderProcessed(img: ImageBitmap, mode: ImageResizeMode, conf: NinePatchConfig, x: Float, y: Float, w: Float, h: Float) {
+private fun DrawScope.renderProcessed(
+    img: ImageBitmap,
+    mode: ImageResizeMode,
+    conf: NinePatchConfig,
+    x: Float,
+    y: Float,
+    w: Float,
+    h: Float
+) {
     clipRect(x, y, x + w, y + h) {
         when (mode) {
             ImageResizeMode.STRETCH ->
                 drawImage(img, dstOffset = IntOffset(x.toInt(), y.toInt()), dstSize = IntSize(w.toInt(), h.toInt()))
+
             ImageResizeMode.FIT_WITH_PADDING -> {
-                val s = minOf(w / img.width, h / img.height); val dw = img.width * s; val dh = img.height * s
-                drawImage(img, dstOffset = IntOffset((x + (w - dw)/2).toInt(), (y + (h - dh)/2).toInt()), dstSize = IntSize(dw.toInt(), dh.toInt()))
+                val s = minOf(w / img.width, h / img.height);
+                val dw = img.width * s;
+                val dh = img.height * s
+                drawImage(
+                    img,
+                    dstOffset = IntOffset((x + (w - dw) / 2).toInt(), (y + (h - dh) / 2).toInt()),
+                    dstSize = IntSize(dw.toInt(), dh.toInt())
+                )
             }
+
             ImageResizeMode.CROP_TO_FILL -> {
-                val s = maxOf(w / img.width, h / img.height); val dw = img.width * s; val dh = img.height * s
-                drawImage(img, dstOffset = IntOffset((x + (w - dw)/2).toInt(), (y + (h - dh)/2).toInt()), dstSize = IntSize(dw.toInt(), dh.toInt()))
+                val s = maxOf(w / img.width, h / img.height);
+                val dw = img.width * s;
+                val dh = img.height * s
+                drawImage(
+                    img,
+                    dstOffset = IntOffset((x + (w - dw) / 2).toInt(), (y + (h - dh) / 2).toInt()),
+                    dstSize = IntSize(dw.toInt(), dh.toInt())
+                )
             }
+
             ImageResizeMode.NINE_PATCH ->
                 drawNP(img, conf, x, y, w, h)
         }
@@ -626,10 +778,21 @@ private fun DrawScope.renderProcessed(img: ImageBitmap, mode: ImageResizeMode, c
 }
 
 private fun DrawScope.drawNP(img: ImageBitmap, c: NinePatchConfig, dx: Float, dy: Float, dw: Float, dh: Float) {
-    val sw = img.width; val sh = img.height; val l = c.left; val t = c.top; val r = c.right; val b = c.bottom
+    val sw = img.width;
+    val sh = img.height;
+    val l = c.left;
+    val t = c.top;
+    val r = c.right;
+    val b = c.bottom
     fun dP(sx: Int, sy: Int, sW: Int, sH: Int, pX: Float, pY: Float, pW: Float, pH: Float) {
         if (sW <= 0 || sH <= 0 || pW <= 0 || pH <= 0) return
-        drawImage(img, IntOffset(sx, sy), IntSize(sW, sH), IntOffset((dx + pX).toInt(), (dy + pY).toInt()), IntSize(pW.toInt(), pH.toInt()))
+        drawImage(
+            img,
+            IntOffset(sx, sy),
+            IntSize(sW, sH),
+            IntOffset((dx + pX).toInt(), (dy + pY).toInt()),
+            IntSize(pW.toInt(), pH.toInt())
+        )
     }
     dP(0, 0, l, t, 0f, 0f, l.toFloat(), t.toFloat())
     dP(l, 0, sw - l - r, t, l.toFloat(), 0f, dw - l - r, t.toFloat())
@@ -645,10 +808,15 @@ private fun DrawScope.drawNP(img: ImageBitmap, c: NinePatchConfig, dx: Float, dy
 private fun DrawScope.drawCheckerboard(rect: Rect) {
     clipRect(rect.left, rect.top, rect.right, rect.bottom) {
         val s = 12.dp.toPx()
-        val cols = ceil(rect.width / s).toInt() + 1; val rows = ceil(rect.height / s).toInt() + 1
+        val cols = ceil(rect.width / s).toInt() + 1;
+        val rows = ceil(rect.height / s).toInt() + 1
         for (i in 0 until rows) {
             for (j in 0 until cols) {
-                if ((i + j) % 2 == 0) drawRect(Color.LightGray.copy(alpha=0.3f), Offset(rect.left + j*s, rect.top + i*s), Size(s, s))
+                if ((i + j) % 2 == 0) drawRect(
+                    Color.LightGray.copy(alpha = 0.3f),
+                    Offset(rect.left + j * s, rect.top + i * s),
+                    Size(s, s)
+                )
             }
         }
     }
@@ -657,8 +825,20 @@ private fun DrawScope.drawCheckerboard(rect: Rect) {
 @Composable
 private fun SizeInputRow(vW: Int, vH: Int, onW: (Int) -> Unit, onH: (Int) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        SelectAllOutlinedTextField(value = vW.toString(), onValueChange = { onW(it.toIntOrNull() ?: vW) }, label = { Text(stringResource(Res.string.label_width_short)) }, modifier = Modifier.weight(1f), singleLine = true)
-        SelectAllOutlinedTextField(value = vH.toString(), onValueChange = { onH(it.toIntOrNull() ?: vH) }, label = { Text(stringResource(Res.string.label_height_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+        SelectAllOutlinedTextField(
+            value = vW.toString(),
+            onValueChange = { onW(it.toIntOrNull() ?: vW) },
+            label = { Text(stringResource(Res.string.label_width_short)) },
+            modifier = Modifier.weight(1f),
+            singleLine = true
+        )
+        SelectAllOutlinedTextField(
+            value = vH.toString(),
+            onValueChange = { onH(it.toIntOrNull() ?: vH) },
+            label = { Text(stringResource(Res.string.label_height_short)) },
+            modifier = Modifier.weight(1f),
+            singleLine = true
+        )
     }
 }
 
@@ -666,12 +846,36 @@ private fun SizeInputRow(vW: Int, vH: Int, onW: (Int) -> Unit, onH: (Int) -> Uni
 private fun NinePatchInputGrid(c: NinePatchConfig, iW: Int, iH: Int, onC: (NinePatchConfig) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SelectAllOutlinedTextField(value = c.left.toString(), onValueChange = { onC(c.copy(left = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) }, label = { Text(stringResource(Res.string.label_left_short)) }, modifier = Modifier.weight(1f), singleLine = true)
-            SelectAllOutlinedTextField(value = c.right.toString(), onValueChange = { onC(c.copy(right = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) }, label = { Text(stringResource(Res.string.label_right_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+            SelectAllOutlinedTextField(
+                value = c.left.toString(),
+                onValueChange = { onC(c.copy(left = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) },
+                label = { Text(stringResource(Res.string.label_left_short)) },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+            SelectAllOutlinedTextField(
+                value = c.right.toString(),
+                onValueChange = { onC(c.copy(right = (it.toIntOrNull() ?: 0).coerceIn(0, iW / 2))) },
+                label = { Text(stringResource(Res.string.label_right_short)) },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SelectAllOutlinedTextField(value = c.top.toString(), onValueChange = { onC(c.copy(top = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) }, label = { Text(stringResource(Res.string.label_top_short)) }, modifier = Modifier.weight(1f), singleLine = true)
-            SelectAllOutlinedTextField(value = c.bottom.toString(), onValueChange = { onC(c.copy(bottom = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) }, label = { Text(stringResource(Res.string.label_bottom_short)) }, modifier = Modifier.weight(1f), singleLine = true)
+            SelectAllOutlinedTextField(
+                value = c.top.toString(),
+                onValueChange = { onC(c.copy(top = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) },
+                label = { Text(stringResource(Res.string.label_top_short)) },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+            SelectAllOutlinedTextField(
+                value = c.bottom.toString(),
+                onValueChange = { onC(c.copy(bottom = (it.toIntOrNull() ?: 0).coerceIn(0, iH / 2))) },
+                label = { Text(stringResource(Res.string.label_bottom_short)) },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
         }
     }
 }
