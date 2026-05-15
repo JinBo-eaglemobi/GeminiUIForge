@@ -270,7 +270,7 @@ fun TemplateAssetGenScreen(
         AssetSelectionDialog(
             title = if (pendingBlock != null) 
                 "批量确认 [${pendingBlock.id}] (${state.batchProgress?.first}/${state.batchProgress?.second})" 
-                else "AI 生成资源预览",
+                else "AI 生成资源预览 - 模块: ${targetBlock?.id ?: "未知"}",
             candidates = state.generatedCandidates,
             initialSelectedUri = targetBlock?.currentImageUri,
             targetWidth = targetBlock?.bounds?.width ?: 0f,
@@ -308,11 +308,12 @@ fun TemplateAssetGenScreen(
     }
 
     if (showHistoricalDialog) {
+        val selectedBlockId = state.selectedBlock?.id ?: "未知"
         AssetSelectionDialog(
             title = when(historySelectionTarget) {
-                TemplateAssetGenViewModel.ButtonGenTarget.PRESSED -> "选择点击态历史资源"
-                TemplateAssetGenViewModel.ButtonGenTarget.DISABLED -> "选择禁用态历史资源"
-                else -> "历史资源列表"
+                TemplateAssetGenViewModel.ButtonGenTarget.PRESSED -> "选择点击态历史资源 - 模块: $selectedBlockId"
+                TemplateAssetGenViewModel.ButtonGenTarget.DISABLED -> "选择禁用态历史资源 - 模块: $selectedBlockId"
+                else -> "历史资源列表 - 模块: $selectedBlockId"
             },
             candidates = historicalImages,
             baseDirectoryPath = state.selectedBlock?.let { block ->

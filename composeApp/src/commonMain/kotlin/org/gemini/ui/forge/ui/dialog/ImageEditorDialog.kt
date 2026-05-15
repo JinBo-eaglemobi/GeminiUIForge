@@ -334,12 +334,26 @@ fun ImageEditorDialog(
                                     .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
                                     .padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
-                                val sizeText = stringResource(
-                                    Res.string.editor_current_base_size,
-                                    imageBitmap!!.width,
-                                    imageBitmap!!.height
-                                )
-                                Text(sizeText, color = Color.White, style = MaterialTheme.typography.labelSmall)
+                                Column {
+                                    val blockNameStr = if (block != null) "模块: ${block.id} - " else ""
+                                    val sizeText = stringResource(
+                                        Res.string.editor_current_base_size,
+                                        imageBitmap!!.width,
+                                        imageBitmap!!.height
+                                    )
+                                    Text(blockNameStr + sizeText, color = Color.White, style = MaterialTheme.typography.labelSmall)
+                                    
+                                    if (selectedTab == EditorTab.CROP && cropSize.width > 0 && cropSize.height > 0 && imageDisplayRect.width > 0) {
+                                        val img = imageBitmap
+                                        if (img != null) {
+                                            val scaleX = img.width / imageDisplayRect.width
+                                            val scaleY = img.height / imageDisplayRect.height
+                                            val actW = (cropSize.width * scaleX).roundToInt()
+                                            val actH = (cropSize.height * scaleY).roundToInt()
+                                            Text("当前裁剪尺寸: $actW x $actH", color = Color.Green, style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
                             }
                         } else {
                             Text(stringResource(Res.string.editor_no_image), color = Color.Gray)
