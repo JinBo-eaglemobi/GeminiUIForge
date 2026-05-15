@@ -9,12 +9,13 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.runBlocking
 import org.gemini.ui.forge.manager.ConfigManager
 import org.jetbrains.skiko.hostOs
+import java.io.File
+import kotlin.math.abs
 
 fun main(args: Array<String>) {
     // 1. 尝试实现内存自举拦截 (Trampoline)
     // 检查是否存在用户的 .vmoptions 文件，如果是生产打包环境，并且内存不符合预期，则注入环境变量重启
-    val userHome = org.gemini.ui.forge.userHomePath
-    val vmOptionsFile = java.io.File(userHome, ".geminiuiforge/app.vmoptions")
+    val vmOptionsFile = File(userHomePath, ".geminiuiforge/app.vmoptions")
     if (vmOptionsFile.exists()) {
         try {
             val lines = vmOptionsFile.readLines()
@@ -35,7 +36,7 @@ fun main(args: Array<String>) {
                 val currentMaxBytes = Runtime.getRuntime().maxMemory()
                 
                 // 允许 10% 的误差，因为底层分配可能略微不一致
-                val diffRatio = Math.abs(currentMaxBytes - targetBytes).toDouble() / targetBytes
+                val diffRatio = abs(currentMaxBytes - targetBytes).toDouble() / targetBytes
                 
                 // 如果当前进程的最大内存与配置的目标内存差异较大 (> 10%)，且没有设置特殊的防循环标记
                 if (diffRatio > 0.1 && System.getenv("GEMINI_FORGE_TRAMPOLINE") != "1") {

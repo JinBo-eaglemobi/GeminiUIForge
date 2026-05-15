@@ -8,7 +8,20 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
- * 处理各种图片源：Base64 字符串、HTTP 链接或本地物理文件路径。
+ * ImageUtils.kt
+ * 
+ * 图像处理工具类，提供基于 Skia 引擎的跨平台图像解码、裁剪、缩放、九宫格烘焙及透明度检测等核心功能。
+ * 适用于 Compose Multiplatform 项目中的 commonMain 模块。
+ */
+
+/**
+ * 将字符串（支持 Base64、HTTP 链接或本地物理文件路径）解码为 [ImageBitmap]。
+ * 
+ * @receiver 图像源字符串。
+ *           - 若以 "data:image" 开头，则视为 Base64 字符串解码。
+ *           - 若以 "http" 开头，目前会跳过同步解码并返回 null。
+ *           - 否则视为本地物理文件路径。
+ * @return 解码后的 [ImageBitmap]，若解码失败或不支持则返回 null。
  */
 @OptIn(ExperimentalEncodingApi::class)
 suspend fun String.decodeBase64ToBitmap(): ImageBitmap? {
@@ -37,18 +50,29 @@ suspend fun String.decodeBase64ToBitmap(): ImageBitmap? {
     }
 }
 
-/** 扩展：支持直接从 TemplateFile 解码 */
+/** 
+ * [TemplateFile] 的扩展方法：直接将模板文件内容解码为 [ImageBitmap]。
+ * 
+ * @return 解码后的 [ImageBitmap]，失败返回 null。
+ */
 suspend fun TemplateFile.decodeToBitmap(): ImageBitmap? = this.getAbsolutePath().decodeBase64ToBitmap()
 
 /**
- * 跨平台将字节数组转换为 ImageBitmap (基于 Skia)
+ * 将字节数组（ByteArray）转换为 Compose [ImageBitmap]。
+ * 内部基于 Skia 的 [Image.makeFromEncoded] 实现。
+ * 
+ * @receiver 包含图像数据的字节数组（如 PNG/JPEG 编码数据）。
+ * @return 转换后的 [ImageBitmap]。
  */
 fun ByteArray.toImageBitmap(): ImageBitmap {
     return Image.makeFromEncoded(this).toComposeImageBitmap()
 }
 
 /**
- * 获取图片原始像素尺寸 (基于 Skia)
+ * 获取指定路径或 URI 对应图片的原始像素尺寸。
+ * 
+ * @param uri 图像文件路径。
+ * @return 包含 (宽度, 高度) 的 [Pair]，若读取失败则返回 null。
  */
 suspend fun getImageSize(uri: String): Pair<Int, Int>? {
     val bytes = readLocalFileBytes(uri) ?: return null
@@ -60,11 +84,25 @@ suspend fun getImageSize(uri: String): Pair<Int, Int>? {
     }
 }
 
-/** 扩展：获取 TemplateFile 图片尺寸 */
+/** 
+ * [TemplateFile] 的扩展方法：获取模板文件的图片像素尺寸。
+ * 
+ * @return 包含 (宽度, 高度) 的 [Pair]，失败返回 null。
+ */
 suspend fun TemplateFile.getImageSize(): Pair<Int, Int>? = getImageSize(this.getAbsolutePath())
 
 /**
- * 核心功能：将当前的拉伸/九宫格效果固化导出为一张新的位图字节流。
+ * 烘焙九宫格（Nine-patch）图像。
+ * 根据指定的缩放模式和九宫格配置，将原始图像渲染到目标尺寸的画布上，并导出为位图字节流。
+ * 
+ * @param imageBytes 原始图像的字节数组。
+ * @param targetWidth 生成的目标位图总宽度（像素）。
+ * @param targetHeight 生成的目标位图总高度（像素）。
+ * @param contentWidth 实际图像内容在画布中占据的宽度。
+ * @param contentHeight 实际图像内容在画布中占据的高度。
+ * @param resizeMode 缩放模式（拉伸、等比适应、等比填充、九宫格）。
+ * @param ninePatchConfig 九宫格切片配置（左、上、右、下边距）。
+ * @return 烘焙后的 PNG 格式字节数组，失败返回 null。
  */
 suspend fun bakeNinePatchImage(
     imageBytes: ByteArray,
@@ -147,7 +185,16 @@ suspend fun bakeNinePatchImage(
 }
 
 /**
- * 核心功能：将当前的拉伸/九宫格效果固化导出为一张新的位图字节流。
+ * 烘焙九宫格（Nine-patch）图像（从路径读取源文件）。
+ * 
+ * @param sourcePath 原始图像的本地物理路径。
+ * @param targetWidth 生成的目标位图总宽度（像素）。
+ * @param targetHeight 生成的目标位图总高度（像素）。
+ * @param contentWidth 实际图像内容在画布中占据的宽度。
+ * @param contentHeight 实际图像内容在画布中占据的高度。
+ * @param resizeMode 缩放模式。
+ * @param ninePatchConfig 九宫格切片配置。
+ * @return 烘焙后的 PNG 格式字节数组，失败返回 null。
  */
 suspend fun bakeNinePatchImage(
     sourcePath: String,
@@ -163,68 +210,79 @@ suspend fun bakeNinePatchImage(
 }
 
 /**
- * 跨平台图像裁剪与缩放逻辑 (基于 Skia)，使用字节数组
+ * 跨平台图像裁剪与缩放逻辑（基于 Skia）。使用字节数组作为输入源。
+ * 
+ * @param imageBytes 原始图像的字节数组。
+ * @param bounds 裁剪区域（相对于 logicalWidth/Height 的比例坐标）。
+ * @param originalWidth 输入坐标对应的逻辑画布宽度。
+ * @param originalHeight 输入坐标对应的逻辑画布高度。
+ * @param isPng 是否导出为 PNG 格式（false 为 JPEG）。
+ * @param forceWidth 强制指定导出的图像宽度（像素），为空则使用裁剪区域的原始大小。
+ * @param forceHeight 强制指定导出的图像高度（像素），为空则使用裁剪区域的原始大小。
+ * @return 裁剪并缩放后的图像字节数组，失败返回 null。
  */
 fun cropImage(
     imageBytes: ByteArray,
     bounds: SerialRect,
-    logicalWidth: Float,
-    logicalHeight: Float,
+    originalWidth: Float,
+    originalHeight: Float,
     isPng: Boolean = true,
     forceWidth: Int? = null,
     forceHeight: Int? = null
 ): ByteArray? {
     return try {
         val image = Image.makeFromEncoded(imageBytes)
-        val scaleX = image.width.toFloat() / logicalWidth
-        val scaleY = image.height.toFloat() / logicalHeight
+        val scaleX = image.width.toFloat() / originalWidth
+        val scaleY = image.height.toFloat() / originalHeight
         
         val srcL = bounds.left * scaleX
         val srcT = bounds.top * scaleY
         val srcW = (bounds.width * scaleX).coerceAtLeast(1f)
         val srcH = (bounds.height * scaleY).coerceAtLeast(1f)
-        
+
+        // 1. 将 Image 转换为 Bitmap (零拷贝/完美继承属性)
+        val srcBitmap = Bitmap.makeFromImage(image)
+
+        // 2. 使用 extractSubset 进行裁剪
+        val croppedBitmap = Bitmap()
+        val extractSuccess = srcBitmap.extractSubset(
+            croppedBitmap, 
+            IRect.makeXYWH(
+                srcL.toInt().coerceAtMost(image.width - 1),
+                srcT.toInt().coerceAtMost(image.height - 1),
+                srcW.toInt().coerceAtMost(image.width - srcL.toInt()),
+                srcH.toInt().coerceAtMost(image.height - srcT.toInt())
+            )
+        )
+
+        if (!extractSuccess) {
+            AppLogger.e("ImageUtils", "❌ Bitmap.extractSubset 裁剪失败")
+            return null
+        }
+
+        val format = if (isPng) EncodedImageFormat.PNG else EncodedImageFormat.JPEG
         val targetWidth = (forceWidth ?: srcW.toInt()).toFloat().coerceAtLeast(1f)
         val targetHeight = (forceHeight ?: srcH.toInt()).toFloat().coerceAtLeast(1f)
-        
+
+        // 如果不需要缩放，直接将裁剪后的 Bitmap 编码返回
+        if (srcW == targetWidth && srcH == targetHeight) {
+            val finalImage = Image.makeFromBitmap(croppedBitmap)
+            return finalImage.encodeToData(format, 100)?.bytes
+        }
+
+        // 3. 一次性直接缩放至目标尺寸
+        val currentImage = Image.makeFromBitmap(croppedBitmap)
+        val finalSurface = Surface.makeRasterN32Premul(targetWidth.toInt(), targetHeight.toInt())
         val paint = Paint().apply { isAntiAlias = true }
         val filter = FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR)
 
-        val cropSurface = Surface.makeRasterN32Premul(srcW.toInt(), srcH.toInt())
-        cropSurface.canvas.drawImageRect(
-            image, 
-            Rect.makeXYWH(srcL, srcT, srcW, srcH), 
+        finalSurface.canvas.drawImageRect(
+            currentImage, 
             Rect.makeWH(srcW, srcH), 
+            Rect.makeWH(targetWidth, targetHeight), 
             filter, paint, true
         )
-        var currentImage = cropSurface.makeImageSnapshot()
-        var currentWidth = srcW
-        var currentHeight = srcH
-
-        var stepCount = 0
-        while (true) {
-            val ratioW = targetWidth / currentWidth
-            val ratioH = targetHeight / currentHeight
-            if (ratioW >= 0.5f && ratioW <= 2.0f && ratioH >= 0.5f && ratioH <= 2.0f) break
-            
-            stepCount++
-            val nextStepWidth = if (ratioW < 0.5f) currentWidth * 0.5f else if (ratioW > 2.0f) currentWidth * 2.0f else targetWidth
-            val nextStepHeight = if (ratioH < 0.5f) currentHeight * 0.5f else if (ratioH > 2.0f) currentHeight * 2.0f else targetHeight
-            
-            val stepW = nextStepWidth.toInt().coerceAtLeast(1)
-            val stepH = nextStepHeight.toInt().coerceAtLeast(1)
-            
-            val stepSurface = Surface.makeRasterN32Premul(stepW, stepH)
-            stepSurface.canvas.drawImageRect(currentImage, Rect.makeWH(currentWidth, currentHeight), Rect.makeWH(stepW.toFloat(), stepH.toFloat()), filter, paint, true)
-            currentImage = stepSurface.makeImageSnapshot()
-            currentWidth = stepW.toFloat()
-            currentHeight = stepH.toFloat()
-        }
-
-        val finalSurface = Surface.makeRasterN32Premul(targetWidth.toInt(), targetHeight.toInt())
-        finalSurface.canvas.drawImageRect(currentImage, Rect.makeWH(currentWidth, currentHeight), Rect.makeWH(targetWidth, targetHeight), filter, paint, true)
         
-        val format = if (isPng) EncodedImageFormat.PNG else EncodedImageFormat.JPEG
         finalSurface.makeImageSnapshot().encodeToData(format, 100)?.bytes
     } catch (e: Exception) {
         AppLogger.e("ImageUtils", "❌ 跨平台裁剪失败 (从字节)", e)
@@ -233,7 +291,16 @@ fun cropImage(
 }
 
 /**
- * 跨平台图像裁剪与缩放逻辑 (基于 Skia)
+ * 跨平台图像裁剪与缩放逻辑（从文件路径读取）。
+ * 
+ * @param imageSource 原始图像路径。
+ * @param bounds 裁剪区域。
+ * @param logicalWidth 逻辑宽度。
+ * @param logicalHeight 逻辑高度。
+ * @param isPng 是否为 PNG。
+ * @param forceWidth 强制宽度。
+ * @param forceHeight 强制高度。
+ * @return 裁剪后的字节数组。
  */
 suspend fun cropImage(
     imageSource: String,
@@ -248,7 +315,17 @@ suspend fun cropImage(
     return cropImage(bytes, bounds, logicalWidth, logicalHeight, isPng, forceWidth, forceHeight)
 }
 
-/** 扩展：从 TemplateFile 裁剪图片 */
+/** 
+ * [TemplateFile] 的扩展方法：裁剪图片。
+ * 
+ * @param bounds 裁剪区域。
+ * @param logicalWidth 逻辑宽度。
+ * @param logicalHeight 逻辑高度。
+ * @param isPng 是否为 PNG。
+ * @param forceWidth 强制宽度。
+ * @param forceHeight 强制高度。
+ * @return 裁剪后的字节数组。
+ */
 suspend fun TemplateFile.crop(
     bounds: SerialRect,
     logicalWidth: Float,
@@ -259,7 +336,11 @@ suspend fun TemplateFile.crop(
 ): ByteArray? = cropImage(this.getAbsolutePath(), bounds, logicalWidth, logicalHeight, isPng, forceWidth, forceHeight)
 
 /**
- * 跨平台透明度边界检测 (基于 Skia)，使用字节数组
+ * 检测图片中非透明部分的边界区域（Bounding Box）。
+ * 使用 alpha 通道阈值 (>8) 进行判定。
+ * 
+ * @param imageBytes 原始图像的字节数组。
+ * @return 包含非透明区域坐标的 [SerialRect]，若全透明或处理失败则返回 null。
  */
 fun getNonTransparentBounds(imageBytes: ByteArray): SerialRect? {
     return try {
@@ -291,7 +372,10 @@ fun getNonTransparentBounds(imageBytes: ByteArray): SerialRect? {
 }
 
 /**
- * 跨平台透明度边界检测 (基于 Skia)
+ * 检测图片中非透明部分的边界区域（从文件路径读取）。
+ * 
+ * @param imageSource 图像文件路径。
+ * @return 非透明区域的 [SerialRect]。
  */
 suspend fun getNonTransparentBounds(imageSource: String): SerialRect? {
     val bytes = readLocalFileBytes(imageSource) ?: return null
@@ -299,7 +383,11 @@ suspend fun getNonTransparentBounds(imageSource: String): SerialRect? {
 }
 
 /**
- * 自动切除图片四周的透明留白 (基于 Skia)
+ * 自动切除图片四周的透明留白（Trim Transparency）。
+ * 内部首先检测非透明边界，然后根据原始尺寸进行裁剪导出。
+ * 
+ * @param imageSource 原始图像路径。
+ * @return 切除白边后的 PNG 格式字节数组，若无非透明像素则返回 null。
  */
 suspend fun trimTransparency(imageSource: String): ByteArray? {
     val bounds = getNonTransparentBounds(imageSource) ?: return null
