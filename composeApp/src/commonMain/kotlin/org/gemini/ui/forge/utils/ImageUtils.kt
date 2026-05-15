@@ -259,6 +259,7 @@ fun cropImage(
             AppLogger.e("ImageUtils", "❌ Bitmap.extractSubset 裁剪失败")
             return null
         }
+        AppLogger.d("ImageUtils", "✅ 成功截取子图: 截取尺寸 = ${croppedBitmap.width}x${croppedBitmap.height}")
 
         val format = if (isPng) EncodedImageFormat.PNG else EncodedImageFormat.JPEG
         val targetWidth = (forceWidth ?: srcW.toInt()).toFloat().coerceAtLeast(1f)
@@ -266,11 +267,13 @@ fun cropImage(
 
         // 如果不需要缩放，直接将裁剪后的 Bitmap 编码返回
         if (srcW == targetWidth && srcH == targetHeight) {
+            AppLogger.d("ImageUtils", "⏭️ 尺寸一致，跳过缩放阶段，直接导出")
             val finalImage = Image.makeFromBitmap(croppedBitmap)
             return finalImage.encodeToData(format, 100)?.bytes
         }
 
         // 3. 一次性直接缩放至目标尺寸
+        AppLogger.d("ImageUtils", "🔍 执行单次直接缩放: ${croppedBitmap.width}x${croppedBitmap.height} -> ${targetWidth}x${targetHeight}")
         val currentImage = Image.makeFromBitmap(croppedBitmap)
         val finalSurface = Surface.makeRasterN32Premul(targetWidth.toInt(), targetHeight.toInt())
         val paint = Paint().apply { isAntiAlias = true }

@@ -489,9 +489,14 @@ fun ImageEditorDialog(
                                                     val relW = cropSize.width / imageDisplayRect.width
                                                     val relH = cropSize.height / imageDisplayRect.height
 
+                                                    val absX = relX * img.width
+                                                    val absY = relY * img.height
+                                                    val absW = relW * img.width
+                                                    val absH = relH * img.height
+
                                                     val result = cropImage(
                                                         bytes,
-                                                        SerialRect(relX, relY, relX + relW, relY + relH),
+                                                        SerialRect(absX, absY, absX + absW, absY + absH),
                                                         img.width.toFloat(),
                                                         img.height.toFloat(),
                                                         true,
