@@ -87,3 +87,12 @@ fun formatIsoTime(isoString: String?): String {
         isoString // 解析失败则原样返回
     }
 }
+
+/**
+ * 跨平台获取当前用户的主目录
+ * - JVM: System.getProperty("user.home")
+ * - iOS: NSHomeDirectory()
+ * - Web: "/web/local" (虚拟路径)
+ * - Android: System.getProperty("user.home")
+ */
+expect val userHomePath: String

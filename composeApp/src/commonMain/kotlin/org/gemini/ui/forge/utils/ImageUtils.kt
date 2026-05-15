@@ -165,7 +165,7 @@ suspend fun bakeNinePatchImage(
 /**
  * 跨平台图像裁剪与缩放逻辑 (基于 Skia)，使用字节数组
  */
-suspend fun cropImage(
+fun cropImage(
     imageBytes: ByteArray,
     bounds: SerialRect,
     logicalWidth: Float,
@@ -176,7 +176,6 @@ suspend fun cropImage(
 ): ByteArray? {
     return try {
         val image = Image.makeFromEncoded(imageBytes)
-        
         val scaleX = image.width.toFloat() / logicalWidth
         val scaleY = image.height.toFloat() / logicalHeight
         

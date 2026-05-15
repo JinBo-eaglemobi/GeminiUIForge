@@ -1,14 +1,12 @@
 package org.gemini.ui.forge.utils
 
 import android.util.Log
+import org.gemini.ui.forge.androidContext
 
-private var androidLogDir: String = ""
+val androidLogDir by lazy {
+    // 初始化 Android 端的日志持久化路径 (Internal Storage)
+    androidContext.filesDir.resolve("logs").apply { if (!exists()) mkdirs() }
 
-/**
- * Android 平台专用的初始化函数，需在 MainActivity 中调用
- */
-fun initAndroidLogConfig(dir: String) {
-    androidLogDir = dir
 }
 
 actual fun printToConsole(level: String, tag: String, message: String, throwable: Throwable?) {
@@ -21,5 +19,5 @@ actual fun printToConsole(level: String, tag: String, message: String, throwable
 }
 
 actual fun getPlatformLogDirectory(): String {
-    return androidLogDir
+    return androidLogDir.absolutePath
 }

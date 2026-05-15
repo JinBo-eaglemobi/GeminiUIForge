@@ -121,3 +121,5 @@ actual val ResizeHorizontalIcon: PointerIcon = PointerIcon(Cursor(Cursor.E_RESIZ
 actual val ResizeVerticalIcon: PointerIcon = PointerIcon(Cursor(Cursor.N_RESIZE_CURSOR))
 
 actual fun getProcessorCount(): Int = Runtime.getRuntime().availableProcessors()
+
+actual val userHomePath: String = System.getProperty("user.home")

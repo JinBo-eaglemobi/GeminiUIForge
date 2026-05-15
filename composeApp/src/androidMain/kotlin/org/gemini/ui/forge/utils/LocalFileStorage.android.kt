@@ -1,23 +1,13 @@
 package org.gemini.ui.forge.utils
 
-import android.content.Context
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.gemini.ui.forge.androidContext
 
 actual class LocalFileStorage {
     
-    private val context: Context? by lazy {
-        try {
-            val activityThreadClass = Class.forName("android.app.ActivityThread")
-            val application = activityThreadClass.getMethod("currentApplication").invoke(null) as? android.app.Application
-            application
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private var currentDir: File = context?.filesDir ?: File("/data/data/org.gemini.ui.forge/files")
+    private var currentDir: File = androidContext.filesDir
 
     init {
         AppLogger.d("LocalFileStorage", "🚀 正在启动 LocalFileStorage 初始化 (Android)...")

@@ -16,7 +16,10 @@ actual class LocalFileStorage {
             val navigatorStorage = window.navigator.asDynamic().storage ?: return null
             var currentHandle = navigatorStorage.getDirectory().unsafeCast<kotlin.js.Promise<dynamic>>().await()
             
-            val parts = path.split("/").filter { it.isNotEmpty() }
+            // 剥离 OPFS 前缀以解析相对路径层级
+            val cleanPath = path.removePrefix(userHomePath).removePrefix("/")
+            val parts = cleanPath.split("/").filter { it.isNotEmpty() }
+            
             for (part in parts) {
                 val options = if (createIfNotExists) js("{ create: true }") else js("{ create: false }")
                 currentHandle = currentHandle.getDirectoryHandle(part, options).unsafeCast<kotlin.js.Promise<dynamic>>().await()
@@ -29,10 +32,11 @@ actual class LocalFileStorage {
     }
 
     private fun getParentPathAndName(fullPath: String): Pair<String, String> {
-        val parts = fullPath.split("/")
+        val cleanPath = fullPath.removePrefix(userHomePath).removePrefix("/")
+        val parts = cleanPath.split("/")
         val fileName = parts.last()
         val dirPath = parts.dropLast(1).joinToString("/")
-        return dirPath to fileName
+        return "$userHomePath$dirPath" to fileName
     }
 
     actual suspend fun updateDataDir(newPath: String): Boolean {
@@ -40,7 +44,7 @@ actual class LocalFileStorage {
         return false
     }
 
-    actual suspend fun getDataDir(): String = "opfs://templates"
+    actual suspend fun getDataDir(): String = "$userHomePath.geminiuiforge"
 
     actual suspend fun saveToFile(fileName: String, content: String): String {
         try {

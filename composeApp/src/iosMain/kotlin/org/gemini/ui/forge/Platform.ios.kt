@@ -37,3 +37,5 @@ actual val ResizeHorizontalIcon: PointerIcon = PointerIcon.Default
 actual val ResizeVerticalIcon: PointerIcon = PointerIcon.Default
 
 actual fun getProcessorCount(): Int = platform.Foundation.NSProcessInfo.processInfo.processorCount.toInt()
+
+actual val userHomePath: String = platform.Foundation.NSHomeDirectory()

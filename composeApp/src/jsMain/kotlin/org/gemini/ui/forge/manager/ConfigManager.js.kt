@@ -2,25 +2,40 @@ package org.gemini.ui.forge.manager
 
 import kotlinx.browser.window
 import kotlinx.coroutines.await
+import org.gemini.ui.forge.userHomePath
 
 actual open class ConfigManager {
 
     /**
+     * OPFS 的基础路径处理。
+     */
+    private suspend fun getTargetDirectoryHandle(path: String, createIfNotExists: Boolean = true): dynamic {
+        try {
+            val navigatorStorage = window.navigator.asDynamic().storage ?: return null
+            var currentHandle = navigatorStorage.getDirectory().unsafeCast<kotlin.js.Promise<dynamic>>().await()
+            
+            val cleanPath = path.removePrefix(userHomePath).removePrefix("/")
+            val parts = cleanPath.split("/").filter { it.isNotEmpty() }
+            for (part in parts) {
+                val options = if (createIfNotExists) js("{ create: true }") else js("{ create: false }")
+                currentHandle = currentHandle.getDirectoryHandle(part, options).unsafeCast<kotlin.js.Promise<dynamic>>().await()
+            }
+            return currentHandle
+        } catch (e: Throwable) {
+            return null
+        }
+    }
+
+    private val configDirPath = "$userHomePath.geminiuiforge"
+
+    /**
      * JS 平台下利用 OPFS (Origin Private File System) 进行文件写入。
-     * OPFS 是浏览器提供的高性能本地沙盒文件系统。
-     * 
-     * 由于 Kotlin/JS 标准库尚未完全封装 OPFS API，
-     * 这里通过 `asDynamic()` 绕过类型检查，直接调用浏览器的原生 JS API。
      */
     private suspend fun writeToOpfs(keyName: String, keyValue: String) {
         try {
-            val navigatorStorage = window.navigator.asDynamic().storage
-            if (navigatorStorage != null) {
-                // 获取 OPFS 根目录句柄
-                val rootHandle = navigatorStorage.getDirectory().unsafeCast<kotlin.js.Promise<dynamic>>().await()
-                // 创建或获取对应 key 命名的 .txt 文件
-                val fileHandle = rootHandle.getFileHandle(keyName + ".txt", js("{ create: true }")).unsafeCast<kotlin.js.Promise<dynamic>>().await()
-                // 创建可写流并写入数据
+            val dirHandle = getTargetDirectoryHandle(configDirPath, createIfNotExists = true)
+            if (dirHandle != null) {
+                val fileHandle = dirHandle.getFileHandle(keyName + ".txt", js("{ create: true }")).unsafeCast<kotlin.js.Promise<dynamic>>().await()
                 val writable = fileHandle.createWritable().unsafeCast<kotlin.js.Promise<dynamic>>().await()
                 writable.write(keyValue).unsafeCast<kotlin.js.Promise<dynamic>>().await()
                 writable.close().unsafeCast<kotlin.js.Promise<dynamic>>().await()
@@ -35,13 +50,10 @@ actual open class ConfigManager {
      */
     private suspend fun readFromOpfs(keyName: String): String? {
         return try {
-            val navigatorStorage = window.navigator.asDynamic().storage
-            if (navigatorStorage != null) {
-                // 获取根目录和对应文件句柄（不创建新文件）
-                val rootHandle = navigatorStorage.getDirectory().unsafeCast<kotlin.js.Promise<dynamic>>().await()
-                val fileHandle = rootHandle.getFileHandle(keyName + ".txt", js("{ create: false }")).unsafeCast<kotlin.js.Promise<dynamic>>().await()
+            val dirHandle = getTargetDirectoryHandle(configDirPath, createIfNotExists = false)
+            if (dirHandle != null) {
+                val fileHandle = dirHandle.getFileHandle(keyName + ".txt", js("{ create: false }")).unsafeCast<kotlin.js.Promise<dynamic>>().await()
                 val file = fileHandle.getFile().unsafeCast<kotlin.js.Promise<dynamic>>().await()
-                // 读取文本内容
                 val text = file.text().unsafeCast<kotlin.js.Promise<String>>().await()
                 text
             } else {

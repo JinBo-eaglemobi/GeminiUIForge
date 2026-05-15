@@ -24,3 +24,5 @@ actual val ResizeHorizontalIcon: PointerIcon = PointerIcon.Default
 actual val ResizeVerticalIcon: PointerIcon = PointerIcon.Default
 
 actual fun getProcessorCount(): Int = kotlinx.browser.window.navigator.hardwareConcurrency.toInt()
+
+actual val userHomePath: String = "opfs://"
