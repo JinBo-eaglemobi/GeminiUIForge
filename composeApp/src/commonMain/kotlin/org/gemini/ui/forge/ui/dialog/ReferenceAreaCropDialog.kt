@@ -17,6 +17,8 @@ import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.ui.component.ImageAreaSelector
 import org.gemini.ui.forge.ui.theme.AppShapes
 
+import kotlin.math.abs
+
 /**
  * 设置区域参考图对话框。
  *
@@ -30,6 +32,7 @@ import org.gemini.ui.forge.ui.theme.AppShapes
  */
 @Composable
 fun ReferenceAreaCropDialog(
+    blockId: String,
     imageUri: TemplateFile?,
     pageWidth: Float,
     pageHeight: Float,
@@ -45,8 +48,25 @@ fun ReferenceAreaCropDialog(
             color = MaterialTheme.colorScheme.surface
         ) {
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                Text("设置区域参考图", style = MaterialTheme.typography.headlineSmall)
+                Text("设置区域参考图 - 模块: $blockId", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
                 Text("框选当前模块在原图上的对应区域，生成时将仅以该区域作为参考图。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp)).padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text("底图尺寸: ${pageWidth.toInt()} x ${pageHeight.toInt()}", style = MaterialTheme.typography.labelMedium)
+                    
+                    val rect = selectedRect
+                    if (rect != null) {
+                        val selW = abs(rect.width).toInt()
+                        val selH = abs(rect.height).toInt()
+                        Text("当前选区大小: $selW x $selH", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Text("当前选区大小: 未选择", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
 
                 ImageAreaSelector(

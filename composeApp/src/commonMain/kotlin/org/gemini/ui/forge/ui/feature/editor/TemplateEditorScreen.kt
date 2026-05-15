@@ -116,6 +116,7 @@ fun TemplateEditorScreen(
         val defaultInstruction =
             if (refineTargetId != null) state.defaultRefineInstructionUpdate else state.defaultRefineInstructionNew
         VisualRefineDialog(
+            blockId = refineTargetId,
             imageUri = state.currentPage?.sourceImageUri,
             pageWidth = state.currentPage?.width ?: 1080f,
             pageHeight = state.currentPage?.height ?: 1920f,
@@ -134,6 +135,7 @@ fun TemplateEditorScreen(
 
     if (showReferenceArea) {
         ReferenceAreaCropDialog(
+            blockId = referenceAreaTargetId ?: "未知模块",
             imageUri = state.currentPage?.sourceImageUri,
             pageWidth = state.currentPage?.width ?: 1080f,
             pageHeight = state.currentPage?.height ?: 1920f,

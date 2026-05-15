@@ -19,6 +19,7 @@ import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.ui.component.ImageAreaSelector
 import org.gemini.ui.forge.ui.theme.AppShapes
+import kotlin.math.abs
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -27,6 +28,7 @@ import org.jetbrains.compose.resources.stringResource
  * 提供一个界面让用户在模板图片上框选特定区域，并输入重塑指令。
  * 支持设置是否携带会话历史上下文。
  *
+ * @param blockId 当前编辑的模块 ID，如果为空则表示全局重塑
  * @param imageUri 待重塑的模板文件信息
  * @param pageWidth 页面原始宽度
  * @param pageHeight 页面原始高度
@@ -36,6 +38,7 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun VisualRefineDialog(
+    blockId: String?,
     imageUri: TemplateFile?,
     pageWidth: Float,
     pageHeight: Float,
@@ -54,7 +57,25 @@ fun VisualRefineDialog(
             color = MaterialTheme.colorScheme.surface
         ) {
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                Text(stringResource(Res.string.action_refine_area), style = MaterialTheme.typography.headlineSmall)
+                val titleSuffix = if (blockId != null) " - 模块: $blockId" else " - 全局"
+                Text(stringResource(Res.string.action_refine_area) + titleSuffix, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+                
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp)).padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text("底图尺寸: ${pageWidth.toInt()} x ${pageHeight.toInt()}", style = MaterialTheme.typography.labelMedium)
+                    
+                    val rect = selectedRect
+                    if (rect != null) {
+                        val selW = abs(rect.width).toInt()
+                        val selH = abs(rect.height).toInt()
+                        Text("当前选区大小: $selW x $selH", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Text("当前选区大小: 未选择", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
 
                 ImageAreaSelector(

@@ -25,6 +25,10 @@ import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.utils.rememberImagePicker
 import org.gemini.ui.forge.ui.dialog.ImageEditorDialog
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.window.Dialog
 import org.gemini.ui.forge.ui.dialog.ButtonStateGenDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,6 +44,7 @@ fun AssetGenPropertyPanel(
     onShowDisabledHistory: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showImagePreview by remember { mutableStateOf<String?>(null) }
     val selectedBlock = state.selectedBlock
     val projectName = state.projectName.replace(" ", "_")
     val projectAssetsBase = TemplateFile("templates/$projectName/assets")
@@ -209,11 +214,14 @@ fun AssetGenPropertyPanel(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = Modifier.size(100.dp).padding(LocalAppSpacing.current.extraSmall), contentAlignment = Alignment.Center) {
                                 if (state.referenceImageUri != null) {
+                                    val imagePath = state.referenceImageUri.getAbsolutePath()
                                     AsyncImage(
-                                        model = state.referenceImageUri.getAbsolutePath(),
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
+                                        model = imagePath,
+                                        contentDescription = "查看大图",
+                                        modifier = Modifier.fillMaxSize()
+                                            .clip(AppShapes.small)
+                                            .clickable { showImagePreview = imagePath },
+                                        contentScale = ContentScale.Fit
                                     )
                                 } else {
                                     Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = AppShapes.small, modifier = Modifier.fillMaxSize()) {
@@ -424,6 +432,49 @@ fun AssetGenPropertyPanel(
             ) {
                 if (state.isGenerating) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                 else Text(stringResource(Res.string.editor_start_gen))
+            }
+        }
+    }
+
+    if (showImagePreview != null) {
+        Dialog(
+            onDismissRequest = { showImagePreview = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(32.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { showImagePreview = null }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = AppShapes.large,
+                    modifier = Modifier.wrapContentSize()
+                ) {
+                    Box(modifier = Modifier.padding(LocalAppSpacing.current.medium)) {
+                        AsyncImage(
+                            model = showImagePreview,
+                            contentDescription = "预览大图",
+                            modifier = Modifier
+                                .fillMaxWidth(0.9f)
+                                .fillMaxHeight(0.9f)
+                                .clip(AppShapes.medium),
+                            contentScale = ContentScale.Fit
+                        )
+                        IconButton(
+                            onClick = { showImagePreview = null },
+                            modifier = Modifier.align(Alignment.TopEnd)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "关闭", tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
             }
         }
     }
