@@ -67,7 +67,7 @@ fun AssetGenPropertyPanel(
         ImageEditorDialog(
             block = selectedBlock,
             onDismiss = { showImageEditor = false },
-            onConfirm = { bytes, mode, config ->
+            onConfirm = { bytes, mode, config, originalCropBytes ->
                 viewModel.updateBlockImageConfig(selectedBlock.id, mode, config)
                 // 执行烘焙保存
                 viewModel.bakeBlockImage(
@@ -78,7 +78,8 @@ fun AssetGenPropertyPanel(
                     selectedBlock.bounds.height.toInt().coerceAtLeast(1),
                     selectedBlock.bounds.width.toInt().coerceAtLeast(1),
                     selectedBlock.bounds.height.toInt().coerceAtLeast(1),
-                    bytes // 传字节流
+                    bytes, // 传字节流
+                    originalCropBytes
                 )
                 showImageEditor = false
             }

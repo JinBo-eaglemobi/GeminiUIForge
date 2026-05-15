@@ -231,7 +231,7 @@ fun TemplateAssetGenScreen(
             targetWidth = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.width ?: 0f,
             targetHeight = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.height ?: 0f,
             onDismiss = { pendingCropUri = null },
-            onConfirm = { bytes, mode, config ->
+            onConfirm = { bytes, mode, config, originalCropBytes ->
                 coroutineScope.launch {
                     // 由于 ImageEditorDialog 已经返回了裁剪/加工后的 bytes，
                     // 我们直接调用 bakeBlockImage 来保存这些 bytes 到对应的 block
@@ -245,7 +245,8 @@ fun TemplateAssetGenScreen(
                             targetHeight = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.height?.toInt() ?: 100,
                             contentWidth = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.width?.toInt() ?: 100,
                             contentHeight = (state.batchPendingConfirmBlock ?: state.selectedBlock)?.bounds?.height?.toInt() ?: 100,
-                            imageBytes = bytes
+                            imageBytes = bytes,
+                            originalCropBytes = originalCropBytes
                         )
                     }
                     

@@ -38,6 +38,7 @@ import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.*
+import org.jetbrains.skia.EncodedImageFormat
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -72,7 +73,7 @@ fun ImageEditorDialog(
     targetWidth: Float? = null,
     targetHeight: Float? = null,
     onDismiss: () -> Unit,
-    onConfirm: (ByteArray, ImageResizeMode, NinePatchConfig) -> Unit
+    onConfirm: (ByteArray, ImageResizeMode, NinePatchConfig, ByteArray?) -> Unit
 ) {
 // ...
 
@@ -86,6 +87,7 @@ fun ImageEditorDialog(
 
     // 核心状态：当前处理中的图片字节流
     var currentBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var originalCropBytes by remember { mutableStateOf<ByteArray?>(null) }
     var isInitializing by remember { mutableStateOf(true) }
 
     // 初始化加载
@@ -105,6 +107,7 @@ fun ImageEditorDialog(
     // 编辑器状态
     var selectedTab by remember { mutableStateOf(if (initialImageUri != null) EditorTab.CROP else EditorTab.BAKE) }
     var isProcessing by remember { mutableStateOf(false) }
+    var saveOriginalCrop by remember { mutableStateOf(false) }
 
     // --- 烘焙模式状态 ---
     var bakeMode by remember { mutableStateOf(block?.resizeMode ?: ImageResizeMode.STRETCH) }
@@ -132,6 +135,66 @@ fun ImageEditorDialog(
     var cropOffset by remember { mutableStateOf(Offset.Zero) }
     var cropSize by remember { mutableStateOf(Size.Zero) }
     var imageDisplayRect by remember { mutableStateOf(Rect.Zero) }
+
+    // --- 未应用更改追踪状态 ---
+    var hasUnappliedCrop by remember { mutableStateOf(false) }
+    var hasUnappliedBake by remember { mutableStateOf(false) }
+    var showUnappliedWarning by remember { mutableStateOf(false) }
+
+    // 通用裁剪执行逻辑
+    suspend fun applyCropLogic(): Boolean {
+        val bytes = currentBytes ?: return false
+        val img = imageBitmap ?: return false
+        val relX = (cropOffset.x - imageDisplayRect.left) / imageDisplayRect.width
+        val relY = (cropOffset.y - imageDisplayRect.top) / imageDisplayRect.height
+        val relW = cropSize.width / imageDisplayRect.width
+        val relH = cropSize.height / imageDisplayRect.height
+
+        val absX = relX * img.width
+        val absY = relY * img.height
+        val absW = relW * img.width
+        val absH = relH * img.height
+
+        // 1. 提取裁剪子图 (直接返回 Image 对象，避免不必要的编码)
+        val croppedImage = extractImageSubsetToImage(
+            bytes, SerialRect(absX, absY, absX + absW, absY + absH),
+            img.width.toFloat(), img.height.toFloat()
+        ) ?: return false
+
+        // 如果用户勾选了保存原图，保留此原始尺寸的裁剪图
+        if (saveOriginalCrop) {
+            val format = EncodedImageFormat.PNG
+            originalCropBytes = croppedImage.encodeToData(format, 100)?.bytes
+        }
+
+        // 2. 将裁剪子图缩放至目标尺寸
+        val scaledBytes = scaleImage(
+            croppedImage, finalTargetW.toInt(), finalTargetH.toInt(), true
+        )
+
+        if (scaledBytes != null) {
+            currentBytes = scaledBytes
+            canvasWidth = finalTargetW.toInt(); canvasHeight = finalTargetH.toInt()
+            contentWidth = finalTargetW.toInt(); contentHeight = finalTargetH.toInt()
+            hasUnappliedCrop = false
+            return true
+        }
+        return false
+    }
+
+    // 通用烘焙执行逻辑
+    suspend fun applyBakeLogic(): Boolean {
+        val bytes = currentBytes ?: return false
+        val result = bakeNinePatchImage(
+            bytes, canvasWidth, canvasHeight, contentWidth, contentHeight, bakeMode, ninePatchConfig
+        )
+        if (result != null) {
+            currentBytes = result
+            hasUnappliedBake = false
+            return true
+        }
+        return false
+    }
 
     // 当容器尺寸或位图变化时，重新初始化裁剪框
     LaunchedEffect(containerSize, imageBitmap, selectedTab) {
@@ -242,6 +305,7 @@ fun ImageEditorDialog(
                                                         imageDisplayRect.bottom - cropSize.height
                                                     )
                                                     cropOffset = Offset(newX, newY)
+                                                    hasUnappliedCrop = true
                                                 }
                                             }
                                     ) {
@@ -310,6 +374,7 @@ fun ImageEditorDialog(
                                                                         (currentS.width + dX).coerceAtLeast(40f)
                                                                     cropSize = Size(finalW, finalW / targetRatio)
                                                                 }
+                                                                hasUnappliedCrop = true
                                                             }
                                                         }
                                                     }
@@ -407,6 +472,22 @@ fun ImageEditorDialog(
                                         )
                                         Spacer(Modifier.height(24.dp))
 
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.fillMaxWidth().clickable { saveOriginalCrop = !saveOriginalCrop }
+                                        ) {
+                                            Checkbox(
+                                                checked = saveOriginalCrop,
+                                                onCheckedChange = { saveOriginalCrop = it }
+                                            )
+                                            Text(
+                                                "保存裁剪图片",
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
+
+                                        Spacer(Modifier.height(16.dp))
+
                                         Button(
                                             onClick = {
                                                 coroutineScope.launch {
@@ -462,6 +543,7 @@ fun ImageEditorDialog(
 
                                                         cropSize = Size(nW, nH)
                                                         cropOffset = Offset(nX, nY)
+                                                        hasUnappliedCrop = true
                                                     }
                                                 }
                                             },
@@ -480,37 +562,7 @@ fun ImageEditorDialog(
                                             onClick = {
                                                 isProcessing = true
                                                 coroutineScope.launch {
-                                                    val bytes = currentBytes ?: return@launch
-                                                    val img = imageBitmap ?: return@launch
-                                                    val relX =
-                                                        (cropOffset.x - imageDisplayRect.left) / imageDisplayRect.width
-                                                    val relY =
-                                                        (cropOffset.y - imageDisplayRect.top) / imageDisplayRect.height
-                                                    val relW = cropSize.width / imageDisplayRect.width
-                                                    val relH = cropSize.height / imageDisplayRect.height
-
-                                                    val absX = relX * img.width
-                                                    val absY = relY * img.height
-                                                    val absW = relW * img.width
-                                                    val absH = relH * img.height
-
-                                                    val result = cropImage(
-                                                        bytes,
-                                                        SerialRect(absX, absY, absX + absW, absY + absH),
-                                                        img.width.toFloat(),
-                                                        img.height.toFloat(),
-                                                        true,
-                                                        finalTargetW.toInt(),
-                                                        finalTargetH.toInt()
-                                                    )
-                                                    if (result != null) {
-                                                        currentBytes = result
-                                                        // 重置烘焙尺寸为新图尺寸
-                                                        canvasWidth = finalTargetW.toInt(); canvasHeight =
-                                                            finalTargetH.toInt()
-                                                        contentWidth = finalTargetW.toInt(); contentHeight =
-                                                            finalTargetH.toInt()
-                                                    }
+                                                    applyCropLogic()
                                                     isProcessing = false
                                                 }
                                             },
@@ -532,10 +584,10 @@ fun ImageEditorDialog(
                                         Spacer(Modifier.height(16.dp))
                                         ImageResizeMode.entries.forEach { mode ->
                                             Row(
-                                                Modifier.fillMaxWidth().clickable { bakeMode = mode },
+                                                Modifier.fillMaxWidth().clickable { bakeMode = mode; hasUnappliedBake = true },
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                RadioButton(selected = bakeMode == mode, onClick = { bakeMode = mode })
+                                                RadioButton(selected = bakeMode == mode, onClick = { bakeMode = mode; hasUnappliedBake = true })
                                                 Text(
                                                     when (mode) {
                                                         ImageResizeMode.STRETCH -> stringResource(Res.string.editor_resize_stretch)
@@ -556,8 +608,8 @@ fun ImageEditorDialog(
                                         SizeInputRow(
                                             canvasWidth,
                                             canvasHeight,
-                                            { canvasWidth = it },
-                                            { canvasHeight = it })
+                                            { canvasWidth = it; hasUnappliedBake = true },
+                                            { canvasHeight = it; hasUnappliedBake = true })
                                         Spacer(Modifier.height(16.dp))
                                         Text(
                                             stringResource(Res.string.editor_content_area_label),
@@ -568,8 +620,8 @@ fun ImageEditorDialog(
                                         SizeInputRow(
                                             contentWidth,
                                             contentHeight,
-                                            { contentWidth = it },
-                                            { contentHeight = it })
+                                            { contentWidth = it; hasUnappliedBake = true },
+                                            { contentHeight = it; hasUnappliedBake = true })
 
                                         if (bakeMode == ImageResizeMode.NINE_PATCH) {
                                             HorizontalDivider(Modifier.padding(vertical = 16.dp))
@@ -583,7 +635,7 @@ fun ImageEditorDialog(
                                                 ninePatchConfig,
                                                 imageBitmap?.width ?: 1,
                                                 imageBitmap?.height ?: 1
-                                            ) { ninePatchConfig = it }
+                                            ) { ninePatchConfig = it; hasUnappliedBake = true }
                                         }
 
                                         Spacer(Modifier.height(24.dp))
@@ -591,19 +643,7 @@ fun ImageEditorDialog(
                                             onClick = {
                                                 isProcessing = true
                                                 coroutineScope.launch {
-                                                    val bytes = currentBytes ?: return@launch
-                                                    val result = bakeNinePatchImage(
-                                                        bytes,
-                                                        canvasWidth,
-                                                        canvasHeight,
-                                                        contentWidth,
-                                                        contentHeight,
-                                                        bakeMode,
-                                                        ninePatchConfig
-                                                    )
-                                                    if (result != null) {
-                                                        currentBytes = result
-                                                    }
+                                                    applyBakeLogic()
                                                     isProcessing = false
                                                 }
                                             },
@@ -627,8 +667,12 @@ fun ImageEditorDialog(
                                     ) { Text(stringResource(Res.string.prop_cancel)) }
                                     Button(
                                         onClick = {
-                                            val bytes = currentBytes ?: return@Button
-                                            onConfirm(bytes, bakeMode, ninePatchConfig)
+                                            if (hasUnappliedCrop || hasUnappliedBake) {
+                                                showUnappliedWarning = true
+                                            } else {
+                                                val bytes = currentBytes ?: return@Button
+                                                onConfirm(bytes, bakeMode, ninePatchConfig, originalCropBytes)
+                                            }
                                         },
                                         Modifier.weight(1f),
                                         enabled = currentBytes != null && !isProcessing
@@ -643,6 +687,49 @@ fun ImageEditorDialog(
                     }
                 }
             }
+        }
+
+        // --- 未应用更改警告弹窗 ---
+        if (showUnappliedWarning) {
+            AlertDialog(
+                onDismissRequest = { showUnappliedWarning = false },
+                title = { Text("未应用的更改") },
+                text = { 
+                    val msgs = mutableListOf<String>()
+                    if (hasUnappliedCrop) msgs.add("裁剪区域")
+                    if (hasUnappliedBake) msgs.add("加工配置")
+                    Text("您修改了 [${msgs.joinTo(StringBuilder(), "、")}] 但尚未应用。\n要在保存前自动应用这些更改吗？")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showUnappliedWarning = false
+                        isProcessing = true
+                        coroutineScope.launch {
+                            // 按顺序应用：先裁剪，后加工
+                            var success = true
+                            if (hasUnappliedCrop) success = applyCropLogic()
+                            if (success && hasUnappliedBake) success = applyBakeLogic()
+                            
+                            isProcessing = false
+                            if (success) {
+                                val bytes = currentBytes ?: return@launch
+                                onConfirm(bytes, bakeMode, ninePatchConfig, originalCropBytes)
+                            }
+                        }
+                    }) {
+                        Text("应用并保存", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showUnappliedWarning = false
+                        val bytes = currentBytes ?: return@TextButton
+                        onConfirm(bytes, bakeMode, ninePatchConfig, originalCropBytes)
+                    }) {
+                        Text("忽略并保存")
+                    }
+                }
+            )
         }
     }
 }

@@ -210,31 +210,25 @@ suspend fun bakeNinePatchImage(
 }
 
 /**
- * 跨平台图像裁剪与缩放逻辑（基于 Skia）。使用字节数组作为输入源。
+ * 从原图中提取指定边界的子图（仅裁剪，不涉及缩放）。
  * 
  * @param imageBytes 原始图像的字节数组。
- * @param bounds 裁剪区域（相对于 logicalWidth/Height 的比例坐标）。
+ * @param bounds 裁剪区域（相对于 originalWidth/Height 的比例坐标）。
  * @param originalWidth 输入坐标对应的逻辑画布宽度。
  * @param originalHeight 输入坐标对应的逻辑画布高度。
- * @param isPng 是否导出为 PNG 格式（false 为 JPEG）。
- * @param forceWidth 强制指定导出的图像宽度（像素），为空则使用裁剪区域的原始大小。
- * @param forceHeight 强制指定导出的图像高度（像素），为空则使用裁剪区域的原始大小。
- * @return 裁剪并缩放后的图像字节数组，失败返回 null。
+ * @return 仅经过裁剪的原始尺寸子图的 [Image] 对象，失败返回 null。
  */
-fun cropImage(
+fun extractImageSubsetToImage(
     imageBytes: ByteArray,
     bounds: SerialRect,
     originalWidth: Float,
-    originalHeight: Float,
-    isPng: Boolean = true,
-    forceWidth: Int? = null,
-    forceHeight: Int? = null
-): ByteArray? {
+    originalHeight: Float
+): Image? {
     return try {
         val image = Image.makeFromEncoded(imageBytes)
         val scaleX = image.width.toFloat() / originalWidth
         val scaleY = image.height.toFloat() / originalHeight
-        
+
         val srcL = bounds.left * scaleX
         val srcT = bounds.top * scaleY
         val srcW = (bounds.width * scaleX).coerceAtLeast(1f)
@@ -261,36 +255,129 @@ fun cropImage(
         }
         AppLogger.d("ImageUtils", "✅ 成功截取子图: 截取尺寸 = ${croppedBitmap.width}x${croppedBitmap.height}")
 
-        val format = if (isPng) EncodedImageFormat.PNG else EncodedImageFormat.JPEG
-        val targetWidth = (forceWidth ?: srcW.toInt()).toFloat().coerceAtLeast(1f)
-        val targetHeight = (forceHeight ?: srcH.toInt()).toFloat().coerceAtLeast(1f)
+        Image.makeFromBitmap(croppedBitmap)
+    } catch (e: Exception) {
+        AppLogger.e("ImageUtils", "❌ 跨平台裁剪提取子图失败", e)
+        null
+    }
+}
 
-        // 如果不需要缩放，直接将裁剪后的 Bitmap 编码返回
-        if (srcW == targetWidth && srcH == targetHeight) {
+/**
+ * 从原图中提取指定边界的子图（仅裁剪，不涉及缩放），返回字节数组。
+ * 
+ * @param imageBytes 原始图像的字节数组。
+ * @param bounds 裁剪区域（相对于 originalWidth/Height 的比例坐标）。
+ * @param originalWidth 输入坐标对应的逻辑画布宽度。
+ * @param originalHeight 输入坐标对应的逻辑画布高度。
+ * @param isPng 是否导出为 PNG 格式（false 为 JPEG）。
+ * @return 仅经过裁剪的原始尺寸子图的字节数组，失败返回 null。
+ */
+fun extractImageSubset(
+    imageBytes: ByteArray,
+    bounds: SerialRect,
+    originalWidth: Float,
+    originalHeight: Float,
+    isPng: Boolean = true
+): ByteArray? {
+    val image = extractImageSubsetToImage(imageBytes, bounds, originalWidth, originalHeight) ?: return null
+    val format = if (isPng) EncodedImageFormat.PNG else EncodedImageFormat.JPEG
+    return image.encodeToData(format, 100)?.bytes
+}
+
+/**
+ * 将图像缩放至目标尺寸 (Image 重载版)。
+ *
+ * @param image 原始 Skia Image 对象。
+ * @param targetWidth 强制指定导出的图像宽度（像素）。
+ * @param targetHeight 强制指定导出的图像高度（像素）。
+ * @param isPng 是否导出为 PNG 格式。
+ * @return 缩放后的图像字节数组，失败返回 null。
+ */
+fun scaleImage(
+    image: Image,
+    targetWidth: Int,
+    targetHeight: Int,
+    isPng: Boolean = true
+): ByteArray? {
+    return try {
+        val format = if (isPng) EncodedImageFormat.PNG else EncodedImageFormat.JPEG
+
+        if (image.width == targetWidth && image.height == targetHeight) {
             AppLogger.d("ImageUtils", "⏭️ 尺寸一致，跳过缩放阶段，直接导出")
-            val finalImage = Image.makeFromBitmap(croppedBitmap)
-            return finalImage.encodeToData(format, 100)?.bytes
+            return image.encodeToData(format, 100)?.bytes
         }
 
-        // 3. 一次性直接缩放至目标尺寸
-        AppLogger.d("ImageUtils", "🔍 执行单次直接缩放: ${croppedBitmap.width}x${croppedBitmap.height} -> ${targetWidth}x${targetHeight}")
-        val currentImage = Image.makeFromBitmap(croppedBitmap)
-        val finalSurface = Surface.makeRasterN32Premul(targetWidth.toInt(), targetHeight.toInt())
+        AppLogger.d("ImageUtils", "🔍 执行单次直接缩放: ${image.width}x${image.height} -> ${targetWidth}x${targetHeight}")
+        
+        val finalSurface = Surface.makeRasterN32Premul(targetWidth, targetHeight)
         val paint = Paint().apply { isAntiAlias = true }
         val filter = FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR)
 
         finalSurface.canvas.drawImageRect(
-            currentImage, 
-            Rect.makeWH(srcW, srcH), 
-            Rect.makeWH(targetWidth, targetHeight), 
+            image, 
+            Rect.makeWH(image.width.toFloat(), image.height.toFloat()), 
+            Rect.makeWH(targetWidth.toFloat(), targetHeight.toFloat()), 
             filter, paint, true
         )
         
         finalSurface.makeImageSnapshot().encodeToData(format, 100)?.bytes
     } catch (e: Exception) {
-        AppLogger.e("ImageUtils", "❌ 跨平台裁剪失败 (从字节)", e)
+        AppLogger.e("ImageUtils", "❌ 缩放图像失败", e)
         null
     }
+}
+
+/**
+ * 将图像缩放至目标尺寸。
+ *
+ * @param imageBytes 原始图像的字节数组。
+ * @param targetWidth 强制指定导出的图像宽度（像素）。
+ * @param targetHeight 强制指定导出的图像高度（像素）。
+ * @param isPng 是否导出为 PNG 格式。
+ * @return 缩放后的图像字节数组，失败返回 null。
+ */
+fun scaleImage(
+    imageBytes: ByteArray,
+    targetWidth: Int,
+    targetHeight: Int,
+    isPng: Boolean = true
+): ByteArray? {
+    return try {
+        val image = Image.makeFromEncoded(imageBytes)
+        scaleImage(image, targetWidth, targetHeight, isPng)
+    } catch (e: Exception) {
+        AppLogger.e("ImageUtils", "❌ 缩放图像解码失败", e)
+        null
+    }
+}
+
+/**
+ * 跨平台图像裁剪与缩放逻辑（基于 Skia）。使用字节数组作为输入源。
+ * 此方法为向后兼容封装，内部将调用 extractImageSubset 与 scaleImage。
+ * 
+ * @param imageBytes 原始图像的字节数组。
+ * @param bounds 裁剪区域（相对于 originalWidth/Height 的比例坐标）。
+ * @param originalWidth 输入坐标对应的逻辑画布宽度。
+ * @param originalHeight 输入坐标对应的逻辑画布高度。
+ * @param isPng 是否导出为 PNG 格式（false 为 JPEG）。
+ * @param forceWidth 强制指定导出的图像宽度（像素），为空则使用裁剪区域的原始大小。
+ * @param forceHeight 强制指定导出的图像高度（像素），为空则使用裁剪区域的原始大小。
+ * @return 裁剪并缩放后的图像字节数组，失败返回 null。
+ */
+fun cropImage(
+    imageBytes: ByteArray,
+    bounds: SerialRect,
+    originalWidth: Float,
+    originalHeight: Float,
+    isPng: Boolean = true,
+    forceWidth: Int? = null,
+    forceHeight: Int? = null
+): ByteArray? {
+    val subsetBytes = extractImageSubset(imageBytes, bounds, originalWidth, originalHeight, isPng) ?: return null
+    if (forceWidth == null && forceHeight == null) return subsetBytes
+    
+    // 如果只需要裁剪，这里尺寸交由 subset 自己决定
+    return scaleImage(subsetBytes, forceWidth ?: 1, forceHeight ?: 1, isPng)
 }
 
 /**

@@ -827,7 +827,8 @@ class TemplateAssetGenViewModel(
         targetHeight: Int,
         contentWidth: Int,
         contentHeight: Int,
-        imageBytes: ByteArray? = null // 新增可选字节流
+        imageBytes: ByteArray? = null,
+        originalCropBytes: ByteArray? = null
     ) {
         val block = findBlockById(_state.value.project.pages.flatMap { it.blocks }, blockId) ?: run {
             AppLogger.e("AssetGenVM", "❌ [错误] 找不到目标模块: $blockId")
@@ -841,12 +842,23 @@ class TemplateAssetGenViewModel(
         val projectName = _state.value.projectName
 
         viewModelScope.launch {
-            _state.update { it.copy(isGenerating = true) } 
+            _state.update { it.copy(isGenerating = true) }
             AppLogger.i("AssetGenVM", "⏳ 开始固化流程: 模式=$resizeMode, 目标尺寸=${targetWidth}x$targetHeight")
             try {
+                // 如果传入了未缩放的裁剪原图字节流，则直接将其保存至资产库
+                if (originalCropBytes != null) {
+                    val originalFile = templateRepo.saveBlockResource(
+                        projectName,
+                        blockId,
+                        "crop_${getCurrentTimeMillis()}",
+                        originalCropBytes,
+                        isPng = true
+                    )
+                    AppLogger.d("AssetGenVM", "✅ 成功保存裁剪原图至: ${originalFile.getAbsolutePath()}")
+                }
+
                 // 调用底层的图像处理逻辑
-                val bytes = withContext(Dispatchers.Default) {
-                    if (imageBytes != null) {
+                val bytes = withContext(Dispatchers.Default) {                    if (imageBytes != null) {
                         bakeNinePatchImage(
                             imageBytes = imageBytes,
                             targetWidth = targetWidth.coerceAtLeast(1),
