@@ -11,7 +11,7 @@ private fun resolve(path: String): String {
     val file = File(path)
     if (file.isAbsolute) return path
     // 相对路径，通过与 LocalFileStorage 一致的规则解析
-    val dataDir = File(System.getProperty("user.home"), ".geminiuiforge")
+    val dataDir = File(org.gemini.ui.forge.userHomePath, ".geminiuiforge")
     return File(dataDir, path).absolutePath
 }
 

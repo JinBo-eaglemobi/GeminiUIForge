@@ -13,7 +13,7 @@ import org.jetbrains.skiko.hostOs
 fun main(args: Array<String>) {
     // 1. 尝试实现内存自举拦截 (Trampoline)
     // 检查是否存在用户的 .vmoptions 文件，如果是生产打包环境，并且内存不符合预期，则注入环境变量重启
-    val userHome = System.getProperty("user.home")
+    val userHome = org.gemini.ui.forge.userHomePath
     val vmOptionsFile = java.io.File(userHome, ".geminiuiforge/app.vmoptions")
     if (vmOptionsFile.exists()) {
         try {

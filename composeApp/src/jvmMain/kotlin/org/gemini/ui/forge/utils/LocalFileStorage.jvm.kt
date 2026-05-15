@@ -5,7 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 actual class LocalFileStorage {
-    private var dataDir = File(System.getProperty("user.home"), ".geminiuiforge")
+    private var dataDir = File(org.gemini.ui.forge.userHomePath, ".geminiuiforge")
 
     init {
         AppLogger.d("LocalFileStorage", "🚀 正在启动 LocalFileStorage 初始化... (JVM)")

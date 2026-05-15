@@ -10,7 +10,7 @@ actual fun printToConsole(level: String, tag: String, message: String, throwable
 }
 
 actual fun getPlatformLogDirectory(): String {
-    val logDir = File(System.getProperty("user.home"), ".geminiuiforge/logs")
+    val logDir = File(org.gemini.ui.forge.userHomePath, ".geminiuiforge/logs")
     if (!logDir.exists()) {
         logDir.mkdirs()
     }

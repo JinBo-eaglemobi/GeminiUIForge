@@ -12,12 +12,12 @@ actual open class ConfigManager {
      * 将配置存储在用户的 Home 目录下的隐藏文件夹中（`~/.geminiuiforge/config.conf`），
      * 保证桌面应用的配置持久化且不会污染项目代码目录。
      */
-    private val envFile = File(System.getProperty("user.home"), ".geminiuiforge/config.conf")
+    private val envFile = File(org.gemini.ui.forge.userHomePath, ".geminiuiforge/config.conf")
 
     /**
      * JVM 专用启动参数配置文件路径。
      */
-    private val vmOptionsFile = File(System.getProperty("user.home"), ".geminiuiforge/app.vmoptions")
+    private val vmOptionsFile = File(org.gemini.ui.forge.userHomePath, ".geminiuiforge/app.vmoptions")
 
     init {
         // 确保父目录和文件存在
@@ -103,7 +103,7 @@ actual open class ConfigManager {
         System.getProperty("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }?.let { return@withContext it }
         
         // 3. 退避策略：尝试读取 `~/.gemini/.env` 通用配置文件
-        val globalEnv = File(System.getProperty("user.home"), ".gemini/.env")
+        val globalEnv = File(org.gemini.ui.forge.userHomePath, ".gemini/.env")
         if (globalEnv.exists()) {
             try {
                 globalEnv.readLines().forEach { line ->

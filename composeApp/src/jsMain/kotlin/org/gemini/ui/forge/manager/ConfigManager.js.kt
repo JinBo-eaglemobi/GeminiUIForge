@@ -75,4 +75,11 @@ actual open class ConfigManager {
     actual suspend fun loadGlobalGeminiKey(): String? {
         return null
     }
+
+    actual suspend fun loadJvmXmx(): String {
+        return ""
+    }
+
+    actual suspend fun saveJvmXmx(xmxValue: String) {
+    }
 }
