@@ -1,6 +1,8 @@
 package org.gemini.ui.forge.utils
 
 import androidx.compose.ui.input.key.*
+import org.jetbrains.skiko.OS
+import org.jetbrains.skiko.hostOs
 
 /**
  * 快捷键工具类，用于判断按键事件是否匹配快捷键配置
@@ -37,13 +39,7 @@ object ShortcutUtils {
             "y" -> event.key == Key.Y
             "f2" -> event.key == Key.F2
             "delete" -> {
-                val isMac = try {
-                    org.gemini.ui.forge.getPlatform().name.contains("iOS") || 
-                    // 在 JVM 上通常可以通过系统属性判断
-                    System.getProperty("os.name")?.lowercase()?.contains("mac") == true
-                } catch (e: Exception) {
-                    false
-                }
+                val isMac = hostOs.isMacOS || hostOs == OS.Ios
                 if (isMac) event.key == Key.Delete || event.key == Key.Backspace else event.key == Key.Delete
             }
             else -> false

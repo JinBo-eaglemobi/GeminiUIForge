@@ -8,6 +8,7 @@ import androidx.compose.ui.window.*
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.runBlocking
 import org.gemini.ui.forge.manager.ConfigManager
+import org.jetbrains.skiko.hostOs
 
 fun main(args: Array<String>) {
     // 1. 尝试实现内存自举拦截 (Trampoline)
@@ -49,13 +50,13 @@ fun main(args: Array<String>) {
                         } else {
                             // 开发环境或纯 jar 环境
                             val javaHome = System.getProperty("java.home")
-                            val javaBin = java.io.File(javaHome, "bin/java" + (if (System.getProperty("os.name").lowercase().contains("win")) ".exe" else "")).absolutePath
+                            val javaBin = java.io.File(javaHome, "bin/java" + (if (hostOs.isWindows) ".exe" else "")).absolutePath
                             command.add(javaBin)
                             command.add("-cp")
                             command.add(appPath)
                             command.add("org.gemini.ui.forge.MainKt")
                         }
-                        
+
                         command.addAll(args)
 
                         val pb = ProcessBuilder(command)

@@ -1,7 +1,9 @@
 package org.gemini.ui.forge
 
 import androidx.compose.ui.input.pointer.PointerIcon
+import org.jetbrains.skiko.hostOs
 import java.awt.Cursor
+import java.awt.Desktop
 import java.io.File
 import java.lang.management.ManagementFactory
 import kotlin.system.exitProcess
@@ -23,12 +25,10 @@ class JVMPlatform : Platform {
             if (!file.exists()) return
 
             val isDirectory = file.isDirectory
-            val os = System.getProperty("os.name").lowercase()
-
             val success = try {
                 when {
                     // Windows: 如果是文件，尝试打开并高亮选中；如果是目录，直接打开。
-                    os.contains("win") -> {
+                    hostOs.isWindows -> {
                         if (isDirectory) {
                             ProcessBuilder("explorer.exe", file.absolutePath).start()
                         } else {
@@ -37,7 +37,7 @@ class JVMPlatform : Platform {
                         true
                     }
                     // macOS: 尝试打开并高亮选中文件
-                    os.contains("mac") -> {
+                    hostOs.isMacOS -> {
                         ProcessBuilder("open", "-R", file.absolutePath).start()
                         true
                     }
@@ -50,10 +50,10 @@ class JVMPlatform : Platform {
 
             // 如果特定平台的命令行执行失败，或者不是 Win/Mac，使用 Java 原生的 Desktop API 作为后备方案
             if (!success) {
-                if (java.awt.Desktop.isDesktopSupported()) {
-                    val desktop = java.awt.Desktop.getDesktop()
+                if (Desktop.isDesktopSupported()) {
+                    val desktop = Desktop.getDesktop()
                     // 尝试高亮选中 (Java 9+)
-                    if (desktop.isSupported(java.awt.Desktop.Action.BROWSE_FILE_DIR)) {
+                    if (desktop.isSupported(Desktop.Action.BROWSE_FILE_DIR)) {
                         desktop.browseFileDirectory(file)
                     } else {
                         // 降级：仅打开所在的文件夹
@@ -75,9 +75,8 @@ class JVMPlatform : Platform {
             
             val destPath = currentFile.absolutePath
             val pid = ManagementFactory.getRuntimeMXBean().name.split("@")[0]
-            val os = System.getProperty("os.name").lowercase()
 
-            if (os.contains("win")) {
+            if (hostOs.isWindows) {
                 val batchFile = File.createTempFile("updater", ".bat")
                 batchFile.writeText("""
                     @echo off

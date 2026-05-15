@@ -22,6 +22,7 @@ import io.ktor.client.plugins.logging.*
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.buffered
+import org.jetbrains.skiko.hostOs
 import kotlin.math.min
 
 /**
@@ -80,8 +81,11 @@ class UpdateService(private val currentVersion: String) {
             AppLogger.i("UpdateService", "📡 检查完成。远程最新版本: $latestVersion, 当前本地版本: $currentVersion")
             
             if (isNewer(latestVersion, currentVersion)) {
-                val osName = org.gemini.ui.forge.getPlatform().name.lowercase()
-                val targetExt = if (osName.contains("java") || osName.contains("windows")) "exe" else "dmg"
+                val targetExt = when {
+                    hostOs.isWindows -> "exe"
+                    hostOs.isMacOS -> "dmg"
+                    else -> "tar.gz" // 预留或其他系统
+                }
                 val asset = release.assets.find { it.name.endsWith(targetExt) } ?: release.assets.firstOrNull()
                 
                 if (asset != null) {

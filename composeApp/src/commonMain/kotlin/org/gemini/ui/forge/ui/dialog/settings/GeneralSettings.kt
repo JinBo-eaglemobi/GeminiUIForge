@@ -20,6 +20,9 @@ import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.rememberDirectoryPicker
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
+import org.jetbrains.skiko.KotlinBackend
+import org.jetbrains.skiko.hostOs
+import org.jetbrains.skiko.kotlinBackend
 
 
 /**
@@ -56,7 +59,8 @@ fun GeneralSettings(
     SettingSectionTitle(stringResource(Res.string.settings_category_general))
     
     // --- JVM Memory (Native specific) ---
-    if (getPlatform().name.contains("Java") || getPlatform().name.contains("JVM")) {
+    val isDesktop = hostOs.isWindows || hostOs.isMacOS || hostOs.isLinux
+    if (kotlinBackend == KotlinBackend.JVM && isDesktop) {
         var showRestartDialog by remember { mutableStateOf(false) }
         var memoryExpanded by remember { mutableStateOf(false) }
         val memoryOptions = listOf("1G", "2G", "4G", "8G", "12G", "16G")

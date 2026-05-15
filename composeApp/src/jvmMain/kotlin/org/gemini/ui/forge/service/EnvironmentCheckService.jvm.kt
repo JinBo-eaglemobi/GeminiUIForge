@@ -14,6 +14,8 @@ import java.io.InputStreamReader
 import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.model.app.PipPackageJson
 import org.gemini.ui.forge.model.app.PipPackageInfo
+import org.jetbrains.skiko.hostId
+import org.jetbrains.skiko.hostOs
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -97,8 +99,7 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
     override fun installItem(name: String): Flow<String> = flow {
         val commandList = when (name) {
             "python" -> {
-                val os = System.getProperty("os.name").lowercase()
-                if (os.contains("win")) {
+                if (hostOs.isWindows) {
                     emit("🔍 检测到 Windows 系统，正在尝试自动安装最新版 Python 3...")
                     emit("💡 如果系统弹出用户账户控制(UAC)对话框，请点击“是”。")
                     listOf("powershell", "-Command", "winget install Python.Python.3 --silent --accept-package-agreements --accept-source-agreements")
@@ -121,7 +122,7 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
                 .redirectErrorStream(true)
                 .start()
 
-            val charsetName = if (System.getProperty("os.name").lowercase().contains("win")) "GBK" else "UTF-8"
+            val charsetName = if (hostOs.isWindows) "GBK" else "UTF-8"
             val reader = BufferedReader(InputStreamReader(process.inputStream, charsetName))
             var line: String?
             while (reader.readLine().also { line = it } != null) {
@@ -153,8 +154,7 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
     override fun uninstallItem(name: String): Flow<String> = flow {
         val commandList = when (name) {
             "python" -> {
-                val os = System.getProperty("os.name").lowercase()
-                if (os.contains("win")) {
+                if (hostOs.isWindows) {
                     emit("🔍 正在尝试通过 winget 卸载 Python 3...")
                     emit("💡 如果系统弹出用户账户控制(UAC)对话框，请点击“是”。如果失败，请前往控制面板手动卸载。")
                     listOf("powershell", "-Command", "winget uninstall Python.Python.3 --silent")
@@ -172,7 +172,7 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
                 .redirectErrorStream(true)
                 .start()
 
-            val charsetName = if (System.getProperty("os.name").lowercase().contains("win")) "GBK" else "UTF-8"
+            val charsetName = if (hostOs.isWindows) "GBK" else "UTF-8"
             val reader = BufferedReader(InputStreamReader(process.inputStream, charsetName))
             var line: String?
             while (reader.readLine().also { line = it } != null) {
@@ -361,7 +361,7 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
 
         try {
             val process = ProcessBuilder(commandList).redirectErrorStream(true).start()
-            val charsetName = if (System.getProperty("os.name").lowercase().contains("win")) "GBK" else "UTF-8"
+            val charsetName = if (hostOs.isWindows) "GBK" else "UTF-8"
             val reader = BufferedReader(InputStreamReader(process.inputStream, charsetName))
             var line: String?
             while (reader.readLine().also { line = it } != null) {
@@ -385,7 +385,7 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
 
         try {
             val process = ProcessBuilder(commandList).redirectErrorStream(true).start()
-            val charsetName = if (System.getProperty("os.name").lowercase().contains("win")) "GBK" else "UTF-8"
+            val charsetName = if (hostOs.isWindows) "GBK" else "UTF-8"
             val reader = BufferedReader(InputStreamReader(process.inputStream, charsetName))
             var line: String?
             while (reader.readLine().also { line = it } != null) {
