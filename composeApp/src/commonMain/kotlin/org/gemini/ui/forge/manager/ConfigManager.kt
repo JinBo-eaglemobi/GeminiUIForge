@@ -20,6 +20,17 @@ expect open class ConfigManager() {
     suspend fun loadKey(keyName: String): String?
 
     /**
+     * 读取当前的 JVM 最大堆内存设置 (例如 "2G")
+     */
+    suspend fun loadJvmXmx(): String
+
+    /**
+     * 保存新的 JVM 最大堆内存设置 (例如 "4G")
+     * 此设置通常需要重启生效
+     */
+    suspend fun saveJvmXmx(xmxValue: String)
+
+    /**
      * 获取全局的 Gemini API Key (例如从 ~/.gemini/.env 或环境变量中)
      */
     suspend fun loadGlobalGeminiKey(): String?

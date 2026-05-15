@@ -270,6 +270,7 @@ fun App(typography: Typography? = null) {
                         marketPage = marketPage,
                         initialCategory = settingsInitialCategory,
                         updateStatus = updateStatus,
+                        configManager = configManager,
                         onDismiss = { showSettingsDialog = false },
                         onLanguageSelected = {
                             settingsViewModel.saveLanguage(it);

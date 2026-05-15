@@ -249,4 +249,9 @@
     <string name="action_copy_log">复制日志</string>
     <string name="toast_log_copied">日志已复制到剪贴板。</string>
     <string name="action_open_in_explorer">在资源管理器中打开</string>
+    <string name="settings_jvm_xmx">JVM 最大堆内存 (需重启生效)</string>
+    <string name="dialog_restart_confirm_title">需要重启应用</string>
+    <string name="dialog_restart_confirm_message">内存设置已更新，是否立即重启应用以应用更改？</string>
+    <string name="action_restart_now">立即重启</string>
+    <string name="action_restart_later">稍后</string>
 </resources>

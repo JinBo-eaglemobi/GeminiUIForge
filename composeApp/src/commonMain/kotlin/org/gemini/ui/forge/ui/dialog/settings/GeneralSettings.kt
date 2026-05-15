@@ -19,6 +19,7 @@ import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.rememberDirectoryPicker
 import org.jetbrains.compose.resources.stringResource
+import kotlinx.coroutines.launch
 
 
 /**
@@ -42,14 +43,73 @@ fun GeneralSettings(
     currentLayoutMode: LayoutMode,
     currentLanguage: String,
     currentStorageDir: String,
+    currentJvmXmx: String = "2G",
     onThemeSelected: (ThemeMode) -> Unit,
     onLayoutModeSelected: (LayoutMode) -> Unit,
     onLanguageSelected: (String) -> Unit,
-    onStorageDirSaved: (String) -> Unit
+    onStorageDirSaved: (String) -> Unit,
+    onJvmXmxSaved: (String) -> Unit = {}
 ) {
     val isCompact = LocalMinimumInteractiveComponentSize.current == 0.dp
+    val coroutineScope = rememberCoroutineScope()
 
     SettingSectionTitle(stringResource(Res.string.settings_category_general))
+    
+    // --- JVM Memory (Native specific) ---
+    if (getPlatform().name.contains("Java") || getPlatform().name.contains("JVM")) {
+        var showRestartDialog by remember { mutableStateOf(false) }
+        var memoryExpanded by remember { mutableStateOf(false) }
+        val memoryOptions = listOf("1G", "2G", "4G", "8G", "12G", "16G")
+
+        if (showRestartDialog) {
+            AlertDialog(
+                onDismissRequest = { showRestartDialog = false },
+                title = { Text(stringResource(Res.string.dialog_restart_confirm_title)) },
+                text = { Text(stringResource(Res.string.dialog_restart_confirm_message)) },
+                confirmButton = {
+                    TextButton(onClick = { 
+                        coroutineScope.launch {
+                            getPlatform().applyUpdateAndRestart("")
+                        }
+                    }) {
+                        Text(stringResource(Res.string.action_restart_now))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRestartDialog = false }) {
+                        Text(stringResource(Res.string.action_restart_later))
+                    }
+                }
+            )
+        }
+
+        ExposedDropdownMenuBox(expanded = memoryExpanded, onExpandedChange = { memoryExpanded = !memoryExpanded }) {
+            SelectAllOutlinedTextField(
+                value = currentJvmXmx,
+                onValueChange = {}, readOnly = true,
+                label = { Text(stringResource(Res.string.settings_jvm_xmx)) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(memoryExpanded) },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                shape = AppShapes.medium
+            )
+            ExposedDropdownMenu(expanded = memoryExpanded, onDismissRequest = { memoryExpanded = false }) {
+                memoryOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            if (currentJvmXmx != option) {
+                                onJvmXmxSaved(option)
+                                showRestartDialog = true
+                            }
+                            memoryExpanded = false
+                        },
+                        contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else MenuDefaults.DropdownMenuItemContentPadding,
+                        modifier = if (isCompact) Modifier.height(32.dp) else Modifier
+                    )
+                }
+            }
+        }
+    }
 
     // Theme Dropdown
     var themeExpanded by remember { mutableStateOf(false) }

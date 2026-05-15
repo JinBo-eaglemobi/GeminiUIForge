@@ -5,6 +5,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 import java.io.ByteArrayOutputStream
 
+import java.io.File
+
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
@@ -158,6 +160,7 @@ kotlin {
 compose.desktop {
     application {
         mainClass = "org.gemini.ui.forge.MainKt"
+        jvmArgs("-Xmx512M", "-Xms256M")
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Pkg, TargetFormat.Msi, TargetFormat.Exe)
             packageName = "GeminiUIForge"
@@ -173,6 +176,15 @@ compose.desktop {
 }
 
 tasks.withType<JavaExec> {
+    val userHome = System.getProperty("user.home")
+    val vmOptionsFile = File(userHome, ".geminiuiforge/app.vmoptions")
+    if (vmOptionsFile.exists()) {
+        val customArgs = vmOptionsFile.readLines().filter { line: String -> line.isNotBlank() && line.startsWith("-") }
+        jvmArgs(customArgs)
+    } else {
+        jvmArgs("-Xmx512M", "-Xms256M")
+    }
+
     systemProperties(
         "stdout.encoding" to "utf-8",
         "stderr.encoding" to "utf-8",

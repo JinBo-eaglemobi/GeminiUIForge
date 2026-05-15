@@ -249,4 +249,9 @@
     <string name="action_copy_log">Copy Log</string>
     <string name="toast_log_copied">Log copied to clipboard.</string>
     <string name="action_open_in_explorer">Open in Explorer</string>
+    <string name="settings_jvm_xmx">Max Heap Memory (Requires Restart)</string>
+    <string name="dialog_restart_confirm_title">Restart Required</string>
+    <string name="dialog_restart_confirm_message">The memory settings have been updated. Do you want to restart the application now to apply the changes?</string>
+    <string name="action_restart_now">Restart Now</string>
+    <string name="action_restart_later">Later</string>
     </resources>

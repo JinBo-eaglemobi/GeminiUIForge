@@ -44,6 +44,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
+import kotlinx.coroutines.launch
 
 /**
  * 应用程序全局设置对话框。
@@ -117,6 +118,7 @@ fun AppSettingsDialog(
     marketPage: Int = 0,
     initialCategory: SettingCategory = SettingCategory.GENERAL,
     updateStatus: UpdateStatus = UpdateStatus.Idle,
+    configManager: org.gemini.ui.forge.manager.ConfigManager,
     onDismiss: () -> Unit,
     onLanguageSelected: (String) -> Unit,
     onLayoutModeSelected: (org.gemini.ui.forge.model.app.LayoutMode) -> Unit,
@@ -240,6 +242,13 @@ fun AppSettingsDialog(
                         // Right Content
                         Box(modifier = Modifier.weight(1f - leftWeight).fillMaxHeight()) {
                             val rightScrollState = rememberScrollState()
+                            val coroutineScope = rememberCoroutineScope()
+                            var currentJvmXmx by remember { mutableStateOf("2G") }
+                            
+                            LaunchedEffect(Unit) {
+                                currentJvmXmx = configManager.loadJvmXmx()
+                            }
+
                             Column(
                                 modifier = Modifier.fillMaxSize().verticalScroll(rightScrollState).padding(LocalAppSpacing.current.medium),
                                 verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.medium)
@@ -247,7 +256,17 @@ fun AppSettingsDialog(
                                 when (selectedCategory) {
                                     SettingCategory.GENERAL -> GeneralSettings(
                                         currentTheme, currentLayoutMode, currentLanguage, currentStorageDir,
-                                        onThemeSelected, onLayoutModeSelected, onLanguageSelected, onStorageDirSaved
+                                        currentJvmXmx = currentJvmXmx,
+                                        onThemeSelected = onThemeSelected, 
+                                        onLayoutModeSelected = onLayoutModeSelected, 
+                                        onLanguageSelected = onLanguageSelected, 
+                                        onStorageDirSaved = onStorageDirSaved,
+                                        onJvmXmxSaved = { 
+                                            coroutineScope.launch {
+                                                configManager.saveJvmXmx(it)
+                                                currentJvmXmx = it
+                                            }
+                                        }
                                     )
 
                                     SettingCategory.AI -> AISettings(
