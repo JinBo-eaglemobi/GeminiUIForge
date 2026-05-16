@@ -42,7 +42,7 @@ val DefaultSpacing = AppSpacing()
  */
 val CompactSpacing = AppSpacing(
     extraSmall = 2.dp,
-    small = 4.dp,
+    small = 6.dp,
     medium = 8.dp,
     large = 16.dp,
     extraLarge = 24.dp
