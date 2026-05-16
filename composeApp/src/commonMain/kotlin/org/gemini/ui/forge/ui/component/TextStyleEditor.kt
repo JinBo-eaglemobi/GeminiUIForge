@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
+import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
 import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.FormatAlignRight
@@ -172,7 +174,7 @@ fun TextStyleToolbar(
                     selected = horizontalAlign == "LEFT",
                     onClick = { onHorizontalAlignChanged("LEFT") },
                     shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
-                ) { Icon(Icons.Default.FormatAlignLeft, "左对齐") }
+                ) { Icon(Icons.AutoMirrored.Filled.FormatAlignLeft, "左对齐") }
                 SegmentedButton(
                     selected = horizontalAlign == "CENTER",
                     onClick = { onHorizontalAlignChanged("CENTER") },
@@ -182,7 +184,7 @@ fun TextStyleToolbar(
                     selected = horizontalAlign == "RIGHT",
                     onClick = { onHorizontalAlignChanged("RIGHT") },
                     shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
-                ) { Icon(Icons.Default.FormatAlignRight, "右对齐") }
+                ) { Icon(Icons.AutoMirrored.Filled.FormatAlignRight, "右对齐") }
             }
 
             // Vertical Align

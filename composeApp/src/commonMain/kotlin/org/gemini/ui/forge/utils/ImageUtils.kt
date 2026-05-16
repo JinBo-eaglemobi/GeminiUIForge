@@ -119,7 +119,13 @@ suspend fun bakeNinePatchImage(
         val srcH = srcImage.height
         
         val paint = Paint().apply { isAntiAlias = true }
-        val filter = FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR)
+        
+        // 可选的缩放模式测试：
+        // val filter = FilterMipmap(FilterMode.NEAREST, MipmapMode.NONE)      // 1. 邻近采样 (Nearest Neighbor) - 性能最高，边缘锐利但可能有锯齿
+        // val filter = FilterMipmap(FilterMode.LINEAR, MipmapMode.NONE)       // 2. 双线性过滤 (Bilinear) - 平滑，性能均衡
+        val filter = FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR)     // 3. 三线性过滤 (Trilinear) - 默认推荐，缩放效果好
+        // val filter = FilterCubic(1/3f, 1/3f)                               // 4. 双三次过滤 (Mitchell-Netravali) - 锐度与平滑的平衡
+        // val filter = FilterCubic(0f, 0.5f)                                 // 5. 双三次过滤 (Catmull-Rom) - 较锐利，适合高质量缩放
 
         val surface = Surface.makeRasterN32Premul(targetWidth, targetHeight)
         val canvas = surface.canvas
@@ -307,19 +313,66 @@ fun scaleImage(
             return image.encodeToData(format, 100)?.bytes
         }
 
-        AppLogger.d("ImageUtils", "🔍 执行单次直接缩放: ${image.width}x${image.height} -> ${targetWidth}x${targetHeight}")
-        
+        AppLogger.d("ImageUtils", "🔍 执行阶梯式高质量缩放: ${image.width}x${image.height} -> ${targetWidth}x${targetHeight}")
+
+        // 1. 使用变量持有当前处理的图像源
+        var currentImage = image
+        var currentWidth = image.width
+        var currentHeight = image.height
+
+        // 2. 阶梯下采样循环：每次最多缩小一半，直到逼近目标尺寸的 2 倍
+        // 针对 392 -> 20，路径为: 392 -> 196 -> 98 -> 49 -> 20
+        while (currentWidth > targetWidth * 2 && currentHeight > targetHeight * 2) {
+            val nextWidth = currentWidth / 2
+            val nextHeight = currentHeight / 2
+
+            val stepSurface = Surface.makeRasterN32Premul(nextWidth, nextHeight)
+            // 阶梯缩放使用 LINEAR (Bilinear) 即可，配合 50% 缩放能完美融合像素
+            // 可选的缩放模式测试：
+            // val stepSampling = FilterMipmap(FilterMode.NEAREST, MipmapMode.NONE)      // 1. 邻近采样 (Nearest Neighbor) - 性能最高，边缘锐利但可能有锯齿
+//         val stepSampling = FilterMipmap(FilterMode.LINEAR, MipmapMode.NONE)       // 2. 双线性过滤 (Bilinear) - 平滑，性能均衡
+            val stepSampling = FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR)     // 3. 三线性过滤 (Trilinear) - 默认推荐，缩放效果好
+//         val stepSampling = CubicResampler(1/3f, 1/3f)                               // 4. 双三次过滤 (Mitchell-Netravali) - 锐度与平滑的平衡
+//         val stepSampling = CubicResampler(0f, 0.5f)                                 // 5. 双三次过滤 (Catmull-Rom) - 较锐利，适合高质量缩放
+//         val stepSampling = CubicResampler(0f, 0.75f)                                 // 5. 双三次过滤 (Catmull-Rom) - 较锐利，适合高质量缩放
+
+            stepSurface.canvas.drawImageRect(
+                currentImage,
+                Rect.makeWH(currentWidth.toFloat(), currentHeight.toFloat()),
+                Rect.makeWH(nextWidth.toFloat(), nextHeight.toFloat()),
+                stepSampling, null, true
+            )
+
+            val stepImage = stepSurface.makeImageSnapshot()
+            // 如果不是初始传入的 image，则需要释放中间生成的临时 Image 内存
+            if (currentImage != image) {
+                currentImage.close()
+            }
+
+            currentImage = stepImage
+            currentWidth = nextWidth
+            currentHeight = nextHeight
+        }
+
+        // 3. 最后一棒：从最接近的中间尺寸（如 49x49）缩放到最终尺寸（20x20）
         val finalSurface = Surface.makeRasterN32Premul(targetWidth, targetHeight)
-        val paint = Paint().apply { isAntiAlias = true }
-        val filter = FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR)
+
+        // 此时两尺寸非常接近，使用双三次插值（Mitchell-Netravali 1/3, 1/3）可以获得极佳的图标质感
+        // 如果想要边缘更硬一点，可以用 CubicResampler(0f, 0.5f)
+        val finalSampling = CubicResampler(1/3f, 1/3f)
 
         finalSurface.canvas.drawImageRect(
-            image, 
-            Rect.makeWH(image.width.toFloat(), image.height.toFloat()), 
-            Rect.makeWH(targetWidth.toFloat(), targetHeight.toFloat()), 
-            filter, paint, true
+            currentImage,
+            Rect.makeWH(currentWidth.toFloat(), currentHeight.toFloat()),
+            Rect.makeWH(targetWidth.toFloat(), targetHeight.toFloat()),
+            finalSampling, null, true
         )
-        
+
+        // 4. 释放最后一次的中间图内存
+        if (currentImage != image) {
+            currentImage.close()
+        }
+
         finalSurface.makeImageSnapshot().encodeToData(format, 100)?.bytes
     } catch (e: Exception) {
         AppLogger.e("ImageUtils", "❌ 缩放图像失败", e)

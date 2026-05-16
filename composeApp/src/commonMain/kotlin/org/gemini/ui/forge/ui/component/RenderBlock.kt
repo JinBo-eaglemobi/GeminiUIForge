@@ -165,7 +165,7 @@ fun RenderBlock(
     // 解析 VIEW 类型的自定义背景色
     val viewBgColor = if (block.type == UIBlockType.VIEW) {
         val vp = block.properties as? BlockProperties.ViewProperties
-        if (!vp?.backgroundColor.isNullOrEmpty()) parseHexColor(vp!!.backgroundColor) else null
+        if (!vp?.backgroundColor.isNullOrEmpty()) parseHexColor(vp.backgroundColor) else null
     } else null
 
     val actualBgColor = when {

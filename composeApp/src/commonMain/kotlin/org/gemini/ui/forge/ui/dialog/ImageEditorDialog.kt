@@ -442,7 +442,7 @@ fun ImageEditorDialog(
                     ) {
                         Column(Modifier.fillMaxSize()) {
                             // 标签页切换
-                            TabRow(selectedTabIndex = selectedTab.ordinal) {
+                            SecondaryTabRow(selectedTabIndex = selectedTab.ordinal) {
                                 Tab(
                                     selected = selectedTab == EditorTab.CROP,
                                     onClick = { selectedTab = EditorTab.CROP }) {
@@ -823,7 +823,7 @@ private fun EditorStage(
             val dConH = contentH * viewZoom
             val cX = viewOffset.x + (dCanW - dConW) / 2f;
             val cY = viewOffset.y + (dCanH - dConH) / 2f
-            renderProcessed(imageBitmap!!, mode, config, cX, cY, dConW, dConH)
+            renderProcessed(imageBitmap, mode, config, cX, cY, dConW, dConH)
             if (mode == ImageResizeMode.NINE_PATCH) {
                 val lL = cX + config.left * viewZoom;
                 val lR = cX + (contentW - config.right) * viewZoom

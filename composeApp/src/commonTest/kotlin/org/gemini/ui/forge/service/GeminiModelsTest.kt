@@ -5,6 +5,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.*
+import org.gemini.ui.forge.manager.ConfigManager
 import kotlin.test.Test
 
 class GeminiModelsTest {

@@ -17,6 +17,7 @@ import org.gemini.ui.forge.model.app.PipPackageInfo
 import org.jetbrains.skiko.hostId
 import org.jetbrains.skiko.hostOs
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
 
 class JvmEnvironmentCheckService : EnvironmentCheckService {
@@ -249,7 +250,7 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
         if (query.isBlank()) return@withContext null
         try {
             val urlString = "https://pypi.org/pypi/$query/json"
-            val url = URL(urlString)
+            val url = URI(urlString).toURL()
             org.gemini.ui.forge.utils.AppLogger.d("JvmEnvironmentCheckService", "🌐 正在请求包详情: $urlString")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
@@ -298,7 +299,7 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
     override suspend fun fetchPackageUrl(packageName: String): String? = withContext(Dispatchers.IO) {
         try {
             val urlString = "https://pypi.org/pypi/$packageName/json"
-            val url = URL(urlString)
+            val url = URI(urlString).toURL()
             org.gemini.ui.forge.utils.AppLogger.d("JvmEnvironmentCheckService", "🌐 正在请求包 URL: $urlString")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
@@ -331,7 +332,7 @@ class JvmEnvironmentCheckService : EnvironmentCheckService {
     override suspend fun fetchTopPackages(): List<String> = withContext(Dispatchers.IO) {
         try {
             val urlString = "https://hugovk.github.io/top-pypi-packages/top-pypi-packages-30-days.min.json"
-            val url = URL(urlString)
+            val url = URI(urlString).toURL()
             org.gemini.ui.forge.utils.AppLogger.d("JvmEnvironmentCheckService", "🌐 正在从云端拉取 Top 排行榜: $urlString")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"

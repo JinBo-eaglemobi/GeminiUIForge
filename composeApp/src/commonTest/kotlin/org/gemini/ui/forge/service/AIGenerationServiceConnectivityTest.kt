@@ -1,6 +1,8 @@
 package org.gemini.ui.forge.service
 
 import kotlinx.coroutines.test.runTest
+import org.gemini.ui.forge.manager.CloudAssetManager
+import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.GeminiModel
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -27,7 +29,7 @@ class AIGenerationServiceConnectivityTest {
 
         try {
             val results = service.generateImages(
-                model = GeminiModel.IMAGEN_3_FAST, // 传入模型
+                model = GeminiModel.IMAGEN_4_0_GENERATE_001, // 传入模型
                 blockType = "Button",
                 userPrompt = "A futuristic glowing button, sci-fi style, high quality",
                 apiKey = apiKey,
@@ -55,7 +57,7 @@ class AIGenerationServiceConnectivityTest {
 
         try {
             val results = service.generateImages(
-                model = GeminiModel.IMAGEN_3_FAST,
+                model = GeminiModel.IMAGEN_4_0_GENERATE_001,
                 blockType = "Button",
                 userPrompt = "A futuristic glowing button, vertex ai style, high quality",
                 apiKey = apiKey,
