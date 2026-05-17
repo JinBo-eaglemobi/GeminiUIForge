@@ -32,7 +32,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.ImageResizeMode
 import org.gemini.ui.forge.model.ui.NinePatchConfig
@@ -86,6 +88,14 @@ fun RenderStyledText(
     val fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal
     val textAlign = parseTextAlign(horizontalAlign)
 
+    // 构建统一的文本样式，设置行高对齐方式，确保在小尺寸容器中也能精准居中
+    val baseStyle = TextStyle(
+        lineHeightStyle = LineHeightStyle(
+            alignment = LineHeightStyle.Alignment.Center,
+            trim = LineHeightStyle.Trim.Both
+        )
+    )
+
     Box(modifier = modifier) {
         // 绘制描边层（在底部）
         if (strokeColorHex.isNotEmpty() && strokeWidth > 0f) {
@@ -97,8 +107,11 @@ fun RenderStyledText(
                 fontWeight = fontWeight,
                 fontStyle = fontStyle,
                 textAlign = textAlign,
+                lineHeight = fontSize,
+                softWrap = false,
+                maxLines = 1,
                 modifier = Modifier.fillMaxWidth(), // 关键：撑满 Box 宽度以便 textAlign 生效
-                style = TextStyle.Default.copy(
+                style = baseStyle.copy(
                     drawStyle = Stroke(miter = 10f, width = strokeWidth * baseScale)
                 )
             )
@@ -112,6 +125,10 @@ fun RenderStyledText(
             fontWeight = fontWeight,
             fontStyle = fontStyle,
             textAlign = textAlign,
+            lineHeight = fontSize,
+            softWrap = false,
+            maxLines = 1,
+            style = baseStyle,
             modifier = Modifier.fillMaxWidth() // 关键：撑满 Box 宽度以便 textAlign 生效
         )
     }
