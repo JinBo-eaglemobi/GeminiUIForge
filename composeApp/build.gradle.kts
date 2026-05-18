@@ -170,6 +170,7 @@ compose.desktop {
             packageVersion = appVersion
             description = "Gemini UI Forge"
             copyright = "Copyright 2026 Gemini"
+            modules("jdk.management", "jdk.management.agent", "jdk.attach", "jdk.jcmd", "jdk.internal.jvmstat")
             windows {
                 shortcut = true
                 menu = true

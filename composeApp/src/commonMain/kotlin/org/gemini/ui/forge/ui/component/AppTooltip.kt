@@ -49,6 +49,7 @@ class GlobalTooltipState {
         if (displayJobCount <= 0) {
             isVisible = false
             displayJobCount = 0
+            text = null // 清理文案，防止下次显示时闪烁旧内容
         }
     }
 }
@@ -83,6 +84,10 @@ fun Modifier.tip(text: String?): Modifier = composed {
                     }
                     PointerEventType.Exit -> {
                         // 鼠标离开组件范围
+                        tooltipState.hide()
+                    }
+                    PointerEventType.Press -> {
+                        // 鼠标点击组件时，通常也应该隐藏提示
                         tooltipState.hide()
                     }
                 }
