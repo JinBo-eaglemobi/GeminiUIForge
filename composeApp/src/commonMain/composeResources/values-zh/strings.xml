@@ -254,4 +254,6 @@
     <string name="dialog_restart_confirm_message">内存设置已更新，是否立即重启应用以应用更改？</string>
     <string name="action_restart_now">立即重启</string>
     <string name="action_restart_later">稍后</string>
+    <string name="screen_project_workspace">项目工作区</string>
+    <string name="action_open_workspace">打开工作区</string>
 </resources>

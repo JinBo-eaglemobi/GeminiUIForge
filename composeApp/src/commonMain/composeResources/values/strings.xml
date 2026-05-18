@@ -254,4 +254,6 @@
     <string name="dialog_restart_confirm_message">The memory settings have been updated. Do you want to restart the application now to apply the changes?</string>
     <string name="action_restart_now">Restart Now</string>
     <string name="action_restart_later">Later</string>
-    </resources>
+        <string name="screen_project_workspace">Project Workspace</string>
+    <string name="action_open_workspace">Open Workspace</string>
+</resources>

@@ -17,11 +17,20 @@ import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.AutoAwesome
 import org.gemini.ui.forge.model.app.UIModule
 import org.gemini.ui.forge.ui.theme.AppShapes
 
+/**
+ * 首页展示的模块卡片组件。
+ * 展示项目封面、名称、创建时间，并提供进入工作区和删除项目的入口。
+ *
+ * @param module 模块元数据。
+ * @param onOpenWorkspace 点击“打开工作区”的回调。
+ * @param onDelete 点击删除图标的回调。
+ */
 @Composable
-fun ModuleCard(module: UIModule, onEditLayout: () -> Unit, onGenerateUI: () -> Unit, onDelete: () -> Unit) {
+fun ModuleCard(module: UIModule, onOpenWorkspace: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.size(280.dp, 400.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -101,27 +110,14 @@ fun ModuleCard(module: UIModule, onEditLayout: () -> Unit, onGenerateUI: () -> U
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
+            Button(
+                onClick = onOpenWorkspace,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                shape = AppShapes.medium
             ) {
-                Button(
-                    onClick = onEditLayout,
-                    modifier = Modifier.weight(1f).padding(end = 4.dp),
-                    shape = AppShapes.medium,
-                    contentPadding = PaddingValues(horizontal = 4.dp)
-                ) {
-                    Text(stringResource(Res.string.action_edit_layout), maxLines = 1, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
-                }
-
-                Button(
-                    onClick = onGenerateUI,
-                    modifier = Modifier.weight(1f).padding(start = 4.dp),
-                    shape = AppShapes.medium,
-                    contentPadding = PaddingValues(horizontal = 4.dp)
-                ) {
-                    Text(stringResource(Res.string.action_generate_ui), maxLines = 1, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
-                }
+                Icon(Icons.Default.AutoAwesome, null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(Res.string.action_open_workspace), style = MaterialTheme.typography.labelLarge)
             }
         }
     }

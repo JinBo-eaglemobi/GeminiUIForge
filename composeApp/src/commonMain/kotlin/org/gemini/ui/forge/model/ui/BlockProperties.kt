@@ -35,7 +35,9 @@ sealed class BlockProperties {
         val text: String = "",
         val isMultiState: Boolean = false,
         val pressedUri: TemplateFile? = null,
-        val disabledUri: TemplateFile? = null
+        val disabledUri: TemplateFile? = null,
+        val pressedPrompt: String = "",
+        val disabledPrompt: String = ""
     ) : BlockProperties()
 
     /**

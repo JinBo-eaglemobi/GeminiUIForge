@@ -66,6 +66,10 @@ fun parseTextAlign(horizontal: String): TextAlign {
     }
 }
 
+/**
+ * 渲染带样式的文本组件。
+ * 支持描边、加粗、斜体以及多种对齐方式。
+ */
 @Composable
 fun RenderStyledText(
     text: String,
@@ -80,6 +84,7 @@ fun RenderStyledText(
     alpha: Float = 1f,
     modifier: Modifier = Modifier
 ) {
+// ... (implementation remains same, just adding comments)
     val color = parseHexColor(textColorHex).copy(alpha = alpha)
     // 使用 with(LocalDensity.current) 将 px 精准转为 sp，但这里简单起见直接放大字号，并依赖 sp 的缩放。
     // 如果想要绝对脱离系统的字体缩放，可以考虑使用 dp 转 sp，但这里直接应用基准缩放通常足够。
@@ -145,6 +150,7 @@ fun RenderStyledText(
  * @param isSelected 当前模块是否被选中
  * @param isDimmed 是否因为处于隔离编辑模式而被置灰显示
  * @param isVisualMode 是否处于视觉预览模式（隐藏线框）
+ * @param isHideOutlines 是否隐藏模块描边
  * @param density 屏幕密度，用于 dp 转换
  * @param selectedBlockId 当前全局选中的模块 ID
  * @param editingGroupId 当前正在编辑的分组 ID
@@ -159,6 +165,7 @@ fun RenderBlock(
     isSelected: Boolean,
     isDimmed: Boolean, // 是否因为处于隔离模式而被置灰
     isVisualMode: Boolean,
+    isHideOutlines: Boolean,
     density: Density,
     selectedBlockId: String?,
     editingGroupId: String?
@@ -201,7 +208,8 @@ fun RenderBlock(
             .clip(RoundedCornerShape(2.dp))
             .background(actualBgColor)
             .then(
-                if ((hidePlaceholder || viewBgColor != null) && !isSelected) Modifier
+                // 如果是隐藏描边模式且未被选中，或者是在有图的视觉模式/有背景色的 View 模式下且未选中，则不显示边框
+                if (((isHideOutlines || hidePlaceholder || viewBgColor != null) && !isSelected)) Modifier
                 else Modifier.border(
                     width = (1.dp / zoom), // 关键：边框粗细除以缩放比例，确保在任何缩放级别下线条视觉宽度一致
                     color = if (isSelected) selectionColor
@@ -210,6 +218,7 @@ fun RenderBlock(
             ),
         contentAlignment = Alignment.Center
     ) {
+// ... (rest of methods)
         if (imageBitmap != null) {
             // 渲染已固化好的 AI 图像成品。
             // 由于图片已经在编辑器中按照 bounds 进行了拉伸、补白或九宫格固化，
@@ -294,6 +303,7 @@ fun RenderBlock(
             isSelected = child.id == selectedBlockId,
             isDimmed = isDimmed,
             isVisualMode = isVisualMode,
+            isHideOutlines = isHideOutlines,
             density = density,
             selectedBlockId = selectedBlockId,
             editingGroupId = editingGroupId

@@ -110,7 +110,7 @@ fun main(args: Array<String>) {
                 }
                 exitApplication()
             },
-            title = "GeminiUIForge",
+            title = "Gemini UI Forge v${ProjectConfig.VERSION}",
             state = windowState
         ) {
             App()

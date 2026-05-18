@@ -18,18 +18,21 @@ import kotlin.math.roundToInt
 
 /**
  * 全局浮动控制栏组件 (Canvas Floating Control Bar)。
- * 
+ *
  * 悬浮在画布上方，提供对整个工作区的全局控制能力，包含：
  * 1. 画布缩放控制（放大、缩小、显示当前比例）。
  * 2. 视角复位（一键恢复 100% 缩放并居中）。
  * 3. 视觉模式切换（线框模式与纯视觉模式的切换）。
- * 4. 参考图的高级控制（隐藏、分屏对比、叠加半透明对比）。
+ * 4. 描边隐藏控制（Hide Outlines）。
+ * 5. 参考图的高级控制（隐藏、分屏对比、叠加半透明对比）。
  *
  * @param zoom 当前画布的缩放比例（1.0 代表 100%）。
  * @param updateZoom 触发缩放更新的回调，接收新的缩放值和缩放的中心坐标 (Centroid)。
  * @param onResetZoom 触发复位操作的回调，将画布恢复初始状态。
  * @param isVisualMode 当前是否处于“视觉模式”（即隐藏占位线框，仅展示图像）。
  * @param onToggleVisualMode 触发视觉模式切换的回调。
+ * @param isHideOutlines 当前是否处于“隐藏描边模式”。
+ * @param onToggleHideOutlines 触发隐藏描边模式切换的回调。
  * @param referenceUri 参考图的资源路径或 Base64 字符串。若为 null，则不显示参考图控制选项。
  * @param internalReferenceMode 当前参考图的显示模式（HIDDEN: 隐藏, SPLIT: 分屏, OVERLAY: 叠加）。
  * @param onReferenceModeChange 改变参考图显示模式的回调。
@@ -45,6 +48,8 @@ fun CanvasFloatingControlBar(
     onResetZoom: () -> Unit,
     isVisualMode: Boolean,
     onToggleVisualMode: () -> Unit,
+    isHideOutlines: Boolean = false,
+    onToggleHideOutlines: () -> Unit = {},
     referenceUri: String?,
     internalReferenceMode: ReferenceDisplayMode,
     onReferenceModeChange: (ReferenceDisplayMode) -> Unit,
@@ -70,15 +75,15 @@ fun CanvasFloatingControlBar(
             // ==========================================
             // 1. 缩放控制区 (Zoom Controls)
             // ==========================================
-            
+
             // 缩小按钮 (-20%)
             IconButton(
-                onClick = { updateZoom(zoom - 0.2f, centerOffset) }, 
+                onClick = { updateZoom(zoom - 0.2f, centerOffset) },
                 modifier = Modifier.size(28.dp)
             ) {
                 Icon(Icons.Default.Remove, "缩小", modifier = Modifier.size(16.dp))
             }
-            
+
             // 当前比例显示
             Box(
                 modifier = Modifier.height(28.dp).width(42.dp),
@@ -90,10 +95,10 @@ fun CanvasFloatingControlBar(
                     textAlign = TextAlign.Center
                 )
             }
-            
+
             // 放大按钮 (+20%)
             IconButton(
-                onClick = { updateZoom(zoom + 0.2f, centerOffset) }, 
+                onClick = { updateZoom(zoom + 0.2f, centerOffset) },
                 modifier = Modifier.size(28.dp)
             ) {
                 Icon(Icons.Default.Add, "放大", modifier = Modifier.size(16.dp))
@@ -105,7 +110,7 @@ fun CanvasFloatingControlBar(
             // 2. 视角复位区 (Reset View)
             // ==========================================
             IconButton(
-                onClick = onResetZoom, 
+                onClick = onResetZoom,
                 modifier = Modifier.size(28.dp)
             ) {
                 Icon(Icons.Default.Refresh, "复位画布", modifier = Modifier.size(18.dp))
@@ -131,12 +136,28 @@ fun CanvasFloatingControlBar(
             }
 
             // ==========================================
-            // 4. 参考图控制区 (Reference Image Controls)
+            // 4. 隐藏描边切换区 (Hide Outlines Toggle)
+            // ==========================================
+            IconToggleButton(
+                checked = isHideOutlines,
+                onCheckedChange = { onToggleHideOutlines() },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = if (isHideOutlines) Icons.Default.GridOff else Icons.Default.GridOn,
+                    contentDescription = "隐藏描边",
+                    modifier = Modifier.size(18.dp),
+                    tint = if (isHideOutlines) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                )
+            }
+
+            // ==========================================
+            // 5. 参考图控制区 (Reference Image Controls)
             // 仅当存在参考图 (referenceUri != null) 时才渲染此区域
             // ==========================================
             if (referenceUri != null) {
                 VerticalDivider(modifier = Modifier.height(16.dp))
-                
+
                 // 参考图全局开关：判断当前是否是非隐藏状态
                 val isRefEnabled = internalReferenceMode != ReferenceDisplayMode.HIDDEN
                 IconToggleButton(
@@ -154,11 +175,11 @@ fun CanvasFloatingControlBar(
                         tint = if (isRefEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
+
                 // 如果参考图已开启，则展示详细的展示模式选择工具
                 if (isRefEnabled) {
                     VerticalDivider(modifier = Modifier.height(16.dp))
-                    
+
                     // 分屏模式按钮 (SPLIT)
                     IconToggleButton(
                         checked = internalReferenceMode == ReferenceDisplayMode.SPLIT,
@@ -172,7 +193,7 @@ fun CanvasFloatingControlBar(
                             tint = if (internalReferenceMode == ReferenceDisplayMode.SPLIT) MaterialTheme.colorScheme.primary else LocalContentColor.current
                         )
                     }
-                    
+
                     // 叠加模式按钮 (OVERLAY)
                     IconToggleButton(
                         checked = internalReferenceMode == ReferenceDisplayMode.OVERLAY,
@@ -186,7 +207,7 @@ fun CanvasFloatingControlBar(
                             tint = if (internalReferenceMode == ReferenceDisplayMode.OVERLAY) MaterialTheme.colorScheme.primary else LocalContentColor.current
                         )
                     }
-                    
+
                     // 当处于叠加模式时，展示透明度调节滑块
                     if (internalReferenceMode == ReferenceDisplayMode.OVERLAY) {
                         Spacer(modifier = Modifier.width(4.dp))

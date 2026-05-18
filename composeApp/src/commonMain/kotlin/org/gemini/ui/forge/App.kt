@@ -21,8 +21,6 @@ import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.ui.feature.home.HomeScreen
-import org.gemini.ui.forge.ui.feature.assetgen.TemplateAssetGenScreen
-import org.gemini.ui.forge.ui.feature.editor.TemplateEditorScreen
 import org.gemini.ui.forge.ui.feature.analysis.TemplateGeneratorScreen
 import org.gemini.ui.forge.ui.component.AppTopBar
 import org.gemini.ui.forge.ui.theme.AppTheme
@@ -354,23 +352,14 @@ fun App(typography: Typography? = null) {
                             AppScreen.HOME -> {
                                 HomeScreen(
                                     modules = availableModules,
-                                    onEditLayout = { moduleId ->
+                                    onOpenWorkspace = { moduleId ->
                                         availableModules.find { it.id == moduleId }?.let {
                                             appViewModel.loadProject(
                                                 it.nameStr ?: moduleId,
                                                 it.projectState!!
                                             )
                                         }
-                                        appViewModel.navigateTo(AppScreen.TEMPLATE_EDITOR)
-                                    },
-                                    onGenerateUI = { moduleId ->
-                                        availableModules.find { it.id == moduleId }?.let {
-                                            appViewModel.loadProject(
-                                                it.nameStr ?: moduleId,
-                                                it.projectState!!
-                                            )
-                                        }
-                                        appViewModel.navigateTo(AppScreen.TEMPLATE_ASSET_GEN)
+                                        appViewModel.navigateTo(AppScreen.PROJECT_WORKSPACE)
                                     },
                                     onDeleteModule = { moduleId ->
                                         coroutineScope.launch {
@@ -381,8 +370,8 @@ fun App(typography: Typography? = null) {
                                 )
                             }
 
-                            AppScreen.TEMPLATE_EDITOR -> {
-                                TemplateEditorScreen(
+                            AppScreen.PROJECT_WORKSPACE -> {
+                                org.gemini.ui.forge.ui.feature.workspace.ProjectWorkspaceScreen(
                                     initialProject = appState.project,
                                     initialProjectName = appState.projectName,
                                     templateRepo = templateRepo,
@@ -399,28 +388,12 @@ fun App(typography: Typography? = null) {
                                 )
                             }
 
-                            AppScreen.TEMPLATE_ASSET_GEN -> {
-                                TemplateAssetGenScreen(
-                                    initialProject = appState.project,
-                                    initialProjectName = appState.projectName,
-                                    templateRepo = templateRepo,
-                                    cloudAssetManager = appViewModel.cloudAssetManager,
-                                    configManager = configManager,
-                                    effectiveApiKey = globalState.effectiveApiKey,
-                                    initialPromptLang = globalState.promptLangPref,
-                                    saveEvent = appViewModel.saveEvent,
-                                    shortcutEvent = appViewModel.shortcutEvent,
-                                    onSaveRequest = { name, project ->
-                                        appViewModel.saveProject(name, project)
-                                    },
-                                    onDirtyChanged = { appViewModel.setDirty(it) }
-                                )
-                            }                            AppScreen.TEMPLATE_GENERATOR -> {
+                            AppScreen.TEMPLATE_GENERATOR -> {
                                 TemplateGeneratorScreen(
                                     onTemplateSaved = { name, ps ->
                                         appViewModel.loadProject(name, ps);
                                         appViewModel.navigateTo(
-                                            AppScreen.TEMPLATE_EDITOR
+                                            AppScreen.PROJECT_WORKSPACE
                                         )
                                     },
                                     globalState = globalState,
@@ -429,6 +402,7 @@ fun App(typography: Typography? = null) {
                                     templateRepo = templateRepo,
                                 )
                             }
+                            else -> {}
                         }
                     }
                 }

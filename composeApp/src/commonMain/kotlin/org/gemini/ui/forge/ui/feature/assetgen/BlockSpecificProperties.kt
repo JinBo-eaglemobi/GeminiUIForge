@@ -16,17 +16,17 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.UIBlockType
-import org.gemini.ui.forge.state.TemplateAssetGenState
+import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.viewmodel.TemplateAssetGenViewModel
+import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 
 @Composable
 fun BlockSpecificProperties(
     blockType: UIBlockType,
     properties: BlockProperties?,
     apiKey: String,
-    viewModel: TemplateAssetGenViewModel,
-    state: TemplateAssetGenState,
+    viewModel: ProjectWorkspaceViewModel,
+    state: ProjectWorkspaceState,
     onShowPressedHistory: () -> Unit = {},
     onShowDisabledHistory: () -> Unit = {},
     onPropertiesChanged: (BlockProperties) -> Unit
@@ -75,7 +75,7 @@ fun BlockSpecificProperties(
                     Text("当前绑定的多态资源", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(LocalAppSpacing.current.extraSmall))
                     
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         // Pressed State Preview
                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
                             Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
@@ -288,7 +288,8 @@ fun BlockSpecificProperties(
         UIBlockType.IMAGE, UIBlockType.SYMBOL, UIBlockType.BACKGROUND, UIBlockType.LOADER -> {
             // 图片和基本块暂无特定的扩充属性，缩放等选项已移至顶层通用图片设置
         }
-        else -> {            // 其他类型保持原样
+        else -> {
+            // 其他类型保持原样
         }
     }
 }

@@ -78,3 +78,14 @@ fun getMimeType(uri: String): String {
         else -> "image/jpeg" // 默认兜底为 JPEG
     }
 }
+
+/**
+ * 格式化字节大小为可读字符串
+ */
+fun formatSize(bytes: Int): String {
+    return if (bytes < 1024 * 1024) {
+        "${bytes / 1024} KB"
+    } else {
+        "${(bytes.toFloat() / (1024 * 1024) * 100).toInt() / 100f} MB"
+    }
+}

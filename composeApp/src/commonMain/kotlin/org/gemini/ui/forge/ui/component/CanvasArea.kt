@@ -46,18 +46,20 @@ import kotlin.math.roundToInt
  * @param blocks 渲染的 UI 模块列表
  * @param selectedBlockId 当前选中的模块 ID
  * @param onBlockClicked 模块点击回调
- * @param onBlockDoubleClicked 模块双击回调（通常用于进入组编辑）
+ * @param onBlockDoubleClicked 模块双击回调
  * @param onBlockDragStart 开始拖拽回调
  * @param onBlockDragged 拖拽进行中回调
  * @param editingGroupId 当前处于隔离编辑模式的组 ID
  * @param onExitGroupEdit 退出组编辑模式的回调
- * @param referenceMode 参考图显示模式（隐藏/分屏/叠加）
+ * @param referenceMode 参考图显示模式
  * @param referenceUri 参考图的资源路径或 Base64 字符串
- * @param referenceOpacity 参考图叠加时的透明度
- * @param isVisualMode 是否为视觉模式（隐藏占位线框，仅显示图片内容）
+ * @param referenceOpacity 参考图透明度
+ * @param isVisualMode 是否为视觉模式（显示生成图）
  * @param onToggleVisualMode 切换视觉模式的回调
- * @param isReadOnly 是否为只读模式（禁用拖拽等修改操作）
- * @param stageBackgroundColor 舞台背景颜色（十六进制字符串）
+ * @param isHideOutlines 是否隐藏模块描边
+ * @param onToggleHideOutlines 切换隐藏描边的回调
+ * @param isReadOnly 是否为只读模式
+ * @param stageBackgroundColor 舞台背景颜色
  */
 @Composable
 fun CanvasArea(
@@ -72,33 +74,32 @@ fun CanvasArea(
     editingGroupId: String? = null,
     onExitGroupEdit: () -> Unit = {},
     referenceMode: ReferenceDisplayMode = ReferenceDisplayMode.HIDDEN,
+    onReferenceModeChange: (ReferenceDisplayMode) -> Unit = {},
     referenceUri: String? = null,
     referenceOpacity: Float = 0.4f,
+    onReferenceOpacityChange: (Float) -> Unit = {},
     isVisualMode: Boolean = false,
     onToggleVisualMode: () -> Unit = {},
+    isHideOutlines: Boolean = false,
+    onToggleHideOutlines: () -> Unit = {},
     isReadOnly: Boolean = false,
     stageBackgroundColor: String = "#2D2D2D",
     modifier: Modifier = Modifier
 ) {
-    // 舞台交互状态
     var zoom by remember { mutableStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
-    // 解析舞台背景色
     val stageColor = remember(stageBackgroundColor) {
         try {
             val colorStr = stageBackgroundColor.removePrefix("#")
             val colorLong = colorStr.toLong(16)
             if (colorStr.length <= 6) Color(colorLong or 0xFF000000L) else Color(colorLong)
         } catch (e: Exception) {
-            Color(0xFF2D2D2D) // 默认深灰
+            Color(0xFF2D2D2D)
         }
     }
 
-    /**
-     * 更新缩放比例，并以指定中心点进行坐标补偿，实现类似 Figma 的中心缩放效果
-     */
     fun updateZoom(newZoom: Float, centroid: Offset) {
         val oldZoom = zoom
         val nextZoom = newZoom.coerceIn(0.1f, 10f)
@@ -111,18 +112,12 @@ fun CanvasArea(
         zoom = nextZoom
     }
 
-    // 参考图显示内部状态
-    var internalReferenceMode by remember { mutableStateOf(referenceMode) }
-    LaunchedEffect(referenceMode) { internalReferenceMode = referenceMode }
-    var internalReferenceOpacity by remember { mutableStateOf(referenceOpacity) }
-
     // 当分屏/参考模式切换时，自动重置缩放和偏移，保证立刻刷新居中
-    LaunchedEffect(internalReferenceMode) {
+    LaunchedEffect(referenceMode) {
         zoom = 1f
         pan = Offset.Zero
     }
 
-    // 状态快照，用于在 PointerInput 闭包中引用最新状态
     val currentBlocks by rememberUpdatedState(blocks)
     val currentEditingGroupId by rememberUpdatedState(editingGroupId)
     val currentOnBlockClicked by rememberUpdatedState(onBlockClicked)
@@ -130,15 +125,12 @@ fun CanvasArea(
     val currentOnBlockDragged by rememberUpdatedState(onBlockDragged)
     val currentOnBlockDragStart by rememberUpdatedState(onBlockDragStart)
     val currentOnExitGroupEdit by rememberUpdatedState(onExitGroupEdit)
-    val currentPageWidth by rememberUpdatedState(pageWidth)
-    val currentPageHeight by rememberUpdatedState(pageHeight)
 
-    // 加载参考图位图
     val refBitmapState = produceState<ImageBitmap?>(null, referenceUri) {
         value = referenceUri?.decodeBase64ToBitmap()
     }
     val refBitmap = refBitmapState.value
-    var splitWeight by remember { mutableStateOf(0.5f) } // 分屏时的比例权重
+    var splitWeight by remember { mutableStateOf(0.5f) }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val totalHeightPx = with(density) { maxHeight.toPx() }
@@ -146,83 +138,53 @@ fun CanvasArea(
         val containerHeightPx = with(density) { maxHeight.toPx() }
 
         Column(modifier = Modifier.fillMaxSize()) {
-            // 参考图分屏模式渲染
-            if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) {
+            if (referenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) {
                 Surface(
                     modifier = Modifier.weight(splitWeight).fillMaxWidth().padding(8.dp),
                     color = Color.Black,
                     shape = RoundedCornerShape(8.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Image(
-                        bitmap = refBitmap,
-                        contentDescription = "Ref",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit
-                    )
+                    Image(bitmap = refBitmap, contentDescription = "Ref", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                 }
-                // 分屏拖拽条
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant)
-                        .pointerHoverIcon(ResizeVerticalIcon)
-                        .draggable(
-                            orientation = Orientation.Vertical,
-                            state = rememberDraggableState { delta ->
-                                val deltaWeight = delta / totalHeightPx
-                                splitWeight = (splitWeight + deltaWeight).coerceIn(0.1f, 0.9f)
-                            }
-                        )
+                    modifier = Modifier.fillMaxWidth().height(4.dp).background(MaterialTheme.colorScheme.outlineVariant).pointerHoverIcon(ResizeVerticalIcon)
+                        .draggable(orientation = Orientation.Vertical, state = rememberDraggableState { delta ->
+                            val deltaWeight = delta / totalHeightPx
+                            splitWeight = (splitWeight + deltaWeight).coerceIn(0.1f, 0.9f)
+                        })
                 )
             }
 
-            // 画布主体部分
-            val canvasWeight =
-                if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
+            val canvasWeight = if (referenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
             Box(modifier = Modifier.weight(canvasWeight).fillMaxWidth().clipToBounds()) {
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    // 动态计算有效画布区域（取舞台尺寸与所有模块最远边界的最大值，确保溢出模块也能看到）
                     val maxBlockRight = currentBlocks.maxOfOrNull { it.bounds.right } ?: 0f
                     val maxBlockBottom = currentBlocks.maxOfOrNull { it.bounds.bottom } ?: 0f
                     val effectiveWidth = maxOf(pageWidth, maxBlockRight)
                     val effectiveHeight = maxOf(pageHeight, maxBlockBottom)
 
-                    // 初始缩放比例：使有效区域自适应容器大小
                     val baseScale = min(maxWidth.value / effectiveWidth, maxHeight.value / effectiveHeight) * 0.9f
-                    // 居中偏移量
-                    val offsetX =
-                        (maxWidth.value - (effectiveWidth * baseScale)) / 2 + (effectiveWidth - pageWidth) / 2 * baseScale
-                    val offsetY =
-                        (maxHeight.value - (effectiveHeight * baseScale)) / 2 + (effectiveHeight - pageHeight) / 2 * baseScale
+                    val offsetX = (maxWidth.value - (effectiveWidth * baseScale)) / 2 + (effectiveWidth - pageWidth) / 2 * baseScale
+                    val offsetY = (maxHeight.value - (effectiveHeight * baseScale)) / 2 + (effectiveHeight - pageHeight) / 2 * baseScale
 
-                    // 状态快照与协调
                     val currentBaseScale by rememberUpdatedState(baseScale)
                     val currentOffsetX by rememberUpdatedState(offsetX)
                     val currentOffsetY by rememberUpdatedState(offsetY)
 
-                    // 交互协调状态：标记当前是否正在进行模块操作
                     var isInteractingWithBlock by remember { mutableStateOf(false) }
 
-                    // 核心交互层：处理手势变换和平移缩放
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
+                        modifier = Modifier.fillMaxSize()
                             .pointerInput(Unit) {
                                 detectTransformGestures { centroid, panChange, zoomChange, _ ->
-                                    // 关键：如果正在拖拽模块，则直接忽略画布变换
                                     if (isInteractingWithBlock) return@detectTransformGestures
-
-                                    // 增加缩放死区阈值，防止单指微小抖动触发缩放
                                     val finalZoomChange = if (abs(zoomChange - 1.0f) < 0.005f) 1.0f else zoomChange
-                                    
                                     updateZoom(zoom * finalZoomChange, centroid)
                                     pan += panChange
                                 }
                             }
                             .pointerInput(Unit) {
-                                // 桌面端滚动滚轮缩放支持
                                 awaitPointerEventScope {
                                     while (true) {
                                         val event = awaitPointerEvent()
@@ -239,140 +201,66 @@ fun CanvasArea(
                                 }
                             }
                             .graphicsLayer {
-                                scaleX = zoom
-                                scaleY = zoom
-                                translationX = pan.x
-                                translationY = pan.y
-                                transformOrigin = TransformOrigin(0f, 0f)
+                                scaleX = zoom; scaleY = zoom; translationX = pan.x; translationY = pan.y; transformOrigin = TransformOrigin(0f, 0f)
                             }
                     ) {
-                        // ...（绘制舞台与参考图逻辑保持不变）...
-                        // 绘制舞台物理边界背景
                         Box(
-                            modifier = Modifier
-                                .offset(x = offsetX.dp, y = offsetY.dp)
-                                .size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp)
-                                .background(stageColor)
-                                .border(
-                                    BorderStroke(
-                                        (1.dp / zoom) / baseScale,
-                                        MaterialTheme.colorScheme.outlineVariant
-                                    )
-                                )
+                            modifier = Modifier.offset(x = offsetX.dp, y = offsetY.dp).size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp)
+                                .background(stageColor).border(BorderStroke((1.dp / zoom) / baseScale, MaterialTheme.colorScheme.outlineVariant))
                         )
 
-                        // 叠加模式下的参考图绘制
-                        if (internalReferenceMode == ReferenceDisplayMode.OVERLAY && refBitmap != null) {
-                            Image(
-                                bitmap = refBitmap,
-                                contentDescription = null,
-                                alpha = internalReferenceOpacity,
-                                modifier = Modifier
-                                    .offset(x = offsetX.dp, y = offsetY.dp)
-                                    .size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp),
-                                contentScale = ContentScale.FillBounds
-                            )
+                        if (referenceMode == ReferenceDisplayMode.OVERLAY && refBitmap != null) {
+                            Image(bitmap = refBitmap, contentDescription = null, alpha = referenceOpacity, modifier = Modifier.offset(x = offsetX.dp, y = offsetY.dp).size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp), contentScale = ContentScale.FillBounds)
                         }
 
-                        // 模块渲染容器
                         Box(
-                            modifier = Modifier
-                                .fillMaxSize()
+                            modifier = Modifier.fillMaxSize()
                                 .pointerInput(Unit) {
-                                    // 点击与双击检测
                                     detectTapGestures(
                                         onDoubleTap = { offset ->
                                             val lx = (offset.x / density.density - currentOffsetX) / currentBaseScale
                                             val ly = (offset.y / density.density - currentOffsetY) / currentBaseScale
-
-                                            val hitBlock =
-                                                findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
-
-                                            if (hitBlock != null) {
-                                                currentOnBlockDoubleClicked(hitBlock.id)
-                                            } else {
-                                                if (currentEditingGroupId != null) {
-                                                    currentOnExitGroupEdit()
-                                                } else {
-                                                    // 非组编辑状态下双击舞台空白处，取消选中
-                                                    currentOnBlockClicked(null)
-                                                }
-                                            }
+                                            val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
+                                            if (hitBlock != null) currentOnBlockDoubleClicked(hitBlock.id) else if (currentEditingGroupId != null) currentOnExitGroupEdit() else currentOnBlockClicked(null)
                                         },
                                         onTap = { offset ->
                                             val lx = (offset.x / density.density - currentOffsetX) / currentBaseScale
                                             val ly = (offset.y / density.density - currentOffsetY) / currentBaseScale
-
-                                            val hitBlock =
-                                                findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
+                                            val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
                                             currentOnBlockClicked(hitBlock?.id)
                                         }
                                     )
                                 }
                                 .pointerInput(isReadOnly) {
                                     if (isReadOnly) return@pointerInput
-                                    var dragTargetId: String? = null
-                                    var isPanningStage = false
-
-                                    // 模块拖拽与画布平移逻辑
+                                    var dragTargetId: String? = null; var isPanningStage = false
                                     detectDragGestures(
                                         onDragStart = { offset ->
                                             val lx = (offset.x / density.density - currentOffsetX) / currentBaseScale
                                             val ly = (offset.y / density.density - currentOffsetY) / currentBaseScale
-
-                                            val hitBlock =
-                                                findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
-
-                                            if (hitBlock != null) {
-                                                dragTargetId = hitBlock.id
-                                                isPanningStage = false
-                                                isInteractingWithBlock = true // 锁定变换
-                                                currentOnBlockDragStart(hitBlock.id)
-                                            } else {
-                                                dragTargetId = null
-                                                isPanningStage = true
-                                                isInteractingWithBlock = false
-                                            }
+                                            val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
+                                            if (hitBlock != null) { dragTargetId = hitBlock.id; isPanningStage = false; isInteractingWithBlock = true; currentOnBlockDragStart(hitBlock.id) }
+                                            else { dragTargetId = null; isPanningStage = true; isInteractingWithBlock = false }
                                         },
                                         onDrag = { change, dragAmount ->
-                                            change.consume() // 消费位移
-
-                                            val tid = dragTargetId
-                                            if (isPanningStage) {
-                                                pan += dragAmount
-                                            } else if (tid != null) {
+                                            change.consume()
+                                            if (isPanningStage) pan += dragAmount else if (dragTargetId != null) {
                                                 val logicalDx = dragAmount.x / density.density / currentBaseScale
                                                 val logicalDy = dragAmount.y / density.density / currentBaseScale
-                                                currentOnBlockDragged(tid, logicalDx, logicalDy)
+                                                currentOnBlockDragged(dragTargetId!!, logicalDx, logicalDy)
                                             }
                                         },
-                                        onDragEnd = { 
-                                            dragTargetId = null
-                                            isPanningStage = false
-                                            isInteractingWithBlock = false // 解锁变换
-                                        },
-                                        onDragCancel = { 
-                                            dragTargetId = null
-                                            isPanningStage = false
-                                            isInteractingWithBlock = false // 解锁变换
-                                        }
+                                        onDragEnd = { dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false },
+                                        onDragCancel = { dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false }
                                     )
                                 }
                         ) {
-                            // 递归渲染所有 UI 模块
                             currentBlocks.forEach { block ->
                                 RenderBlock(
-                                    block = block,
-                                    parentX = offsetX,
-                                    parentY = offsetY,
-                                    baseScale = baseScale,
-                                    zoom = zoom,
-                                    isSelected = block.id == selectedBlockId,
-                                    isDimmed = shouldDim(block, editingGroupId),
-                                    isVisualMode = isVisualMode,
-                                    density = density,
-                                    selectedBlockId = selectedBlockId,
-                                    editingGroupId = editingGroupId
+                                    block = block, parentX = offsetX, parentY = offsetY, baseScale = baseScale, zoom = zoom,
+                                    isSelected = block.id == selectedBlockId, isDimmed = shouldDim(block, editingGroupId),
+                                    isVisualMode = isVisualMode, isHideOutlines = isHideOutlines,
+                                    density = density, selectedBlockId = selectedBlockId, editingGroupId = editingGroupId
                                 )
                             }
                         }
@@ -381,131 +269,60 @@ fun CanvasArea(
             }
         }
 
-        // 隔离模式指示器：当进入组编辑时，顶部显示当前组 ID 及退出按钮
         if (editingGroupId != null) {
-            Surface(
-                modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.primary,
-                shadowElevation = 4.dp
-            ) {
-                Row(
-                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Layers,
-                        null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
+            Surface(modifier = Modifier.align(Alignment.TopStart).padding(12.dp), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primary, shadowElevation = 4.dp) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Layers, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimary)
                     Spacer(Modifier.width(8.dp))
-
-                    val prefix = stringResource(Res.string.group_editing_indicator_prefix)
-                    Text(
-                        text = "$prefix $editingGroupId",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-
+                    Text(text = "${stringResource(Res.string.group_editing_indicator_prefix)} $editingGroupId", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary)
                     Spacer(Modifier.width(12.dp))
-                    VerticalDivider(
-                        modifier = Modifier.height(16.dp),
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f)
-                    )
+                    VerticalDivider(modifier = Modifier.height(16.dp), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f))
                     Spacer(Modifier.width(8.dp))
-
-                    Text(
-                        text = stringResource(Res.string.action_exit),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier
-                            .clickable { onExitGroupEdit() }
-                            .padding(4.dp)
-                    )
+                    Text(text = stringResource(Res.string.action_exit), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.clickable { onExitGroupEdit() }.padding(4.dp))
                 }
             }
         }
 
-        // 全局浮动控制栏：缩放比例、复位、视觉模式切换、参考图控制
-        val currentCanvasWeight =
-            if (internalReferenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
-        val viewCenterX = containerWidthPx / 2f
-        val viewCenterY = (containerHeightPx * currentCanvasWeight) / 2f
-        
+        val currentCanvasWeight = if (referenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
         CanvasFloatingControlBar(
-            zoom = zoom,
-            updateZoom = ::updateZoom,
-            onResetZoom = {
-                zoom = 1f; pan = Offset.Zero; AppLogger.d("CanvasArea", "🔄 已还原舞台缩放为100%并居中")
-            },
-            isVisualMode = isVisualMode,
-            onToggleVisualMode = onToggleVisualMode,
-            referenceUri = referenceUri,
-            internalReferenceMode = internalReferenceMode,
-            onReferenceModeChange = { internalReferenceMode = it },
-            internalReferenceOpacity = internalReferenceOpacity,
-            onReferenceOpacityChange = { internalReferenceOpacity = it },
-            centerOffset = Offset(viewCenterX, viewCenterY),
+            zoom = zoom, updateZoom = ::updateZoom, onResetZoom = { zoom = 1f; pan = Offset.Zero },
+            isVisualMode = isVisualMode, onToggleVisualMode = onToggleVisualMode,
+            isHideOutlines = isHideOutlines, onToggleHideOutlines = onToggleHideOutlines,
+            referenceUri = referenceUri, internalReferenceMode = referenceMode,
+            onReferenceModeChange = onReferenceModeChange,
+            internalReferenceOpacity = referenceOpacity, onReferenceOpacityChange = onReferenceOpacityChange,
+            centerOffset = Offset(containerWidthPx / 2f, (containerHeightPx * currentCanvasWeight) / 2f),
             modifier = Modifier.align(Alignment.TopCenter)
         )
     }
 }
 
-/**
- * 碰撞检测：查找用户点击位置对应的最深层模块
- * 隔离模式下限制仅能在指定组及其子级中查找
- */
-private fun findHitBlock(
-    blocks: List<UIBlock>,
-    lx: Float,
-    ly: Float,
-    parentLx: Float,
-    parentLy: Float,
-    editingGroupId: String?
-): UIBlock? {
+private fun findHitBlock(blocks: List<UIBlock>, lx: Float, ly: Float, parentLx: Float, parentLy: Float, editingGroupId: String?): UIBlock? {
     if (editingGroupId == null) {
-        // 普通模式：从上往下（视觉上）寻找，即列表反向遍历
         for (i in blocks.indices.reversed()) {
             val block = blocks[i]
             if (!block.isVisible) continue
-            val absL = parentLx + block.bounds.left
-            val absT = parentLy + block.bounds.top
-            val absR = parentLx + block.bounds.right
-            val absB = parentLy + block.bounds.bottom
+            val absL = parentLx + block.bounds.left; val absT = parentLy + block.bounds.top
+            val absR = parentLx + block.bounds.right; val absB = parentLy + block.bounds.bottom
             if (lx >= absL && lx <= absR && ly >= absT && ly <= absB) return block
         }
         return null
     }
-
-    // 隔离模式：仅在编辑组及其范围内查找
     val targetGroup = findBlockInList(blocks, editingGroupId) ?: return null
     val groupAbsPos = calculateBlockAbsolutePosition(blocks, editingGroupId) ?: Offset.Zero
-
-    // 优先匹配子模块
     for (i in targetGroup.children.indices.reversed()) {
         val child = targetGroup.children[i]
         if (!child.isVisible) continue
-        val absL = groupAbsPos.x + child.bounds.left
-        val absT = groupAbsPos.y + child.bounds.top
-        val absR = groupAbsPos.x + child.bounds.right
-        val absB = groupAbsPos.y + child.bounds.bottom
+        val absL = groupAbsPos.x + child.bounds.left; val absT = groupAbsPos.y + child.bounds.top
+        val absR = groupAbsPos.x + child.bounds.right; val absB = groupAbsPos.y + child.bounds.bottom
         if (lx >= absL && lx <= absR && ly >= absT && ly <= absB) return child
     }
-
-    // 最后匹配父组自身
-    val gL = groupAbsPos.x
-    val gT = groupAbsPos.y
-    val gR = groupAbsPos.x + targetGroup.bounds.width
-    val gB = groupAbsPos.y + targetGroup.bounds.height
+    val gL = groupAbsPos.x; val gT = groupAbsPos.y
+    val gR = groupAbsPos.x + targetGroup.bounds.width; val gB = groupAbsPos.y + targetGroup.bounds.height
     if (lx >= gL && lx <= gR && ly >= gT && ly <= gB) return targetGroup
     return null
 }
 
-/**
- * 递归查找模块列表中的指定 ID 模块
- */
 private fun findBlockInList(blocks: List<UIBlock>, id: String): UIBlock? {
     for (block in blocks) {
         if (block.id == id) return block
@@ -515,18 +332,9 @@ private fun findBlockInList(blocks: List<UIBlock>, id: String): UIBlock? {
     return null
 }
 
-/**
- * 递归计算指定模块在画布上的绝对偏移位置
- */
-private fun calculateBlockAbsolutePosition(
-    blocks: List<UIBlock>,
-    id: String,
-    currentX: Float = 0f,
-    currentY: Float = 0f
-): Offset? {
+private fun calculateBlockAbsolutePosition(blocks: List<UIBlock>, id: String, currentX: Float = 0f, currentY: Float = 0f): Offset? {
     for (block in blocks) {
-        val absX = currentX + block.bounds.left
-        val absY = currentY + block.bounds.top
+        val absX = currentX + block.bounds.left; val absY = currentY + block.bounds.top
         if (block.id == id) return Offset(absX, absY)
         val found = calculateBlockAbsolutePosition(block.children, id, absX, absY)
         if (found != null) return found
@@ -534,25 +342,13 @@ private fun calculateBlockAbsolutePosition(
     return null
 }
 
-/**
- * 判断模块是否应置灰（当处于隔离模式且模块不在编辑路径上时）
- */
 private fun shouldDim(block: UIBlock, editingGroupId: String?): Boolean {
     if (editingGroupId == null) return false
     if (block.id == editingGroupId) return false
     return !containsBlock(block, editingGroupId)
 }
 
-/**
- * 判断当前模块是否包含指定模块（递归）
- */
 private fun containsBlock(currentBlock: UIBlock, targetId: String): Boolean {
     if (currentBlock.id == targetId) return true
     return currentBlock.children.any { containsBlock(it, targetId) }
 }
-
-/**
- * 扩展函数：便捷获取 OutlineVariant 颜色，处理不同 Material 主题版本兼容
- */
-@Composable
-private fun MaterialTheme.outlineVariant(): Color = colorScheme.outlineVariant

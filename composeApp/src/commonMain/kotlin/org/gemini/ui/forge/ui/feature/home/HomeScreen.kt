@@ -17,11 +17,18 @@ import androidx.compose.runtime.setValue
 import org.gemini.ui.forge.model.app.UIModule
 import org.gemini.ui.forge.ui.theme.AppShapes
 
+/**
+ * 应用主界面（首页）。
+ * 展示所有已保存的 UI 模块模板，并提供进入工作区、删除模板等入口。
+ *
+ * @param modules 待展示的模块列表。
+ * @param onOpenWorkspace 进入统一工作区的回调。
+ * @param onDeleteModule 删除指定模块的回调。
+ */
 @Composable
 fun HomeScreen(
     modules: List<UIModule>,
-    onEditLayout: (String) -> Unit,
-    onGenerateUI: (String) -> Unit,
+    onOpenWorkspace: (String) -> Unit,
     onDeleteModule: (String) -> Unit = {}
 ) {
     var moduleToDelete by remember { mutableStateOf<UIModule?>(null) }
@@ -45,8 +52,7 @@ fun HomeScreen(
                 items(modules) { module ->
                     ModuleCard(
                         module = module,
-                        onEditLayout = { onEditLayout(module.id) },
-                        onGenerateUI = { onGenerateUI(module.id) },
+                        onOpenWorkspace = { onOpenWorkspace(module.id) },
                         onDelete = { moduleToDelete = module }
                     )
                 }

@@ -13,8 +13,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
-import org.gemini.ui.forge.state.TemplateAssetGenState
-import org.gemini.ui.forge.viewmodel.TemplateAssetGenViewModel
+import org.gemini.ui.forge.state.ProjectWorkspaceState
+import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
+import org.gemini.ui.forge.viewmodel.AssetGenerationDelegate
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.model.ui.BlockProperties
 
@@ -24,21 +25,17 @@ import org.gemini.ui.forge.model.ui.BlockProperties
  * 专门用于为按钮组件（Button）生成额外的状态图像（如按下态 Pressed、禁用态 Disabled）。
  * 用户可以分别输入不同状态的提示词，预览生成的新图与当前图的对比，并确认应用。
  *
- * @param state 当前模板资产生成状态流的最新值，包含所有状态数据。
- * @param viewModel 负责处理生成逻辑和状态管理的 ViewModel。
+ * @param state 当前统一工作区状态。
+ * @param viewModel 统一工作区 ViewModel。
  * @param apiKey 用于调用 Gemini 生图 API 的密钥。
  */
 @Composable
 fun ButtonStateGenDialog(
-    state: TemplateAssetGenState,
-    viewModel: TemplateAssetGenViewModel,
+    state: ProjectWorkspaceState,
+    viewModel: ProjectWorkspaceViewModel,
     apiKey: String
 ) {
     if (!state.showButtonGenDialog) return
-    // ... 原有逻辑 ...
-// 这里因为替换内容包含了很多内部代码，我应该用缩小范围的 replace 方式，或者重新生成整个函数。
-// 为了避免省略导致的问题，我将通过替换部分代码段来添加。
-
 
     Dialog(
         onDismissRequest = { if (!state.isButtonGenInProgress) viewModel.closeButtonGenDialog() },
@@ -113,7 +110,7 @@ fun ButtonStateGenDialog(
                             }
                             if (state.buttonPressedCandidate != null || currentProps?.pressedUri != null) {
                                 TextButton(
-                                    onClick = { viewModel.executeButtonStateGen(apiKey, TemplateAssetGenViewModel.ButtonGenTarget.PRESSED) },
+                                    onClick = { viewModel.assetGen.executeButtonStateGen(apiKey, AssetGenerationDelegate.ButtonGenTarget.PRESSED) },
                                     enabled = !state.isButtonGenInProgress,
                                     modifier = Modifier.fillMaxWidth().height(24.dp),
                                     contentPadding = PaddingValues(0.dp)
@@ -143,7 +140,7 @@ fun ButtonStateGenDialog(
                             }
                             if (state.buttonDisabledCandidate != null || currentProps?.disabledUri != null) {
                                 TextButton(
-                                    onClick = { viewModel.executeButtonStateGen(apiKey, TemplateAssetGenViewModel.ButtonGenTarget.DISABLED) },
+                                    onClick = { viewModel.assetGen.executeButtonStateGen(apiKey, AssetGenerationDelegate.ButtonGenTarget.DISABLED) },
                                     enabled = !state.isButtonGenInProgress,
                                     modifier = Modifier.fillMaxWidth().height(24.dp),
                                     contentPadding = PaddingValues(0.dp)
@@ -170,7 +167,7 @@ fun ButtonStateGenDialog(
                     
                     if (state.buttonPressedCandidate != null || state.buttonDisabledCandidate != null) {
                         OutlinedButton(
-                            onClick = { viewModel.executeButtonStateGen(apiKey, TemplateAssetGenViewModel.ButtonGenTarget.ALL) },
+                            onClick = { viewModel.assetGen.executeButtonStateGen(apiKey, AssetGenerationDelegate.ButtonGenTarget.ALL) },
                             enabled = !state.isButtonGenInProgress
                         ) {
                             Text("全部重绘")
@@ -184,7 +181,7 @@ fun ButtonStateGenDialog(
                         }
                     } else {
                         Button(
-                            onClick = { viewModel.executeButtonStateGen(apiKey, TemplateAssetGenViewModel.ButtonGenTarget.ALL) },
+                            onClick = { viewModel.assetGen.executeButtonStateGen(apiKey, AssetGenerationDelegate.ButtonGenTarget.ALL) },
                             enabled = !state.isButtonGenInProgress
                         ) {
                             if (state.isButtonGenInProgress) {
