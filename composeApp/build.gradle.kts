@@ -84,8 +84,11 @@ kotlin {
             kotlin.srcDir(generateProjectConfig.map { it.outputs.files.asPath })
         }
         androidMain.dependencies {
-            implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
+            implementation(libs.compose.uiToolingPreview)
+//            implementation(libs.compose.uiTooling)
+//            implementation("androidx.customview:customview:1.1.0")
+//            implementation("androidx.customview:customview-poolingcontainer:1.1.0")
             implementation(libs.ktor.client.okhttp)
             implementation("org.jetbrains.skiko:skiko-android:0.9.37.3")
         }

@@ -79,14 +79,14 @@ fun CanvasFloatingControlBar(
             // 缩小按钮 (-20%)
             IconButton(
                 onClick = { updateZoom(zoom - 0.2f, centerOffset) },
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(28.dp).tip("缩小视图")
             ) {
                 Icon(Icons.Default.Remove, "缩小", modifier = Modifier.size(16.dp))
             }
 
             // 当前比例显示
             Box(
-                modifier = Modifier.height(28.dp).width(42.dp),
+                modifier = Modifier.height(28.dp).width(42.dp).tip("当前缩放比例"),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -99,7 +99,7 @@ fun CanvasFloatingControlBar(
             // 放大按钮 (+20%)
             IconButton(
                 onClick = { updateZoom(zoom + 0.2f, centerOffset) },
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(28.dp).tip("放大视图")
             ) {
                 Icon(Icons.Default.Add, "放大", modifier = Modifier.size(16.dp))
             }
@@ -111,7 +111,7 @@ fun CanvasFloatingControlBar(
             // ==========================================
             IconButton(
                 onClick = onResetZoom,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(28.dp).tip("重置缩放并居中")
             ) {
                 Icon(Icons.Default.Refresh, "复位画布", modifier = Modifier.size(18.dp))
             }
@@ -124,7 +124,7 @@ fun CanvasFloatingControlBar(
             IconToggleButton(
                 checked = isVisualMode,
                 onCheckedChange = { onToggleVisualMode() },
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(28.dp).tip("切换视觉/线框模式")
             ) {
                 Icon(
                     imageVector = if (isVisualMode) Icons.Default.AutoFixNormal else Icons.Default.AutoFixOff,
@@ -141,7 +141,7 @@ fun CanvasFloatingControlBar(
             IconToggleButton(
                 checked = isHideOutlines,
                 onCheckedChange = { onToggleHideOutlines() },
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(28.dp).tip("显示/隐藏模块边框")
             ) {
                 Icon(
                     imageVector = if (isHideOutlines) Icons.Default.GridOff else Icons.Default.GridOn,
@@ -166,7 +166,7 @@ fun CanvasFloatingControlBar(
                         // 开启时默认进入分屏模式，关闭时设为隐藏
                         onReferenceModeChange(if (it) ReferenceDisplayMode.SPLIT else ReferenceDisplayMode.HIDDEN)
                     },
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(28.dp).tip("显示/隐藏参考图")
                 ) {
                     Icon(
                         imageVector = if (isRefEnabled) Icons.Default.Image else Icons.Default.VisibilityOff,
@@ -184,7 +184,7 @@ fun CanvasFloatingControlBar(
                     IconToggleButton(
                         checked = internalReferenceMode == ReferenceDisplayMode.SPLIT,
                         onCheckedChange = { onReferenceModeChange(ReferenceDisplayMode.SPLIT) },
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(28.dp).tip("分屏对比模式")
                     ) {
                         Icon(
                             imageVector = Icons.Default.VerticalSplit,
@@ -198,7 +198,7 @@ fun CanvasFloatingControlBar(
                     IconToggleButton(
                         checked = internalReferenceMode == ReferenceDisplayMode.OVERLAY,
                         onCheckedChange = { onReferenceModeChange(ReferenceDisplayMode.OVERLAY) },
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(28.dp).tip("半透明叠加模式")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Layers,
@@ -214,7 +214,7 @@ fun CanvasFloatingControlBar(
                         Slider(
                             value = internalReferenceOpacity,
                             onValueChange = onReferenceOpacityChange,
-                            modifier = Modifier.width(100.dp).height(24.dp),
+                            modifier = Modifier.width(100.dp).height(24.dp).tip("调节参考图透明度"),
                             // 透明度限制在 10% 到 100% 之间
                             valueRange = 0.1f..1f
                         )

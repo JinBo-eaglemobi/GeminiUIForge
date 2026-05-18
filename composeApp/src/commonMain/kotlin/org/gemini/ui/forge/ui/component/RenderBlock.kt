@@ -193,6 +193,8 @@ fun RenderBlock(
     } else null
 
     val actualBgColor = when {
+        // 如果是隐藏描边模式且未选中，则强制背景透明
+        isHideOutlines && !isSelected -> Color.Transparent
         viewBgColor != null -> viewBgColor
         hidePlaceholder -> Color.Transparent
         isSelected -> selectionColor.copy(alpha = 0.15f)

@@ -25,6 +25,18 @@ import androidx.compose.ui.geometry.Offset
 import org.gemini.ui.forge.model.app.AppScreen
 import org.gemini.ui.forge.ui.theme.AppShapes
 
+/**
+ * 应用顶部导航栏组件。
+ * 提供返回、标题显示、当前模式标识以及核心功能按钮（保存、云资产、帮助、设置）。
+ *
+ * @param currentScreen 当前所在的屏幕页面。
+ * @param onNavigateHome 点击返回首页的回调。
+ * @param onGenerateTemplateClicked 点击 AI 生成模板的回调。
+ * @param onCloudAssetManagerClicked 点击云端资产管理的回调。
+ * @param onSaveClicked 点击保存项目的回调。
+ * @param onSettingsClicked 点击应用设置的回调。
+ * @param onHelpClicked 点击帮助的回调。
+ */
 @Composable
 fun AppTopBar(
     currentScreen: AppScreen,
@@ -60,7 +72,10 @@ fun AppTopBar(
             // 左侧：返回按钮 + 标题
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (currentScreen != AppScreen.HOME) {
-                    IconButton(onClick = onNavigateHome, modifier = Modifier.size(32.dp)) {
+                    IconButton(
+                        onClick = onNavigateHome, 
+                        modifier = Modifier.size(32.dp).tip("返回首页")
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -106,7 +121,8 @@ fun AppTopBar(
                     TextButton(
                         onClick = onGenerateTemplateClicked,
                         contentPadding = PaddingValues(horizontal = 8.dp),
-                        shape = AppShapes.medium
+                        shape = AppShapes.medium,
+                        modifier = Modifier.tip("通过 AI 分析生图并创建新模板")
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
@@ -116,23 +132,27 @@ fun AppTopBar(
                     TextButton(
                         onClick = onCloudAssetManagerClicked,
                         contentPadding = PaddingValues(horizontal = 8.dp),
-                        shape = AppShapes.medium
+                        shape = AppShapes.medium,
+                        modifier = Modifier.tip("管理已上传至云端的媒体资产")
                     ) {
                         Icon(Icons.Default.Cloud, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
                         Text(stringResource(Res.string.menu_cloud_assets), style = MaterialTheme.typography.labelLarge)
                     }
                 } else if (currentScreen == AppScreen.TEMPLATE_EDITOR || currentScreen == AppScreen.TEMPLATE_ASSET_GEN || currentScreen == AppScreen.PROJECT_WORKSPACE) {
-                    IconButton(onClick = onSaveClicked) {
+                    IconButton(
+                        onClick = onSaveClicked,
+                        modifier = Modifier.tip("保存当前项目修改 (Ctrl+S)")
+                    ) {
                         Icon(Icons.Default.Save, contentDescription = "Save Layout", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
                 
                 // 帮助与设置按钮（始终显示）
-                IconButton(onClick = onHelpClicked) {
+                IconButton(onClick = onHelpClicked, modifier = Modifier.tip("查看使用说明")) {
                     Icon(Icons.AutoMirrored.Filled.Help, contentDescription = stringResource(Res.string.menu_help))
                 }
-                IconButton(onClick = onSettingsClicked) {
+                IconButton(onClick = onSettingsClicked, modifier = Modifier.tip("应用全局设置")) {
                     Icon(Icons.Default.Settings, contentDescription = stringResource(Res.string.menu_settings))
                 }
             }

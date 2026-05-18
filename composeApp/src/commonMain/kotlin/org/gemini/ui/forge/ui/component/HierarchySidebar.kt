@@ -74,16 +74,16 @@ fun HierarchySidebar(
     var draggedBlockId by remember { mutableStateOf<String?>(null) } // 当前正在拖拽的源图层 ID
     var hoveredBlockId by remember { mutableStateOf<String?>(null) } // 当前被拖拽到的目标上方图层 ID
     var pressedBlockId by remember { mutableStateOf<String?>(null) } // 刚被按下但还未触发拖拽的图层 ID（用于防止误触）
-    
+
     // ---- 拖拽时的浮动视觉提示状态 ----
     var dragShadowIcon by remember { mutableStateOf<ImageVector?>(null) }
     var dragShadowLabel by remember { mutableStateOf<String?>(null) }
-    
+
     // ---- 坐标映射及碰撞检测缓存 ----
-    var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) } // 面板容器的全局坐标，用于坐标转换
+    var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) } // 面板容器的全局坐标，用于坐标转换   
     val itemBounds = remember { mutableMapOf<String, Rect>() } // 缓存每个图层项渲染后在其 Window 中的位置边界
     var dragPosition by remember { mutableStateOf<Offset?>(null) } // 当前拖拽手指所处的实时位置
-    
+
     // ---- 对话框及面板属性状态 ----
     var showAddDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf<String?>(null) }
@@ -171,7 +171,7 @@ fun HierarchySidebar(
                         change.consume()
                         dragPosition = change.position
                         val windowOffset = listCoordinates?.localToWindow(change.position) ?: change.position
-                        val hit = itemBounds.entries.toList().asReversed().find { it.value.contains(windowOffset) }
+                        val hit = itemBounds.entries.toList().asReversed().find { it.value.contains(windowOffset) }    
                         if (hit != null) {
                             hoveredBlockId = hit.key
                             val rect = hit.value
@@ -207,7 +207,7 @@ fun HierarchySidebar(
                 )
             }
         ) {
-            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {   
                 Icon(
                     Icons.Default.Layers,
                     null,
@@ -220,7 +220,7 @@ fun HierarchySidebar(
                 IconToggleButton(
                     checked = isAutoTrackEnabled,
                     onCheckedChange = { isAutoTrackEnabled = it },
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(28.dp).tip("画布选中项自动追踪")
                 ) {
                     Icon(
                         imageVector = if (isAutoTrackEnabled) Icons.Default.MyLocation else Icons.Default.LocationDisabled,
@@ -235,9 +235,12 @@ fun HierarchySidebar(
                 }
 
                 val allVisible = blocks.isNotEmpty() && checkAllVisible(blocks)
-                IconButton(onClick = { onToggleAllVisibility(!allVisible) }, modifier = Modifier.size(28.dp)) {
+                IconButton(
+                    onClick = { onToggleAllVisibility(!allVisible) }, 
+                    modifier = Modifier.size(28.dp).tip("一键显示/隐藏所有图层")
+                ) {        
                     Icon(
-                        imageVector = if (allVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        imageVector = if (allVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,       
                         contentDescription = "All Vis",
                         modifier = Modifier.size(18.dp),
                         tint = if (allVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -247,12 +250,12 @@ fun HierarchySidebar(
                     Spacer(Modifier.width(4.dp))
                     IconButton(
                         onClick = { showAddDialog = true },
-                        modifier = Modifier.size(28.dp)
-                    ) { Icon(Icons.Default.AddBox, contentDescription = "Add", modifier = Modifier.size(18.dp)) }
+                        modifier = Modifier.size(28.dp).tip("添加自定义模块")
+                    ) { Icon(Icons.Default.AddBox, contentDescription = "Add", modifier = Modifier.size(18.dp)) }      
                     Spacer(Modifier.width(4.dp))
                     IconButton(
                         onClick = { if (selectedBlockId != null) showRenameDialog = selectedBlockId },
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier.size(28.dp).tip("修改模块 ID"),
                         enabled = selectedBlockId != null
                     ) {
                         Icon(
@@ -269,7 +272,7 @@ fun HierarchySidebar(
             if (!isReadOnly && draggedBlockId != null && hoveredBlockId == null) {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
-                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)).padding(8.dp),
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)).padding(8.dp),      
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -334,7 +337,7 @@ fun HierarchySidebar(
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(6.6.dp))
                     Text(
                         text = dragShadowLabel!!,
                         style = MaterialTheme.typography.labelMedium,

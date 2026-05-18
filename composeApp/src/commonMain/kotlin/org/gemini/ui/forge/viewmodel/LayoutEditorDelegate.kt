@@ -373,15 +373,54 @@ class LayoutEditorDelegate(
     // --- 快捷键处理 ---
 
     fun handleShortcutAction(action: ShortcutAction) {
-        when (action) {
-            ShortcutAction.UNDO -> undo()
-            ShortcutAction.REDO -> redo()
-            ShortcutAction.DELETE -> getState().selectedBlockId?.let { blockId -> updateState { it.copy(showDeleteBlockConfirmation = true, pendingDeleteBlockId = blockId) } }
-            ShortcutAction.COPY -> copy()
-            ShortcutAction.PASTE -> paste()
-            ShortcutAction.CUT -> cut()
-            ShortcutAction.RENAME -> onRequestRename()
-            else -> {}
+// ... existing handleShortcutAction ...
+    }
+
+    fun onSetReferenceArea(
+        blockId: String,
+        bounds: SerialRect
+    ) {
+        val currentState = getState()
+        val currentPage = currentState.currentPage
+        val originalImage = currentPage?.sourceImageUri ?: return
+
+        scope.launch {
+            try {
+                AppLogger.d("LayoutEditor", "✂️ 正在提取并保存模块 $blockId 的局部参考图...")
+                val croppedBytes = cropImage(
+                    imageSource = originalImage.getAbsolutePath(),
+                    bounds = bounds,
+                    logicalWidth = currentPage.width,
+                    logicalHeight = currentPage.height
+                ) ?: throw Exception("裁剪局部参考图失败")
+
+                val savedFile = templateRepo.saveBlockResource(
+                    templateName = currentState.projectName,
+                    blockId = blockId,
+                    fileNamePrefix = "ref",
+                    bytes = croppedBytes,
+                    isPng = false
+                )
+
+                updateState { state ->
+                    val updatedPages = state.project.pages.map { page ->
+                        if (page.id == currentPage.id) {
+                            page.copy(
+                                blocks = updateBlockInList(page.blocks, blockId) { block ->
+                                    block.copy(referenceImage = savedFile)
+                                }
+                            )
+                        } else page
+                    }
+                    state.copy(project = state.project.copy(pages = updatedPages))
+                }
+                markDirty()
+                AppLogger.d("LayoutEditor", "✅ 局部参考图保存成功: ${savedFile.relativePath}")
+                Toast.show("局部参考图设置成功", ToastType.SUCCESS)
+            } catch (e: Exception) {
+                AppLogger.e("LayoutEditor", "❌ 设置局部参考图失败", e)
+                Toast.show("设置局部参考图失败", ToastType.ERROR)
+            }
         }
     }
 

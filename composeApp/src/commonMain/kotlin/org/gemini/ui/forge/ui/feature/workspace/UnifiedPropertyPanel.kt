@@ -2,7 +2,6 @@ package org.gemini.ui.forge.ui.feature.workspace
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -28,14 +27,15 @@ import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
+import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.dialog.ButtonStateGenDialog
 import org.gemini.ui.forge.ui.dialog.ImageEditorDialog
+import org.gemini.ui.forge.ui.feature.assetgen.BlockSpecificProperties
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.rememberImagePicker
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.jetbrains.compose.resources.stringResource
-import org.gemini.ui.forge.ui.dialog.ButtonStateGenDialog
-import org.gemini.ui.forge.ui.feature.assetgen.BlockSpecificProperties
 
 /**
  * 统一属性面板：集成布局编辑、物理参数、AI 生成配置及组件特有属性。
@@ -81,7 +81,9 @@ fun UnifiedPropertyPanel(
         }
 
         // 内容滚动区
-        Box(modifier = Modifier.weight(1f).padding(LocalAppSpacing.current.medium).verticalScroll(rememberScrollState())) {
+        Box(
+            modifier = Modifier.weight(1f).padding(LocalAppSpacing.current.medium).verticalScroll(rememberScrollState())
+        ) {
             if (selectedTab == 0) {
                 LayoutPropertyContent(state, viewModel, apiKey, onRefineClick, onSetReferenceAreaClick)
             } else {
@@ -105,20 +107,24 @@ private fun LayoutPropertyContent(
     onSetReferenceAreaClick: (String) -> Unit
 ) {
     val selectedBlock = state.selectedBlock
-    
+
     // 1. 未选中模块时显示页面级属性
     if (selectedBlock == null) {
         state.currentPage?.let { page ->
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("页面与属性", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                
+                Text(
+                    "页面与属性",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
                 // 页面切换器
                 if (state.project.pages.size > 1) {
                     var pageMenuExpanded by remember { mutableStateOf(false) }
                     Box(Modifier.fillMaxWidth()) {
                         OutlinedButton(
                             onClick = { pageMenuExpanded = true },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().tip("点击切换当前编辑的页面"),
                             shape = AppShapes.small,
                             contentPadding = PaddingValues(horizontal = 12.dp)
                         ) {
@@ -128,12 +134,22 @@ private fun LayoutPropertyContent(
                             Spacer(Modifier.weight(1f))
                             Icon(Icons.Default.ArrowDropDown, null)
                         }
-                        DropdownMenu(expanded = pageMenuExpanded, onDismissRequest = { pageMenuExpanded = false }, modifier = Modifier.width(260.dp)) {
+                        DropdownMenu(
+                            expanded = pageMenuExpanded,
+                            onDismissRequest = { pageMenuExpanded = false },
+                            modifier = Modifier.width(260.dp)
+                        ) {
                             state.project.pages.forEach { p ->
                                 DropdownMenuItem(
                                     text = { Text(p.id, style = MaterialTheme.typography.bodyMedium) },
                                     onClick = { viewModel.switchPage(p.id); pageMenuExpanded = false },
-                                    leadingIcon = { if(p.id == page.id) Icon(Icons.Default.Check, null, Modifier.size(18.dp)) }
+                                    leadingIcon = {
+                                        if (p.id == page.id) Icon(
+                                            Icons.Default.Check,
+                                            null,
+                                            Modifier.size(18.dp)
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -141,11 +157,25 @@ private fun LayoutPropertyContent(
                 }
 
                 // 物理尺寸与背景
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), shape = AppShapes.small, modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    shape = AppShapes.small,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            EditableInfoItem(label = "宽度 (W)", value = page.width.toInt().toString(), onValueChange = { viewModel.updatePageSize(it.toFloat(), page.height) }, modifier = Modifier.weight(1f))
-                            EditableInfoItem(label = "高度 (H)", value = page.height.toInt().toString(), onValueChange = { viewModel.updatePageSize(page.width, it.toFloat()) }, modifier = Modifier.weight(1f))
+                            EditableInfoItem(
+                                label = "宽度 (W)",
+                                value = page.width.toInt().toString(),
+                                onValueChange = { viewModel.updatePageSize(it.toFloat(), page.height) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            EditableInfoItem(
+                                label = "高度 (H)",
+                                value = page.height.toInt().toString(),
+                                onValueChange = { viewModel.updatePageSize(page.width, it.toFloat()) },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                         SelectAllOutlinedTextField(
                             value = state.stageBackgroundColor,
@@ -160,15 +190,18 @@ private fun LayoutPropertyContent(
                 }
 
                 // AI 辅助全局功能
-                Button(onClick = { onRefineClick(null) }, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { onRefineClick(null) },
+                    modifier = Modifier.fillMaxWidth().tip("基于 AI 视觉识别重构整个页面的布局结构")
+                ) {
                     Icon(Icons.Default.AutoFixHigh, null)
                     Spacer(Modifier.width(8.dp))
                     Text("全局区域重塑")
                 }
-                
+
                 OutlinedButton(
                     onClick = { viewModel.updateState { it.copy(showBatchGenDialog = true) } },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().tip("为页面中所有缺失资源的模块自动生成资源图")
                 ) {
                     Icon(Icons.Default.AutoAwesomeMotion, null)
                     Spacer(Modifier.width(8.dp))
@@ -180,7 +213,7 @@ private fun LayoutPropertyContent(
     }
 
     // 2. 选中模块后显示具体物理参数
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier = Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // ID 编辑
         SelectAllOutlinedTextField(
             value = selectedBlock.id,
@@ -192,16 +225,76 @@ private fun LayoutPropertyContent(
         )
 
         // 物理坐标与尺寸实时输入
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), shape = AppShapes.small, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("物理坐标与尺寸", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            shape = AppShapes.small,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "物理坐标与尺寸",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EditableInfoItem(label = "X", value = selectedBlock.bounds.left.toInt().toString(), onValueChange = { viewModel.updateBlockBounds(selectedBlock.id, it.toFloat(), selectedBlock.bounds.top, it.toFloat() + selectedBlock.bounds.width, selectedBlock.bounds.bottom) }, modifier = Modifier.weight(1f))
-                    EditableInfoItem(label = "Y", value = selectedBlock.bounds.top.toInt().toString(), onValueChange = { viewModel.updateBlockBounds(selectedBlock.id, selectedBlock.bounds.left, it.toFloat(), selectedBlock.bounds.right, it.toFloat() + selectedBlock.bounds.height) }, modifier = Modifier.weight(1f))
+                    EditableInfoItem(
+                        label = "X",
+                        value = selectedBlock.bounds.left.toInt().toString(),
+                        onValueChange = {
+                            viewModel.updateBlockBounds(
+                                selectedBlock.id,
+                                it.toFloat(),
+                                selectedBlock.bounds.top,
+                                it.toFloat() + selectedBlock.bounds.width,
+                                selectedBlock.bounds.bottom
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    EditableInfoItem(
+                        label = "Y",
+                        value = selectedBlock.bounds.top.toInt().toString(),
+                        onValueChange = {
+                            viewModel.updateBlockBounds(
+                                selectedBlock.id,
+                                selectedBlock.bounds.left,
+                                it.toFloat(),
+                                selectedBlock.bounds.right,
+                                it.toFloat() + selectedBlock.bounds.height
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EditableInfoItem(label = "W", value = selectedBlock.bounds.width.toInt().toString(), onValueChange = { viewModel.updateBlockBounds(selectedBlock.id, selectedBlock.bounds.left, selectedBlock.bounds.top, selectedBlock.bounds.left + it.toFloat(), selectedBlock.bounds.bottom) }, modifier = Modifier.weight(1f))
-                    EditableInfoItem(label = "H", value = selectedBlock.bounds.height.toInt().toString(), onValueChange = { viewModel.updateBlockBounds(selectedBlock.id, selectedBlock.bounds.left, selectedBlock.bounds.top, selectedBlock.bounds.right, selectedBlock.bounds.top + it.toFloat()) }, modifier = Modifier.weight(1f))
+                    EditableInfoItem(
+                        label = "W",
+                        value = selectedBlock.bounds.width.toInt().toString(),
+                        onValueChange = {
+                            viewModel.updateBlockBounds(
+                                selectedBlock.id,
+                                selectedBlock.bounds.left,
+                                selectedBlock.bounds.top,
+                                selectedBlock.bounds.left + it.toFloat(),
+                                selectedBlock.bounds.bottom
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    EditableInfoItem(
+                        label = "H",
+                        value = selectedBlock.bounds.height.toInt().toString(),
+                        onValueChange = {
+                            viewModel.updateBlockBounds(
+                                selectedBlock.id,
+                                selectedBlock.bounds.left,
+                                selectedBlock.bounds.top,
+                                selectedBlock.bounds.right,
+                                selectedBlock.bounds.top + it.toFloat()
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -220,7 +313,9 @@ private fun LayoutPropertyContent(
             )
             ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
                 UIBlockType.entries.forEach { type ->
-                    DropdownMenuItem(text = { Text(stringResource(type.getDisplayNameRes())) }, onClick = { viewModel.updateBlockType(selectedBlock.id, type); typeExpanded = false })
+                    DropdownMenuItem(
+                        text = { Text(stringResource(type.getDisplayNameRes())) },
+                        onClick = { viewModel.updateBlockType(selectedBlock.id, type); typeExpanded = false })
                 }
             }
         }
@@ -229,13 +324,19 @@ private fun LayoutPropertyContent(
 
         // AI 结构重塑与参考区域
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onRefineClick(selectedBlock.id) }, modifier = Modifier.weight(1f)) {
+            Button(
+                onClick = { onRefineClick(selectedBlock.id) },
+                modifier = Modifier.weight(1f).tip("通过 AI 自动分析并重塑该模块的内部层级结构")
+            ) {
                 Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("区域重塑")
             }
-            
-            OutlinedButton(onClick = { onSetReferenceAreaClick(selectedBlock.id) }, modifier = Modifier.weight(1f)) {
+
+            OutlinedButton(
+                onClick = { onSetReferenceAreaClick(selectedBlock.id) },
+                modifier = Modifier.weight(1f).tip("从原图中截取局部区域作为该模块的 AI 生成参考图")
+            ) {
                 Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("参考区域")
@@ -246,7 +347,7 @@ private fun LayoutPropertyContent(
         Button(
             onClick = { viewModel.layoutEditor.deleteBlock(selectedBlock.id) },
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().tip("从项目中永久移除此模块及其子模块"),
             shape = AppShapes.medium,
             enabled = !state.isGenerating
         ) {
@@ -283,7 +384,17 @@ private fun AssetGenPropertyContent(
             block = selectedBlock,
             onDismiss = { showImageEditor = false },
             onConfirm = { bytes, mode, config, cropBytes ->
-                viewModel.assetManager.bakeBlockImage(selectedBlock.id, mode, config, selectedBlock.bounds.width.toInt(), selectedBlock.bounds.height.toInt(), selectedBlock.bounds.width.toInt(), selectedBlock.bounds.height.toInt(), bytes, cropBytes)
+                viewModel.assetManager.bakeBlockImage(
+                    selectedBlock.id,
+                    mode,
+                    config,
+                    selectedBlock.bounds.width.toInt(),
+                    selectedBlock.bounds.height.toInt(),
+                    selectedBlock.bounds.width.toInt(),
+                    selectedBlock.bounds.height.toInt(),
+                    bytes,
+                    cropBytes
+                )
                 showImageEditor = false
             }
         )
@@ -297,41 +408,80 @@ private fun AssetGenPropertyContent(
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // 顶部快捷工具：风格与模型
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { showAdvancedSettings = true }, modifier = Modifier.weight(1f).height(40.dp), shape = AppShapes.small) {
+            OutlinedButton(
+                onClick = { showAdvancedSettings = true },
+                modifier = Modifier.weight(1f).height(40.dp).tip("设置全项目通用的 AI 风格关键词和参考图"),
+                shape = AppShapes.small
+            ) {
                 Icon(Icons.Default.Palette, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("全局风格", style = MaterialTheme.typography.labelSmall)
             }
-            ModelSelector(state, viewModel, Modifier.weight(1.2f))
+            ModelSelector(state, viewModel, Modifier.weight(1.2f).tip("选择当前生图任务使用的 AI 模型"))
         }
 
         // 模块资源预览图：点击进入物理加工
-        Box(Modifier.fillMaxWidth().height(180.dp).clip(AppShapes.medium).background(Color.Black.copy(alpha = 0.05f)).clickable { if(selectedBlock.currentImageUri != null) showImageEditor = true }) {
+        Box(
+            Modifier.fillMaxWidth().height(180.dp).clip(AppShapes.medium).background(Color.Black.copy(alpha = 0.05f))
+                .clickable { if (selectedBlock.currentImageUri != null) showImageEditor = true }
+                .tip(if (selectedBlock.currentImageUri != null) "点击进入物理加工与固化流程" else "暂无绑定的资源")
+        ) {
             if (selectedBlock.currentImageUri != null) {
-                AsyncImage(model = selectedBlock.currentImageUri.getAbsolutePath(), contentDescription = null, modifier = Modifier.fillMaxSize().padding(8.dp), contentScale = ContentScale.Fit)
+                AsyncImage(
+                    model = selectedBlock.currentImageUri.getAbsolutePath(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    contentScale = ContentScale.Fit
+                )
             } else {
                 Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.HideImage, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline)
-                    Text("尚未绑定资源", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    Icon(
+                        Icons.Default.HideImage,
+                        null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.outline
+                    )
+                    Text(
+                        "尚未绑定资源",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 }
             }
         }
 
         // 资源管理按钮组
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { onShowHistory(selectedBlock.id) }, modifier = Modifier.weight(1f), shape = AppShapes.medium) {
+            OutlinedButton(
+                onClick = { onShowHistory(selectedBlock.id) },
+                modifier = Modifier.weight(1f).tip("查看该模块的历史生成记录"),
+                shape = AppShapes.medium
+            ) {
                 Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("历史/切换", style = MaterialTheme.typography.labelSmall)
             }
-            OutlinedButton(onClick = { viewModel.assetManager.clearSelectedImage(selectedBlock.id) }, modifier = Modifier.weight(0.7f), shape = AppShapes.medium, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+            OutlinedButton(
+                onClick = { viewModel.assetManager.clearSelectedImage(selectedBlock.id) },
+                modifier = Modifier.weight(0.7f).tip("解除当前绑定的资源图"),
+                shape = AppShapes.medium,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
                 Text("解绑", style = MaterialTheme.typography.labelSmall)
             }
         }
 
         // 物理加工显式入口
         if (selectedBlock.currentImageUri != null) {
-            Button(onClick = { showImageEditor = true }, modifier = Modifier.fillMaxWidth().height(40.dp), shape = AppShapes.medium, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
+            Button(
+                onClick = { showImageEditor = true },
+                modifier = Modifier.fillMaxWidth().height(40.dp).tip("进入物理加工、裁剪或九宫格固化流程"),
+                shape = AppShapes.medium,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            ) {
                 Icon(Icons.Default.Edit, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("物理加工与固化", style = MaterialTheme.typography.labelMedium)
@@ -353,17 +503,26 @@ private fun AssetGenPropertyContent(
         // AI 提示词编辑区
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text("AI 提示词", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    "AI 提示词",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
                 Spacer(Modifier.weight(1f))
                 // 语言快速切换器
                 SingleChoiceSegmentedButtonRow {
                     PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang ->
-                        SegmentedButton(selected = state.currentLang == lang, onClick = { viewModel.switchLang(lang) }, shape = SegmentedButtonDefaults.itemShape(index = index, count = 2), label = { Text(lang.displayName, style = MaterialTheme.typography.labelSmall) })
+                        SegmentedButton(
+                            selected = state.currentLang == lang,
+                            onClick = { viewModel.switchLang(lang) },
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+                            label = { Text(lang.displayName, style = MaterialTheme.typography.labelSmall) })
                     }
                 }
             }
-            
-            val prompt = if (state.currentLang == PromptLanguage.ZH) selectedBlock.userPromptZh else selectedBlock.userPromptEn
+
+            val prompt =
+                if (state.currentLang == PromptLanguage.ZH) selectedBlock.userPromptZh else selectedBlock.userPromptEn
             SelectAllOutlinedTextField(
                 value = prompt,
                 onValueChange = { viewModel.assetManager.updateBlockPrompt(selectedBlock.id, state.currentLang, it) },
@@ -374,25 +533,52 @@ private fun AssetGenPropertyContent(
 
             // 会话上下文与优化入口
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = useChatContext, onCheckedChange = { useChatContext = it })
+                Checkbox(
+                    checked = useChatContext,
+                    onCheckedChange = { useChatContext = it },
+                    modifier = Modifier.tip("开启后将携带历史对话记录以获得更连贯的生成效果")
+                )
                 Text("携带历史上下文 (会话模式)", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = { viewModel.layoutEditor.optimizePrompt(selectedBlock.id, apiKey, state.currentLang, useChatContext) }, enabled = !state.isGenerating && prompt.isNotBlank()) {
+                IconButton(
+                    onClick = {
+                        viewModel.layoutEditor.optimizePrompt(
+                            selectedBlock.id,
+                            apiKey,
+                            state.currentLang,
+                            useChatContext
+                        )
+                    },
+                    enabled = !state.isGenerating && prompt.isNotBlank(),
+                    modifier = Modifier.tip("通过 AI 润色和扩充当前提示词")
+                ) {
                     Icon(Icons.Default.AutoFixHigh, "优化提示词", tint = MaterialTheme.colorScheme.primary)
                 }
             }
         }
 
         // 资源生成详细选项
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f), shape = AppShapes.small, modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+            shape = AppShapes.small,
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Column(Modifier.padding(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = state.isGenerateTransparent, onCheckedChange = { checked -> viewModel.updateState { it.copy(isGenerateTransparent = checked) } })
+                    Checkbox(
+                        checked = state.isGenerateTransparent,
+                        onCheckedChange = { checked -> viewModel.updateState { it.copy(isGenerateTransparent = checked) } },
+                        modifier = Modifier.tip("如果模型支持，则尝试生成带有 alpha 通道的透明图")
+                    )
                     Text("生成透明背景 (PNG)", style = MaterialTheme.typography.bodySmall)
                 }
                 if (state.isGenerateTransparent) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 24.dp)) {
-                        Checkbox(checked = state.isPrioritizeCloudRemoval, onCheckedChange = { checked -> viewModel.updateState { it.copy(isPrioritizeCloudRemoval = checked) } })
+                        Checkbox(
+                            checked = state.isPrioritizeCloudRemoval,
+                            onCheckedChange = { checked -> viewModel.updateState { it.copy(isPrioritizeCloudRemoval = checked) } },
+                            modifier = Modifier.tip("优先使用线上高质量 AI 接口执行抠图，失败后回退至本地模型")
+                        )
                         Text("优先云端抠图", style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -400,8 +586,21 @@ private fun AssetGenPropertyContent(
         }
 
         // 触发生成
-        Button(onClick = { viewModel.assetGen.onRequestGeneration(apiKey, if(state.currentLang == PromptLanguage.ZH) selectedBlock.userPromptZh else selectedBlock.userPromptEn) }, modifier = Modifier.fillMaxWidth().height(48.dp), enabled = !state.isGenerating) {
-            if (state.isGenerating) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+        Button(
+            onClick = {
+                viewModel.assetGen.onRequestGeneration(
+                    apiKey,
+                    if (state.currentLang == PromptLanguage.ZH) selectedBlock.userPromptZh else selectedBlock.userPromptEn
+                )
+            },
+            modifier = Modifier.fillMaxWidth().height(48.dp).tip("调用 AI 模型开始生成新的图片资产"),
+            enabled = !state.isGenerating
+        ) {
+            if (state.isGenerating) CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                color = MaterialTheme.colorScheme.onPrimary,
+                strokeWidth = 2.dp
+            )
             else {
                 Icon(Icons.Default.Bolt, null)
                 Spacer(Modifier.width(8.dp))
@@ -416,17 +615,36 @@ private fun AssetGenPropertyContent(
  * 提供支持生图的 Gemini/Imagen 模型列表供用户快速切换。
  */
 @Composable
-private fun ModelSelector(state: ProjectWorkspaceState, viewModel: ProjectWorkspaceViewModel, modifier: Modifier = Modifier) {
+private fun ModelSelector(
+    state: ProjectWorkspaceState,
+    viewModel: ProjectWorkspaceViewModel,
+    modifier: Modifier = Modifier
+) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
-        OutlinedButton(onClick = { expanded = true }, shape = AppShapes.small, modifier = Modifier.fillMaxWidth().height(40.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            shape = AppShapes.small,
+            modifier = Modifier.fillMaxWidth().height(40.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp)
+        ) {
             Text(state.selectedModel.displayName, style = MaterialTheme.typography.labelSmall, maxLines = 1)
             Icon(Icons.Default.ArrowDropDown, null)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.width(220.dp)) {
-            GeminiModel.entries.filter { it.modelName.contains("image") || it.modelName.contains("imagen") }.forEach { model ->
-                DropdownMenuItem(text = { Text(model.displayName, style = MaterialTheme.typography.bodyMedium) }, onClick = { viewModel.updateState { it.copy(selectedModel = model) }; expanded = false }, leadingIcon = { if(state.selectedModel == model) Icon(Icons.Default.Check, null, Modifier.size(18.dp)) })
-            }
+            GeminiModel.entries.filter { it.modelName.contains("image") || it.modelName.contains("imagen") }
+                .forEach { model ->
+                    DropdownMenuItem(
+                        text = { Text(model.displayName, style = MaterialTheme.typography.bodyMedium) },
+                        onClick = { viewModel.updateState { it.copy(selectedModel = model) }; expanded = false },
+                        leadingIcon = {
+                            if (state.selectedModel == model) Icon(
+                                Icons.Default.Check,
+                                null,
+                                Modifier.size(18.dp)
+                            )
+                        })
+                }
         }
     }
 }
@@ -436,39 +654,97 @@ private fun ModelSelector(state: ProjectWorkspaceState, viewModel: ProjectWorksp
  * 负责管理风格参考图（图生图）以及全项目通用的风格提示词。
  */
 @Composable
-private fun AdvancedSettingsDialog(state: ProjectWorkspaceState, viewModel: ProjectWorkspaceViewModel, onDismiss: () -> Unit) {
+private fun AdvancedSettingsDialog(
+    state: ProjectWorkspaceState,
+    viewModel: ProjectWorkspaceViewModel,
+    onDismiss: () -> Unit
+) {
     val projectName = state.projectName.replace(" ", "_")
     val projectAssetsBase = TemplateFile("templates/$projectName/assets")
-    val imagePicker = projectAssetsBase.rememberImagePicker { uris -> uris.firstOrNull()?.let { viewModel.assetManager.setReferenceImageExternal(it) } }
+    val imagePicker = projectAssetsBase.rememberImagePicker { uris ->
+        uris.firstOrNull()?.let { viewModel.assetManager.setReferenceImageExternal(it) }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("全局风格与参考设置") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("风格参考图 (图生图引导)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "风格参考图 (图生图引导)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     // 参考图预览与选择
-                    Box(Modifier.size(80.dp).clip(AppShapes.small).background(MaterialTheme.colorScheme.surfaceVariant).clickable { imagePicker() }) {
+                    Box(
+                        Modifier.size(80.dp).clip(AppShapes.small).background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { imagePicker() }.tip("点击选择本地图片作为 AI 生图的风格参考")
+                    ) {
                         if (state.referenceImageUri != null) {
-                            AsyncImage(model = state.referenceImageUri.getAbsolutePath(), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                            AsyncImage(
+                                model = state.referenceImageUri.getAbsolutePath(),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
+                            )
                         } else {
-                            Icon(Icons.Default.AddPhotoAlternate, null, Modifier.align(Alignment.Center), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(
+                                Icons.Default.AddPhotoAlternate,
+                                null,
+                                Modifier.align(Alignment.Center),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                     Column {
-                        Button(onClick = { imagePicker() }, shape = AppShapes.small, modifier = Modifier.height(32.dp), contentPadding = PaddingValues(horizontal = 8.dp)) { Text("更改参考", style = MaterialTheme.typography.labelSmall) }
-                        if(state.referenceImageUri != null) {
-                            TextButton(onClick = { viewModel.assetManager.setReferenceImage(null) }) { Text("移除参考", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
+                        Button(
+                            onClick = { imagePicker() },
+                            shape = AppShapes.small,
+                            modifier = Modifier.height(32.dp).tip("更换当前的全局参考图"),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) { Text("更改参考", style = MaterialTheme.typography.labelSmall) }
+                        if (state.referenceImageUri != null) {
+                            TextButton(
+                                onClick = { viewModel.assetManager.setReferenceImage(null) },
+                                modifier = Modifier.tip("移除参考图，AI 将不再受其风格引导")
+                            ) {
+                                Text(
+                                    "移除参考",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                 }
 
-                Text("全局风格关键词", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                SelectAllOutlinedTextField(value = state.globalStyle, onValueChange = { viewModel.assetManager.setGlobalStyle(it) }, modifier = Modifier.fillMaxWidth().height(100.dp), placeholder = { Text("例如: Cyberpunk, oil painting...", style = MaterialTheme.typography.bodySmall) })
+                Text(
+                    "全局风格关键词",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                SelectAllOutlinedTextField(
+                    value = state.globalStyle,
+                    onValueChange = { viewModel.assetManager.setGlobalStyle(it) },
+                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                    placeholder = {
+                        Text(
+                            "例如: Cyberpunk, oil painting...",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    })
             }
         },
-        confirmButton = { Button(onClick = { viewModel.assetManager.saveStyleSettings { onDismiss() } }) { Text("保存设置") } },
+        confirmButton = {
+            Button(
+                onClick = { viewModel.assetManager.saveStyleSettings { onDismiss() } },
+                modifier = Modifier.tip("应用当前风格并保存项目配置")
+            ) { Text("保存设置") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }
@@ -477,12 +753,17 @@ private fun AdvancedSettingsDialog(state: ProjectWorkspaceState, viewModel: Proj
  * 带有数值校验的单行数字输入项。
  */
 @Composable
-private fun EditableInfoItem(label: String, value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun EditableInfoItem(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     SelectAllOutlinedTextField(
         value = value,
-        onValueChange = { if(it.isEmpty() || it.toFloatOrNull() != null) onValueChange(it) },
+        onValueChange = { if (it.isEmpty() || it.toFloatOrNull() != null) onValueChange(it) },
         label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-        modifier = modifier,
+        modifier = modifier.tip("输入数字以精确调整坐标或尺寸"),
         shape = AppShapes.small,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)

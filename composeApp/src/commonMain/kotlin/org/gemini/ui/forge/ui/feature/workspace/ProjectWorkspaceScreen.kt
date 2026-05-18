@@ -32,18 +32,6 @@ import org.jetbrains.compose.resources.stringResource
  * 统一项目工作区主页面。
  * 将原有的“布局编辑器”与“资产生成器”合并为单一工作流。
  * 核心结构为：左侧图层树、中间交互式画布、右侧属性配置面板。
- *
- * @param initialProject 初始加载的项目状态。
- * @param initialProjectName 项目名称。
- * @param templateRepo 模板持久化仓库。
- * @param cloudAssetManager 云端资产管理器。
- * @param configManager 配置管理器。
- * @param effectiveApiKey 用于 AI 生成的 API Key。
- * @param initialPromptLang 初始提示词语言偏好。
- * @param saveEvent 外部触发的保存事件流。
- * @param shortcutEvent 全局快捷键事件流。
- * @param onSaveRequest 执行保存操作的回调。
- * @param onDirtyChanged 脏标记状态变更回调。
  */
 @Composable
 fun ProjectWorkspaceScreen(
@@ -201,14 +189,14 @@ fun ProjectWorkspaceScreen(
                 centerWeight = 1.0f - leftWeight - rightWeight
             })
 
-            // [右] 统一属性面板
+            // [右] 属性面板
             Surface(Modifier.weight(rightWeight).fillMaxHeight()) {
                 UnifiedPropertyPanel(
                     state = state,
                     viewModel = viewModel,
                     apiKey = effectiveApiKey,
                     onRefineClick = { refineTargetId = it; showVisualRefine = true },
-                    onSetReferenceAreaClick = { /* TODO */ },
+                    onSetReferenceAreaClick = { id -> referenceAreaTargetId = id; showReferenceArea = true },
                     onShowHistory = { id -> 
                         coroutineScope.launch {
                             historicalImages = viewModel.assetManager.loadHistoricalImages(id)
@@ -217,6 +205,23 @@ fun ProjectWorkspaceScreen(
                     }
                 )
             }
+        }
+        
+        // 参考区域截图对话框
+        if (showReferenceArea && state.currentPage?.sourceImageUri != null) {
+            ReferenceAreaCropDialog(
+                blockId = referenceAreaTargetId ?: "",
+                imageUri = state.currentPage!!.sourceImageUri!!,
+                pageWidth = state.currentPage!!.width,
+                pageHeight = state.currentPage!!.height,
+                onDismiss = { showReferenceArea = false },
+                onConfirm = { rect ->
+                    showReferenceArea = false
+                    referenceAreaTargetId?.let { blockId ->
+                        viewModel.layoutEditor.onSetReferenceArea(blockId, rect)
+                    }
+                }
+            )
         }
     }
 }
