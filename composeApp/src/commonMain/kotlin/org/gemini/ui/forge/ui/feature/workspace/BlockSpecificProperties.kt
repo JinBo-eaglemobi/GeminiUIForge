@@ -1,7 +1,8 @@
-package org.gemini.ui.forge.ui.feature.assetgen
+package org.gemini.ui.forge.ui.feature.workspace
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.material.icons.Icons
@@ -15,6 +16,8 @@ import androidx.compose.material.icons.filled.ImageNotSupported
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,9 +27,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.ui.BlockProperties
+import org.gemini.ui.forge.model.ui.SerialRect
+import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.ProjectWorkspaceState
+import org.gemini.ui.forge.ui.component.ColorPickerField
+import org.gemini.ui.forge.ui.component.TextStyleToolbar
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 
@@ -168,7 +176,7 @@ fun BlockSpecificProperties(
             val props = properties as? BlockProperties.ViewProperties ?: BlockProperties.ViewProperties()
             Text("视图配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(LocalAppSpacing.current.small))
-            org.gemini.ui.forge.ui.component.ColorPickerField(
+            ColorPickerField(
                 label = "背景色 (Hex)",
                 hexColor = props.backgroundColor,
                 onColorChanged = { onPropertiesChanged(props.copy(backgroundColor = it)) }
@@ -186,7 +194,7 @@ fun BlockSpecificProperties(
                 singleLine = true
             )
             Spacer(Modifier.height(LocalAppSpacing.current.small))
-            org.gemini.ui.forge.ui.component.TextStyleToolbar(
+            TextStyleToolbar(
                 isBold = props.isBold,
                 onBoldChanged = { onPropertiesChanged(props.copy(isBold = it)) },
                 isItalic = props.isItalic,
@@ -198,7 +206,7 @@ fun BlockSpecificProperties(
             )
             Spacer(Modifier.height(LocalAppSpacing.current.small))
             Row(horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
-                org.gemini.ui.forge.ui.component.ColorPickerField(
+                ColorPickerField(
                     label = "文本颜色",
                     hexColor = props.textColor,
                     onColorChanged = { onPropertiesChanged(props.copy(textColor = it)) },
@@ -214,7 +222,7 @@ fun BlockSpecificProperties(
             }
             Spacer(Modifier.height(LocalAppSpacing.current.small))
             Row(horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
-                org.gemini.ui.forge.ui.component.ColorPickerField(
+                ColorPickerField(
                     label = "描边颜色",
                     hexColor = props.strokeColor,
                     onColorChanged = { onPropertiesChanged(props.copy(strokeColor = it)) },
@@ -241,7 +249,7 @@ fun BlockSpecificProperties(
                 singleLine = true
             )
             Spacer(Modifier.height(LocalAppSpacing.current.small))
-            org.gemini.ui.forge.ui.component.TextStyleToolbar(
+            TextStyleToolbar(
                 isBold = props.isBold,
                 onBoldChanged = { onPropertiesChanged(props.copy(isBold = it)) },
                 isItalic = props.isItalic,
@@ -253,7 +261,7 @@ fun BlockSpecificProperties(
             )
             Spacer(Modifier.height(LocalAppSpacing.current.small))
             Row(horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
-                org.gemini.ui.forge.ui.component.ColorPickerField(
+                ColorPickerField(
                     label = "文本颜色",
                     hexColor = props.textColor,
                     onColorChanged = { onPropertiesChanged(props.copy(textColor = it)) },
@@ -269,7 +277,7 @@ fun BlockSpecificProperties(
             }
             Spacer(Modifier.height(LocalAppSpacing.current.small))
             Row(horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
-                org.gemini.ui.forge.ui.component.ColorPickerField(
+                ColorPickerField(
                     label = "描边颜色",
                     hexColor = props.strokeColor,
                     onColorChanged = { onPropertiesChanged(props.copy(strokeColor = it)) },
@@ -300,7 +308,7 @@ fun BlockSpecificProperties(
         }
         UIBlockType.REEL -> {
             val props = properties as? BlockProperties.ReelProperties ?: BlockProperties.ReelProperties()
-            var showSymbolManager by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            var showSymbolManager by remember { mutableStateOf(false) }
 
             Text("转轴核心配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(LocalAppSpacing.current.small))
@@ -374,11 +382,11 @@ fun BlockSpecificProperties(
         apiKey: String,
         state: ProjectWorkspaceState
         ) {
-        var showAddItemDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-        var editingItem by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<org.gemini.ui.forge.model.ui.UIBlock?>(null) }
+        var showAddItemDialog by remember { mutableStateOf(false) }
+        var editingItem by remember { mutableStateOf<UIBlock?>(null) }
 
-        var newItemPromptZh by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-        var newItemPromptEn by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+        var newItemPromptZh by remember { mutableStateOf("") }
+        var newItemPromptEn by remember { mutableStateOf("") }
 
         AlertDialog(
         onDismissRequest = onDismiss,
@@ -403,7 +411,7 @@ fun BlockSpecificProperties(
                     Text("暂无符号元素，请点击右上角添加", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 }
             } else {
-                androidx.compose.foundation.lazy.LazyColumn(
+                LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.heightIn(max = 400.dp)
                 ) {
@@ -509,10 +517,10 @@ fun BlockSpecificProperties(
                             userPromptEn = newItemPromptEn
                         )
                     } else {
-                        org.gemini.ui.forge.model.ui.UIBlock(
-                            id = "sym_${org.gemini.ui.forge.getCurrentTimeMillis()}",
+                        UIBlock(
+                            id = "sym_${getCurrentTimeMillis()}",
                             type = UIBlockType.SYMBOL, // 强制设置为 SYMBOL
-                            bounds = org.gemini.ui.forge.model.ui.SerialRect(0f, 0f, 100f, 100f),
+                            bounds = SerialRect(0f, 0f, 100f, 100f),
                             userPromptZh = newItemPromptZh,
                             userPromptEn = newItemPromptEn
                         )

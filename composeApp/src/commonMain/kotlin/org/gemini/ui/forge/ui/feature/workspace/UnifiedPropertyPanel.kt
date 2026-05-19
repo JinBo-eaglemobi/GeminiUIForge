@@ -31,7 +31,6 @@ import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.ButtonStateGenDialog
 import org.gemini.ui.forge.ui.dialog.ImageEditorDialog
-import org.gemini.ui.forge.ui.feature.assetgen.BlockSpecificProperties
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.rememberImagePicker
