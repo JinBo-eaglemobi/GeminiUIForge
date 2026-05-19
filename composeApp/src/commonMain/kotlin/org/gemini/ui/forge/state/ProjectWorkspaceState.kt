@@ -62,6 +62,9 @@ data class ProjectWorkspaceState(
     val buttonDisabledCandidate: TemplateFile? = null,
     val isButtonGenInProgress: Boolean = false,
 
+    /** 转轴组件生成相关 */
+    val selectedReelItemId: String? = null,
+
     /** 临时状态 */
     val stageBackgroundColor: String = "#2D2D2D",
     val currentLang: PromptLanguage = PromptLanguage.ZH,

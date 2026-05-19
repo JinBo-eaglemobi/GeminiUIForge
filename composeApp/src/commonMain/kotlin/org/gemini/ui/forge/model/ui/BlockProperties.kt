@@ -103,6 +103,22 @@ sealed class BlockProperties {
         val strokeColor: String = "",
         val strokeWidth: Float = 0f
     ) : BlockProperties()
+
+    /**
+     * 转轴组件的属性配置。
+     *
+     * @property rows 转轴的行数（例如：3）。
+     * @property columns 转轴的列数（例如：5）。
+     * @property items 转轴中包含的可选元素集。每一个元素都是一个完整的 UIBlock。
+     * @property showBackground 是否显示转轴背景板。
+     */
+    @Serializable
+    data class ReelProperties(
+        val rows: Int = 3,
+        val columns: Int = 5,
+        val items: List<UIBlock> = emptyList(),
+        val showBackground: Boolean = true
+    ) : BlockProperties()
 }
 
 /**

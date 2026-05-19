@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import org.gemini.ui.forge.state.app.AppState
 import org.gemini.ui.forge.state.ui.ProjectState
+import org.gemini.ui.forge.state.ui.postProcess
 
 /**
  * 应用的主控制 ViewModel
@@ -142,9 +143,10 @@ class AppViewModel(
     // --- 数据加载与共享 ---
 
     fun loadProject(projectName: String, projectState: ProjectState) {
+        val processedState = projectState.postProcess()
         _state.update {
             it.copy(
-                project = projectState,
+                project = processedState,
                 projectName = projectName
             )
         }

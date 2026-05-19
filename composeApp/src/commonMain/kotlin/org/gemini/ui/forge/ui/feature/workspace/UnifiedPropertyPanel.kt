@@ -1,5 +1,6 @@
 package org.gemini.ui.forge.ui.feature.workspace
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -113,13 +114,7 @@ private fun LayoutPropertyContent(
     // 1. 未选中模块时显示页面级属性
     if (selectedBlock == null) {
         state.currentPage?.let { page ->
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    "页面与属性",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
+            CollapsibleSection(title = "页面与属性") {
                 // 页面切换器
                 if (state.project.pages.size > 1) {
                     var pageMenuExpanded by remember { mutableStateOf(false) }
@@ -190,7 +185,9 @@ private fun LayoutPropertyContent(
                         )
                     }
                 }
+            }
 
+            CollapsibleSection(title = "AI 辅助高级功能", defaultExpanded = false) {
                 // AI 辅助全局功能
                 Button(
                     onClick = { onRefineClick(null) },
@@ -216,146 +213,162 @@ private fun LayoutPropertyContent(
 
     // 2. 选中模块后显示具体物理参数
     Column(modifier = Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // ID 编辑
-        SelectAllOutlinedTextField(
-            value = selectedBlock.id,
-            onValueChange = { if (it.isNotBlank()) viewModel.layoutEditor.renameBlock(selectedBlock.id, it) },
-            label = { Text(stringResource(Res.string.prop_block_id)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = AppShapes.medium
-        )
-
-        // 物理坐标与尺寸实时输入
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-            shape = AppShapes.small,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "物理坐标与尺寸",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EditableInfoItem(
-                        label = "X",
-                        value = selectedBlock.bounds.left.toInt().toString(),
-                        onValueChange = {
-                            viewModel.updateBlockBounds(
-                                selectedBlock.id,
-                                it.toFloat(),
-                                selectedBlock.bounds.top,
-                                it.toFloat() + selectedBlock.bounds.width,
-                                selectedBlock.bounds.bottom
-                            )
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    EditableInfoItem(
-                        label = "Y",
-                        value = selectedBlock.bounds.top.toInt().toString(),
-                        onValueChange = {
-                            viewModel.updateBlockBounds(
-                                selectedBlock.id,
-                                selectedBlock.bounds.left,
-                                it.toFloat(),
-                                selectedBlock.bounds.right,
-                                it.toFloat() + selectedBlock.bounds.height
-                            )
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EditableInfoItem(
-                        label = "W",
-                        value = selectedBlock.bounds.width.toInt().toString(),
-                        onValueChange = {
-                            viewModel.updateBlockBounds(
-                                selectedBlock.id,
-                                selectedBlock.bounds.left,
-                                selectedBlock.bounds.top,
-                                selectedBlock.bounds.left + it.toFloat(),
-                                selectedBlock.bounds.bottom
-                            )
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    EditableInfoItem(
-                        label = "H",
-                        value = selectedBlock.bounds.height.toInt().toString(),
-                        onValueChange = {
-                            viewModel.updateBlockBounds(
-                                selectedBlock.id,
-                                selectedBlock.bounds.left,
-                                selectedBlock.bounds.top,
-                                selectedBlock.bounds.right,
-                                selectedBlock.bounds.top + it.toFloat()
-                            )
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-
-        // 模块类型动态切换
-        var typeExpanded by remember { mutableStateOf(false) }
-        ExposedDropdownMenuBox(expanded = typeExpanded, onExpandedChange = { typeExpanded = it }) {
+        CollapsibleSection(title = "基础物理属性") {
+            // ID 编辑
             SelectAllOutlinedTextField(
-                value = stringResource(selectedBlock.type.getDisplayNameRes()),
-                onValueChange = {},
-                readOnly = true,
-                label = { Text(stringResource(Res.string.prop_type)) },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded) },
-                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                value = selectedBlock.id,
+                onValueChange = { if (it.isNotBlank()) viewModel.layoutEditor.renameBlock(selectedBlock.id, it) },
+                label = { Text(stringResource(Res.string.prop_block_id)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
                 shape = AppShapes.medium
             )
-            ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                UIBlockType.entries.forEach { type ->
-                    DropdownMenuItem(
-                        text = { Text(stringResource(type.getDisplayNameRes())) },
-                        onClick = { viewModel.updateBlockType(selectedBlock.id, type); typeExpanded = false })
+
+            // 物理坐标与尺寸实时输入
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = AppShapes.small,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "坐标与尺寸",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        EditableInfoItem(
+                            label = "X",
+                            value = selectedBlock.bounds.left.toInt().toString(),
+                            onValueChange = {
+                                viewModel.updateBlockBounds(
+                                    selectedBlock.id,
+                                    it.toFloat(),
+                                    selectedBlock.bounds.top,
+                                    it.toFloat() + selectedBlock.bounds.width,
+                                    selectedBlock.bounds.bottom
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        EditableInfoItem(
+                            label = "Y",
+                            value = selectedBlock.bounds.top.toInt().toString(),
+                            onValueChange = {
+                                viewModel.updateBlockBounds(
+                                    selectedBlock.id,
+                                    selectedBlock.bounds.left,
+                                    it.toFloat(),
+                                    selectedBlock.bounds.right,
+                                    it.toFloat() + selectedBlock.bounds.height
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        EditableInfoItem(
+                            label = "W",
+                            value = selectedBlock.bounds.width.toInt().toString(),
+                            onValueChange = {
+                                viewModel.updateBlockBounds(
+                                    selectedBlock.id,
+                                    selectedBlock.bounds.left,
+                                    selectedBlock.bounds.top,
+                                    selectedBlock.bounds.left + it.toFloat(),
+                                    selectedBlock.bounds.bottom
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        EditableInfoItem(
+                            label = "H",
+                            value = selectedBlock.bounds.height.toInt().toString(),
+                            onValueChange = {
+                                viewModel.updateBlockBounds(
+                                    selectedBlock.id,
+                                    selectedBlock.bounds.left,
+                                    selectedBlock.bounds.top,
+                                    selectedBlock.bounds.right,
+                                    selectedBlock.bounds.top + it.toFloat()
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            // 模块类型动态切换
+            var typeExpanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(expanded = typeExpanded, onExpandedChange = { typeExpanded = it }) {
+                SelectAllOutlinedTextField(
+                    value = stringResource(selectedBlock.type.getDisplayNameRes()),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(stringResource(Res.string.prop_type)) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded) },
+                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                    shape = AppShapes.medium
+                )
+                ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
+                    UIBlockType.entries.forEach { type ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(type.getDisplayNameRes())) },
+                            onClick = { viewModel.updateBlockType(selectedBlock.id, type); typeExpanded = false })
+                    }
                 }
             }
         }
 
-        HorizontalDivider(modifier = Modifier.alpha(0.2f))
-
-        // AI 结构重塑与参考区域
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { onRefineClick(selectedBlock.id) },
-                modifier = Modifier.weight(1f).tip("通过 AI 自动分析并重塑该模块的内部层级结构")
-            ) {
-                Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("区域重塑")
-            }
-
-            OutlinedButton(
-                onClick = { onSetReferenceAreaClick(selectedBlock.id) },
-                modifier = Modifier.weight(1f).tip("从原图中截取局部区域作为该模块的 AI 生成参考图")
-            ) {
-                Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("参考区域")
+        val hasSpecificProps = selectedBlock.type in listOf(UIBlockType.BUTTON, UIBlockType.VIEW, UIBlockType.TEXT, UIBlockType.INPUT, UIBlockType.REEL)
+        if (hasSpecificProps) {
+            CollapsibleSection(title = "专属属性配置") {
+                BlockSpecificProperties(
+                    blockType = selectedBlock.type,
+                    properties = selectedBlock.properties,
+                    apiKey = apiKey,
+                    viewModel = viewModel,
+                    state = state,
+                    onPropertiesChanged = { viewModel.assetManager.updateBlockProperties(selectedBlock.id, it) }
+                )
             }
         }
 
-        // 删除模块
-        Button(
-            onClick = { onDeleteRequest(selectedBlock.id) },
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            modifier = Modifier.fillMaxWidth().tip("从项目中永久移除此模块及其子模块"),
-            shape = AppShapes.medium,
-            enabled = !state.isGenerating
-        ) {
-            Icon(Icons.Default.Delete, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(Res.string.action_delete_block))
+        CollapsibleSection(title = "高级与破坏性操作", defaultExpanded = false) {
+            // AI 结构重塑与参考区域
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { onRefineClick(selectedBlock.id) },
+                    modifier = Modifier.weight(1f).tip("通过 AI 自动分析并重塑该模块的内部层级结构")
+                ) {
+                    Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("区域重塑")
+                }
+
+                OutlinedButton(
+                    onClick = { onSetReferenceAreaClick(selectedBlock.id) },
+                    modifier = Modifier.weight(1f).tip("从原图中截取局部区域作为该模块的 AI 生成参考图")
+                ) {
+                    Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("参考区域")
+                }
+            }
+
+            // 删除模块
+            Button(
+                onClick = { onDeleteRequest(selectedBlock.id) },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth().tip("从项目中永久移除此模块及其子模块"),
+                shape = AppShapes.medium,
+                enabled = !state.isGenerating
+            ) {
+                Icon(Icons.Default.Delete, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(Res.string.action_delete_block))
+            }
         }
     }
 }
@@ -810,3 +823,45 @@ private fun EditableInfoItem(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
     )
 }
+
+@Composable
+fun CollapsibleSection(
+    title: String,
+    defaultExpanded: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    var expanded by remember { mutableStateOf(defaultExpanded) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(vertical = 12.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp, start = 8.dp, end = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                content()
+            }
+        }
+        HorizontalDivider(modifier = Modifier.alpha(0.4f), color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+

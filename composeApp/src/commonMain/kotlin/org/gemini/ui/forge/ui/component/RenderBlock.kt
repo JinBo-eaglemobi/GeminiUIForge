@@ -278,11 +278,44 @@ fun RenderBlock(
                     )
                 }
             }
+        } else if (block.type == UIBlockType.REEL) {
+            val reelProps = block.properties as? BlockProperties.ReelProperties
+            if (reelProps != null) {
+                val gridColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                Canvas(Modifier.fillMaxSize()) {
+                    val rows = reelProps.rows.coerceAtLeast(1)
+                    val cols = reelProps.columns.coerceAtLeast(1)
+                    val sw = (1.dp).toPx() / zoom
+
+                    // 绘制垂直分割线
+                    for (i in 1 until cols) {
+                        val x = size.width * i / cols
+                        drawLine(
+                            gridColor,
+                            start = androidx.compose.ui.geometry.Offset(x, 0f),
+                            end = androidx.compose.ui.geometry.Offset(x, size.height),
+                            strokeWidth = sw
+                        )
+                    }
+                    // 绘制水平分割线
+                    for (i in 1 until rows) {
+                        val y = size.height * i / rows
+                        drawLine(
+                            gridColor,
+                            start = androidx.compose.ui.geometry.Offset(0f, y),
+                            end = androidx.compose.ui.geometry.Offset(size.width, y),
+                            strokeWidth = sw
+                        )
+                    }
+                }
+            }
         }
 
         // 5. 显示模块占位文本：仅在未隐藏且无图片时显示模块类型 (对于 TEXT 和 VIEW 如果已经有了内容，也应当考虑隐藏占位)
         val hasCustomContent = (block.type == UIBlockType.TEXT && (block.properties as? BlockProperties.TextProperties)?.text?.isNotEmpty() == true) ||
-                               (block.type == UIBlockType.VIEW && viewBgColor != null)
+                (block.type == UIBlockType.VIEW && viewBgColor != null) ||
+                (block.type == UIBlockType.REEL)
+
                                
         if (!hidePlaceholder && imageBitmap == null && block.currentImageUri == null && !hasCustomContent) {
             Text(

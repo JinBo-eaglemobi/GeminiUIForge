@@ -23,4 +23,38 @@ data class ProjectState(
     val referenceImages: List<TemplateFile> = emptyList(), // 多参考图路径列表
     val pages: List<UIPage> = emptyList(),
     val createdAt: Long = 0L
-)
+    )
+
+    /**
+    * 模板解析后处理逻辑。
+    * 针对特定的复杂组件（如 REEL）进行二次结构化调整。
+    */
+    fun ProjectState.postProcess(): ProjectState {
+    return copy(pages = pages.map { it.postProcess() })
+    }
+
+    fun UIPage.postProcess(): UIPage {
+    return copy(blocks = blocks.map { it.postProcess() })
+    }
+
+    fun org.gemini.ui.forge.model.ui.UIBlock.postProcess(): org.gemini.ui.forge.model.ui.UIBlock {
+    // 递归处理子级
+    val processedChildren = children.map { it.postProcess() }
+
+    return if (type == org.gemini.ui.forge.model.ui.UIBlockType.REEL) {
+        // 如果是转轴且包含子级，则将其子级直接作为 items 并入属性中，然后清空子级
+        if (processedChildren.isNotEmpty()) {
+            val currentProps = properties as? org.gemini.ui.forge.model.ui.BlockProperties.ReelProperties 
+                ?: org.gemini.ui.forge.model.ui.BlockProperties.ReelProperties()
+            
+            // 直接使用 processedChildren 作为新的 items
+            val updatedProps = currentProps.copy(items = currentProps.items + processedChildren)
+            copy(properties = updatedProps, children = emptyList())
+        } else {
+            // 没有子级说明已经解析过，或者是一个空的 REEL，无需覆盖原有属性
+            copy(children = processedChildren)
+        }
+    } else {
+        copy(children = processedChildren)
+    }
+    }

@@ -44,7 +44,14 @@ class AssetManagerDelegate(
     fun onImageSelected(imageUri: TemplateFile) {
         val pageId = getState().selectedPageId ?: return
         val blockId = getState().batchPendingConfirmBlock?.id ?: getState().selectedBlockId ?: return
-        
+        val reelItemId = getState().selectedReelItemId
+
+        if (reelItemId != null) {
+            assignImageToReelItem(blockId, reelItemId, imageUri)
+            updateState { it.copy(selectedReelItemId = null, generatedCandidates = emptyList()) }
+            return
+        }
+
         saveSnapshot("绑定资源图: $blockId")
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
@@ -56,6 +63,30 @@ class AssetManagerDelegate(
                 project = currentState.project.copy(pages = updatedPages),
                 generatedCandidates = if (currentState.batchPendingConfirmBlock != null) currentState.generatedCandidates else emptyList()
             )
+        }
+        markDirty()
+        notifySelectionHandled()
+    }
+
+    fun selectReelItem(itemId: String?) {
+        updateState { it.copy(selectedReelItemId = itemId) }
+    }
+
+    private fun assignImageToReelItem(blockId: String, itemId: String, imageUri: TemplateFile) {
+        saveSnapshot("绑定转轴元素图: $itemId")
+        updateState { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == currentState.selectedPageId) {
+                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
+                        val props = block.properties as? BlockProperties.ReelProperties ?: BlockProperties.ReelProperties()
+                        val newItems = props.items.map { item ->
+                            if (item.id == itemId) item.copy(currentImageUri = imageUri) else item
+                        }
+                        block.copy(properties = props.copy(items = newItems))
+                    })
+                } else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
         markDirty()
         notifySelectionHandled()

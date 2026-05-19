@@ -92,6 +92,16 @@
     <string name="action_save_layout">保存修改</string>
     <string name="toast_layout_saved">布局保存成功。</string>
 
+    <string name="prop_reel_rows">转轴行数</string>
+    <string name="prop_reel_cols">转轴列数</string>
+    <string name="prop_reel_show_bg">显示背景面板</string>
+    <string name="prop_reel_items_title">元素集管理</string>
+    <string name="prop_reel_add_item">新增元素项</string>
+    <string name="prop_reel_item_name">元素名称 (例如: 樱桃/WILD)</string>
+    <string name="prop_reel_gen_image">生成元素图</string>
+    <string name="prop_reel_item_prompt_hint">描述该元素的视觉特征...</string>
+    <string name="prop_reel_no_items">暂无元素，请点击上方按钮添加</string>
+
     <string name="prop_pages">页面列表:</string>
     <string name="prop_add_block">添加功能模块:</string>
     <string name="prop_select_block">请在左侧画布选择一个模块以编辑其属性。</string>
