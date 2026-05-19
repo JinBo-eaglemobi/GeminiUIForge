@@ -234,6 +234,21 @@ fun RenderBlock(
         } else if (block.currentImageUri != null) {
             // 图片加载中的反馈
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.dp)
+        } else if (block.type == UIBlockType.SYMBOL) {
+            // SYMBOL 类型渲染：图标 + 空白文案Text
+            // 这里无图时显示占位文案，宽度填满，高度自适应，文本居中
+            val fallbackText = block.userPromptZh.ifBlank { block.userPromptEn }.ifBlank { "Symbol" }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = fallbackText,
+                    modifier = Modifier.fillMaxWidth().padding(4.dp),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 3,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+            }
         }
 
         // 渲染文本组件内容

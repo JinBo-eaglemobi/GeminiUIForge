@@ -300,12 +300,7 @@ fun BlockSpecificProperties(
         }
         UIBlockType.REEL -> {
             val props = properties as? BlockProperties.ReelProperties ?: BlockProperties.ReelProperties()
-            var showAddItemDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-            var editingItem by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<org.gemini.ui.forge.model.ui.UIBlock?>(null) }
-            
-            var newItemName by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-            var newItemPromptZh by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-            var newItemPromptEn by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+            var showSymbolManager by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
             Text("转轴核心配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(LocalAppSpacing.current.small))
@@ -341,32 +336,79 @@ fun BlockSpecificProperties(
 
             HorizontalDivider(Modifier.padding(vertical = LocalAppSpacing.current.small).alpha(0.3f))
 
-            // 元素管理部分
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text("元素项集 (Symbols)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.weight(1f))
-                IconButton(
-                    onClick = { 
-                        newItemName = ""
-                        newItemPromptZh = ""
-                        newItemPromptEn = ""
-                        editingItem = null
-                        showAddItemDialog = true 
-                    },
-                    enabled = !state.isGenerating,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(Icons.Default.AddCircle, null, tint = MaterialTheme.colorScheme.primary)
-                }
+            // 仅仅提供一个入口按钮
+            Button(
+                onClick = { showSymbolManager = true },
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+                shape = AppShapes.small
+            ) {
+                Icon(Icons.Default.Edit, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("配置转轴符号集 (共 ${props.items.size} 个)")
             }
 
+            // 独立的元素集管理器 Dialog
+            if (showSymbolManager) {
+                ReelSymbolManagerDialog(
+                    props = props,
+                    onDismiss = { showSymbolManager = false },
+                    onPropertiesChanged = onPropertiesChanged,
+                    viewModel = viewModel,
+                    apiKey = apiKey,
+                    state = state
+                )
+            }
+        }
+        else -> {
+            // 其他类型保持原样
+        }
+        }
+        }
+
+        @Composable
+        private fun ReelSymbolManagerDialog(
+        props: BlockProperties.ReelProperties,
+        onDismiss: () -> Unit,
+        onPropertiesChanged: (BlockProperties) -> Unit,
+        viewModel: ProjectWorkspaceViewModel,
+        apiKey: String,
+        state: ProjectWorkspaceState
+        ) {
+        var showAddItemDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        var editingItem by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<org.gemini.ui.forge.model.ui.UIBlock?>(null) }
+
+        var newItemPromptZh by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+        var newItemPromptEn by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+
+        AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.fillMaxWidth(0.9f),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("转轴符号集管理器")
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { 
+                    editingItem = null
+                    newItemPromptZh = ""
+                    newItemPromptEn = ""
+                    showAddItemDialog = true 
+                }) {
+                    Icon(Icons.Default.AddCircle, "添加", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+        },
+        text = {
             if (props.items.isEmpty()) {
-                Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
-                    Text("暂无元素，请点击上方按钮添加", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                    Text("暂无符号元素，请点击右上角添加", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 }
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    props.items.forEachIndexed { index, item ->
+                androidx.compose.foundation.lazy.LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.heightIn(max = 400.dp)
+                ) {
+                    items(props.items.size) { index ->
+                        val item = props.items[index]
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                             shape = AppShapes.small,
@@ -389,9 +431,9 @@ fun BlockSpecificProperties(
                                         Icon(Icons.Default.ImageNotSupported, null, Modifier.size(20.dp).align(Alignment.Center), tint = MaterialTheme.colorScheme.outline)
                                     }
                                 }
-                                
+
                                 Spacer(Modifier.width(12.dp))
-                                
+
                                 Column(Modifier.weight(1f)) {
                                     Text(item.userPromptZh.ifBlank { item.id }, style = MaterialTheme.typography.labelMedium)
                                     Text(item.userPromptEn.ifBlank { "No English Prompt" }, style = MaterialTheme.typography.labelSmall, maxLines = 1, color = MaterialTheme.colorScheme.outline)
@@ -400,7 +442,6 @@ fun BlockSpecificProperties(
                                 // 编辑按钮
                                 IconButton(onClick = {
                                     editingItem = item
-                                    newItemName = item.userPromptZh // 借用名称
                                     newItemPromptZh = item.userPromptZh
                                     newItemPromptEn = item.userPromptEn
                                     showAddItemDialog = true
@@ -417,7 +458,7 @@ fun BlockSpecificProperties(
                                 }, modifier = Modifier.size(28.dp)) {
                                     Icon(Icons.Default.AutoAwesome, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.secondary)
                                 }
-                                
+
                                 Spacer(Modifier.width(4.dp))
 
                                 // 删除按钮
@@ -432,66 +473,66 @@ fun BlockSpecificProperties(
                     }
                 }
             }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) { Text("完成") }
+        }
+        )
 
-            // 新增/编辑元素对话框
-            if (showAddItemDialog) {
-                AlertDialog(
-                    onDismissRequest = { showAddItemDialog = false },
-                    title = { Text(if (editingItem == null) "新增转轴元素" else "编辑转轴元素") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            SelectAllOutlinedTextField(
-                                value = newItemPromptZh,
-                                onValueChange = { newItemPromptZh = it },
-                                label = { Text("中文描述/名称") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                            SelectAllOutlinedTextField(
-                                value = newItemPromptEn,
-                                onValueChange = { newItemPromptEn = it },
-                                label = { Text("英文 Prompt (生图核心)") },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp)
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        Button(onClick = {
-                            val targetItem = if (editingItem != null) {
-                                editingItem!!.copy(
-                                    userPromptZh = newItemPromptZh,
-                                    userPromptEn = newItemPromptEn
-                                )
-                            } else {
-                                org.gemini.ui.forge.model.ui.UIBlock(
-                                    id = "item_${org.gemini.ui.forge.getCurrentTimeMillis()}",
-                                    type = UIBlockType.SYMBOL,
-                                    bounds = org.gemini.ui.forge.model.ui.SerialRect(0f, 0f, 100f, 100f),
-                                    userPromptZh = newItemPromptZh,
-                                    userPromptEn = newItemPromptEn
-                                )
-                            }
-                            
-                            val newItems = if (editingItem != null) {
-                                props.items.map { if (it.id == editingItem!!.id) targetItem else it }
-                            } else {
-                                props.items + targetItem
-                            }
-                            
-                            onPropertiesChanged(props.copy(items = newItems))
-                            showAddItemDialog = false
-                        }) {
-                            Text("保存")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showAddItemDialog = false }) { Text("取消") }
+        // 新增/编辑元素对话框 (在管理器之上弹出)
+        if (showAddItemDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddItemDialog = false },
+            title = { Text(if (editingItem == null) "新增符号元素 (SYMBOL)" else "编辑符号元素") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SelectAllOutlinedTextField(
+                        value = newItemPromptZh,
+                        onValueChange = { newItemPromptZh = it },
+                        label = { Text("中文描述/名称") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    SelectAllOutlinedTextField(
+                        value = newItemPromptEn,
+                        onValueChange = { newItemPromptEn = it },
+                        label = { Text("英文 Prompt (生图核心)") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val targetItem = if (editingItem != null) {
+                        editingItem!!.copy(
+                            userPromptZh = newItemPromptZh,
+                            userPromptEn = newItemPromptEn
+                        )
+                    } else {
+                        org.gemini.ui.forge.model.ui.UIBlock(
+                            id = "sym_${org.gemini.ui.forge.getCurrentTimeMillis()}",
+                            type = UIBlockType.SYMBOL, // 强制设置为 SYMBOL
+                            bounds = org.gemini.ui.forge.model.ui.SerialRect(0f, 0f, 100f, 100f),
+                            userPromptZh = newItemPromptZh,
+                            userPromptEn = newItemPromptEn
+                        )
                     }
-                )
+
+                    val newItems = if (editingItem != null) {
+                        props.items.map { if (it.id == editingItem!!.id) targetItem else it }
+                    } else {
+                        props.items + targetItem
+                    }
+
+                    onPropertiesChanged(props.copy(items = newItems))
+                    showAddItemDialog = false
+                }) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddItemDialog = false }) { Text("取消") }
             }
+        )
         }
-        else -> {
-            // 其他类型保持原样
         }
-    }
-}

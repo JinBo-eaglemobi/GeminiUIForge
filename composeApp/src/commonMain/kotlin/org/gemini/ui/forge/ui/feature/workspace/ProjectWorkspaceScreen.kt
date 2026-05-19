@@ -1,17 +1,14 @@
 package org.gemini.ui.forge.ui.feature.workspace
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
@@ -19,14 +16,13 @@ import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.service.AIGenerationService
-import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
-import org.gemini.ui.forge.ui.component.VerticalSplitter
-import org.gemini.ui.forge.ui.dialog.*
+import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.CanvasArea
 import org.gemini.ui.forge.ui.component.HierarchySidebar
-import org.jetbrains.compose.resources.stringResource
+import org.gemini.ui.forge.ui.component.VerticalSplitter
+import org.gemini.ui.forge.ui.dialog.*
+import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 
 /**
  * 统一项目工作区主页面。
