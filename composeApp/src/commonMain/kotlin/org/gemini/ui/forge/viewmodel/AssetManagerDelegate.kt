@@ -21,6 +21,7 @@ class AssetManagerDelegate(
     private val getState: () -> ProjectWorkspaceState,
     private val updateState: ((ProjectWorkspaceState) -> ProjectWorkspaceState) -> Unit,
     private val markDirty: () -> Unit,
+    private val saveSnapshot: (String) -> Unit,
     private val notifySelectionHandled: () -> Unit
 ) {
 
@@ -44,6 +45,7 @@ class AssetManagerDelegate(
         val pageId = getState().selectedPageId ?: return
         val blockId = getState().batchPendingConfirmBlock?.id ?: getState().selectedBlockId ?: return
         
+        saveSnapshot("绑定资源图: $blockId")
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) {
@@ -60,6 +62,7 @@ class AssetManagerDelegate(
     }
 
     fun clearSelectedImage(blockId: String) {
+        saveSnapshot("解绑资源图: $blockId")
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) page.copy(
@@ -70,6 +73,33 @@ class AssetManagerDelegate(
         markDirty()
     }
 
+    /** 删除历史生成的图片 */
+    fun deleteHistoricalImages(uris: List<TemplateFile>) {
+        scope.launch {
+            try {
+                uris.forEach { it.delete() }
+                AppLogger.d("AssetManager", "🗑️ 已物理删除 ${uris.size} 张历史图片")
+            } catch (e: Exception) {
+                AppLogger.e("AssetManager", "❌ 删除物理文件失败", e)
+            }
+        }
+    }
+
+    /** 清空指定模块的所有历史生成记录 */
+    fun clearAllHistory(blockId: String) {
+        val projectName = getState().projectName.replace(" ", "_")
+        val dir = "templates/$projectName/assets/$blockId"
+        scope.launch {
+            try {
+                val tDir = TemplateFile(dir)
+                if (tDir.exists()) tDir.delete(recursive = true)
+                AppLogger.d("AssetManager", "🧹 已清空模块 $blockId 的所有历史生成记录")
+            } catch (e: Exception) {
+                AppLogger.e("AssetManager", "❌ 清空历史目录失败", e)
+            }
+        }
+    }
+
     /** 保存当前的风格设置与参考图，并执行磁盘缓存管理 */
     fun saveStyleSettings(onComplete: () -> Unit) {
         val currentState = getState()
@@ -78,6 +108,7 @@ class AssetManagerDelegate(
         val projectName = currentState.projectName
         val sanitizedProjectName = projectName.replace(" ", "_")
         
+        saveSnapshot("修改项目风格设置")
         scope.launch {
             var finalRefUri: TemplateFile? = currentRefUri
 
@@ -190,6 +221,7 @@ class AssetManagerDelegate(
         
         val projectName = currentState.projectName
 
+        saveSnapshot("执行图像固化 (Bake): $blockId")
         scope.launch {
             updateState { it.copy(isGenerating = true) }
             try {
@@ -253,6 +285,7 @@ class AssetManagerDelegate(
 
     /** 更新模块属性 */
     fun updateBlockProperties(blockId: String, properties: BlockProperties) {
+        saveSnapshot("修改模块属性: $blockId")
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) page.copy(
@@ -269,6 +302,7 @@ class AssetManagerDelegate(
         val block = currentState.selectedBlock ?: return
         if (block.type != UIBlockType.BUTTON) return
         
+        saveSnapshot("确认按钮多态资源: $target")
         val existingProps = block.properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties(isMultiState = true)
         val newProps = when(target) {
             AssetGenerationDelegate.ButtonGenTarget.PRESSED -> existingProps.copy(pressedUri = imageUri, isMultiState = true)

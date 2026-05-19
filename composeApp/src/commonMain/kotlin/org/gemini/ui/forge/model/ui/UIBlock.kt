@@ -30,9 +30,9 @@ data class UIBlock(
     val isVisible: Boolean = true, // 新增：图层是否可见
     val properties: BlockProperties? = null // 新增：不同类型模块的专属属性
 ) {
-    /** 自动拼接基础类别描述与英文自定义描述，形成最终发给生图模型的完整 Prompt */
+    /** 自动拼接基础类别描述与用户自定义描述，形成最终发给生图模型的完整 Prompt */
     val fullPrompt: String
-        get() = "${type.defaultPrompt}, $userPromptEn"
+        get() = "${type.defaultPrompt}, $userPrompt"
 
     /** 向下兼容字段：优先返回中文描述，无则返回英文 */
     val userPrompt: String

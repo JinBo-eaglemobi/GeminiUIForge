@@ -61,11 +61,26 @@ fun ProjectWorkspaceScreen(
     var referenceAreaTargetId by remember { mutableStateOf<String?>(null) }
     var showHistoricalDialog by remember { mutableStateOf(false) }
     var historicalImages by remember { mutableStateOf<List<TemplateFile>>(emptyList()) }
+    var blockToDelete by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     // 生命周期与全局事件监听
     LaunchedEffect(saveEvent) { saveEvent.collect { onSaveRequest(initialProjectName, state.project) } }
-    LaunchedEffect(shortcutEvent) { shortcutEvent.collect { viewModel.layoutEditor.handleShortcutAction(it) } }
+    LaunchedEffect(viewModel.requestSaveEvent) { viewModel.requestSaveEvent.collect { onSaveRequest(initialProjectName, state.project) } }
+    LaunchedEffect(shortcutEvent) { 
+        shortcutEvent.collect { action ->
+            org.gemini.ui.forge.utils.AppLogger.d("WorkspaceScreen", "📌 收到快捷键: ${action.name}")
+            if (action == org.gemini.ui.forge.model.app.ShortcutAction.DELETE) {
+                if (state.selectedBlockId != null) {
+                    blockToDelete = state.selectedBlockId
+                } else {
+                    org.gemini.ui.forge.utils.Toast.show("请先选择要删除的模块", org.gemini.ui.forge.ui.component.ToastType.INFO)
+                }
+            } else {
+                viewModel.shortcutManager.handleAction(action) 
+            }
+        } 
+    }
     LaunchedEffect(initialProject) { viewModel.reload(initialProject) }
 
     // --- 对话框组件集成 ---
@@ -102,13 +117,22 @@ fun ProjectWorkspaceScreen(
 
     // 历史资产选择对话框
     if (showHistoricalDialog) {
+        val targetBlock = state.selectedBlock
         AssetSelectionDialog(
             title = "历史生成记录",
             candidates = historicalImages,
             onDismiss = { showHistoricalDialog = false },
             onImageSelected = { viewModel.assetManager.onImageSelected(it); showHistoricalDialog = false },
-            onDeleteImages = { /* TODO */ },
-            onClearAll = { /* TODO */ }
+            onDeleteImages = { uris -> 
+                viewModel.assetManager.deleteHistoricalImages(uris)
+                historicalImages = historicalImages.filterNot { it in uris }
+            },
+            onClearAll = { 
+                targetBlock?.id?.let { id ->
+                    viewModel.assetManager.clearAllHistory(id)
+                    historicalImages = emptyList()
+                }
+            }
         )
     }
 
@@ -123,6 +147,17 @@ fun ProjectWorkspaceScreen(
             blocks = findAllMissing(state.currentPage?.blocks ?: emptyList()),
             onCancel = { viewModel.updateState { it.copy(showBatchGenDialog = false) } },
             onStartGen = { viewModel.assetGen.startBatchGeneration(effectiveApiKey, it) }
+        )
+    }
+
+    // 历史记录面板
+    if (state.showHistoryPanel) {
+        HistoryPanelDialog(
+            undoStack = state.undoStack,
+            redoStack = state.redoStack,
+            onJump = { viewModel.historyManager.jumpToHistory(it) },
+            onReset = { viewModel.historyManager.clearAllHistoryAndReset(); viewModel.historyManager.toggleHistoryPanel(false) },
+            onDismiss = { viewModel.historyManager.toggleHistoryPanel(false) }
         )
     }
 
@@ -144,7 +179,7 @@ fun ProjectWorkspaceScreen(
                     onMoveBlock = { src, target, pos -> viewModel.layoutEditor.moveBlock(src, target, pos) },
                     onToggleVisibility = { id, visible -> viewModel.layoutEditor.toggleBlockVisibility(id, visible) },
                     onToggleAllVisibility = { visible -> viewModel.layoutEditor.toggleAllBlocksVisibility(visible) },
-                    onAddCustomBlock = { name, type, w, h -> /* 暂未迁移 */ },
+                    onAddCustomBlock = { _, type, _, _ -> viewModel.layoutEditor.addBlock(type) },
                     onRenameBlock = { old, new -> viewModel.layoutEditor.renameBlock(old, new) },
                     renameRequestEvent = viewModel.requestRenameEvent
                 )
@@ -176,10 +211,24 @@ fun ProjectWorkspaceScreen(
                     onReferenceOpacityChange = { opacity -> viewModel.updateState { s -> s.copy(referenceOpacity = opacity) } },
                     onBlockClicked = { viewModel.onBlockClicked(it) },
                     onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
+                    onBlockDragStart = { viewModel.historyManager.saveSnapshot("拖动模块位置") },
                     onBlockDragged = { id, dx, dy -> viewModel.layoutEditor.moveBlockBy(id, dx, dy) },
                     onExitGroupEdit = { viewModel.updateState { s -> s.copy(editingGroupId = null) } },
                     stageBackgroundColor = state.stageBackgroundColor
                 )
+
+                // 悬浮历史入口
+                Box(Modifier.fillMaxSize().padding(16.dp)) {
+                    FilledTonalIconButton(
+                        onClick = { viewModel.historyManager.toggleHistoryPanel(true) },
+                        modifier = Modifier.align(androidx.compose.ui.Alignment.TopStart).size(40.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+                        )
+                    ) {
+                        Icon(Icons.Default.History, "操作历史", modifier = Modifier.size(20.dp))
+                    }
+                }
             }
 
             // 属性面板缩放条
@@ -202,9 +251,31 @@ fun ProjectWorkspaceScreen(
                             historicalImages = viewModel.assetManager.loadHistoricalImages(id)
                             showHistoricalDialog = true
                         }
-                    }
+                    },
+                    onDeleteRequest = { blockToDelete = it }
                 )
             }
+        }
+        
+        // 删除确认对话框
+        if (blockToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { blockToDelete = null },
+                title = { Text("确认删除") },
+                text = { Text("是否永久删除模块 $blockToDelete 及其所有子模块？此操作无法撤销。") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.layoutEditor.deleteBlock(blockToDelete!!)
+                            blockToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) { Text("删除") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { blockToDelete = null }) { Text("取消") }
+                }
+            )
         }
         
         // 参考区域截图对话框

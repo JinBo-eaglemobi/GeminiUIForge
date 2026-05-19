@@ -7,20 +7,9 @@ import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.ui.UIBlock
 
 /**
- * 工作区模式枚举
- */
-enum class EditorMode {
-    LAYOUT,    // 布局编辑模式
-    ASSET_GEN  // 资产生成模式
-}
-
-/**
  * 统一工作区运行时状态
  */
 data class ProjectWorkspaceState(
-    /** 当前工作模式 */
-    val mode: EditorMode = EditorMode.LAYOUT,
-
     /** 当前编辑的项目副本 */
     val project: ProjectState = ProjectState(),
     /** 项目名称 */
@@ -75,7 +64,12 @@ data class ProjectWorkspaceState(
 
     /** 临时状态 */
     val stageBackgroundColor: String = "#2D2D2D",
-    val currentLang: PromptLanguage = PromptLanguage.ZH
+    val currentLang: PromptLanguage = PromptLanguage.ZH,
+    val showHistoryPanel: Boolean = false,
+
+    /** 历史记录快照 (Undo/Redo) */
+    val undoStack: List<org.gemini.ui.forge.model.history.HistoryEntry> = emptyList(),
+    val redoStack: List<org.gemini.ui.forge.model.history.HistoryEntry> = emptyList()
 ) {
     val currentPage get() = project.pages.find { it.id == selectedPageId }
     val selectedBlock: UIBlock?

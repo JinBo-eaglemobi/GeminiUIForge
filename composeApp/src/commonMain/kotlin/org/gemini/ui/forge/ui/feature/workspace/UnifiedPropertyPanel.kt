@@ -57,6 +57,7 @@ fun UnifiedPropertyPanel(
     onRefineClick: (String?) -> Unit,
     onSetReferenceAreaClick: (String) -> Unit,
     onShowHistory: (String) -> Unit,
+    onDeleteRequest: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableStateOf(0) }
@@ -85,7 +86,7 @@ fun UnifiedPropertyPanel(
             modifier = Modifier.weight(1f).padding(LocalAppSpacing.current.medium).verticalScroll(rememberScrollState())
         ) {
             if (selectedTab == 0) {
-                LayoutPropertyContent(state, viewModel, apiKey, onRefineClick, onSetReferenceAreaClick)
+                LayoutPropertyContent(state, viewModel, apiKey, onRefineClick, onSetReferenceAreaClick, onDeleteRequest)
             } else {
                 AssetGenPropertyContent(state, viewModel, apiKey, onShowHistory)
             }
@@ -104,7 +105,8 @@ private fun LayoutPropertyContent(
     viewModel: ProjectWorkspaceViewModel,
     apiKey: String,
     onRefineClick: (String?) -> Unit,
-    onSetReferenceAreaClick: (String) -> Unit
+    onSetReferenceAreaClick: (String) -> Unit,
+    onDeleteRequest: (String) -> Unit
 ) {
     val selectedBlock = state.selectedBlock
 
@@ -345,7 +347,7 @@ private fun LayoutPropertyContent(
 
         // 删除模块
         Button(
-            onClick = { viewModel.layoutEditor.deleteBlock(selectedBlock.id) },
+            onClick = { onDeleteRequest(selectedBlock.id) },
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             modifier = Modifier.fillMaxWidth().tip("从项目中永久移除此模块及其子模块"),
             shape = AppShapes.medium,
@@ -406,6 +408,33 @@ private fun AssetGenPropertyContent(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // 选中模块标识
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.Fingerprint,
+                null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "正在编辑: ${selectedBlock.id}",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.weight(1f))
+            SuggestionChip(
+                onClick = { },
+                label = { Text(stringResource(selectedBlock.type.getDisplayNameRes()), style = MaterialTheme.typography.labelSmall) },
+                shape = AppShapes.small,
+                border = null,
+                colors = SuggestionChipDefaults.suggestionChipColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                    labelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            )
+        }
+
         // 顶部快捷工具：风格与模型
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
@@ -501,6 +530,13 @@ private fun AssetGenPropertyContent(
         )
 
         // AI 提示词编辑区
+        val systemLang = androidx.compose.ui.text.intl.Locale.current.language
+        val effectiveLang = state.currentLang.resolve(systemLang)
+        val prompt =
+            if (effectiveLang == PromptLanguage.ZH) selectedBlock.userPromptZh else selectedBlock.userPromptEn
+        val otherPrompt =
+            if (effectiveLang == PromptLanguage.ZH) selectedBlock.userPromptEn else selectedBlock.userPromptZh
+
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(
@@ -513,7 +549,7 @@ private fun AssetGenPropertyContent(
                 SingleChoiceSegmentedButtonRow {
                     PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang ->
                         SegmentedButton(
-                            selected = state.currentLang == lang,
+                            selected = effectiveLang == lang,
                             onClick = { viewModel.switchLang(lang) },
                             shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
                             label = { Text(lang.displayName, style = MaterialTheme.typography.labelSmall) })
@@ -521,12 +557,17 @@ private fun AssetGenPropertyContent(
                 }
             }
 
-            val prompt =
-                if (state.currentLang == PromptLanguage.ZH) selectedBlock.userPromptZh else selectedBlock.userPromptEn
             SelectAllOutlinedTextField(
                 value = prompt,
-                onValueChange = { viewModel.assetManager.updateBlockPrompt(selectedBlock.id, state.currentLang, it) },
+                onValueChange = { viewModel.assetManager.updateBlockPrompt(selectedBlock.id, effectiveLang, it) },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                placeholder = {
+                    if (otherPrompt.isNotBlank()) {
+                        Text("当前语言为空，系统将使用: ${otherPrompt.take(20)}...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                    } else {
+                        Text(stringResource(Res.string.prop_prompt_hint), style = MaterialTheme.typography.bodySmall)
+                    }
+                },
                 maxLines = 8,
                 enabled = !state.isGenerating
             )
@@ -545,11 +586,11 @@ private fun AssetGenPropertyContent(
                         viewModel.layoutEditor.optimizePrompt(
                             selectedBlock.id,
                             apiKey,
-                            state.currentLang,
+                            effectiveLang,
                             useChatContext
                         )
                     },
-                    enabled = !state.isGenerating && prompt.isNotBlank(),
+                    enabled = !state.isGenerating && (prompt.isNotBlank() || otherPrompt.isNotBlank()),
                     modifier = Modifier.tip("通过 AI 润色和扩充当前提示词")
                 ) {
                     Icon(Icons.Default.AutoFixHigh, "优化提示词", tint = MaterialTheme.colorScheme.primary)
@@ -590,7 +631,7 @@ private fun AssetGenPropertyContent(
             onClick = {
                 viewModel.assetGen.onRequestGeneration(
                     apiKey,
-                    if (state.currentLang == PromptLanguage.ZH) selectedBlock.userPromptZh else selectedBlock.userPromptEn
+                    if (prompt.isNotBlank()) prompt else otherPrompt
                 )
             },
             modifier = Modifier.fillMaxWidth().height(48.dp).tip("调用 AI 模型开始生成新的图片资产"),

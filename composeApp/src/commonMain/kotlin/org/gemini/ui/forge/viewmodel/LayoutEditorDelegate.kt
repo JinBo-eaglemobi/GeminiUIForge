@@ -7,6 +7,7 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.api.ChatMessage
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.app.ShortcutAction
+import org.gemini.ui.forge.model.history.HistoryEntry
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
@@ -30,52 +31,20 @@ class LayoutEditorDelegate(
     private val getState: () -> ProjectWorkspaceState,
     private val updateState: ((ProjectWorkspaceState) -> ProjectWorkspaceState) -> Unit,
     private val markDirty: () -> Unit,
+    private val saveSnapshot: (String) -> Unit,
+    private val undo: () -> Unit,
+    private val redo: () -> Unit,
     private val onRequestRename: () -> Unit
 ) {
 
-    private val undoStack = ArrayDeque<ProjectState>()
-    private val redoStack = ArrayDeque<ProjectState>()
     private var clipboardBlock: UIBlock? = null
     private var currentGenJob: Job? = null
-
-    // --- 撤销/重做 ---
-
-    fun saveSnapshot() {
-        val currentProject = getState().project
-        if (undoStack.lastOrNull() != currentProject) {
-            undoStack.addLast(currentProject)
-            if (undoStack.size > 50) undoStack.removeFirst()
-            redoStack.clear()
-        }
-    }
-
-    fun undo() {
-        if (undoStack.isNotEmpty()) {
-            val currentState = getState().project
-            redoStack.addLast(currentState)
-            val previousState = undoStack.removeLast()
-            updateState { it.copy(project = previousState) }
-            markDirty()
-            Toast.show("已撤销操作", ToastType.INFO)
-        }
-    }
-
-    fun redo() {
-        if (redoStack.isNotEmpty()) {
-            val currentState = getState().project
-            undoStack.addLast(currentState)
-            val nextState = redoStack.removeLast()
-            updateState { it.copy(project = nextState) }
-            markDirty()
-            Toast.show("已重做操作", ToastType.INFO)
-        }
-    }
 
     // --- 块操作 ---
 
     fun renameBlock(oldId: String, newId: String) {
         if (oldId == newId || newId.isBlank()) return
-        saveSnapshot()
+        saveSnapshot("重命名模块: $newId")
         val pageId = getState().selectedPageId ?: return
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
@@ -93,7 +62,7 @@ class LayoutEditorDelegate(
     }
 
     fun addBlock(type: UIBlockType) {
-        saveSnapshot()
+        saveSnapshot("添加模块: $type")
         val pageId = getState().selectedPageId ?: return
         val newBlockId = "block_${getCurrentTimeMillis()}"
         updateState { currentState ->
@@ -123,7 +92,7 @@ class LayoutEditorDelegate(
     }
 
     fun deleteBlock(blockId: String) {
-        saveSnapshot()
+        saveSnapshot("删除模块: $blockId")
         val pageId = getState().selectedPageId ?: return
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
@@ -171,6 +140,8 @@ class LayoutEditorDelegate(
     fun moveBlock(draggedBlockId: String, targetId: String?, dropPosition: DropPosition = DropPosition.INSIDE) {
         if (draggedBlockId == targetId) return
         val pageId = getState().selectedPageId ?: return
+        
+        saveSnapshot("移动模块层级: $draggedBlockId")
         updateState { currentState ->
             val currentPage = currentState.currentPage ?: return@updateState currentState
             val draggedBlock = findBlockById(currentPage.blocks, draggedBlockId) ?: return@updateState currentState
@@ -194,7 +165,6 @@ class LayoutEditorDelegate(
                 else if (dropPosition == DropPosition.INSIDE) updateBlockInList(newBlocks, targetId) { it.copy(children = it.children + updatedDraggedBlock) } 
                 else insertBlockSibling(newBlocks, targetId, updatedDraggedBlock, dropPosition)
             
-            saveSnapshot()
             val updatedPages = currentState.project.pages.map { if (it.id == pageId) it.copy(blocks = resultBlocks) else it }
             currentState.copy(project = currentState.project.copy(pages = updatedPages, createdAt = getCurrentTimeMillis()))
         }
@@ -242,7 +212,7 @@ class LayoutEditorDelegate(
 
     fun paste() {
         val source = clipboardBlock ?: return
-        saveSnapshot()
+        saveSnapshot("粘贴模块: ${source.id}")
         val pageId = getState().selectedPageId ?: return
         
         fun deepCopyAndRename(block: UIBlock): UIBlock {
@@ -369,11 +339,21 @@ class LayoutEditorDelegate(
             }
         }
     }
+    // --- 快捷键动作触发接口 ---
 
-    // --- 快捷键处理 ---
+    fun triggerRename() {
+        if (getState().selectedBlockId != null) {
+            onRequestRename()
+        }
+    }
 
-    fun handleShortcutAction(action: ShortcutAction) {
-// ... existing handleShortcutAction ...
+    fun deleteSelectedBlock() {
+        val selectedId = getState().selectedBlockId
+        if (selectedId != null) {
+            deleteBlock(selectedId)
+        } else {
+            Toast.show("请先选择要删除的模块", ToastType.INFO)
+        }
     }
 
     fun onSetReferenceArea(

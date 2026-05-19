@@ -71,6 +71,7 @@ fun CanvasArea(
     onBlockDoubleClicked: (String) -> Unit = {},
     onBlockDragStart: (String) -> Unit = {},
     onBlockDragged: (String, Float, Float) -> Unit = { _, _, _ -> },
+    onBlockDragEnd: (String) -> Unit = {},
     editingGroupId: String? = null,
     onExitGroupEdit: () -> Unit = {},
     referenceMode: ReferenceDisplayMode = ReferenceDisplayMode.HIDDEN,
@@ -124,6 +125,7 @@ fun CanvasArea(
     val currentOnBlockDoubleClicked by rememberUpdatedState(onBlockDoubleClicked)
     val currentOnBlockDragged by rememberUpdatedState(onBlockDragged)
     val currentOnBlockDragStart by rememberUpdatedState(onBlockDragStart)
+    val currentOnBlockDragEnd by rememberUpdatedState(onBlockDragEnd)
     val currentOnExitGroupEdit by rememberUpdatedState(onExitGroupEdit)
 
     val refBitmapState = produceState<ImageBitmap?>(null, referenceUri) {
@@ -250,8 +252,8 @@ fun CanvasArea(
                                                 currentOnBlockDragged(dragTargetId!!, logicalDx, logicalDy)
                                             }
                                         },
-                                        onDragEnd = { dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false },
-                                        onDragCancel = { dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false }
+                                        onDragEnd = { dragTargetId?.let { currentOnBlockDragEnd(it) }; dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false },
+                                        onDragCancel = { dragTargetId?.let { currentOnBlockDragEnd(it) }; dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false }
                                     )
                                 }
                         ) {

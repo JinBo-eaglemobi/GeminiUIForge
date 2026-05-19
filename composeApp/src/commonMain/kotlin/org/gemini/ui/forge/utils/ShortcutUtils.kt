@@ -47,6 +47,7 @@ object ShortcutUtils {
 
         if (isKeyMatch) {
             AppLogger.d("ShortcutUtils", "✅ 快捷键匹配成功: $shortcut")
+            org.gemini.ui.forge.utils.Toast.show("收到快捷键: $shortcut", org.gemini.ui.forge.ui.component.ToastType.INFO)
         }
 
         return isKeyMatch
