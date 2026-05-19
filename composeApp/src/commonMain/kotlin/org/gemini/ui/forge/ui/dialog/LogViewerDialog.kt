@@ -16,10 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +26,7 @@ import kotlinx.coroutines.launch
 import org.gemini.ui.forge.utils.getPlatformLogDirectory
 import org.gemini.ui.forge.utils.streamLocalFileLines
 import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 
 @Composable
 fun LogViewerDialog(
@@ -42,21 +39,31 @@ fun LogViewerDialog(
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // 自动滚动逻辑：如果当前就在底部，则新数据进来时自动跟随
+    // 智能锁定逻辑：只有当滚动位置接近底部时，才允许自动跟随新数据
     val isAtBottom by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
-            if (layoutInfo.visibleItemsInfo.isEmpty()) true
+            val totalItems = layoutInfo.totalItemsCount
+            if (totalItems == 0) true
             else {
-                // reverseLayout = true 时，index 0 就是最底部的最新数据
-                listState.firstVisibleItemIndex == 0
+                val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+                // 如果最后可见项的 index 接近总数，则判定为“在底部”
+                lastVisibleItem != null && lastVisibleItem.index >= totalItems - 2
             }
         }
     }
+    
+    // 是否在顶部
+    val isAtTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
+    }
 
+    // 核心自动滚动：当 logLines 变化且用户处于底部时，强制滚动到最后一行
     LaunchedEffect(logLines.size) {
         if (isAtBottom && logLines.isNotEmpty()) {
-            listState.animateScrollToItem(0)
+            listState.scrollToItem(logLines.size - 1)
         }
     }
 
@@ -66,9 +73,6 @@ fun LogViewerDialog(
             errorMessage = null
             isLoading = true
             try {
-                AppLogger.d("LogViewer", "请求分块加载本地日志文件")
-                kotlinx.coroutines.delay(100)
-                
                 val logDir = getPlatformLogDirectory()
                 val fileName = when (selectedLevel) {
                     "ERROR" -> "app_error.log"
@@ -77,7 +81,10 @@ fun LogViewerDialog(
                 }
                 
                 streamLocalFileLines("$logDir/$fileName") { chunk ->
-                    logLines.addAll(chunk)
+                    val filteredChunk = if (selectedLevel == "ALL") chunk else chunk.filter { it.contains("[$selectedLevel]") || it.startsWith("---") }
+                    if (filteredChunk.isNotEmpty()) {
+                        logLines.addAll(filteredChunk)
+                    }
                 }
                 
                 if (logLines.isEmpty()) {
@@ -103,7 +110,7 @@ fun LogViewerDialog(
             tonalElevation = 8.dp
         ) {
             Column(Modifier.fillMaxSize().padding(16.dp)) {
-                // 头部
+                // 顶部标题与控制
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -130,8 +137,7 @@ fun LogViewerDialog(
 
                 // 过滤器
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val levels = listOf("ALL", "INFO", "ERROR")
-                    levels.forEach { level ->
+                    listOf("ALL", "INFO", "ERROR").forEach { level ->
                         FilterChip(
                             selected = selectedLevel == level,
                             onClick = { selectedLevel = level },
@@ -142,58 +148,24 @@ fun LogViewerDialog(
 
                 Spacer(Modifier.height(16.dp))
 
-                // 日志列表区域
+                // 日志显示区域
                 Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF1E1E1E), RoundedCornerShape(8.dp))) {
-                    SelectionContainer {
-                        if (errorMessage != null) {
-                            Text(errorMessage!!, color = Color.Gray, modifier = Modifier.padding(16.dp))
-                        } else {
-                            // 自定义一直显示的滚动条
-                            Box(modifier = Modifier.fillMaxSize().padding(end = 4.dp)) {
+                    if (errorMessage != null) {
+                        Text(errorMessage!!, color = Color.Gray, modifier = Modifier.padding(16.dp).align(Alignment.Center))
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            // 主列表
+                            SelectionContainer(Modifier.fillMaxSize()) {
                                 LazyColumn(
                                     state = listState,
-                                    modifier = Modifier.fillMaxSize().padding(8.dp).drawWithContent {
-                                        drawContent()
-                                        // 绘制常驻滚动条
-                                        val layoutInfo = listState.layoutInfo
-                                        if (layoutInfo.totalItemsCount > 0) {
-                                            val viewportSize = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
-                                            val totalHeight = layoutInfo.totalItemsCount.toFloat() // 简化计算，按项数算高度
-                                            val visibleHeight = layoutInfo.visibleItemsInfo.size.toFloat()
-                                            
-                                            if (visibleHeight < totalHeight) {
-                                                val scrollbarHeight = (visibleHeight / totalHeight) * size.height
-                                                // reverseLayout = true 时，firstVisibleItemIndex = 0 在最下面
-                                                val scrollOffset = (listState.firstVisibleItemIndex.toFloat() / totalHeight) * size.height
-                                                
-                                                // 滚动条槽
-                                                drawRoundRect(
-                                                    color = Color.White.copy(alpha = 0.05f),
-                                                    topLeft = Offset(size.width - 4.dp.toPx(), 0f),
-                                                    size = Size(4.dp.toPx(), size.height),
-                                                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
-                                                )
-                                                
-                                                // 滚动条滑块 (考虑到 reverseLayout，计算位置)
-                                                val top = size.height - scrollOffset - scrollbarHeight
-                                                drawRoundRect(
-                                                    color = Color.White.copy(alpha = 0.3f),
-                                                    topLeft = Offset(size.width - 4.dp.toPx(), top.coerceIn(0f, size.height - scrollbarHeight)),
-                                                    size = Size(4.dp.toPx(), scrollbarHeight),
-                                                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
-                                                )
-                                            }
-                                        }
-                                    },
-                                    reverseLayout = true
+                                    modifier = Modifier.fillMaxSize().padding(8.dp).padding(end = 12.dp)
                                 ) {
                                     items(logLines.size) { index ->
-                                        val line = logLines[logLines.size - 1 - index]
+                                        val line = logLines[index]
                                         val color = when {
                                             line.contains("[ERROR]") -> Color(0xFFFF6B6B)
                                             line.contains("[INFO]") -> Color(0xFF4EC9B0)
                                             line.contains("[DEBUG]") -> Color(0xFFCCCCCC)
-                                            line.startsWith("---") -> Color(0xFF888888)
                                             else -> Color(0xFFCCCCCC)
                                         }
                                         Text(
@@ -201,38 +173,44 @@ fun LogViewerDialog(
                                             color = color,
                                             fontSize = 12.sp,
                                             fontFamily = FontFamily.Monospace,
-                                            modifier = Modifier.padding(vertical = 2.dp)
+                                            modifier = Modifier.padding(vertical = 1.dp)
                                         )
                                     }
                                 }
                             }
+                            
+                            // 使用项目内置的适配器，它是原生的 VerticalScrollbar 封装
+                            VerticalScrollbarAdapter(
+                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(end = 4.dp, top = 4.dp, bottom = 4.dp),
+                                scrollState = listState
+                            )
                         }
                     }
 
-                    // 快速导航悬浮按钮
+                    // 悬浮导航按钮
                     Column(
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 40.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        AnimatedVisibility(visible = logLines.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
+                        AnimatedVisibility(visible = !isAtTop && logLines.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
                             FloatingActionButton(
-                                onClick = { coroutineScope.launch { listState.animateScrollToItem(logLines.size - 1) } },
+                                onClick = { coroutineScope.launch { listState.scrollToItem(0) } },
                                 modifier = Modifier.size(40.dp),
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
                                 shape = CircleShape,
-                                elevation = FloatingActionButtonDefaults.elevation(0.dp)
+                                elevation = FloatingActionButtonDefaults.elevation(2.dp)
                             ) {
                                 Icon(Icons.Default.KeyboardArrowUp, "回到顶部")
                             }
                         }
                         
-                        AnimatedVisibility(visible = !isAtBottom, enter = fadeIn(), exit = fadeOut()) {
+                        AnimatedVisibility(visible = !isAtBottom && logLines.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
                             FloatingActionButton(
-                                onClick = { coroutineScope.launch { listState.animateScrollToItem(0) } },
+                                onClick = { coroutineScope.launch { listState.scrollToItem(logLines.size - 1) } },
                                 modifier = Modifier.size(40.dp),
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
                                 shape = CircleShape,
-                                elevation = FloatingActionButtonDefaults.elevation(0.dp)
+                                elevation = FloatingActionButtonDefaults.elevation(2.dp)
                             ) {
                                 Icon(Icons.Default.KeyboardArrowDown, "回到底部")
                             }
