@@ -1,5 +1,10 @@
 package org.gemini.ui.forge.utils
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -20,6 +25,23 @@ object AppLogger {
     private val logChannel = Channel<LogEvent>(Channel.UNLIMITED)
     private val loggerScope = CoroutineScope(Dispatchers.Default)
     
+    private val _memoryLogs = MutableStateFlow<List<LogEvent>>(emptyList())
+    val memoryLogs = _memoryLogs.asStateFlow()
+
+    private val _statusMessage = MutableStateFlow("就绪")
+    val statusMessage = _statusMessage.asStateFlow()
+    
+    private val _showLogViewer = MutableStateFlow(false)
+    val showLogViewer = _showLogViewer.asStateFlow()
+
+    fun showStatus(msg: String) {
+        _statusMessage.value = msg
+    }
+
+    fun toggleLogViewer(show: Boolean) {
+        _showLogViewer.value = show
+    }
+
     init {
         loggerScope.launch {
             val debugLogBuffer = StringBuilder() // 全部日志

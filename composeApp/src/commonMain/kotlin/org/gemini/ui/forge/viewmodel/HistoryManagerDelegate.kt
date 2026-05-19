@@ -38,6 +38,7 @@ class HistoryManagerDelegate(
     /** 保存当前状态到撤销栈 */
     fun saveSnapshot(label: String = "操作") {
         org.gemini.ui.forge.utils.AppLogger.d("HistoryManager", "保存快照: $label")
+        org.gemini.ui.forge.utils.AppLogger.showStatus("已保存: $label")
         val currentState = getState()
         val entry = HistoryEntry(
             id = "hist_${getCurrentTimeMillis()}_${(0..999).random()}",
@@ -51,8 +52,11 @@ class HistoryManagerDelegate(
                 add(entry)
                 if (size > 50) removeAt(0)
             }
-            // 保存快照时清空重做栈 (产生新分支)
-            s.copy(undoStack = newUndo, redoStack = emptyList())
+            s.copy(
+                undoStack = newUndo, 
+                redoStack = emptyList(),
+                statusMessage = "已保存: $label"
+            )
         }
     }
 
@@ -64,7 +68,6 @@ class HistoryManagerDelegate(
         val poppedUndo = s.undoStack.last()
         val newUndo = s.undoStack.dropLast(1)
         
-        // 使用弹出的 Undo 节点的 ID 和 Label，这样在列表中它保持稳定身份
         val currentAsRedo = HistoryEntry(
             id = poppedUndo.id,
             label = poppedUndo.label,
@@ -74,11 +77,13 @@ class HistoryManagerDelegate(
         val newRedo = s.redoStack + currentAsRedo
         
         org.gemini.ui.forge.utils.AppLogger.d("HistoryManager", "撤销回退: ${poppedUndo.label}")
+        org.gemini.ui.forge.utils.AppLogger.showStatus("已撤销: ${poppedUndo.label}")
         
         updateState { it.copy(
             project = deepCopyProject(poppedUndo.projectState),
             undoStack = newUndo,
-            redoStack = newRedo
+            redoStack = newRedo,
+            statusMessage = "已撤销: ${poppedUndo.label}"
         ) }
         markDirty()
     }
@@ -100,11 +105,13 @@ class HistoryManagerDelegate(
         val newUndo = s.undoStack + currentAsUndo
         
         org.gemini.ui.forge.utils.AppLogger.d("HistoryManager", "重做前进: ${poppedRedo.label}")
+        org.gemini.ui.forge.utils.AppLogger.showStatus("已重做: ${poppedRedo.label}")
         
         updateState { it.copy(
             project = deepCopyProject(poppedRedo.projectState),
             undoStack = newUndo,
-            redoStack = newRedo
+            redoStack = newRedo,
+            statusMessage = "已重做: ${poppedRedo.label}"
         ) }
         markDirty()
     }
@@ -115,14 +122,12 @@ class HistoryManagerDelegate(
         val s = getState()
         
         if (s.undoStack.any { it.id == entryId }) {
-            // 目标在过去，一直撤销直到包含该目标
             while (getState().undoStack.isNotEmpty()) {
                 val lastId = getState().undoStack.last().id
                 undo()
                 if (lastId == entryId) break
             }
         } else if (s.redoStack.any { it.id == entryId }) {
-            // 目标在未来，一直重做直到包含该目标
             while (getState().redoStack.isNotEmpty()) {
                 val lastId = getState().redoStack.last().id
                 redo()
@@ -138,7 +143,8 @@ class HistoryManagerDelegate(
         updateState { it.copy(
             project = deepCopyProject(firstState),
             undoStack = emptyList(),
-            redoStack = emptyList()
+            redoStack = emptyList(),
+            statusMessage = "已清空操作历史"
         ) }
         markDirty()
     }

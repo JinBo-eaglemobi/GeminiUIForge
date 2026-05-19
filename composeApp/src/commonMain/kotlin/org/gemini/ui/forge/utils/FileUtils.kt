@@ -26,6 +26,12 @@ expect fun Throwable.getPlatformStackTrace(): String
 expect suspend fun readLocalFileBytes(filePath: String): ByteArray?
 
 /**
+ * 跨平台读取文件的最后 N 行 (分段读取)，用于提升读取大日志文件时的性能。
+ */
+expect suspend fun readLocalFileTail(filePath: String, maxLines: Int = 1000): String?
+
+
+/**
  * 将文本以追加模式高效写入到文件末尾 (支持日志持久化)
  */
 expect suspend fun appendToLocalFile(filePath: String, content: String): Boolean
@@ -89,3 +95,5 @@ fun formatSize(bytes: Int): String {
         "${(bytes.toFloat() / (1024 * 1024) * 100).toInt() / 100f} MB"
     }
 }
+
+expect suspend fun streamLocalFileLines(filePath: String, onChunk: (List<String>) -> Unit)

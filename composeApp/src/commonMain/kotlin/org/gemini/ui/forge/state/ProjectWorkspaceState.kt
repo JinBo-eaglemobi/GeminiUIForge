@@ -66,6 +66,8 @@ data class ProjectWorkspaceState(
     val stageBackgroundColor: String = "#2D2D2D",
     val currentLang: PromptLanguage = PromptLanguage.ZH,
     val showHistoryPanel: Boolean = false,
+    val statusMessage: String = "就绪",
+    val showLogViewer: Boolean = false,
 
     /** 历史记录快照 (Undo/Redo) */
     val undoStack: List<org.gemini.ui.forge.model.history.HistoryEntry> = emptyList(),

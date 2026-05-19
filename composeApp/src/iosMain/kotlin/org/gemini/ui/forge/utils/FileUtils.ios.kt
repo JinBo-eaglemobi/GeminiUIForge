@@ -103,3 +103,22 @@ actual suspend fun copyLocalFile(sourcePath: String, destPath: String): Boolean 
 }
 
 private infix fun Int.add(other: Int): Int = this + other
+
+
+actual suspend fun readLocalFileTail(filePath: String, maxLines: Int): String? {
+    val bytes = readLocalFileBytes(filePath) ?: return null
+    val text = bytes.decodeToString()
+    val lines = text.split("\n")
+    if (lines.size <= maxLines) return text
+    return lines.takeLast(maxLines).joinToString("\n")
+}
+
+actual suspend fun streamLocalFileLines(filePath: String, onChunk: (List<String>) -> Unit) {
+    val bytes = readLocalFileBytes(filePath) ?: return
+    val text = bytes.decodeToString()
+    val lines = text.split("\n")
+    lines.chunked(3000).forEach { chunk ->
+        onChunk(chunk)
+        kotlinx.coroutines.yield()
+    }
+}

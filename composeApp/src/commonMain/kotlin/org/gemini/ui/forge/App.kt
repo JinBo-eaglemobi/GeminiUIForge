@@ -1,4 +1,8 @@
 package org.gemini.ui.forge
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -27,6 +31,7 @@ import org.gemini.ui.forge.ui.theme.AppTheme
 import org.gemini.ui.forge.service.*
 import kotlin.time.Duration.Companion.milliseconds
 import org.gemini.ui.forge.ui.dialog.AppSettingsDialog
+import org.gemini.ui.forge.ui.dialog.LogViewerDialog
 import org.gemini.ui.forge.ui.dialog.HelpDialog
 import org.gemini.ui.forge.manager.*
 import org.gemini.ui.forge.utils.*
@@ -328,7 +333,19 @@ fun App(typography: Typography? = null) {
                         )
                     }
 
+
+                    val statusMessage by AppLogger.statusMessage.collectAsState()
+                    val showLogViewer by AppLogger.showLogViewer.collectAsState()
+                    val memoryLogs by AppLogger.memoryLogs.collectAsState()
+
+                    if (showLogViewer) {
+                        LogViewerDialog(
+                            onDismiss = { AppLogger.toggleLogViewer(false) }
+                        )
+                    }
+
                     Scaffold(
+
                         modifier = Modifier.fillMaxSize(),
                         topBar = {
                             AppTopBar(
@@ -351,6 +368,31 @@ fun App(typography: Typography? = null) {
                                 },
                                 onHelpClicked = { showHelpDialog = true }
                             )
+                        },
+                        bottomBar = {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().height(24.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                tonalElevation = 2.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = statusMessage,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    IconButton(
+                                        onClick = { AppLogger.toggleLogViewer(true) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(Icons.Default.Info, contentDescription = "查看日志", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
                         }
                     ) { innerPadding ->
                         Box(
