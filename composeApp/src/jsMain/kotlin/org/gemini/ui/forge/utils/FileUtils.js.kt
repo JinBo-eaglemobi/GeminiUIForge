@@ -7,6 +7,20 @@ actual fun Throwable.getPlatformStackTrace(): String {
     return this.message ?: "Unknown JS Error"
 }
 
+actual suspend fun getLocalFileSize(filePath: String): Long {
+    val storage = LocalFileStorage()
+    val bytes = storage.readBytesFromFile(filePath)
+    return bytes?.size?.toLong() ?: 0L
+}
+
+actual suspend fun renameLocalFile(oldPath: String, newPath: String): Boolean {
+    val storage = LocalFileStorage()
+    val bytes = storage.readBytesFromFile(oldPath) ?: return false
+    storage.saveBytesToFile(newPath, bytes)
+    storage.deleteFile(oldPath)
+    return true
+}
+
 actual suspend fun getLocalFileLastModified(filePath: String): Long {
     // Web OPFS does not easily expose last modified via handles yet in pure JS without File interface wrapping.
     // Return current time as a placeholder.

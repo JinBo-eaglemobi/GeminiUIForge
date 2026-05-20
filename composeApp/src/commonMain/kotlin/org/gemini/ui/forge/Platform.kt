@@ -68,10 +68,19 @@ fun formatTimestamp(timeMillis: Long, format: String = "yyyy-MM-dd HH:mm:ss"): S
     
     return if (format == "HH:mm:ss") {
         "$hour:$minute:$second"
+    } else if (format == "yyyy_MM_dd") {
+        "${year}_${month}_$day"
+    } else if (format == "yyyy-MM-dd") {
+        "$year-$month-$day"
     } else {
         "$year-$month-$day $hour:$minute:$second"
     }
 }
+
+/**
+ * 获取当前日期的格式化字符串 (yyyy-MM-dd)
+ */
+fun getCurrentDate(): String = formatTimestamp(getCurrentTimeMillis(), "yyyy-MM-dd")
 
 /**
  * 将 Gemini API 返回的 RFC 3339 格式字符串解析并格式化为本地时间

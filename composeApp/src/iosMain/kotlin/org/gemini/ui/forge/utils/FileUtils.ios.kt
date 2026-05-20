@@ -13,6 +13,19 @@ actual fun Throwable.getPlatformStackTrace(): String {
 }
 
 @OptIn(ExperimentalForeignApi::class)
+actual suspend fun getLocalFileSize(filePath: String): Long {
+    val fileManager = NSFileManager.defaultManager
+    val attributes = fileManager.attributesOfItemAtPath(filePath, error = null)
+    return (attributes?.get(NSFileSize) as? NSNumber)?.longValue ?: 0L
+}
+
+@OptIn(ExperimentalForeignApi::class)
+actual suspend fun renameLocalFile(oldPath: String, newPath: String): Boolean {
+    val fileManager = NSFileManager.defaultManager
+    return fileManager.moveItemAtPath(oldPath, newPath, error = null)
+}
+
+@OptIn(ExperimentalForeignApi::class)
 actual suspend fun getLocalFileLastModified(filePath: String): Long {
     val fileManager = NSFileManager.defaultManager
     val attributes = fileManager.attributesOfItemAtPath(filePath, error = null)

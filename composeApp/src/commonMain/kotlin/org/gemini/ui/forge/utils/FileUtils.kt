@@ -1,6 +1,16 @@
 package org.gemini.ui.forge.utils
 
 /**
+ * 获取本地文件大小 (字节)
+ */
+expect suspend fun getLocalFileSize(filePath: String): Long
+
+/**
+ * 重命名/移动本地文件
+ */
+expect suspend fun renameLocalFile(oldPath: String, newPath: String): Boolean
+
+/**
  * 获取本地文件的最后修改时间 (毫秒)
  */
 expect suspend fun getLocalFileLastModified(filePath: String): Long

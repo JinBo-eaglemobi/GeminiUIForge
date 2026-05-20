@@ -19,6 +19,14 @@ actual fun Throwable.getPlatformStackTrace(): String {
     return this.stackTraceToString()
 }
 
+actual suspend fun getLocalFileSize(filePath: String): Long = withContext(Dispatchers.IO) {
+    return@withContext File(resolve(filePath)).length()
+}
+
+actual suspend fun renameLocalFile(oldPath: String, newPath: String): Boolean = withContext(Dispatchers.IO) {
+    return@withContext File(resolve(oldPath)).renameTo(File(resolve(newPath)))
+}
+
 actual suspend fun getLocalFileLastModified(filePath: String): Long = withContext(Dispatchers.IO) {
     return@withContext File(resolve(filePath)).lastModified()
 }

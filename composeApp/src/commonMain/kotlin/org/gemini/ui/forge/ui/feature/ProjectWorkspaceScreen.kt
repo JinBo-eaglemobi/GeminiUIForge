@@ -24,6 +24,7 @@ import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.CanvasArea
 import org.gemini.ui.forge.ui.component.HierarchySidebar
 import org.gemini.ui.forge.ui.component.ToastType
+import org.gemini.ui.forge.ui.dialog.AppConfirmDialog
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.dialog.*
 import org.gemini.ui.forge.ui.feature.workspace.UnifiedPropertyPanel
@@ -262,22 +263,16 @@ fun ProjectWorkspaceScreen(
         
         // 删除确认对话框
         if (blockToDelete != null) {
-            AlertDialog(
-                onDismissRequest = { blockToDelete = null },
-                title = { Text("确认删除") },
-                text = { Text("是否永久删除模块 $blockToDelete 及其所有子模块？此操作无法撤销。") },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            viewModel.layoutEditor.deleteBlock(blockToDelete!!)
-                            blockToDelete = null
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) { Text("删除") }
+            AppConfirmDialog(
+                title = "确认删除",
+                message = "是否永久删除模块 $blockToDelete 及其所有子模块？此操作无法撤销。",
+                confirmText = "确认删除",
+                isDestructive = true,
+                onConfirm = {
+                    viewModel.layoutEditor.deleteBlock(blockToDelete!!)
+                    blockToDelete = null
                 },
-                dismissButton = {
-                    TextButton(onClick = { blockToDelete = null }) { Text("取消") }
-                }
+                onDismiss = { blockToDelete = null }
             )
         }
         

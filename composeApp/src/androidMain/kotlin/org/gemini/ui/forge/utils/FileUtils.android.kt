@@ -7,6 +7,14 @@ actual fun Throwable.getPlatformStackTrace(): String {
     return android.util.Log.getStackTraceString(this)
 }
 
+actual suspend fun getLocalFileSize(filePath: String): Long {
+    return File(filePath).length()
+}
+
+actual suspend fun renameLocalFile(oldPath: String, newPath: String): Boolean {
+    return File(oldPath).renameTo(File(newPath))
+}
+
 actual suspend fun getLocalFileLastModified(filePath: String): Long {
     return File(filePath).lastModified()
 }

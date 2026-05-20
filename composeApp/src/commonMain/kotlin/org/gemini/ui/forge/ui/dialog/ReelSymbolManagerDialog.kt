@@ -374,60 +374,47 @@ fun ReelSymbolManagerDialog(
 
     // 生图确认对话框
     if (showGenConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showGenConfirmDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text("确认开始 AI 生成")
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { showGenConfirmDialog = false }) {
-                        Icon(Icons.Default.Close, "关闭", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+        val langText = if (promptTab == 0) "【中文】" else "【英文】"
+        AppConfirmDialog(
+            title = "确认开始 AI 生成",
+            message = "将使用当前选中的 $langText 提示词触发 AI 生成任务。生成的图片将作为此符号的候选资产。是否继续？",
+            confirmText = "开始生成",
+            onConfirm = {
+                // 1. 先保存当前数据（确保生图使用的是最新的 Prompt）
+                val targetItem = if (editingItem != null) {
+                    editingItem!!.copy(
+                        userPromptZh = newItemPromptZh,
+                        userPromptEn = newItemPromptEn
+                    )
+                } else {
+                    UIBlock(
+                        id = "sym_${getCurrentTimeMillis()}",
+                        type = UIBlockType.SYMBOL,
+                        bounds = SerialRect(0f, 0f, 100f, 100f),
+                        userPromptZh = newItemPromptZh,
+                        userPromptEn = newItemPromptEn
+                    )
                 }
-            },
-            text = { 
-                val langText = if (promptTab == 0) "【中文】" else "【英文】"
-                Text("将使用当前选中的 $langText 提示词触发 AI 生成任务。生成的图片将作为此符号的候选资产。是否继续？") 
-            },
-            confirmButton = {
-                Button(onClick = {
-                    // 1. 先保存当前数据（确保生图使用的是最新的 Prompt）
-                    val targetItem = if (editingItem != null) {
-                        editingItem!!.copy(
-                            userPromptZh = newItemPromptZh,
-                            userPromptEn = newItemPromptEn
-                        )
-                    } else {
-                        UIBlock(
-                            id = "sym_${getCurrentTimeMillis()}",
-                            type = UIBlockType.SYMBOL,
-                            bounds = SerialRect(0f, 0f, 100f, 100f),
-                            userPromptZh = newItemPromptZh,
-                            userPromptEn = newItemPromptEn
-                        )
-                    }
 
-                    val newItems = if (editingItem != null) {
-                        props.items.map { if (it.id == editingItem!!.id) targetItem else it }
-                    } else {
-                        props.items + targetItem
-                    }
-
-                    onPropertiesChanged(props.copy(items = newItems))
-                    
-                    // 2. 触发生成逻辑，强制使用当前选中 Tab 的语言
-                    val finalPromptText = if (promptTab == 0) targetItem.userPromptZh else targetItem.userPromptEn
-                    val safePrompt = if (finalPromptText.isNotBlank()) finalPromptText else targetItem.fullPrompt
-                    
-                    viewModel.assetManager.selectReelItem(targetItem.id)
-                    viewModel.assetGen.onRequestGeneration(apiKey, "${UIBlockType.SYMBOL.defaultPrompt}, $safePrompt")
-                    
-                    showGenConfirmDialog = false
-                    showAddItemDialog = false
-                }) {
-                    Text("开始生成")
+                val newItems = if (editingItem != null) {
+                    props.items.map { if (it.id == editingItem!!.id) targetItem else it }
+                } else {
+                    props.items + targetItem
                 }
-            }
+
+                onPropertiesChanged(props.copy(items = newItems))
+                
+                // 2. 触发生成逻辑，强制使用当前选中 Tab 的语言
+                val finalPromptText = if (promptTab == 0) targetItem.userPromptZh else targetItem.userPromptEn
+                val safePrompt = if (finalPromptText.isNotBlank()) finalPromptText else targetItem.fullPrompt
+                
+                viewModel.assetManager.selectReelItem(targetItem.id)
+                viewModel.assetGen.onRequestGeneration(apiKey, "${UIBlockType.SYMBOL.defaultPrompt}, $safePrompt")
+                
+                showGenConfirmDialog = false
+                showAddItemDialog = false
+            },
+            onDismiss = { showGenConfirmDialog = false }
         )
     }
 }

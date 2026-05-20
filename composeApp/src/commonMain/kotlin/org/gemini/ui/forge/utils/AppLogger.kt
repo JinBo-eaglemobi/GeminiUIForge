@@ -23,6 +23,7 @@ expect fun printToConsole(level: String, tag: String, message: String, throwable
 object AppLogger {
     private val logChannel = Channel<LogEvent>(Channel.UNLIMITED)
     private val loggerScope = CoroutineScope(Dispatchers.Default)
+    private var justStarted = true
     
     private val _memoryLogs = MutableStateFlow<List<LogEvent>>(emptyList())
     val memoryLogs = _memoryLogs.asStateFlow()
@@ -44,7 +45,7 @@ object AppLogger {
     init {
         loggerScope.launch {
             val debugLogBuffer = StringBuilder() // 全部日志
-            val infoLogBuffer = StringBuilder()  // 仅 INFO 和 ERROR
+            val infoLogBuffer = StringBuilder()  // INFO, WARN 和 ERROR
             val errorLogBuffer = StringBuilder() // 仅 ERROR
             var lastFlushTime = org.gemini.ui.forge.getCurrentTimeMillis()
             
@@ -58,7 +59,7 @@ object AppLogger {
                     // 所有日志进 debug.log
                     debugLogBuffer.append(formatted).append("\n")
                     
-                    if (event.level == "INFO" || event.level == "ERROR") {
+                    if (event.level == "INFO" || event.level == "WARN" || event.level == "ERROR") {
                         infoLogBuffer.append(formatted).append("\n")
                     }
                     if (event.level == "ERROR") {
@@ -95,19 +96,80 @@ object AppLogger {
         val logDir = getPlatformLogDirectory()
         if (logDir.isNotEmpty()) {
             if (debugBuf.isNotEmpty()) {
-                appendToLocalFile("$logDir/app_debug.log", debugBuf.toString())
+                val fileName = "app_debug.log"
+                checkAndRoll(logDir, fileName)
+                appendToLocalFile("$logDir/$fileName", debugBuf.toString())
                 debugBuf.clear()
             }
             if (infoBuf.isNotEmpty()) {
-                appendToLocalFile("$logDir/app_info.log", infoBuf.toString())
+                val fileName = "app_info.log"
+                checkAndRoll(logDir, fileName)
+                appendToLocalFile("$logDir/$fileName", infoBuf.toString())
                 infoBuf.clear()
             }
             if (errorBuf.isNotEmpty()) {
-                appendToLocalFile("$logDir/app_error.log", errorBuf.toString())
+                val fileName = "app_error.log"
+                checkAndRoll(logDir, fileName)
+                appendToLocalFile("$logDir/$fileName", errorBuf.toString())
                 errorBuf.clear()
             }
+            // 所有检查完后，标记为非首次启动
+            justStarted = false
         } else {
             debugBuf.clear(); infoBuf.clear(); errorBuf.clear()
+        }
+    }
+
+    private suspend fun checkAndRoll(logDir: String, fileName: String) {
+        val filePath = "$logDir/$fileName"
+        if (!isFileExists(filePath)) return
+
+        val fileSize = getLocalFileSize(filePath)
+        val lastModified = getLocalFileLastModified(filePath)
+        val todayStr = org.gemini.ui.forge.getCurrentDate()
+        val lastModifiedDateStr = org.gemini.ui.forge.formatTimestamp(lastModified, "yyyy-MM-dd")
+
+        // 滚动条件：文件超过5M，或者最后修改日期不是今天，或者程序刚刚启动
+        val needsRoll = fileSize > 5 * 1024 * 1024 || 
+                        lastModifiedDateStr != todayStr ||
+                        justStarted
+
+        if (needsRoll) {
+            val baseName = fileName.substringBeforeLast(".")
+            val extension = fileName.substringAfterLast(".", "log")
+            val dateSuffix = org.gemini.ui.forge.formatTimestamp(lastModified, "yyyy_MM_dd")
+            
+            // 查找下一个可用的索引
+            var index = 1
+            var rollPath = "$logDir/${baseName}-${dateSuffix}_${index}.${extension}"
+            while (isFileExists(rollPath)) {
+                index++
+                rollPath = "$logDir/${baseName}-${dateSuffix}_${index}.${extension}"
+            }
+            
+            renameLocalFile(filePath, rollPath)
+            
+            // 清理旧日志
+            cleanupOldLogs(logDir, baseName, extension)
+        }
+    }
+
+    private suspend fun cleanupOldLogs(logDir: String, baseFileName: String, extension: String) {
+        val prefix = "$baseFileName-"
+        val allFiles = listFilesInLocalDirectory(logDir)
+        
+        // 过滤出该类型的滚动日志文件
+        val rolledFiles = allFiles.filter { 
+            val fileName = it.replace("\\", "/").substringAfterLast("/")
+            fileName.startsWith(prefix) && fileName.endsWith(".$extension")
+        }.map { it to getLocalFileLastModified(it) }
+        .sortedByDescending { it.second } // 按时间倒序
+
+        // 超过20个则删除最早的
+        if (rolledFiles.size > 20) {
+            for (i in 20 until rolledFiles.size) {
+                deleteLocalFile(rolledFiles[i].first)
+            }
         }
     }
 
@@ -121,6 +183,7 @@ object AppLogger {
 
     fun d(tag: String, message: String, throwable: Throwable? = null) = log("DEBUG", tag, message, throwable)
     fun i(tag: String, message: String, throwable: Throwable? = null) = log("INFO", tag, message, throwable)
+    fun w(tag: String, message: String, throwable: Throwable? = null) = log("WARN", tag, message, throwable)
     fun e(tag: String, message: String, throwable: Throwable? = null) = log("ERROR", tag, message, throwable)
 }
 
