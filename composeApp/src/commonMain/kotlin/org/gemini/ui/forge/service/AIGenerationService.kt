@@ -14,12 +14,13 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.api.ChatMessage
 import org.gemini.ui.forge.state.ui.ProjectState
-import org.gemini.ui.forge.state.ui.postProcess
 import org.gemini.ui.forge.model.ui.UIPage
 import org.gemini.ui.forge.utils.AppLogger
 import kotlin.time.Duration.Companion.milliseconds
 import org.gemini.ui.forge.manager.*
 import org.gemini.ui.forge.utils.LocalFileStorage
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * AI 生成服务类（门面），协调 ImagenGenerator 和 GeminiImageGenerator。
@@ -160,18 +161,13 @@ class AIGenerationService(
                         } else {
                             imagenGenerator.generate(model.modelName, params, onLog) {
                                 onImageGenerated(it)
-                            }.also { list ->
-                                // 如果底层不是逐张回调（比如 Imagen 一次性回 4 张），这里补齐回调
-                                if (list.size > 0 && list.size <= params.count) {
-                                    // 实际上 ImagenGenerator 现在也支持回调了，这里为了稳妥
-                                }
                             }
                         }
                         return@async results
                     } catch (e: Exception) {
                         lastException = e
                         syncLog("❌ $batchTag 请求异常: ${e.message}", onLog)
-                        if (attempt < maxRetries) delay(1000L * (attempt + 1))
+                        if (attempt < maxRetries) delay((1000L * (attempt + 1)).milliseconds)
                     }
                 }
                 throw lastException ?: Exception("生图未知错误")
@@ -194,7 +190,7 @@ class AIGenerationService(
             return null
         }
 
-        val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
+        val timestamp = getCurrentTimeMillis()
         val inputPath = storage.getFilePath("temp/input_$timestamp.png")
         val outputPath = storage.getFilePath("temp/output_$timestamp.png")
 
@@ -273,13 +269,13 @@ class AIGenerationService(
             })
         }.toString()
 
-        val startTime = org.gemini.ui.forge.getCurrentTimeMillis()
+        val startTime = getCurrentTimeMillis()
         return try {
             val resultBase64 = geminiClient.generateContent(url, requestBody, onLog)
-            val duration = org.gemini.ui.forge.getCurrentTimeMillis() - startTime
+            val duration = getCurrentTimeMillis() - startTime
 
-            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-            val resultBytes = kotlin.io.encoding.Base64.Default.decode(resultBase64)
+            @OptIn(ExperimentalEncodingApi::class)
+            val resultBytes = Base64.decode(resultBase64)
             syncLog("✅ 云端抠图处理完成 (${duration}ms)", onLog)
             resultBytes
         } catch (e: Exception) {
@@ -288,7 +284,7 @@ class AIGenerationService(
         }
     }
 
-    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    @OptIn(ExperimentalEncodingApi::class)
     suspend fun analyzeImagesForTemplate(
         imageUris: List<String>,
         apiKey: String = "",

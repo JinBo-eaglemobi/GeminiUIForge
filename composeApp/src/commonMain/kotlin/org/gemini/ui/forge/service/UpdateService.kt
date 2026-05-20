@@ -23,7 +23,6 @@ import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.buffered
 import org.jetbrains.skiko.hostOs
-import kotlin.math.min
 
 /**
  * 软件更新服务

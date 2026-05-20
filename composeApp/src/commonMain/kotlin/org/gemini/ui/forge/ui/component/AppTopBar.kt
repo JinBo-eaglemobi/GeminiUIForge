@@ -17,7 +17,6 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Help
 import androidx.compose.ui.text.font.FontWeight
 
 import androidx.compose.ui.draw.drawBehind

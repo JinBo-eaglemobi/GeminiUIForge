@@ -119,7 +119,7 @@ fun App(typography: Typography? = null) {
                         val info = (updateStatus as UpdateStatus.Available).info
                         Toast.show(
                             message = "发现新版本 v${info.version}！",
-                            type = org.gemini.ui.forge.ui.component.ToastType.INFO,
+                            type = ToastType.INFO,
                             durationMillis = 10000L, // 显示 10 秒
                             actionLabel = "立即更新"
                         ) {
@@ -132,7 +132,7 @@ fun App(typography: Typography? = null) {
                         if (progress == 0f) {
                             Toast.show(
                                 message = "开始后台下载更新...",
-                                type = org.gemini.ui.forge.ui.component.ToastType.SUCCESS
+                                type = ToastType.SUCCESS
                             )
                         }
                     }
@@ -140,7 +140,7 @@ fun App(typography: Typography? = null) {
                     is UpdateStatus.ReadyToInstall -> {
                         Toast.show(
                             message = "下载完成，准备重启安装！",
-                            type = org.gemini.ui.forge.ui.component.ToastType.SUCCESS,
+                            type = ToastType.SUCCESS,
                             durationMillis = 5000L
                         )
                     }
@@ -149,7 +149,7 @@ fun App(typography: Typography? = null) {
                         val errorMsg = (updateStatus as UpdateStatus.Error).message
                         Toast.show(
                             message = "更新失败: $errorMsg",
-                            type = org.gemini.ui.forge.ui.component.ToastType.ERROR,
+                            type = ToastType.ERROR,
                             durationMillis = 8000L
                         )
                     }
@@ -285,7 +285,7 @@ fun App(typography: Typography? = null) {
                             configManager = configManager,
                             onDismiss = { showSettingsDialog = false },
                             onLanguageSelected = {
-                                settingsViewModel.saveLanguage(it);
+                                settingsViewModel.saveLanguage(it)
                                 appViewModel.setLanguage(it); languageKey++
                             },
                             onLayoutModeSelected = {
@@ -294,7 +294,7 @@ fun App(typography: Typography? = null) {
                             },
                             onThemeSelected = { appViewModel.setThemeMode(it) },
                             onApiKeySaved = {
-                                settingsViewModel.saveApiKey(it);
+                                settingsViewModel.saveApiKey(it)
                                 appViewModel.updateApiKey(it)
                             },
                             onStorageDirSaved = { path ->
@@ -305,19 +305,19 @@ fun App(typography: Typography? = null) {
                                 }
                             },
                             onMaxRetriesSaved = {
-                                settingsViewModel.saveMaxRetries(it);
+                                settingsViewModel.saveMaxRetries(it)
                                 appViewModel.updateMaxRetriesState(it)
                             },
                             onImageGenCountSaved = {
-                                settingsViewModel.saveImageGenCount(it);
+                                settingsViewModel.saveImageGenCount(it)
                                 appViewModel.updateImageGenCountState(it)
                             },
                             onPromptLangSelected = {
-                                settingsViewModel.savePromptLanguagePref(it);
+                                settingsViewModel.savePromptLanguagePref(it)
                                 appViewModel.setPromptLanguagePref(it)
                             },
                             onShortcutSaved = { action, key ->
-                                settingsViewModel.saveShortcut(action, key);
+                                settingsViewModel.saveShortcut(action, key)
                                 appViewModel.updateShortcutState(action, key)
                             },
                             onCheckEnv = { envViewModel.checkEnvironment() },
@@ -364,7 +364,7 @@ fun App(typography: Typography? = null) {
                                     appViewModel.dispatchSaveEvent()
                                 },
                                 onSettingsClicked = {
-                                    settingsInitialCategory = SettingCategory.GENERAL;
+                                    settingsInitialCategory = SettingCategory.GENERAL
                                     showSettingsDialog = true
                                 },
                                 onHelpClicked = { showHelpDialog = true }
@@ -442,7 +442,7 @@ fun App(typography: Typography? = null) {
                                 AppScreen.TEMPLATE_GENERATOR -> {
                                     TemplateGeneratorScreen(
                                         onTemplateSaved = { name, ps ->
-                                            appViewModel.loadProject(name, ps);
+                                            appViewModel.loadProject(name, ps)
                                             appViewModel.navigateTo(
                                                 AppScreen.PROJECT_WORKSPACE
                                             )
@@ -459,7 +459,7 @@ fun App(typography: Typography? = null) {
                     }
 
                     // 在所有 UI 的最上层挂载全局 Toast 容器
-                    org.gemini.ui.forge.ui.component.AppToastContainer(
+                    AppToastContainer(
                         toastData = toastData,
                         onDismiss = { Toast.hide() },
                         modifier = Modifier.align(Alignment.TopCenter)

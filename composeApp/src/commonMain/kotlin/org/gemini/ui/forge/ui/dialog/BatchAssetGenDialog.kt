@@ -20,7 +20,6 @@ import androidx.compose.ui.window.DialogProperties
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.jetbrains.compose.resources.stringResource

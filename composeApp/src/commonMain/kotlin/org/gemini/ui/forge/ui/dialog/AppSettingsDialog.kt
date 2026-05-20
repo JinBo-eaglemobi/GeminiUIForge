@@ -3,18 +3,13 @@ package org.gemini.ui.forge.ui.dialog
 import org.gemini.ui.forge.ui.dialog.settings.*
 
 import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.PaddingValues
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
-import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.foundation.gestures.*
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.automirrored.filled.*
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,26 +19,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.ProjectConfig
 import org.gemini.ui.forge.ResizeHorizontalIcon
-import org.gemini.ui.forge.getPlatform
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.model.app.*
-import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.utils.rememberDirectoryPicker
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LinearProgressIndicator
 import kotlinx.coroutines.launch
 
 /**
@@ -98,7 +81,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun AppSettingsDialog(
     currentTheme: ThemeMode,
-    currentLayoutMode: org.gemini.ui.forge.model.app.LayoutMode,
+    currentLayoutMode: LayoutMode,
     currentLanguage: String,
     currentApiKey: String,
     currentStorageDir: String,
@@ -121,7 +104,7 @@ fun AppSettingsDialog(
     configManager: org.gemini.ui.forge.manager.ConfigManager,
     onDismiss: () -> Unit,
     onLanguageSelected: (String) -> Unit,
-    onLayoutModeSelected: (org.gemini.ui.forge.model.app.LayoutMode) -> Unit,
+    onLayoutModeSelected: (LayoutMode) -> Unit,
     onThemeSelected: (ThemeMode) -> Unit,
     onApiKeySaved: (String) -> Unit,
     onStorageDirSaved: (String) -> Unit,

@@ -22,7 +22,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.action_exit
@@ -30,12 +29,10 @@ import geminiuiforge.composeapp.generated.resources.group_editing_indicator_pref
 import org.gemini.ui.forge.ResizeVerticalIcon
 import org.gemini.ui.forge.model.app.ReferenceDisplayMode
 import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.decodeBase64ToBitmap
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.abs
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 /**
  * 画布区域组件：负责渲染基础 Slots 模板及已绑定的图片。
@@ -96,7 +93,7 @@ fun CanvasArea(
             val colorStr = stageBackgroundColor.removePrefix("#")
             val colorLong = colorStr.toLong(16)
             if (colorStr.length <= 6) Color(colorLong or 0xFF000000L) else Color(colorLong)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Color(0xFF2D2D2D)
         }
     }
@@ -306,7 +303,7 @@ private fun findHitBlock(blocks: List<UIBlock>, lx: Float, ly: Float, parentLx: 
             if (!block.isVisible) continue
             val absL = parentLx + block.bounds.left; val absT = parentLy + block.bounds.top
             val absR = parentLx + block.bounds.right; val absB = parentLy + block.bounds.bottom
-            if (lx >= absL && lx <= absR && ly >= absT && ly <= absB) return block
+            if (lx in absL..absR && ly >= absT && ly <= absB) return block
         }
         return null
     }

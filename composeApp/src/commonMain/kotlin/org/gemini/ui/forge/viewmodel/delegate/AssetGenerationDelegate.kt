@@ -295,7 +295,7 @@ class AssetGenerationDelegate(
         prefix: String,
         block: UIBlock,
         currentState: ProjectWorkspaceState
-    ): TemplateFile? {
+    ): TemplateFile {
         val deferredBytes = CompletableDeferred<ByteArray>()
         aiService.generateImages(
             model = currentState.selectedModel,

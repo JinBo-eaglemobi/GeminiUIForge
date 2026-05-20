@@ -1,7 +1,5 @@
 package org.gemini.ui.forge
 
-import org.gemini.ui.forge.utils.AppLogger
-
 /**
  * Logger instantiation by function. Use: `val log = logger()`. The logger will be named according to the
  * receiver of the function, which can be a class or object. An alternative for explicitly named loggers is

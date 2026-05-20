@@ -230,7 +230,7 @@ fun TemplateGeneratorScreen(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             shape = MaterialTheme.shapes.small
         ) {
-            val logs = currentTask?.logs ?: remember { mutableStateListOf<String>() }
+            val logs = currentTask?.logs ?: remember { mutableStateListOf() }
             
             if (logs.isEmpty() && taskStatus == AITaskStatus.IDLE) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

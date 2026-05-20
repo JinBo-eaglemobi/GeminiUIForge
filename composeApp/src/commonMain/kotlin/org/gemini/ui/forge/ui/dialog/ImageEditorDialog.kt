@@ -32,9 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.*
@@ -798,7 +796,7 @@ private fun EditorStage(
                     if (activeLine == DragTarget.PAN) {
                         viewOffset += amt
                     } else if (mode == ImageResizeMode.NINE_PATCH) {
-                        val dx = amt.x / viewZoom;
+                        val dx = amt.x / viewZoom
                         val dy = amt.y / viewZoom
                         when (activeLine) {
                             DragTarget.LEFT -> dragL = (dragL + dx).coerceIn(0f, contentW - dragR - 10f)
@@ -814,20 +812,20 @@ private fun EditorStage(
         }
     ) {
         if (!isInitialized) return@Canvas
-        val dCanW = canvasW * viewZoom;
+        val dCanW = canvasW * viewZoom
         val dCanH = canvasH * viewZoom
         drawRect(Color.Black.copy(alpha = 0.5f), viewOffset, Size(dCanW, dCanH))
         clipRect(viewOffset.x, viewOffset.y, viewOffset.x + dCanW, viewOffset.y + dCanH) {
             drawCheckerboard(Rect(viewOffset, Size(dCanW, dCanH)))
-            val dConW = contentW * viewZoom;
+            val dConW = contentW * viewZoom
             val dConH = contentH * viewZoom
-            val cX = viewOffset.x + (dCanW - dConW) / 2f;
+            val cX = viewOffset.x + (dCanW - dConW) / 2f
             val cY = viewOffset.y + (dCanH - dConH) / 2f
             renderProcessed(imageBitmap, mode, config, cX, cY, dConW, dConH)
             if (mode == ImageResizeMode.NINE_PATCH) {
-                val lL = cX + config.left * viewZoom;
+                val lL = cX + config.left * viewZoom
                 val lR = cX + (contentW - config.right) * viewZoom
-                val lT = cY + config.top * viewZoom;
+                val lT = cY + config.top * viewZoom
                 val lB = cY + (contentH - config.bottom) * viewZoom
                 fun dG(s: Offset, e: Offset, a: Boolean) =
                     drawLine(if (a) Color.Cyan else Color.Green, s, e, if (a) 3.dp.toPx() else 1.dp.toPx())
@@ -856,8 +854,8 @@ private fun DrawScope.renderProcessed(
                 drawImage(img, dstOffset = IntOffset(x.toInt(), y.toInt()), dstSize = IntSize(w.toInt(), h.toInt()))
 
             ImageResizeMode.FIT_WITH_PADDING -> {
-                val s = minOf(w / img.width, h / img.height);
-                val dw = img.width * s;
+                val s = minOf(w / img.width, h / img.height)
+                val dw = img.width * s
                 val dh = img.height * s
                 drawImage(
                     img,
@@ -867,8 +865,8 @@ private fun DrawScope.renderProcessed(
             }
 
             ImageResizeMode.CROP_TO_FILL -> {
-                val s = maxOf(w / img.width, h / img.height);
-                val dw = img.width * s;
+                val s = maxOf(w / img.width, h / img.height)
+                val dw = img.width * s
                 val dh = img.height * s
                 drawImage(
                     img,
@@ -884,11 +882,11 @@ private fun DrawScope.renderProcessed(
 }
 
 private fun DrawScope.drawNP(img: ImageBitmap, c: NinePatchConfig, dx: Float, dy: Float, dw: Float, dh: Float) {
-    val sw = img.width;
-    val sh = img.height;
-    val l = c.left;
-    val t = c.top;
-    val r = c.right;
+    val sw = img.width
+    val sh = img.height
+    val l = c.left
+    val t = c.top
+    val r = c.right
     val b = c.bottom
     fun dP(sx: Int, sy: Int, sW: Int, sH: Int, pX: Float, pY: Float, pW: Float, pH: Float) {
         if (sW <= 0 || sH <= 0 || pW <= 0 || pH <= 0) return
@@ -914,7 +912,7 @@ private fun DrawScope.drawNP(img: ImageBitmap, c: NinePatchConfig, dx: Float, dy
 private fun DrawScope.drawCheckerboard(rect: Rect) {
     clipRect(rect.left, rect.top, rect.right, rect.bottom) {
         val s = 12.dp.toPx()
-        val cols = ceil(rect.width / s).toInt() + 1;
+        val cols = ceil(rect.width / s).toInt() + 1
         val rows = ceil(rect.height / s).toInt() + 1
         for (i in 0 until rows) {
             for (j in 0 until cols) {

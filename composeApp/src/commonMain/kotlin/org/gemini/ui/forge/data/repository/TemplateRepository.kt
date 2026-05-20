@@ -9,6 +9,9 @@ import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.*
 import org.gemini.ui.forge.data.TemplateFile
+import org.gemini.ui.forge.model.ui.UIBlock
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * 模板持久化仓库类，负责项目模板及关联资源的保存、读取和删除
@@ -103,8 +106,8 @@ class TemplateRepository(
                     }
                     originalPath.startsWith("data:image") -> {
                         val pureBase64 = if (originalPath.contains(",")) originalPath.substringAfter(",") else originalPath
-                        @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-                        bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
+                        @OptIn(ExperimentalEncodingApi::class)
+                        bytes = Base64.decode(pureBase64)
                         ext = originalPath.substringAfter("data:image/").substringBefore(";").ifBlank { "png" }
                     }
                     else -> {
@@ -141,7 +144,7 @@ class TemplateRepository(
         AppLogger.i("TemplateRepository", "✅ 模板 JSON 已更新")
     }
 
-    private fun cleanBlockPaths(blocks: List<org.gemini.ui.forge.model.ui.UIBlock>): List<org.gemini.ui.forge.model.ui.UIBlock> {
+    private fun cleanBlockPaths(blocks: List<UIBlock>): List<UIBlock> {
         return blocks.map { block ->
             block.copy(
                 children = cleanBlockPaths(block.children)
@@ -158,11 +161,11 @@ class TemplateRepository(
         fileStorage.deleteDirectory("$PROJECTS_DIR/$sanitizedName")
     }
 
-    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    @OptIn(ExperimentalEncodingApi::class)
     suspend fun saveResource(templateName: String, blockId: String, base64Data: String): TemplateFile {
         val sanitizedName = templateName.replace(" ", "_")
         val pureBase64 = if (base64Data.contains(",")) base64Data.substringAfter(",") else base64Data
-        val bytes = kotlin.io.encoding.Base64.Default.decode(pureBase64)
+        val bytes = Base64.decode(pureBase64)
 
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
         val resourceName = "$PROJECTS_DIR/$sanitizedName/assets/$blockId/manual_$timestamp.png"

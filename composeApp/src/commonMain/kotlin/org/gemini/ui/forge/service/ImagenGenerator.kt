@@ -9,8 +9,6 @@ import org.gemini.ui.forge.data.remote.NetworkClient
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.utils.getMimeType
 import org.gemini.ui.forge.utils.readLocalFileBytes
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 import org.gemini.ui.forge.manager.*
 
 /**

@@ -25,7 +25,6 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.utils.getPlatformLogDirectory
 import org.gemini.ui.forge.utils.streamLocalFileLines
-import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 
 @Composable
