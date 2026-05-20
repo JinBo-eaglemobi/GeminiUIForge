@@ -173,6 +173,7 @@ fun App(typography: Typography? = null) {
 
             var showCloudAssetDialog by remember { mutableStateOf(false) }
             var showSettingsDialog by remember { mutableStateOf(false) }
+            var showCompileDialog by remember { mutableStateOf(false) }
             var showHelpDialog by remember { mutableStateOf(false) }
             var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
 
@@ -214,6 +215,19 @@ fun App(typography: Typography? = null) {
                             false
                         }
                 ) {
+                    if (showCompileDialog) {
+                        org.gemini.ui.forge.ui.dialog.CompileConfigDialog(
+                            initialConfig = globalState.compileConfig,
+                            onDismiss = { showCompileDialog = false },
+                            onConfirm = { config ->
+                                settingsViewModel.saveCompileConfig(config)
+                                appViewModel.updateCompileConfig(config)
+                                showCompileDialog = false
+                                // TODO: Implement compilation logic if needed
+                            }
+                        )
+                    }
+
                     if (showExitConfirmDialog) {
                         AlertDialog(
                             onDismissRequest = { showExitConfirmDialog = false },
@@ -367,6 +381,7 @@ fun App(typography: Typography? = null) {
                                 },
                                 onGenerateTemplateClicked = { appViewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
                                 onCloudAssetManagerClicked = { showCloudAssetDialog = true },
+                                onCompileClicked = { showCompileDialog = true },
                                 onSaveClicked = {
                                     appViewModel.dispatchSaveEvent()
                                 },

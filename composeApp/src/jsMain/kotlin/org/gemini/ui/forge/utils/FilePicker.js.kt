@@ -75,6 +75,43 @@ actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): 
     }
 }
 
+@Composable
+actual fun rememberFilePicker(title: String, extensions: List<String>, onResult: (String?) -> Unit): () -> Unit {
+    return {
+        val input = document.createElement("input") as HTMLInputElement
+        input.type = "file"
+        if (extensions.isNotEmpty()) {
+            input.accept = extensions.joinToString(",") { 
+                when (it) {
+                    "js" -> "application/javascript"
+                    "json" -> "application/json"
+                    else -> ".$it"
+                }
+            }
+        }
+        
+        input.onchange = {
+            val files = input.files
+            if (files != null && files.length > 0) {
+                MainScope().launch {
+                    val file = files.item(0)
+                    if (file != null) {
+                        val bytes = readFileAsByteArray(file)
+                        val storage = LocalFileStorage()
+                        val opfsPath = "imports/${file.name}"
+                        storage.saveBytesToFile(opfsPath, bytes)
+                        onResult(opfsPath)
+                    }
+                }
+            } else {
+                onResult(null)
+            }
+            null
+        }
+        input.click()
+    }
+}
+
 private suspend fun readFileAsByteArray(file: org.w3c.files.File): ByteArray = suspendCoroutine { cont ->
     val reader = FileReader()
     reader.onload = {

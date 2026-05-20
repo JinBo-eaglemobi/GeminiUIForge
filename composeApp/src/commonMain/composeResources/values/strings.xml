@@ -256,4 +256,14 @@
     <string name="action_restart_later">Later</string>
         <string name="screen_project_workspace">Project Workspace</string>
     <string name="action_open_workspace">Open Workspace</string>
+    <string name="menu_compile">Compile</string>
+    <string name="compile_config_title">Compilation Configuration</string>
+    <string name="compile_env_root">Environment Root Directory</string>
+    <string name="compile_script_path">Compilation Script (Node.js)</string>
+    <string name="compile_output_dir">Resource Output Directory</string>
+    <string name="compile_output_dir_hint">Relative to Root</string>
+    <string name="compile_action_start">Start Compilation</string>
+    <string name="compile_pick_dir">Pick Directory</string>
+    <string name="compile_pick_file">Pick File</string>
+    <string name="compile_tip">Configure and run compilation script</string>
 </resources>

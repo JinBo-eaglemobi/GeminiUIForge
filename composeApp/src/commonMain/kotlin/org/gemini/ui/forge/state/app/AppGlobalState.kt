@@ -5,6 +5,7 @@ import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.app.ShortcutAction
 import org.gemini.ui.forge.model.app.ThemeMode
 import org.gemini.ui.forge.model.app.LayoutMode
+import org.gemini.ui.forge.model.app.CompileConfig
 
 /**
  * 应用全局状态模型
@@ -17,6 +18,7 @@ import org.gemini.ui.forge.model.app.LayoutMode
  * @property templateStorageDir 模板数据的存储目录
  * @property maxRetries API 请求的最大重试次数
  * @property shortcuts 快捷键映射表 (Action -> 组合键描述)
+ * @property compileConfig 编译环境配置
  */
 data class AppGlobalState(
     val currentScreen: AppScreen = AppScreen.HOME,
@@ -29,5 +31,6 @@ data class AppGlobalState(
     val maxRetries: Int = 0,
     val imageGenCount: Int = 4,
     val shortcuts: Map<ShortcutAction, String> = ShortcutAction.entries.associateWith { it.defaultKey },
-    val layoutMode: LayoutMode = LayoutMode.AUTO
+    val layoutMode: LayoutMode = LayoutMode.AUTO,
+    val compileConfig: CompileConfig = CompileConfig()
 )

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +33,7 @@ import org.gemini.ui.forge.ui.theme.AppShapes
  * @param onNavigateHome 点击返回首页的回调。
  * @param onGenerateTemplateClicked 点击 AI 生成模板的回调。
  * @param onCloudAssetManagerClicked 点击云端资产管理的回调。
+ * @param onCompileClicked 点击编译配置的回调。
  * @param onSaveClicked 点击保存项目的回调。
  * @param onSettingsClicked 点击应用设置的回调。
  * @param onHelpClicked 点击帮助的回调。
@@ -42,6 +44,7 @@ fun AppTopBar(
     onNavigateHome: () -> Unit,
     onGenerateTemplateClicked: () -> Unit = {},
     onCloudAssetManagerClicked: () -> Unit = {},
+    onCompileClicked: () -> Unit = {},
     onSaveClicked: () -> Unit = {},
     onSettingsClicked: () -> Unit = {},
     onHelpClicked: () -> Unit = {}
@@ -139,6 +142,14 @@ fun AppTopBar(
                         Text(stringResource(Res.string.menu_cloud_assets), style = MaterialTheme.typography.labelLarge)
                     }
                 } else if (currentScreen == AppScreen.TEMPLATE_EDITOR || currentScreen == AppScreen.TEMPLATE_ASSET_GEN || currentScreen == AppScreen.PROJECT_WORKSPACE) {
+                    if (currentScreen == AppScreen.PROJECT_WORKSPACE) {
+                        IconButton(
+                            onClick = onCompileClicked,
+                            modifier = Modifier.tip(stringResource(Res.string.compile_tip))
+                        ) {
+                            Icon(Icons.Default.Build, contentDescription = stringResource(Res.string.menu_compile))
+                        }
+                    }
                     IconButton(
                         onClick = onSaveClicked,
                         modifier = Modifier.tip("保存当前项目修改 (Ctrl+S)")

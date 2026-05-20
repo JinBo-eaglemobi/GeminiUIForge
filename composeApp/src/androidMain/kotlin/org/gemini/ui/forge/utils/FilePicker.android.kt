@@ -38,6 +38,28 @@ actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): 
 }
 
 @Composable
+actual fun rememberFilePicker(title: String, extensions: List<String>, onResult: (String?) -> Unit): () -> Unit {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            onResult(uri.toString())
+        } else {
+            onResult(null)
+        }
+    }
+    return {
+        val mimeType = if (extensions.isNotEmpty()) {
+            // 简化 MIME 类型映射
+            when (extensions.first()) {
+                "js" -> "application/javascript"
+                "json" -> "application/json"
+                else -> "*/*"
+            }
+        } else "*/*"
+        launcher.launch(mimeType)
+    }
+}
+
+@Composable
 actual fun org.gemini.ui.forge.data.TemplateFile.rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
     // Android 系统文件选择器暂不支持指定起始本地目录，回退至标准选择器
     return rememberImagePicker(onResult)

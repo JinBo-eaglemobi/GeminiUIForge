@@ -102,3 +102,28 @@ actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): 
         }.start()
     }
 }
+
+@Composable
+actual fun rememberFilePicker(title: String, extensions: List<String>, onResult: (String?) -> Unit): () -> Unit {
+    return {
+        Thread {
+            val activeWindow = java.awt.Window.getWindows().firstOrNull { it.isActive }
+            val dialog = FileDialog(activeWindow as? Frame, title, FileDialog.LOAD)
+            dialog.isAlwaysOnTop = true
+            if (extensions.isNotEmpty()) {
+                // 为 AWT FileDialog 简化处理扩展名过滤
+                dialog.file = extensions.joinToString(";") { "*.$it" }
+            }
+            dialog.isVisible = true
+            val file = if (dialog.file != null) {
+                val dir = dialog.directory
+                val fileName = dialog.file
+                if (dir != null && fileName != null) {
+                    java.io.File(dir, fileName).absolutePath
+                } else null
+            } else null
+            onResult(file)
+            dialog.dispose()
+        }.start()
+    }
+}

@@ -118,6 +118,10 @@ class AppViewModel(
                 LayoutMode.AUTO
             }
 
+            val compileRootDir = configManager.loadKey("COMPILE_ROOT_DIR") ?: ""
+            val compileScriptPath = configManager.loadKey("COMPILE_SCRIPT_PATH") ?: ""
+            val compileOutputDir = configManager.loadKey("COMPILE_OUTPUT_DIR") ?: ""
+
             _state.update {
                 it.copy(
                     globalState = it.globalState.copy(
@@ -128,7 +132,12 @@ class AppViewModel(
                         promptLangPref = promptLang,
                         maxRetries = retriesStr.toIntOrNull() ?: 3,
                         imageGenCount = imageGenCountStr.toIntOrNull() ?: 4,
-                        layoutMode = layoutMode
+                        layoutMode = layoutMode,
+                        compileConfig = CompileConfig(
+                            rootDir = compileRootDir,
+                            scriptPath = compileScriptPath,
+                            outputDir = compileOutputDir
+                        )
                     )
                 )
             }
@@ -205,5 +214,10 @@ class AppViewModel(
     fun setPromptLanguagePref(pref: PromptLanguage) =
         _state.update {
             it.copy(globalState = it.globalState.copy(promptLangPref = pref))
+        }
+
+    fun updateCompileConfig(config: CompileConfig) =
+        _state.update {
+            it.copy(globalState = it.globalState.copy(compileConfig = config))
         }
 }

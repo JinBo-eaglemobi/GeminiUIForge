@@ -90,3 +90,35 @@ actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): 
         rootVC?.presentViewController(picker, animated = true, completion = null)
     }
 }
+
+@Composable
+actual fun rememberFilePicker(title: String, extensions: List<String>, onResult: (String?) -> Unit): () -> Unit {
+    val delegate = remember {
+        object : NSObject(), UIDocumentPickerDelegateProtocol {
+            override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
+                val url = didPickDocumentsAtURLs.firstOrNull() as? NSURL
+                onResult(url?.path)
+            }
+            override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) {
+                onResult(null)
+            }
+        }
+    }
+
+    return {
+        val contentTypes = if (extensions.isNotEmpty()) {
+            extensions.mapNotNull { ext ->
+                when (ext) {
+                    "js" -> UTType.typeWithFilenameExtension("js")
+                    "json" -> UTTypeJSON
+                    else -> UTTypeData
+                }
+            }
+        } else listOf(UTTypeData)
+        
+        val picker = UIDocumentPickerViewController(forOpeningContentTypes = contentTypes, asCopy = false)
+        picker.delegate = delegate
+        val rootVC = UIApplication.sharedApplication.keyWindow?.rootViewController
+        rootVC?.presentViewController(picker, animated = true, completion = null)
+    }
+}
