@@ -382,7 +382,7 @@ class AIGenerationService(
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
 
         val promptTemplate = promptManager.getPrompt("refine_template")
-        val fullPrompt = promptTemplate.replace("\${USER_INSTRUCTION}", userInstruction)
+        val fullPrompt = promptTemplate.replace($$"${USER_INSTRUCTION}", userInstruction)
 
 
         // 使用统一图片预处理方法处理 croppedBytes

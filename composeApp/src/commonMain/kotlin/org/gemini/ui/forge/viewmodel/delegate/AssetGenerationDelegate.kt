@@ -16,6 +16,7 @@ import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.formatSize
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -238,7 +239,7 @@ class AssetGenerationDelegate(
                             updateWorker(slotId, blockId = block.id, action = "❌ 失败", info = e.message ?: "", isBusy = true)
                         } finally {
                             updateState { s -> s.copy(batchProgress = (s.batchProgress?.first ?: 0) + 1 to selectedBlocks.size) }
-                            delay(1000)
+                            delay(1000.milliseconds)
                             updateWorker(slotId, isBusy = false) 
                         }
                     }

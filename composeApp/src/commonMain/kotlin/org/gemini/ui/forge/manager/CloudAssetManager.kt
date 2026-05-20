@@ -22,6 +22,7 @@ import org.gemini.ui.forge.model.api.gemini.file.GeminiFileUploadResponse
 import org.gemini.ui.forge.utils.AppLogger
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 云端资产管理器 (Cloud Asset Manager)
@@ -185,7 +186,7 @@ class CloudAssetManager(private val configManager: ConfigManager) {
             while (uploadedFile.state == "PROCESSING" && retries < maxRetries) {
                 val waitSec = (retries + 1) * 2
                 onProgress(0.9f + (retries.toFloat() / maxRetries) * 0.09f, "云端处理中 (${waitSec}s)...")
-                delay(2000L)
+                delay(2000L.milliseconds)
                 val updated = getFileDetail(uploadedFile.name) ?: break
                 uploadedFile = updated
                 retries++

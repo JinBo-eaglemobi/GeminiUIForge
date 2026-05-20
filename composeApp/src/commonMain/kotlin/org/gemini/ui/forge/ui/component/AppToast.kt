@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.getCurrentTimeMillis
+import kotlin.time.Duration.Companion.milliseconds
 
 /** 提示类型 */
 enum class ToastType {
@@ -67,11 +68,11 @@ fun AppToastContainer(
                         break
                     }
                     progress = 1f - (elapsed.toFloat() / duration)
-                    delay(16) // 约 60fps 刷新一次
+                    delay(16.milliseconds) // 约 60fps 刷新一次
                 }
             }
 
-            delay(duration)
+            delay(duration.milliseconds)
             onDismiss()
         }
     }

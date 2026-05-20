@@ -25,6 +25,7 @@ import org.gemini.ui.forge.utils.rememberImagePicker
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.ui.theme.AppShapes
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 云端资产管理对话框。
@@ -79,7 +80,7 @@ fun CloudAssetDialog(
                             uploadingTasks[displayName] = 0f to errorMsg
                         } finally {
                             // 上传成功或彻底失败后停留 1.5 秒再从“上传列表”移除，让用户看一眼结果
-                            delay(1500L)
+                            delay(1500L.milliseconds)
                             uploadingTasks.remove(displayName)
                         }
                     }

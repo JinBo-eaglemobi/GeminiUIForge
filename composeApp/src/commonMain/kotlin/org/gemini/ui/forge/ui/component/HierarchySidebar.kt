@@ -37,6 +37,7 @@ import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.ui.dialog.AddLayerDialog
 import org.gemini.ui.forge.ui.dialog.RenameLayerDialog
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * UI 图层层级面板组件
@@ -102,7 +103,7 @@ fun HierarchySidebar(
     // 监听 selectedBlockId 变化：当在外侧画布被选中时，延迟通知列表滚动定位到该图层
     LaunchedEffect(selectedBlockId, isAutoTrackEnabled) {
         if (isAutoTrackEnabled && selectedBlockId != null) {
-            delay(100)
+            delay(100.milliseconds)
             locateTrigger = getCurrentTimeMillis()
         }
     }
