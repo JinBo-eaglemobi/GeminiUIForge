@@ -140,7 +140,7 @@ fun ImageEditorDialog(
     var showUnappliedWarning by remember { mutableStateOf(false) }
 
     // 通用裁剪执行逻辑
-    suspend fun applyCropLogic(): Boolean {
+    fun applyCropLogic(): Boolean {
         val bytes = currentBytes ?: return false
         val img = imageBitmap ?: return false
         val relX = (cropOffset.x - imageDisplayRect.left) / imageDisplayRect.width

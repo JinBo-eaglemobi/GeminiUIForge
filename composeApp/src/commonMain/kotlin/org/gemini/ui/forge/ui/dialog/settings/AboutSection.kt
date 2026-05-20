@@ -25,8 +25,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.LinearProgressIndicator
 
 
-
-
 /**
  * “关于”设置区块
  *
@@ -43,7 +41,6 @@ fun AboutSection(
     onCheckUpdate: () -> Unit,
     onStartUpdate: (UpdateInfo) -> Unit
 ) {
-    val isCompact = LocalMinimumInteractiveComponentSize.current == 0.dp
 
     SettingSectionTitle(stringResource(Res.string.settings_category_about))
 
@@ -89,7 +86,10 @@ fun AboutSection(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
             shape = AppShapes.medium
         ) {
-            Column(Modifier.padding(LocalAppSpacing.current.medium), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                Modifier.padding(LocalAppSpacing.current.medium),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 when (updateStatus) {
                     is UpdateStatus.Idle -> {
                         Button(onClick = onCheckUpdate, shape = AppShapes.medium) {
@@ -127,7 +127,8 @@ fun AboutSection(
                     is UpdateStatus.Downloading -> {
                         LinearProgressIndicator(
                             progress = { updateStatus.progress },
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).height(LocalAppSpacing.current.small).clip(CircleShape)
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                .height(LocalAppSpacing.current.small).clip(CircleShape)
                         )
                         Text(
                             stringResource(Res.string.update_downloading, (updateStatus.progress * 100).toInt()),
@@ -137,7 +138,10 @@ fun AboutSection(
                     }
 
                     is UpdateStatus.ReadyToInstall -> {
-                        CircularProgressIndicator(Modifier.size(LocalAppSpacing.current.large), color = MaterialTheme.colorScheme.primary)
+                        CircularProgressIndicator(
+                            Modifier.size(LocalAppSpacing.current.large),
+                            color = MaterialTheme.colorScheme.primary
+                        )
                         Text(
                             stringResource(Res.string.update_preparing),
                             style = MaterialTheme.typography.bodySmall,
@@ -151,7 +155,10 @@ fun AboutSection(
                             color = Color(0xFF4CAF50),
                             style = MaterialTheme.typography.bodyMedium
                         )
-                        TextButton(onClick = onCheckUpdate, modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall)) {
+                        TextButton(
+                            onClick = onCheckUpdate,
+                            modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall)
+                        ) {
                             Text(
                                 stringResource(Res.string.update_check_action),
                                 style = MaterialTheme.typography.labelSmall

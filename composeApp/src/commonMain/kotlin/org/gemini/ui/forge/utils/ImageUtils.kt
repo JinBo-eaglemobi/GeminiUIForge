@@ -104,7 +104,7 @@ suspend fun TemplateFile.getImageSize(): Pair<Int, Int>? = getImageSize(this.get
  * @param ninePatchConfig 九宫格切片配置（左、上、右、下边距）。
  * @return 烘焙后的 PNG 格式字节数组，失败返回 null。
  */
-suspend fun bakeNinePatchImage(
+fun bakeNinePatchImage(
     imageBytes: ByteArray,
     targetWidth: Int,
     targetHeight: Int,
