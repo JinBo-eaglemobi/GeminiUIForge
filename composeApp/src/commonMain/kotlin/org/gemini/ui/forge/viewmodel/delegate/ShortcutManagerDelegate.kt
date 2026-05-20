@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.viewmodel
+package org.gemini.ui.forge.viewmodel.delegate
 
 import org.gemini.ui.forge.model.app.ShortcutAction
 import org.gemini.ui.forge.utils.AppLogger
@@ -19,7 +19,7 @@ class ShortcutManagerDelegate(
      */
     fun handleAction(action: ShortcutAction) {
         AppLogger.d("ShortcutManager", "⌨️ 路由快捷键动作: ${action.name}")
-        
+
         when (action) {
             ShortcutAction.UNDO -> historyManager.undo()
             ShortcutAction.REDO -> historyManager.redo()

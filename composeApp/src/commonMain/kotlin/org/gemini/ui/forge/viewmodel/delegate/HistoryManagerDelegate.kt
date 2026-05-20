@@ -1,9 +1,11 @@
-package org.gemini.ui.forge.viewmodel
+package org.gemini.ui.forge.viewmodel.delegate
 
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.history.HistoryEntry
+import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.state.ui.ProjectState
+import org.gemini.ui.forge.utils.AppLogger
 
 /**
  * 历史记录与版本控制逻辑委托。
@@ -23,7 +25,7 @@ class HistoryManagerDelegate(
         return project.copy(pages = copiedPages)
     }
 
-    private fun deepCopyBlocks(blocks: List<org.gemini.ui.forge.model.ui.UIBlock>): List<org.gemini.ui.forge.model.ui.UIBlock> {
+    private fun deepCopyBlocks(blocks: List<UIBlock>): List<UIBlock> {
         return blocks.map { block ->
             block.copy(
                 bounds = block.bounds.copy(),
@@ -37,8 +39,8 @@ class HistoryManagerDelegate(
 
     /** 保存当前状态到撤销栈 */
     fun saveSnapshot(label: String = "操作") {
-        org.gemini.ui.forge.utils.AppLogger.d("HistoryManager", "保存快照: $label")
-        org.gemini.ui.forge.utils.AppLogger.showStatus("已保存: $label")
+        AppLogger.d("HistoryManager", "保存快照: $label")
+        AppLogger.showStatus("已保存: $label")
         val currentState = getState()
         val entry = HistoryEntry(
             id = "hist_${getCurrentTimeMillis()}_${(0..999).random()}",
@@ -46,14 +48,14 @@ class HistoryManagerDelegate(
             timestamp = getCurrentTimeMillis(),
             projectState = deepCopyProject(currentState.project)
         )
-        
+
         updateState { s ->
-            val newUndo = s.undoStack.toMutableList().apply { 
+            val newUndo = s.undoStack.toMutableList().apply {
                 add(entry)
                 if (size > 50) removeAt(0)
             }
             s.copy(
-                undoStack = newUndo, 
+                undoStack = newUndo,
                 redoStack = emptyList(),
                 statusMessage = "已保存: $label"
             )
@@ -64,10 +66,10 @@ class HistoryManagerDelegate(
     fun undo() {
         val s = getState()
         if (s.undoStack.isEmpty()) return
-        
+
         val poppedUndo = s.undoStack.last()
         val newUndo = s.undoStack.dropLast(1)
-        
+
         val currentAsRedo = HistoryEntry(
             id = poppedUndo.id,
             label = poppedUndo.label,
@@ -75,16 +77,18 @@ class HistoryManagerDelegate(
             projectState = deepCopyProject(s.project)
         )
         val newRedo = s.redoStack + currentAsRedo
-        
-        org.gemini.ui.forge.utils.AppLogger.d("HistoryManager", "撤销回退: ${poppedUndo.label}")
-        org.gemini.ui.forge.utils.AppLogger.showStatus("已撤销: ${poppedUndo.label}")
-        
-        updateState { it.copy(
-            project = deepCopyProject(poppedUndo.projectState),
-            undoStack = newUndo,
-            redoStack = newRedo,
-            statusMessage = "已撤销: ${poppedUndo.label}"
-        ) }
+
+        AppLogger.d("HistoryManager", "撤销回退: ${poppedUndo.label}")
+        AppLogger.showStatus("已撤销: ${poppedUndo.label}")
+
+        updateState {
+            it.copy(
+                project = deepCopyProject(poppedUndo.projectState),
+                undoStack = newUndo,
+                redoStack = newRedo,
+                statusMessage = "已撤销: ${poppedUndo.label}"
+            )
+        }
         markDirty()
     }
 
@@ -92,10 +96,10 @@ class HistoryManagerDelegate(
     fun redo() {
         val s = getState()
         if (s.redoStack.isEmpty()) return
-        
+
         val poppedRedo = s.redoStack.last()
         val newRedo = s.redoStack.dropLast(1)
-        
+
         val currentAsUndo = HistoryEntry(
             id = poppedRedo.id,
             label = poppedRedo.label,
@@ -103,24 +107,26 @@ class HistoryManagerDelegate(
             projectState = deepCopyProject(s.project)
         )
         val newUndo = s.undoStack + currentAsUndo
-        
-        org.gemini.ui.forge.utils.AppLogger.d("HistoryManager", "重做前进: ${poppedRedo.label}")
-        org.gemini.ui.forge.utils.AppLogger.showStatus("已重做: ${poppedRedo.label}")
-        
-        updateState { it.copy(
-            project = deepCopyProject(poppedRedo.projectState),
-            undoStack = newUndo,
-            redoStack = newRedo,
-            statusMessage = "已重做: ${poppedRedo.label}"
-        ) }
+
+        AppLogger.d("HistoryManager", "重做前进: ${poppedRedo.label}")
+        AppLogger.showStatus("已重做: ${poppedRedo.label}")
+
+        updateState {
+            it.copy(
+                project = deepCopyProject(poppedRedo.projectState),
+                undoStack = newUndo,
+                redoStack = newRedo,
+                statusMessage = "已重做: ${poppedRedo.label}"
+            )
+        }
         markDirty()
     }
 
     /** 跳转到指定的历史点 */
     fun jumpToHistory(entryId: String) {
-        org.gemini.ui.forge.utils.AppLogger.d("HistoryManager", "尝试跳转到记录: $entryId")
+        AppLogger.d("HistoryManager", "尝试跳转到记录: $entryId")
         val s = getState()
-        
+
         if (s.undoStack.any { it.id == entryId }) {
             while (getState().undoStack.isNotEmpty()) {
                 val lastId = getState().undoStack.last().id
@@ -140,17 +146,21 @@ class HistoryManagerDelegate(
     fun clearAllHistoryAndReset() {
         val s = getState()
         val firstState = s.undoStack.firstOrNull()?.projectState ?: s.project
-        updateState { it.copy(
-            project = deepCopyProject(firstState),
-            undoStack = emptyList(),
-            redoStack = emptyList(),
-            statusMessage = "已清空操作历史"
-        ) }
+        updateState {
+            it.copy(
+                project = deepCopyProject(firstState),
+                undoStack = emptyList(),
+                redoStack = emptyList(),
+                statusMessage = "已清空操作历史"
+            )
+        }
         markDirty()
     }
 
     /** 切换历史记录面板显示状态 */
     fun toggleHistoryPanel(show: Boolean) {
-        updateState { it.copy(showHistoryPanel = show) }
+        updateState {
+            it.copy(showHistoryPanel = show)
+        }
     }
 }

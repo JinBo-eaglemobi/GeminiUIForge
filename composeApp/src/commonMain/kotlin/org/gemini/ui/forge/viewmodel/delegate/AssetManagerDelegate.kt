@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.viewmodel
+package org.gemini.ui.forge.viewmodel.delegate
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.utils.*
@@ -301,12 +302,12 @@ class AssetManagerDelegate(
         }
     }
 
-    fun updateBlockPrompt(blockId: String, lang: org.gemini.ui.forge.model.app.PromptLanguage, prompt: String) {
+    fun updateBlockPrompt(blockId: String, lang: PromptLanguage, prompt: String) {
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) page.copy(
                     blocks = updateBlockInList(page.blocks, blockId) { 
-                        if (lang == org.gemini.ui.forge.model.app.PromptLanguage.EN) it.copy(userPromptEn = prompt) else it.copy(userPromptZh = prompt)
+                        if (lang == PromptLanguage.EN) it.copy(userPromptEn = prompt) else it.copy(userPromptZh = prompt)
                     }) else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))

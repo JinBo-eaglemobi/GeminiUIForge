@@ -112,7 +112,11 @@ class AppViewModel(
             val retriesStr = configManager.loadKey("API_MAX_RETRIES") ?: "3"
             val imageGenCountStr = configManager.loadKey("IMAGE_GEN_COUNT") ?: "4"
             val layoutModeStr = configManager.loadKey("APP_LAYOUT_MODE") ?: "AUTO"
-            val layoutMode = try { org.gemini.ui.forge.model.app.LayoutMode.valueOf(layoutModeStr) } catch(e: Exception) { org.gemini.ui.forge.model.app.LayoutMode.AUTO }
+            val layoutMode = try {
+                LayoutMode.valueOf(layoutModeStr)
+            } catch (e: Exception) {
+                LayoutMode.AUTO
+            }
 
             _state.update {
                 it.copy(
@@ -134,11 +138,22 @@ class AppViewModel(
     // --- 导航与显示控制 ---
 
     fun navigateTo(screen: AppScreen) =
-        _state.update { it.copy(globalState = it.globalState.copy(currentScreen = screen)) }
+        _state.update {
+            it.copy(globalState = it.globalState.copy(currentScreen = screen))
+        }
 
-    fun setThemeMode(mode: ThemeMode) = _state.update { it.copy(globalState = it.globalState.copy(themeMode = mode)) }
-    fun setLanguage(code: String) = _state.update { it.copy(globalState = it.globalState.copy(languageCode = code)) }
-    fun setLayoutMode(mode: org.gemini.ui.forge.model.app.LayoutMode) = _state.update { it.copy(globalState = it.globalState.copy(layoutMode = mode)) }
+    fun setThemeMode(mode: ThemeMode) = _state.update {
+        it.copy(globalState = it.globalState.copy(themeMode = mode))
+    }
+
+    fun setLanguage(code: String) = _state.update {
+        it.copy(globalState = it.globalState.copy(languageCode = code))
+    }
+
+    fun setLayoutMode(mode: LayoutMode) =
+        _state.update {
+            it.copy(globalState = it.globalState.copy(layoutMode = mode))
+        }
 
     // --- 数据加载与共享 ---
 
@@ -160,16 +175,24 @@ class AppViewModel(
     // --- 设置同步接口 ---
 
     fun updateApiKey(newKey: String) =
-        _state.update { it.copy(globalState = it.globalState.copy(apiKey = newKey, effectiveApiKey = newKey)) }
+        _state.update {
+            it.copy(globalState = it.globalState.copy(apiKey = newKey, effectiveApiKey = newKey))
+        }
 
     fun updateStorageDirState(newPath: String) =
-        _state.update { it.copy(globalState = it.globalState.copy(templateStorageDir = newPath)) }
+        _state.update {
+            it.copy(globalState = it.globalState.copy(templateStorageDir = newPath))
+        }
 
     fun updateMaxRetriesState(count: Int) =
-        _state.update { it.copy(globalState = it.globalState.copy(maxRetries = count)) }
+        _state.update {
+            it.copy(globalState = it.globalState.copy(maxRetries = count))
+        }
 
     fun updateImageGenCountState(count: Int) =
-        _state.update { it.copy(globalState = it.globalState.copy(imageGenCount = count)) }
+        _state.update {
+            it.copy(globalState = it.globalState.copy(imageGenCount = count))
+        }
 
     fun updateShortcutState(action: ShortcutAction, keyChord: String) {
         _state.update { s ->
@@ -180,5 +203,7 @@ class AppViewModel(
     }
 
     fun setPromptLanguagePref(pref: PromptLanguage) =
-        _state.update { it.copy(globalState = it.globalState.copy(promptLangPref = pref)) }
+        _state.update {
+            it.copy(globalState = it.globalState.copy(promptLangPref = pref))
+        }
 }

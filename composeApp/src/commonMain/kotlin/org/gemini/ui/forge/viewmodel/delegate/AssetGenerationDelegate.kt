@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.viewmodel
+package org.gemini.ui.forge.viewmodel.delegate
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -8,7 +8,6 @@ import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.getProcessorCount
-import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.state.ProjectWorkspaceState
@@ -17,6 +16,8 @@ import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.formatSize
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * 批量生成结果封装
@@ -70,7 +71,7 @@ class AssetGenerationDelegate(
         updateState { it.copy(isGenerating = false) }
     }
 
-    @OptIn(ExperimentalEncodingApi::class, kotlin.uuid.ExperimentalUuidApi::class)
+    @OptIn(ExperimentalEncodingApi::class, ExperimentalUuidApi::class)
     fun onRequestGeneration(apiKey: String, customPrompt: String) {
         val currentState = getState()
         val block = currentState.selectedBlock ?: return
@@ -121,7 +122,7 @@ class AssetGenerationDelegate(
                                 updateStatus("正在接收数据: $sizeStr")
                                 addLog("[IO] 收到原始图像数据 ($sizeStr)，正在保存...")
                                 
-                                val shortUuid = kotlin.uuid.Uuid.random().toString().substringBefore('-')
+                                val shortUuid = Uuid.random().toString().substringBefore('-')
                                 val originalTFile = templateRepo.saveBlockResource(projectName, block.id, "gen_${idx}_${timestamp}_$shortUuid", bytes, isPng = false)
                                 
                                 var displayFile = originalTFile

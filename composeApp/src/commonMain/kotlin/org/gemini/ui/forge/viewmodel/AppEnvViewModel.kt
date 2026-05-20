@@ -2,16 +2,16 @@ package org.gemini.ui.forge.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.model.app.FullEnvironmentStatus
 import org.gemini.ui.forge.service.EnvironmentCheckService
 import org.gemini.ui.forge.service.createEnvironmentCheckService
+import org.gemini.ui.forge.utils.AppLogger
 
 /**
  * 专门负责 Python 运行环境检测与维护的独立 ViewModel
@@ -106,12 +106,12 @@ class AppEnvViewModel(
         viewModelScope.launch {
             _isMarketLoading.value = true
             _marketPage.value = pageIndex
-            org.gemini.ui.forge.utils.AppLogger.i("AppEnvViewModel", "🌐 开始加载探索市场页面: $pageIndex")
+            AppLogger.i("AppEnvViewModel", "🌐 开始加载探索市场页面: $pageIndex")
             try {
                 if (allTopPackages.isEmpty()) {
-                    org.gemini.ui.forge.utils.AppLogger.d("AppEnvViewModel", "⏳ 正在从云端拉取 Top 5000 排行榜缓存...")
+                    AppLogger.d("AppEnvViewModel", "⏳ 正在从云端拉取 Top 5000 排行榜缓存...")
                     allTopPackages = envService.fetchTopPackages()
-                    org.gemini.ui.forge.utils.AppLogger.d("AppEnvViewModel", "✅ Top 排行榜拉取成功, 共 ${allTopPackages.size} 条记录")
+                    AppLogger.d("AppEnvViewModel", "✅ Top 排行榜拉取成功, 共 ${allTopPackages.size} 条记录")
                 }
                 
                 if (allTopPackages.isNotEmpty()) {
@@ -133,7 +133,7 @@ class AppEnvViewModel(
                         // 取消遮罩 loading，让用户立刻看到列表骨架
                         _isMarketLoading.value = false 
                         
-                        org.gemini.ui.forge.utils.AppLogger.d("AppEnvViewModel", "🚀 已渲染占位符，正在后台并行请求 ${pageNames.size} 个扩展包详情...")
+                        AppLogger.d("AppEnvViewModel", "🚀 已渲染占位符，正在后台并行请求 ${pageNames.size} 个扩展包详情...")
                         
                         // 2. 发起非阻塞的并行请求，获取一个就刷新一个 (渐进式更新)
                         pageNames.forEachIndexed { index, name ->
@@ -173,10 +173,10 @@ class AppEnvViewModel(
                      _isMarketLoading.value = false 
                 }
             } catch (e: Exception) {
-                org.gemini.ui.forge.utils.AppLogger.e("AppEnvViewModel", "❌ 加载探索市场失败", e)
+                AppLogger.e("AppEnvViewModel", "❌ 加载探索市场失败", e)
                 _isMarketLoading.value = false 
             } finally {
-                org.gemini.ui.forge.utils.AppLogger.i("AppEnvViewModel", "🏁 探索市场页面 $pageIndex 初始渲染结束")
+                AppLogger.i("AppEnvViewModel", "🏁 探索市场页面 $pageIndex 初始渲染结束")
             }
         }
     }
@@ -236,7 +236,7 @@ class AppEnvViewModel(
                 val finalUrl = if (url.contains("github.com")) {
                     if (url.endsWith("/")) "${url}releases" else "$url/releases"
                 } else url
-                org.gemini.ui.forge.getPlatform().openInBrowser(finalUrl)
+                getPlatform().openInBrowser(finalUrl)
             }
         }
     }
@@ -246,7 +246,7 @@ class AppEnvViewModel(
         viewModelScope.launch {
             val url = envService.fetchPackageUrl(packageName)
             if (url != null) {
-                org.gemini.ui.forge.getPlatform().openInBrowser(url)
+                getPlatform().openInBrowser(url)
             }
         }
     }

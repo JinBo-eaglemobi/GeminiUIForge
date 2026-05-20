@@ -1,13 +1,12 @@
-package org.gemini.ui.forge.viewmodel
+package org.gemini.ui.forge.viewmodel.delegate
 
 import kotlinx.coroutines.*
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.model.api.ChatMessage
 import org.gemini.ui.forge.model.app.PromptLanguage
-import org.gemini.ui.forge.model.app.ShortcutAction
-import org.gemini.ui.forge.model.history.HistoryEntry
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
@@ -26,8 +25,8 @@ import org.gemini.ui.forge.utils.*
 class LayoutEditorDelegate(
     private val scope: CoroutineScope,
     private val aiService: AIGenerationService,
-    private val templateRepo: org.gemini.ui.forge.data.repository.TemplateRepository,
-    private val cloudAssetManager: org.gemini.ui.forge.manager.CloudAssetManager,
+    private val templateRepo: TemplateRepository,
+    private val cloudAssetManager: CloudAssetManager,
     private val getState: () -> ProjectWorkspaceState,
     private val updateState: ((ProjectWorkspaceState) -> ProjectWorkspaceState) -> Unit,
     private val markDirty: () -> Unit,

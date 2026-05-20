@@ -15,7 +15,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
-import org.gemini.ui.forge.viewmodel.AssetGenerationDelegate
+import org.gemini.ui.forge.viewmodel.delegate.AssetGenerationDelegate
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.model.ui.BlockProperties
 

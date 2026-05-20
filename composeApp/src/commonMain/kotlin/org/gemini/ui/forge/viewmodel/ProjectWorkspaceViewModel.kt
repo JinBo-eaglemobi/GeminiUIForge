@@ -13,11 +13,17 @@ import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.BlockProperties
+import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.state.ui.ProjectState
+import org.gemini.ui.forge.viewmodel.delegate.AssetGenerationDelegate
+import org.gemini.ui.forge.viewmodel.delegate.AssetManagerDelegate
+import org.gemini.ui.forge.viewmodel.delegate.HistoryManagerDelegate
+import org.gemini.ui.forge.viewmodel.delegate.LayoutEditorDelegate
+import org.gemini.ui.forge.viewmodel.delegate.ShortcutManagerDelegate
 
 /**
  * 统一工作区 ViewModel。
@@ -186,7 +192,7 @@ class ProjectWorkspaceViewModel(
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) {
                     page.copy(blocks = updateBlockInList(page.blocks, blockId) { 
-                        it.copy(bounds = org.gemini.ui.forge.model.ui.SerialRect(left, top, right, bottom))
+                        it.copy(bounds = SerialRect(left, top, right, bottom))
                     })
                 } else page
             }
@@ -196,7 +202,7 @@ class ProjectWorkspaceViewModel(
     }
 
     /** 修改模块类型 */
-    fun updateBlockType(blockId: String, type: org.gemini.ui.forge.model.ui.UIBlockType) {
+    fun updateBlockType(blockId: String, type: UIBlockType) {
         historyManager.saveSnapshot("修改模块类型: $type")
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
