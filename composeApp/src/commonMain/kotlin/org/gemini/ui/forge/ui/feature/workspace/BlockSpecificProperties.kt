@@ -41,6 +41,7 @@ fun BlockSpecificProperties(
     state: ProjectWorkspaceState,
     onShowPressedHistory: () -> Unit = {},
     onShowDisabledHistory: () -> Unit = {},
+    onShowHistory: (String) -> Unit = {},
     onPropertiesChanged: (BlockProperties) -> Unit
 ) {
     when (blockType) {
@@ -305,7 +306,6 @@ fun BlockSpecificProperties(
             var showSymbolManager by remember { mutableStateOf(false) }
 
             Text("转轴核心配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(LocalAppSpacing.current.small))
 
             Row(horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
                 SelectAllOutlinedTextField(
@@ -326,7 +326,6 @@ fun BlockSpecificProperties(
                 )
             }
 
-            Spacer(Modifier.height(LocalAppSpacing.current.small))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = props.showBackground,
@@ -376,7 +375,8 @@ fun BlockSpecificProperties(
                     onPropertiesChanged = onPropertiesChanged,
                     viewModel = viewModel,
                     apiKey = apiKey,
-                    state = state
+                    state = state,
+                    onShowHistory = onShowHistory
                 )
             }
         }

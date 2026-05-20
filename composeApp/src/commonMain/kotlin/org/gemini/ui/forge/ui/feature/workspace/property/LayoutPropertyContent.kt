@@ -33,6 +33,7 @@ fun LayoutPropertyContent(
     apiKey: String,
     onRefineClick: (String?) -> Unit,
     onSetReferenceAreaClick: (String) -> Unit,
+    onShowHistory: (String) -> Unit = {},
     onDeleteRequest: (String) -> Unit
 ) {
     val selectedBlock = state.selectedBlock
@@ -257,6 +258,7 @@ fun LayoutPropertyContent(
                         apiKey = apiKey,
                         viewModel = viewModel,
                         state = state,
+                        onShowHistory = onShowHistory,
                         onPropertiesChanged = { viewModel.assetManager.updateBlockProperties(selectedBlock.id, it) }
                     )
                 }

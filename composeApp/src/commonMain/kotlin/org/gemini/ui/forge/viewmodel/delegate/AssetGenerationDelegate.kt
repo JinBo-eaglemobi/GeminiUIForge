@@ -349,5 +349,12 @@ class AssetGenerationDelegate(
         confirmationDeferred?.complete(Unit)
     }
 
+    /**
+     * 优化生图提示词
+     */
+    suspend fun optimizePrompt(originalPrompt: String, apiKey: String): String {
+        return aiService.optimizePrompt(originalPrompt, apiKey)
+    }
+
     enum class ButtonGenTarget { ALL, PRESSED, DISABLED }
 }

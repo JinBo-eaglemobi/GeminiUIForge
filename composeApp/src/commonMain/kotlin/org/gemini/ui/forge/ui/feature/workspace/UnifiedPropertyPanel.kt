@@ -77,6 +77,7 @@ fun UnifiedPropertyPanel(
                     apiKey = apiKey,
                     onRefineClick = onRefineClick,
                     onSetReferenceAreaClick = onSetReferenceAreaClick,
+                    onShowHistory = onShowHistory,
                     onDeleteRequest = onDeleteRequest
                 )
             } else {
