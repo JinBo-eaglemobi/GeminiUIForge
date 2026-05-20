@@ -40,6 +40,7 @@ import org.gemini.ui.forge.viewmodel.AppUpdateViewModel
 import org.gemini.ui.forge.viewmodel.AppViewModel
 import org.gemini.ui.forge.ui.component.*
 import org.gemini.ui.forge.ui.feature.ProjectWorkspaceScreen
+import org.gemini.ui.forge.ui.feature.TemplateGeneratorScreen
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.theme.AppSpacing
 
