@@ -106,7 +106,7 @@ fun CollapsibleSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { expanded = !expanded }
-                .padding(vertical = 12.dp, horizontal = 4.dp),
+                .padding(vertical = 8.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -125,8 +125,8 @@ fun CollapsibleSection(
         }
         AnimatedVisibility(visible = expanded) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp, start = 8.dp, end = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp, start = 8.dp, end = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 content()
             }

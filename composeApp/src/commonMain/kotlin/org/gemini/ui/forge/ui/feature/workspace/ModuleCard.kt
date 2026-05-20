@@ -33,7 +33,12 @@ import org.gemini.ui.forge.getPlatform
  * @param onDelete 点击删除图标的回调。
  */
 @Composable
-fun ModuleCard(module: UIModule, onOpenWorkspace: () -> Unit, onDelete: () -> Unit) {
+fun ModuleCard(
+    module: UIModule,
+    onOpenWorkspace: () -> Unit,
+    onOpenFileDir: () -> Unit,
+    onDelete: () -> Unit
+) {
     Card(
         modifier = Modifier.size(280.dp, 400.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -75,7 +80,8 @@ fun ModuleCard(module: UIModule, onOpenWorkspace: () -> Unit, onDelete: () -> Un
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                val rawTitle = if (module.nameRes != null) stringResource(module.nameRes) else module.nameStr ?: "Unknown"
+                val rawTitle =
+                    if (module.nameRes != null) stringResource(module.nameRes) else module.nameStr ?: "Unknown"
                 val displayTitle = if (rawTitle.length > 15) rawTitle.take(15) + "..." else rawTitle
 
                 Column(modifier = Modifier.weight(1f)) {
@@ -97,28 +103,26 @@ fun ModuleCard(module: UIModule, onOpenWorkspace: () -> Unit, onDelete: () -> Un
                     }
                 }
 
-                if (module.absolutePath != null) {
-                    Row {
-                        IconButton(
-                            onClick = { getPlatform().openInFileExplorer(module.absolutePath) },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FolderOpen,
-                                contentDescription = "Open Folder",
-                                tint = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-                        IconButton(
-                            onClick = onDelete,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete Template",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
+                Row {
+                    IconButton(
+                        onClick = onOpenFileDir,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FolderOpen,
+                            contentDescription = "Open Folder",
+                            tint = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete Template",
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }

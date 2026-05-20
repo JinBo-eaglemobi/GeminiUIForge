@@ -12,12 +12,10 @@ import org.jetbrains.compose.resources.StringResource
  * @property nameRes 模块的显示名称（基于内置 Compose Resources 的字符串引用），优先使用。
  * @property nameStr 模块的显示名称（普通字符串格式），常用于表示从本地用户目录加载的自定义项目。
  * @property projectState 该模块关联的核心布局状态数据结构。包含具体的页面、UIBlock 层级、画布尺寸等核心属性。
- * @property absolutePath 该模块在本地系统中的绝对物理路径。若为 null，则表示该模块可能是系统内置/尚未落盘的模板。
  */
 data class UIModule(
     val id: String,
     val nameRes: StringResource? = null,
     val nameStr: String? = null,
     val projectState: ProjectState? = null,
-    val absolutePath: String? = null
 )

@@ -220,7 +220,10 @@ fun RenderBlock(
         contentAlignment = Alignment.Center
     ) {
 // ... (rest of methods)
-        if (imageBitmap != null) {
+        val reelProps = if (block.type == UIBlockType.REEL) block.properties as? BlockProperties.ReelProperties else null
+        val showReelBg = reelProps?.showBackground != false
+
+        if (imageBitmap != null && showReelBg) {
             // 渲染已固化好的 AI 图像成品。
             // 由于图片已经在编辑器中按照 bounds 进行了拉伸、补白或九宫格固化，
             // 这里的渲染逻辑应保持最简。
@@ -230,7 +233,7 @@ fun RenderBlock(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.FillBounds
             )
-        } else if (block.currentImageUri != null) {
+        } else if (block.currentImageUri != null && showReelBg) {
             // 图片加载中的反馈
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.dp)
         } else if (block.type == UIBlockType.SYMBOL) {
@@ -299,9 +302,9 @@ fun RenderBlock(
                 val cols = reelProps.columns.coerceAtLeast(1)
 
                 if (reelProps.items.isNotEmpty()) {
-                    // 使用固定的随机种子保证重组时不会疯狂闪烁
-                    val randomItems = androidx.compose.runtime.remember(block.id, rows, cols, reelProps.items) {
-                        val rnd = kotlin.random.Random(block.id.hashCode())
+                    // 使用固定的随机种子加上 rollSeed 保证重组时不疯狂闪烁，但可通过 rollSeed 强制刷新
+                    val randomItems = androidx.compose.runtime.remember(block.id, rows, cols, reelProps.items, reelProps.rollSeed) {
+                        val rnd = kotlin.random.Random(block.id.hashCode() + reelProps.rollSeed)
                         List(rows * cols) { reelProps.items.random(rnd) }
                     }
 

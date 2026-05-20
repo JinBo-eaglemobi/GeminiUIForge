@@ -2,6 +2,9 @@ package org.gemini.ui.forge.state.ui
 
 import kotlinx.serialization.Serializable
 import org.gemini.ui.forge.data.TemplateFile
+import org.gemini.ui.forge.model.ui.BlockProperties
+import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIPage
 
 /**
@@ -37,18 +40,16 @@ data class ProjectState(
     return copy(blocks = blocks.map { it.postProcess() })
     }
 
-    fun org.gemini.ui.forge.model.ui.UIBlock.postProcess(): org.gemini.ui.forge.model.ui.UIBlock {
+    fun UIBlock.postProcess(): UIBlock {
     // 递归处理子级
     val processedChildren = children.map { it.postProcess() }
 
-    return if (type == org.gemini.ui.forge.model.ui.UIBlockType.REEL) {
+    return if (type == UIBlockType.REEL) {
         // 如果是转轴且包含子级，则将其子级直接作为 items 并入属性中，然后清空子级
         if (processedChildren.isNotEmpty()) {
-            val currentProps = properties as? org.gemini.ui.forge.model.ui.BlockProperties.ReelProperties 
-                ?: org.gemini.ui.forge.model.ui.BlockProperties.ReelProperties()
-            
+            val currentProps = properties as? BlockProperties.ReelProperties ?: BlockProperties.ReelProperties()
             // 直接使用 processedChildren 作为新的 items
-            val updatedProps = currentProps.copy(items = currentProps.items + processedChildren)
+            val updatedProps = currentProps.copy(items = currentProps.items + processedChildren.onEach {  })
             copy(properties = updatedProps, children = emptyList())
         } else {
             // 没有子级说明已经解析过，或者是一个空的 REEL，无需覆盖原有属性

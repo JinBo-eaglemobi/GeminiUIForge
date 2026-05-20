@@ -7,6 +7,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,6 +27,7 @@ import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.ColorPickerField
 import org.gemini.ui.forge.ui.component.TextStyleToolbar
+import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.ReelSymbolManagerDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
@@ -331,6 +334,25 @@ fun BlockSpecificProperties(
                     enabled = !state.isGenerating
                 )
                 Text("显示外框背景板", style = MaterialTheme.typography.bodySmall)
+                
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = "说明",
+                    modifier = Modifier.padding(start = 4.dp).size(14.dp).tip("是否为整个转轴区域渲染一个背板/底框图层。若取消勾选，转轴内的符号将直接浮现在主背景之上。"),
+                    tint = MaterialTheme.colorScheme.outline
+                )
+                
+                Spacer(Modifier.weight(1f))
+                
+                IconButton(
+                    onClick = {
+                        onPropertiesChanged(props.copy(rollSeed = props.rollSeed + 1))
+                    },
+                    modifier = Modifier.size(28.dp).tip("随机洗牌：重新打乱并分配当前符号集中的元素到网格中"),
+                    enabled = !state.isGenerating
+                ) {
+                    Icon(Icons.Default.Refresh, "重新生成元素", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                }
             }
 
             HorizontalDivider(Modifier.padding(vertical = LocalAppSpacing.current.small).alpha(0.3f))

@@ -30,6 +30,7 @@ import org.gemini.ui.forge.ui.theme.AppShapes
 fun HomeScreen(
     modules: List<UIModule>,
     onOpenWorkspace: (String) -> Unit,
+    onOpenFileDir: (UIModule) -> Unit,
     onDeleteModule: (String) -> Unit = {}
 ) {
     var moduleToDelete by remember { mutableStateOf<UIModule?>(null) }
@@ -54,6 +55,7 @@ fun HomeScreen(
                     ModuleCard(
                         module = module,
                         onOpenWorkspace = { onOpenWorkspace(module.id) },
+                        onOpenFileDir = { onOpenFileDir(module) },
                         onDelete = { moduleToDelete = module }
                     )
                 }

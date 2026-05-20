@@ -9,6 +9,8 @@ import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.*
 import org.gemini.ui.forge.data.TemplateFile
+import org.gemini.ui.forge.getPlatform
+import org.gemini.ui.forge.model.app.UIModule
 import org.gemini.ui.forge.model.ui.UIBlock
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -22,23 +24,29 @@ class TemplateRepository(
 ) {
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
-    private val PROJECTS_DIR = "templates"
+    val PROJECTS_DIR = "templates"
 
     /**
      * 将生成的资源保存到模块专用的资产目录下
      */
-    suspend fun saveBlockResource(templateName: String, blockId: String, fileNamePrefix: String, bytes: ByteArray, isPng: Boolean = true): TemplateFile {
+    suspend fun saveBlockResource(
+        templateName: String,
+        blockId: String,
+        fileNamePrefix: String,
+        bytes: ByteArray,
+        isPng: Boolean = true
+    ): TemplateFile {
         val sanitizedName = templateName.replace(" ", "_")
         val timestamp = org.gemini.ui.forge.getCurrentTimeMillis()
         val ext = if (isPng) "png" else "jpg"
-        
+
         // 构造强类型相对路径
         val relPath = "$PROJECTS_DIR/$sanitizedName/assets/$blockId/${fileNamePrefix}_$timestamp.$ext"
         val tFile = TemplateFile(relPath)
-        
+
         // 执行写入 (TemplateFile.writeBytes 内部会自动处理绝对路径拼接)
         tFile.writeBytes(bytes)
-        
+
         AppLogger.i("TemplateRepository", "✅ Block 资源已保存: $relPath")
         return tFile
     }
@@ -90,7 +98,7 @@ class TemplateRepository(
     suspend fun archiveExternalImages(templateName: String, externalUris: List<String>): List<TemplateFile> {
         val sanitizedName = templateName.replace(" ", "_")
         val archivedFiles = mutableListOf<TemplateFile>()
-        
+
         externalUris.forEachIndexed { index, originalPath ->
             try {
                 var bytes: ByteArray? = null
@@ -104,12 +112,15 @@ class TemplateRepository(
                             ext = response.headers["Content-Type"]?.substringAfter("/")?.substringBefore(";") ?: "png"
                         }
                     }
+
                     originalPath.startsWith("data:image") -> {
-                        val pureBase64 = if (originalPath.contains(",")) originalPath.substringAfter(",") else originalPath
+                        val pureBase64 =
+                            if (originalPath.contains(",")) originalPath.substringAfter(",") else originalPath
                         @OptIn(ExperimentalEncodingApi::class)
                         bytes = Base64.decode(pureBase64)
                         ext = originalPath.substringAfter("data:image/").substringBefore(";").ifBlank { "png" }
                     }
+
                     else -> {
                         bytes = readLocalFileBytes(originalPath)
                         ext = originalPath.substringAfterLast(".", "png")
@@ -201,5 +212,12 @@ class TemplateRepository(
 
     suspend fun getDataDir(): String {
         return fileStorage.getDataDir()
+    }
+
+    suspend fun openFileDir(module: UIModule) {
+        val sanitizedName = module.id.replace(" ", "_")
+        val path = fileStorage.getDataDir() + "/$PROJECTS_DIR/$sanitizedName"
+        AppLogger.i("TemplateRepository", "🗑️ 正在打开模板目录: $path")
+        getPlatform().openInFileExplorer(path)
     }
 }

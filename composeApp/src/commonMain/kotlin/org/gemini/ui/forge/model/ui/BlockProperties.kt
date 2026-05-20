@@ -117,7 +117,8 @@ sealed class BlockProperties {
         val rows: Int = 3,
         val columns: Int = 5,
         val items: List<UIBlock> = emptyList(),
-        val showBackground: Boolean = true
+        val showBackground: Boolean = true,
+        val rollSeed: Int = 0
     ) : BlockProperties()
 }
 

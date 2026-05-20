@@ -1,48 +1,53 @@
 package org.gemini.ui.forge
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.Icons
 
-
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.Alignment
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 import androidx.compose.foundation.focusable
-import kotlinx.coroutines.launch
-
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.*
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
-import org.gemini.ui.forge.state.ui.ProjectState
-import org.gemini.ui.forge.model.app.*
+import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.repository.TemplateRepository
-import org.gemini.ui.forge.ui.feature.HomeScreen
-import org.gemini.ui.forge.ui.component.AppTopBar
-import org.gemini.ui.forge.ui.theme.AppTheme
-import org.gemini.ui.forge.service.*
-import kotlin.time.Duration.Companion.milliseconds
+import org.gemini.ui.forge.manager.CloudAssetManager
+import org.gemini.ui.forge.manager.ConfigManager
+import org.gemini.ui.forge.model.app.AppScreen
+import org.gemini.ui.forge.model.app.SettingCategory
+import org.gemini.ui.forge.model.app.UIModule
+import org.gemini.ui.forge.model.app.UpdateStatus
+import org.gemini.ui.forge.service.AIGenerationService
+import org.gemini.ui.forge.state.ui.ProjectState
+import org.gemini.ui.forge.ui.component.*
 import org.gemini.ui.forge.ui.dialog.AppSettingsDialog
-import org.gemini.ui.forge.ui.dialog.LogViewerDialog
 import org.gemini.ui.forge.ui.dialog.HelpDialog
-import org.gemini.ui.forge.manager.*
-import org.gemini.ui.forge.utils.*
+import org.gemini.ui.forge.ui.dialog.LogViewerDialog
+import org.gemini.ui.forge.ui.feature.HomeScreen
+import org.gemini.ui.forge.ui.feature.ProjectWorkspaceScreen
+import org.gemini.ui.forge.ui.feature.TemplateGeneratorScreen
+import org.gemini.ui.forge.ui.theme.AppSpacing
+import org.gemini.ui.forge.ui.theme.AppTheme
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.ShortcutUtils
+import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.viewmodel.AppEnvViewModel
 import org.gemini.ui.forge.viewmodel.AppSettingsViewModel
 import org.gemini.ui.forge.viewmodel.AppUpdateViewModel
 import org.gemini.ui.forge.viewmodel.AppViewModel
-import org.gemini.ui.forge.ui.component.*
-import org.gemini.ui.forge.ui.feature.ProjectWorkspaceScreen
-import org.gemini.ui.forge.ui.feature.TemplateGeneratorScreen
-import org.gemini.ui.forge.ui.theme.LocalAppSpacing
-import org.gemini.ui.forge.ui.theme.AppSpacing
+import kotlin.time.Duration.Companion.milliseconds
 
 private var originalSystemLanguage: String? = null
 
@@ -160,7 +165,7 @@ fun App(typography: Typography? = null) {
 
             val availableModules = buildList {
                 templatesList.forEach { (name, projectState) ->
-                    add(UIModule(id = name, nameStr = name, projectState = projectState, absolutePath = ""))
+                    add(UIModule(id = name, nameStr = name, projectState = projectState))
                 }
             }
 
@@ -195,13 +200,13 @@ fun App(typography: Typography? = null) {
                                 }
                             }
                         }
-                        .onPreviewKeyEvent { event ->
+                        .onKeyEvent { event ->
                             AppLogger.d("App", "⌨️ 捕获到按键: ${event.key}, type: ${event.type}")
                             // 全局快捷键处理
                             globalState.shortcuts.forEach { (action, shortcut) ->
                                 if (ShortcutUtils.isMatch(event, shortcut)) {
                                     appViewModel.dispatchShortcutEvent(action)
-                                    return@onPreviewKeyEvent true
+                                    return@onKeyEvent true
                                 }
                             }
                             false
@@ -412,10 +417,15 @@ fun App(typography: Typography? = null) {
                                             }
                                             appViewModel.navigateTo(AppScreen.PROJECT_WORKSPACE)
                                         },
+                                        onOpenFileDir = {
+                                            coroutineScope.launch {
+                                                templateRepo.openFileDir(it)
+                                            }
+                                        },
                                         onDeleteModule = { moduleId ->
                                             coroutineScope.launch {
-                                                templateRepo.deleteTemplate(moduleId); templatesList =
-                                                templateRepo.getTemplates()
+                                                templateRepo.deleteTemplate(moduleId);
+                                                templatesList = templateRepo.getTemplates()
                                             }
                                         }
                                     )
