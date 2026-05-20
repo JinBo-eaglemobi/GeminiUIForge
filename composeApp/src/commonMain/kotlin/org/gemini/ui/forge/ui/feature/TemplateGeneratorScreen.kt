@@ -35,9 +35,9 @@ fun TemplateGeneratorScreen(
     globalState: AppGlobalState,
     cloudAssetManager: CloudAssetManager,
     configManager: ConfigManager,
-    templateRepo: TemplateRepository
+    templateRepo: TemplateRepository,
+    aiService: AIGenerationService
 ) {
-    val aiService: AIGenerationService = remember { AIGenerationService(cloudAssetManager, configManager) }
     val coroutineScope = rememberCoroutineScope()
     
     var inputUris by remember { mutableStateOf("") }

@@ -44,6 +44,7 @@ fun ProjectWorkspaceScreen(
     templateRepo: TemplateRepository,
     cloudAssetManager: CloudAssetManager,
     configManager: ConfigManager,
+    aiService: AIGenerationService,
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
     saveEvent: SharedFlow<Unit>,
@@ -51,8 +52,7 @@ fun ProjectWorkspaceScreen(
     onSaveRequest: (String, ProjectState) -> Unit,
     onDirtyChanged: (Boolean) -> Unit
 ) {
-    // 实例化核心服务与 ViewModel
-    val aiService = remember { AIGenerationService(cloudAssetManager, configManager) }
+    // 实例化核心 ViewModel
     val viewModel: ProjectWorkspaceViewModel = viewModel(key = initialProjectName) {
         ProjectWorkspaceViewModel(initialProject, initialProjectName, initialPromptLang, templateRepo, cloudAssetManager, aiService, onDirtyChanged)
     }

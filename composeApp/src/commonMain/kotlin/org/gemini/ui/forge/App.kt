@@ -41,6 +41,7 @@ import org.gemini.ui.forge.ui.theme.AppSpacing
 import org.gemini.ui.forge.ui.theme.AppTheme
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.ShortcutUtils
 import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.viewmodel.AppEnvViewModel
@@ -58,7 +59,8 @@ fun App(typography: Typography? = null) {
     }
 
     var languageKey by remember { mutableStateOf(0) }
-    val templateRepo = remember { TemplateRepository() }
+    val storage = remember { LocalFileStorage() }
+    val templateRepo = remember { TemplateRepository(storage) }
     val focusRequester = remember { FocusRequester() }
     val tooltipState = remember { GlobalTooltipState() }
 
@@ -76,7 +78,7 @@ fun App(typography: Typography? = null) {
                 AppViewModel(
                     templateRepo = templateRepo,
                     cloudAssetManager = cloudAssetManager,
-                    aiService = AIGenerationService(cloudAssetManager, configManager)
+                    aiService = AIGenerationService(storage, cloudAssetManager, configManager)
                 )
             }
             val settingsViewModel: AppSettingsViewModel = viewModel {
@@ -438,6 +440,7 @@ fun App(typography: Typography? = null) {
                                         templateRepo = templateRepo,
                                         cloudAssetManager = appViewModel.cloudAssetManager,
                                         configManager = configManager,
+                                        aiService = appViewModel.aiService,
                                         effectiveApiKey = globalState.effectiveApiKey,
                                         initialPromptLang = globalState.promptLangPref,
                                         saveEvent = appViewModel.saveEvent,
@@ -461,6 +464,7 @@ fun App(typography: Typography? = null) {
                                         cloudAssetManager = appViewModel.cloudAssetManager,
                                         configManager = configManager,
                                         templateRepo = templateRepo,
+                                        aiService = appViewModel.aiService
                                     )
                                 }
                                 else -> {}

@@ -30,7 +30,7 @@ import org.gemini.ui.forge.state.ui.postProcess
 class AppViewModel(
     private val templateRepo: TemplateRepository = TemplateRepository(),
     val cloudAssetManager: CloudAssetManager,
-    private val aiService: AIGenerationService
+    val aiService: AIGenerationService
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(AppState())

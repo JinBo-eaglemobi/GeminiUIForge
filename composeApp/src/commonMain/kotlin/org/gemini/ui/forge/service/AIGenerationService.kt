@@ -26,6 +26,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  * AI 生成服务类（门面），协调 ImagenGenerator 和 GeminiImageGenerator。
  */
 class AIGenerationService(
+    private val storage: LocalFileStorage,
     private val cloudAssetManager: CloudAssetManager,
     private val configManager: ConfigManager
 ) {
@@ -35,8 +36,7 @@ class AIGenerationService(
         prettyPrint = true
     }
 
-    // 初始化存储与管理器
-    private val storage = LocalFileStorage()
+    // 初始化管理器 (使用传入的 storage)
     val promptManager = PromptManager(storage)
     private val scriptManager = ScriptManager(storage)
 
