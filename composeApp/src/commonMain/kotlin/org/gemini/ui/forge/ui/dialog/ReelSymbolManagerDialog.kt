@@ -60,7 +60,7 @@ fun ReelSymbolManagerDialog(
     // 在对话框中临时缓存的中英文描述，用于输入绑定
     var newItemPromptZh by remember { mutableStateOf("") }
     var newItemPromptEn by remember { mutableStateOf("") }
-    
+
     // 提示词 Tab 状态：0 = 中文, 1 = 英文
     var promptTab by remember { mutableStateOf(0) }
 
@@ -82,12 +82,12 @@ fun ReelSymbolManagerDialog(
                 Text("转轴符号集管理器")
                 Spacer(Modifier.weight(1f))
                 IconButton(
-                    onClick = { 
+                    onClick = {
                         editingItem = null
                         newItemPromptZh = ""
                         newItemPromptEn = ""
                         promptTab = 0
-                        showAddItemDialog = true 
+                        showAddItemDialog = true
                     },
                     modifier = Modifier.tip("添加新符号")
                 ) {
@@ -99,7 +99,11 @@ fun ReelSymbolManagerDialog(
             // 内容区域：若没有符号则显示提示文字
             if (props.items.isEmpty()) {
                 Box(Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
-                    Text("暂无符号元素，请点击右上角添加", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        "暂无符号元素，请点击右上角添加",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 }
             } else {
                 // 使用滚动列表展示已有的符号
@@ -137,7 +141,12 @@ fun ReelSymbolManagerDialog(
                                             contentScale = ContentScale.Fit
                                         )
                                     } else {
-                                        Icon(Icons.Default.ImageNotSupported, null, Modifier.size(24.dp).align(Alignment.Center), tint = MaterialTheme.colorScheme.outline)
+                                        Icon(
+                                            Icons.Default.ImageNotSupported,
+                                            null,
+                                            Modifier.size(24.dp).align(Alignment.Center),
+                                            tint = MaterialTheme.colorScheme.outline
+                                        )
                                     }
                                 }
 
@@ -145,21 +154,35 @@ fun ReelSymbolManagerDialog(
 
                                 // 文本描述：展示中文名称和英文 Prompt
                                 Column(Modifier.weight(1f)) {
-                                    Text(item.userPromptZh.ifBlank { item.id }, style = MaterialTheme.typography.titleSmall)
-                                    Text(item.userPromptEn.ifBlank { "No English Prompt" }, style = MaterialTheme.typography.labelSmall, maxLines = 2, color = MaterialTheme.colorScheme.outline)
+                                    Text(
+                                        item.userPromptZh.ifBlank { item.id },
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        item.userPromptEn.ifBlank { "No English Prompt" },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 2,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
                                 }
 
                                 // 操作按钮组：编辑、生成、删除
-                                
+
                                 // 编辑按钮：点击打开二级对话框修改文本
                                 IconButton(onClick = {
                                     editingItem = item
                                     newItemPromptZh = item.userPromptZh
                                     newItemPromptEn = item.userPromptEn
-                                    promptTab = if (item.userPromptEn.isNotBlank() && item.userPromptZh.isBlank()) 1 else 0
+                                    promptTab =
+                                        if (item.userPromptEn.isNotBlank() && item.userPromptZh.isBlank()) 1 else 0
                                     showAddItemDialog = true
                                 }, modifier = Modifier.size(32.dp).tip("编辑符号及生成资源")) {
-                                    Icon(Icons.Default.Edit, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        null,
+                                        Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
                                 }
 
                                 Spacer(Modifier.width(4.dp))
@@ -169,10 +192,16 @@ fun ReelSymbolManagerDialog(
                                     editingItem = item
                                     newItemPromptZh = item.userPromptZh
                                     newItemPromptEn = item.userPromptEn
-                                    promptTab = if (item.userPromptEn.isNotBlank() && item.userPromptZh.isBlank()) 1 else 0
+                                    promptTab =
+                                        if (item.userPromptEn.isNotBlank() && item.userPromptZh.isBlank()) 1 else 0
                                     showGenConfirmDialog = true
                                 }, modifier = Modifier.size(32.dp).tip("快速触发 AI 生图")) {
-                                    Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.secondary)
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        null,
+                                        Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
                                 }
 
                                 Spacer(Modifier.width(4.dp))
@@ -181,7 +210,12 @@ fun ReelSymbolManagerDialog(
                                 IconButton(onClick = {
                                     onShowHistory(item.id)
                                 }, modifier = Modifier.size(32.dp).tip("查看历史候选图")) {
-                                    Icon(Icons.Default.History, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Icon(
+                                        Icons.Default.History,
+                                        null,
+                                        Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
                                 }
 
                                 Spacer(Modifier.width(4.dp))
@@ -190,7 +224,12 @@ fun ReelSymbolManagerDialog(
                                 IconButton(onClick = {
                                     itemToDeleteIndex = index
                                 }, modifier = Modifier.size(32.dp).tip("删除此符号")) {
-                                    Icon(Icons.Default.Delete, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        null,
+                                        Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
                                 }
                             }
                         }
@@ -231,24 +270,16 @@ fun ReelSymbolManagerDialog(
 
     // 删除确认对话框
     if (itemToDeleteIndex != null) {
-        AlertDialog(
-            onDismissRequest = { itemToDeleteIndex = null },
-            title = { Text("确认删除") },
-            text = { Text("确定要删除这个符号吗？此操作不可撤销。") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val newItems = props.items.toMutableList().apply { removeAt(itemToDeleteIndex!!) }
-                        onPropertiesChanged(props.copy(items = newItems))
-                        itemToDeleteIndex = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("确认删除")
+        AppConfirmDialog(
+            title = "确认删除",
+            message = "确定要删除这个符号吗？此操作不可撤销。",
+            isDestructive = true,
+            onConfirm = {
+                val newItems = props.items.toMutableList().apply {
+                    removeAt(itemToDeleteIndex!!)
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { itemToDeleteIndex = null }) { Text("取消") }
+                onPropertiesChanged(props.copy(items = newItems))
+                itemToDeleteIndex = null
             }
         )
     }
@@ -277,7 +308,7 @@ fun ReelSymbolManagerDialog(
                             Text("英文 Prompt (English)", modifier = Modifier.padding(12.dp))
                         }
                     }
-                    
+
                     Box(Modifier.fillMaxWidth().heightIn(min = 100.dp)) {
                         if (promptTab == 0) {
                             SelectAllOutlinedTextField(
@@ -294,7 +325,7 @@ fun ReelSymbolManagerDialog(
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 400.dp)
                             )
                         }
-                        
+
                         // 优化提示词按钮
                         val currentPromptText = if (promptTab == 0) newItemPromptZh else newItemPromptEn
                         if (currentPromptText.isNotBlank() || newItemPromptZh.isNotBlank()) {
@@ -314,13 +345,19 @@ fun ReelSymbolManagerDialog(
                                         }
                                     }
                                 },
-                                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp).tip("AI 自动优化提示词 (将生成英文 Prompt)"),
+                                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
+                                    .tip("AI 自动优化提示词 (将生成英文 Prompt)"),
                                 enabled = !isOptimizing
                             ) {
                                 if (isOptimizing) {
                                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                                 } else {
-                                    Icon(Icons.Default.Translate, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Icon(
+                                        Icons.Default.Translate,
+                                        null,
+                                        Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
                         }
@@ -403,14 +440,14 @@ fun ReelSymbolManagerDialog(
                 }
 
                 onPropertiesChanged(props.copy(items = newItems))
-                
+
                 // 2. 触发生成逻辑，强制使用当前选中 Tab 的语言
                 val finalPromptText = if (promptTab == 0) targetItem.userPromptZh else targetItem.userPromptEn
                 val safePrompt = if (finalPromptText.isNotBlank()) finalPromptText else targetItem.fullPrompt
-                
+
                 viewModel.assetManager.selectReelItem(targetItem.id)
                 viewModel.assetGen.onRequestGeneration(apiKey, "${UIBlockType.SYMBOL.defaultPrompt}, $safePrompt")
-                
+
                 showGenConfirmDialog = false
                 showAddItemDialog = false
             },
