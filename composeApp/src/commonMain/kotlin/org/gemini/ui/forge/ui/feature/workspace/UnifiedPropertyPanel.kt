@@ -94,19 +94,24 @@ fun UnifiedPropertyPanel(
 
 /**
  * 通用的可折叠板块组件。
+ *
+ * @param title 板块标题。
+ * @param expanded 是否展开。
+ * @param onToggle 切换展开状态的回调。
+ * @param content 内容。
  */
 @Composable
 fun CollapsibleSection(
     title: String,
-    defaultExpanded: Boolean = true,
+    expanded: Boolean,
+    onToggle: (Boolean) -> Unit,
     content: @Composable () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(defaultExpanded) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expanded = !expanded }
+                .clickable { onToggle(!expanded) }
                 .padding(vertical = 8.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

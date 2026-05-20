@@ -155,6 +155,31 @@ class TemplateRepository(
         AppLogger.i("TemplateRepository", "✅ 模板 JSON 已更新")
     }
 
+    /**
+     * 保存工作区配置到本地。
+     */
+    suspend fun saveWorkspaceConfig(templateName: String, config: org.gemini.ui.forge.model.app.WorkspaceConfig) {
+        val sanitizedName = templateName.replace(" ", "_")
+        val jsonRelPath = "$PROJECTS_DIR/$sanitizedName/workspace.json"
+        val content = json.encodeToString(config)
+        fileStorage.saveToFile(jsonRelPath, content)
+    }
+
+    /**
+     * 加载工作区配置。
+     */
+    suspend fun loadWorkspaceConfig(templateName: String): org.gemini.ui.forge.model.app.WorkspaceConfig? {
+        val sanitizedName = templateName.replace(" ", "_")
+        val jsonRelPath = "$PROJECTS_DIR/$sanitizedName/workspace.json"
+        val content = fileStorage.readFromFile(jsonRelPath) ?: return null
+        return try {
+            json.decodeFromString<org.gemini.ui.forge.model.app.WorkspaceConfig>(content)
+        } catch (e: Exception) {
+            AppLogger.e("TemplateRepository", "❌ 解析 workspace.json 失败: $templateName", e)
+            null
+        }
+    }
+
     private fun cleanBlockPaths(blocks: List<UIBlock>): List<UIBlock> {
         return blocks.map { block ->
             block.copy(

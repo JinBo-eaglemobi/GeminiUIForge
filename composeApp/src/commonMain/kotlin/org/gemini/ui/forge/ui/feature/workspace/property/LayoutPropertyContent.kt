@@ -43,9 +43,14 @@ fun LayoutPropertyContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (selectedBlock == null) {
+            val collapsedSet = state.collapsedSections["global"] ?: emptySet()
             // 1. 未选中模块时显示页面级属性
             state.currentPage?.let { page ->
-                CollapsibleSection(title = "页面与属性") {
+                CollapsibleSection(
+                    title = "页面与属性",
+                    expanded = "页面与属性" !in collapsedSet,
+                    onToggle = { viewModel.toggleSectionCollapsed("global", "页面与属性", !it) }
+                ) {
                     // 页面切换器
                     if (state.project.pages.size > 1) {
                         var pageMenuExpanded by remember { mutableStateOf(false) }
@@ -118,7 +123,11 @@ fun LayoutPropertyContent(
                     }
                 }
 
-                CollapsibleSection(title = "AI 辅助高级功能", defaultExpanded = true) {
+                CollapsibleSection(
+                    title = "AI 辅助高级功能",
+                    expanded = "AI 辅助高级功能" !in collapsedSet,
+                    onToggle = { viewModel.toggleSectionCollapsed("global", "AI 辅助高级功能", !it) }
+                ) {
                     // AI 辅助全局功能
                     Button(
                         onClick = { onRefineClick(null) },
@@ -141,7 +150,12 @@ fun LayoutPropertyContent(
             } ?: Text("请选择模块", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             // 2. 选中模块后显示具体物理参数
-            CollapsibleSection(title = "基础物理属性") {
+            val blockCollapsedSet = state.collapsedSections[selectedBlock.id] ?: emptySet()
+            CollapsibleSection(
+                title = "基础物理属性",
+                expanded = "基础物理属性" !in blockCollapsedSet,
+                onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, "基础物理属性", !it) }
+            ) {
                 // ID 编辑
                 SelectAllOutlinedTextField(
                     value = selectedBlock.id,
@@ -251,7 +265,11 @@ fun LayoutPropertyContent(
 
             val hasSpecificProps = selectedBlock.type in listOf(UIBlockType.BUTTON, UIBlockType.VIEW, UIBlockType.TEXT, UIBlockType.INPUT, UIBlockType.REEL)
             if (hasSpecificProps) {
-                CollapsibleSection(title = "专属属性配置") {
+                CollapsibleSection(
+                    title = "专属属性配置",
+                    expanded = "专属属性配置" !in blockCollapsedSet,
+                    onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, "专属属性配置", !it) }
+                ) {
                     BlockSpecificProperties(
                         blockType = selectedBlock.type,
                         properties = selectedBlock.properties,
@@ -264,7 +282,11 @@ fun LayoutPropertyContent(
                 }
             }
 
-            CollapsibleSection(title = "高级与破坏性操作", defaultExpanded = true) {
+            CollapsibleSection(
+                title = "高级与破坏性操作",
+                expanded = "高级与破坏性操作" !in blockCollapsedSet,
+                onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, "高级与破坏性操作", !it) }
+            ) {
                 // AI 结构重塑与参考区域
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(

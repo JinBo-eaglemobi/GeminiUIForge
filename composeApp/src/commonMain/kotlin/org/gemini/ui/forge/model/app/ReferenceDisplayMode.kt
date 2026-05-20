@@ -1,7 +1,11 @@
 package org.gemini.ui.forge.model.app
+
+import kotlinx.serialization.Serializable
+
 /**
  * 参考图显示模式
  */
+@Serializable
 enum class ReferenceDisplayMode {
     HIDDEN,   // 隐藏参考图
     SPLIT,    // 上下分屏对照

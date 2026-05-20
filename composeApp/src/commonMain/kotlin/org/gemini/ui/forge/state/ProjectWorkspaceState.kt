@@ -35,6 +35,9 @@ data class ProjectWorkspaceState(
     val pendingDeleteBlockId: String? = null,
     val chatHistories: Map<String, List<org.gemini.ui.forge.model.api.ChatMessage>> = emptyMap(),
 
+    /** 界面持久化配置 */
+    val collapsedSections: Map<String, Set<String>> = emptyMap(),
+
     /** 资产生成专用 */
     val isLocalProcessing: Boolean = false,
     val isGenerateTransparent: Boolean = true,

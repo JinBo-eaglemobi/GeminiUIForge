@@ -122,14 +122,21 @@ class ProjectWorkspaceViewModel(
     // --- 生命周期与基础控制 ---
 
     init {
-        // 加载初始 AI 提示词模板
+        // 加载初始 AI 提示词模板与工作区持久化配置
         viewModelScope.launch {
             val updateInstruction = aiService.promptManager.getPrompt("refine_instruction_update")
             val newInstruction = aiService.promptManager.getPrompt("refine_instruction_new")
+            val wsConfig = templateRepo.loadWorkspaceConfig(initialProjectName)
+
             _state.update {
                 it.copy(
                     defaultRefineInstructionUpdate = updateInstruction,
-                    defaultRefineInstructionNew = newInstruction
+                    defaultRefineInstructionNew = newInstruction,
+                    collapsedSections = wsConfig?.collapsedSections ?: emptyMap(),
+                    isVisualMode = wsConfig?.isVisualMode ?: false,
+                    isHideOutlines = wsConfig?.isHideOutlines ?: false,
+                    referenceMode = wsConfig?.referenceMode ?: org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN,
+                    referenceOpacity = wsConfig?.referenceOpacity ?: 0.4f
                 )
             }
         }
@@ -138,18 +145,86 @@ class ProjectWorkspaceViewModel(
     /** 重新加载项目数据 */
     fun reload(newProject: ProjectState) {
         if (_state.value.project == newProject) return
-        _state.update {
-            it.copy(
-                project = newProject,
-                selectedPageId = newProject.pages.firstOrNull()?.id,
-                selectedBlockId = null,
-                editingGroupId = null,
-                globalStyle = newProject.globalStyle,
-                referenceImageUri = newProject.styleReferenceUri,
-                undoStack = emptyList(), 
-                redoStack = emptyList()
-            )
+        viewModelScope.launch {
+            val wsConfig = templateRepo.loadWorkspaceConfig(_state.value.projectName)
+            _state.update {
+                it.copy(
+                    project = newProject,
+                    selectedPageId = newProject.pages.firstOrNull()?.id,
+                    selectedBlockId = null,
+                    editingGroupId = null,
+                    globalStyle = newProject.globalStyle,
+                    referenceImageUri = newProject.styleReferenceUri,
+                    undoStack = emptyList(), 
+                    redoStack = emptyList(),
+                    collapsedSections = wsConfig?.collapsedSections ?: emptyMap(),
+                    isVisualMode = wsConfig?.isVisualMode ?: false,
+                    isHideOutlines = wsConfig?.isHideOutlines ?: false,
+                    referenceMode = wsConfig?.referenceMode ?: org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN,
+                    referenceOpacity = wsConfig?.referenceOpacity ?: 0.4f
+                )
+            }
         }
+    }
+
+    /** 触发工作区配置持久化 */
+    private fun saveWorkspaceConfig() {
+        val currentState = _state.value
+        val config = org.gemini.ui.forge.model.app.WorkspaceConfig(
+            collapsedSections = currentState.collapsedSections,
+            isVisualMode = currentState.isVisualMode,
+            isHideOutlines = currentState.isHideOutlines,
+            referenceMode = currentState.referenceMode,
+            referenceOpacity = currentState.referenceOpacity
+        )
+        viewModelScope.launch {
+            templateRepo.saveWorkspaceConfig(currentState.projectName, config)
+        }
+    }
+
+    /** 切换折叠状态 */
+    fun toggleSectionCollapsed(blockId: String?, title: String, collapsed: Boolean) {
+        val targetId = blockId ?: "global"
+        _state.update { 
+            val currentMap = it.collapsedSections.toMutableMap()
+            val currentSet = currentMap[targetId]?.toMutableSet() ?: mutableSetOf()
+            if (collapsed) {
+                currentSet.add(title)
+            } else {
+                currentSet.remove(title)
+            }
+            if (currentSet.isEmpty()) {
+                currentMap.remove(targetId)
+            } else {
+                currentMap[targetId] = currentSet
+            }
+            it.copy(collapsedSections = currentMap)
+        }
+        saveWorkspaceConfig()
+    }
+
+    /** 切换视觉模式 */
+    fun toggleVisualMode() {
+        _state.update { it.copy(isVisualMode = !it.isVisualMode) }
+        saveWorkspaceConfig()
+    }
+
+    /** 切换隐藏描边 */
+    fun toggleHideOutlines() {
+        _state.update { it.copy(isHideOutlines = !it.isHideOutlines) }
+        saveWorkspaceConfig()
+    }
+
+    /** 切换参考图模式 */
+    fun updateReferenceMode(mode: org.gemini.ui.forge.model.app.ReferenceDisplayMode) {
+        _state.update { it.copy(referenceMode = mode) }
+        saveWorkspaceConfig()
+    }
+
+    /** 更新参考图透明度 */
+    fun updateReferenceOpacity(opacity: Float) {
+        _state.update { it.copy(referenceOpacity = opacity) }
+        saveWorkspaceConfig()
     }
 
     /** 切换语言偏好 */
