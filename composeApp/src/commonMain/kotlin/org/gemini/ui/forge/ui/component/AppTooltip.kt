@@ -22,20 +22,29 @@ import androidx.compose.ui.window.PopupProperties
  */
 class GlobalTooltipState {
     var text by mutableStateOf<String?>(null)
-    var windowPosition by mutableStateOf(Offset.Zero)
+    var pointerPosition by mutableStateOf(Offset.Zero)
     var isVisible by mutableStateOf(false)
     private var displayJobCount = 0
 
     /**
      * 显示提示
      * @param text 提示文案
-     * @param position 组件在窗口中的位置偏移
+     * @param position 鼠标指针在窗口中的位置
      */
     fun show(text: String, position: Offset) {
         this.text = text
-        this.windowPosition = position
+        this.pointerPosition = position
         this.isVisible = true
         displayJobCount++
+    }
+
+    /**
+     * 更新鼠标位置
+     */
+    fun updatePosition(position: Offset) {
+        if (isVisible) {
+            this.pointerPosition = position
+        }
     }
 
     /**
@@ -74,10 +83,18 @@ fun Modifier.tip(text: String?): Modifier = composed {
         awaitPointerEventScope {
             while (true) {
                 val event = awaitPointerEvent()
+                val currentPointer = event.changes.firstOrNull()?.position ?: Offset.Zero
+                // 计算鼠标相对于窗口的绝对坐标
+                val absolutePointer = componentPosition + currentPointer
+
                 when (event.type) {
                     PointerEventType.Enter -> {
                         // 鼠标进入组件范围
-                        tooltipState.show(text, componentPosition)
+                        tooltipState.show(text, absolutePointer)
+                    }
+                    PointerEventType.Move -> {
+                        // 鼠标在组件内移动，更新位置，让提示框跟随
+                        tooltipState.updatePosition(absolutePointer)
                     }
                     PointerEventType.Exit -> {
                         // 鼠标离开组件范围
@@ -102,8 +119,8 @@ fun GlobalTooltipHost() {
     val state = LocalGlobalTooltip.current
     if (state.isVisible && !state.text.isNullOrBlank()) {
         Popup(
-            // 在组件下方偏移一定距离显示
-            offset = IntOffset(state.windowPosition.x.toInt(), state.windowPosition.y.toInt() + 40),
+            // 在鼠标指针的右下方添加安全偏移显示，避免遮挡光标引发闪烁
+            offset = IntOffset(state.pointerPosition.x.toInt() + 15, state.pointerPosition.y.toInt() + 15),
             properties = PopupProperties(
                 focusable = false,
                 dismissOnBackPress = false,

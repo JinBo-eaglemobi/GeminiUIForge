@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.model.ui.BlockProperties
@@ -84,8 +85,9 @@ fun ReelSymbolManagerDialog(
                 IconButton(
                     onClick = {
                         editingItem = null
+             = null
                         newItemPromptZh = ""
-                        newItemPromptEn = ""
+          PromptEn = ""
                         promptTab = 0
                         showAddItemDialog = true
                     },
@@ -158,8 +160,9 @@ fun ReelSymbolManagerDialog(
                                         item.userPromptZh.ifBlank { item.id },
                                         style = MaterialTheme.typography.titleSmall
                                     )
+                    
                                     Text(
-                                        item.userPromptEn.ifBlank { "No English Prompt" },
+                    tem.userPromptEn.ifBlank { "No English Prompt" },
                                         style = MaterialTheme.typography.labelSmall,
                                         maxLines = 2,
                                         color = MaterialTheme.colorScheme.outline
@@ -230,9 +233,8 @@ fun ReelSymbolManagerDialog(
                                         Modifier.size(18.dp),
                                         tint = MaterialTheme.colorScheme.error
                                     )
-                                }
-                            }
-                        }
+                                                     }
+                            }     }
                     }
                 }
             }
@@ -240,6 +242,9 @@ fun ReelSymbolManagerDialog(
         confirmButton = {
             Button(onClick = onDismiss) { Text("完成") }
         }
+    )
+
+    // � }
     )
 
     // 大图预览对话框
@@ -309,26 +314,9 @@ fun ReelSymbolManagerDialog(
                         }
                     }
 
-                    Box(Modifier.fillMaxWidth().heightIn(min = 100.dp)) {
-                        if (promptTab == 0) {
-                            SelectAllOutlinedTextField(
-                                value = newItemPromptZh,
-                                onValueChange = { newItemPromptZh = it },
-                                label = { Text("请输入中文描述，可作为提示词基础或占位名称") },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 400.dp)
-                            )
-                        } else {
-                            SelectAllOutlinedTextField(
-                                value = newItemPromptEn,
-                                onValueChange = { newItemPromptEn = it },
-                                label = { Text("请输入 English Prompt，用于精准的 AI 生图") },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 400.dp)
-                            )
-                        }
-
-                        // 优化提示词按钮
-                        val currentPromptText = if (promptTab == 0) newItemPromptZh else newItemPromptEn
-                        if (currentPromptText.isNotBlank() || newItemPromptZh.isNotBlank()) {
+                    // 预定义优化按钮，移入 trailingIcon 槽位以防遮挡文字
+                    val optimizeButton: @Composable (() -> Unit)? = if (newItemPromptZh.isNotBlank() || newItemPromptEn.isNotBlank()) {
+                        {
                             IconButton(
                                 onClick = {
                                     scope.launch {
@@ -341,12 +329,11 @@ fun ReelSymbolManagerDialog(
                                         } catch (e: Exception) {
                                             // 可以在此处添加 Toast 或日志提示
                                         } finally {
-                                            isOptimizing = false
+                                    = false
                                         }
                                     }
                                 },
-                                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
-                                    .tip("AI 自动优化提示词 (将生成英文 Prompt)"),
+                                modifier = Modifier.tip("AI 自动优化提示词 (将生成英文 Prompt)"),
                                 enabled = !isOptimizing
                             ) {
                                 if (isOptimizing) {
@@ -361,6 +348,24 @@ fun ReelSymbolManagerDialog(
                                 }
                             }
                         }
+                    } else null
+
+                    if (promptTab == 0) {
+                        SelectAllOutlinedTextField(
+                            value = newItemPromptZh,
+                            onValueChange = { newItemPromptZh = it },
+                            label = { Text("请输入中文描述，可作为提示词基础或占位名称") },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 400.dp),
+                            trailingIcon = optimizeButton
+                        )
+                    } else {
+                        SelectAllOutlinedTextField(
+                            value = newItemPromptEn,
+                            onValueChange = { newItemPromptEn = it },
+                            label = { Text("请输入 English Prompt，用于精准的 AI 生图") },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 400.dp),
+                            trailingIcon = optimizeButton
+                        )
                     }
                 }
             },
@@ -399,8 +404,9 @@ fun ReelSymbolManagerDialog(
                     FilledTonalButton(
                         onClick = { showGenConfirmDialog = true },
                         modifier = Modifier.tip("保存并使用当前 Tab 语言立即生图")
+             �图")
                     ) {
-                        Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
+                        Icon(Icme, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("保存并生成")
                     }
@@ -409,8 +415,7 @@ fun ReelSymbolManagerDialog(
         )
     }
 
-    // 生图确认对话框
-    if (showGenConfirmDialog) {
+    // 生图确认对话� 生图确认对enConfirmDialog) {
         val langText = if (promptTab == 0) "【中文】" else "【英文】"
         AppConfirmDialog(
             title = "确认开始 AI 生成",
@@ -454,4 +459,9 @@ fun ReelSymbolManagerDialog(
             onDismiss = { showGenConfirmDialog = false }
         )
     }
+}
+        )
+    }
+}
+
 }
