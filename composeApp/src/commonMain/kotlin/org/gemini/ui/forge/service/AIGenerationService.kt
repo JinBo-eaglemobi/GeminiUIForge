@@ -366,6 +366,22 @@ class AIGenerationService(
         }
     }
 
+    /**
+     * 针对页面布局中被用户框选或指定的局部区域，进行重塑或优化分析。
+     * 
+     * 通过向大模型传入被截取区域的图片、原 JSON 节点结构及用户的修改指令，
+     * AI 将理解该区域目前的结构以及意图，并返回重新设计的该层级及下级的 UI 树（多页形式返回，通常只包含该区域的内容）。
+     * 
+     * @param originalImageUri 原始基底大图路径（预留参数，目前未注入）。
+     * @param croppedBytes 被裁切或高亮区域的图像数据（字节数组）。
+     * @param currentJson 该区域目前对应的 JSON 结构字符串。
+     * @param userInstruction 用户对该区域的明确指令（例如“把这个按钮换成圆角的”）。
+     * @param apiKey API 密钥。
+     * @param history AI 与用户的多轮对话历史。
+     * @param onLog 日志输出回调。
+     * @param onChunk 流式数据片段回调。
+     * @return 更新后的 [UIPage] 列表（代表该区域的新布局分支）。
+     */
     suspend fun refineAreaForTemplate(
         originalImageUri: String,
         croppedBytes: ByteArray,

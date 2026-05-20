@@ -76,7 +76,8 @@ fun ReelSymbolManagerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth(0.95f),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.fillMaxWidth(0.9f),
         title = {
             // 标题栏：包含标题文字和新增按钮
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -85,9 +86,8 @@ fun ReelSymbolManagerDialog(
                 IconButton(
                     onClick = {
                         editingItem = null
-             = null
                         newItemPromptZh = ""
-          PromptEn = ""
+                        newItemPromptEn = ""
                         promptTab = 0
                         showAddItemDialog = true
                     },
@@ -160,9 +160,8 @@ fun ReelSymbolManagerDialog(
                                         item.userPromptZh.ifBlank { item.id },
                                         style = MaterialTheme.typography.titleSmall
                                     )
-                    
                                     Text(
-                    tem.userPromptEn.ifBlank { "No English Prompt" },
+                                        item.userPromptEn.ifBlank { "No English Prompt" },
                                         style = MaterialTheme.typography.labelSmall,
                                         maxLines = 2,
                                         color = MaterialTheme.colorScheme.outline
@@ -233,8 +232,9 @@ fun ReelSymbolManagerDialog(
                                         Modifier.size(18.dp),
                                         tint = MaterialTheme.colorScheme.error
                                     )
-                                                     }
-                            }     }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -242,9 +242,6 @@ fun ReelSymbolManagerDialog(
         confirmButton = {
             Button(onClick = onDismiss) { Text("完成") }
         }
-    )
-
-    // � }
     )
 
     // 大图预览对话框
@@ -293,7 +290,8 @@ fun ReelSymbolManagerDialog(
     if (showAddItemDialog) {
         AlertDialog(
             onDismissRequest = { showAddItemDialog = false },
-            modifier = Modifier.fillMaxWidth(0.85f),
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            modifier = Modifier.fillMaxWidth(0.8f),
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text(if (editingItem == null) "新增符号元素 (SYMBOL)" else "编辑符号元素")
@@ -329,7 +327,7 @@ fun ReelSymbolManagerDialog(
                                         } catch (e: Exception) {
                                             // 可以在此处添加 Toast 或日志提示
                                         } finally {
-                                    = false
+                                            isOptimizing = false
                                         }
                                     }
                                 },
@@ -404,9 +402,8 @@ fun ReelSymbolManagerDialog(
                     FilledTonalButton(
                         onClick = { showGenConfirmDialog = true },
                         modifier = Modifier.tip("保存并使用当前 Tab 语言立即生图")
-             �图")
                     ) {
-                        Icon(Icme, null, Modifier.size(18.dp))
+                        Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("保存并生成")
                     }
@@ -415,7 +412,8 @@ fun ReelSymbolManagerDialog(
         )
     }
 
-    // 生图确认对话� 生图确认对enConfirmDialog) {
+    // 生图确认对话框
+    if (showGenConfirmDialog) {
         val langText = if (promptTab == 0) "【中文】" else "【英文】"
         AppConfirmDialog(
             title = "确认开始 AI 生成",
@@ -459,9 +457,4 @@ fun ReelSymbolManagerDialog(
             onDismiss = { showGenConfirmDialog = false }
         )
     }
-}
-        )
-    }
-}
-
 }
