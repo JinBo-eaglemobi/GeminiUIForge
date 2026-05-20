@@ -255,7 +255,7 @@
     <string name="label_bottom_short">下</string>
     <string name="label_width_short">宽</string>
     <string name="label_height_short">高</string>
-    <string name="log_title">历史执行日志 ({0})</string>
+    <string name="log_title">历史执行日志 (%1$s)</string>
     <string name="action_copy_log">复制日志</string>
     <string name="toast_log_copied">日志已复制到剪贴板。</string>
     <string name="action_open_in_explorer">在资源管理器中打开</string>

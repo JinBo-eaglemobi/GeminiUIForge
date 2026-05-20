@@ -314,7 +314,12 @@ class LayoutEditorDelegate(
         val task = aiService.createTask<String>("提示词优化", scope)
         currentGenJob = scope.launch {
             launch { task.status.collect { status -> updateState { it.copy(isGenerating = status == AITaskStatus.RUNNING) } } }
-            updateState { it.copy(isGenerating = true, generationLogs = emptyList(), showAITaskDialog = true) }
+            updateState { it.copy(
+                isGenerating = true, 
+                generationLogs = listOf("🚀 启动 AI 提示词优化引擎..."), 
+                showAITaskDialog = true,
+                currentTaskStatus = "正在优化节点 [${block.type.name}] 的提示词"
+            ) }
             
             task.execute {
                 val logger = { msg: String -> addLog(msg); log(msg) }
@@ -322,7 +327,20 @@ class LayoutEditorDelegate(
                 val historyKey = "PROMPT_$blockId"
                 val history = if (useChatContext) getState().chatHistories[historyKey] ?: emptyList() else emptyList()
                 
-                val optimized = aiService.optimizePrompt(systemInstruction + textToOptimize, apiKey, 3, history = history)
+                var chunkCount = 0
+                val optimized = aiService.optimizePrompt(
+                    originalPrompt = systemInstruction + textToOptimize, 
+                    apiKey = apiKey, 
+                    maxRetries = 3, 
+                    history = history,
+                    onLog = logger,
+                    onChunk = { _ -> 
+                        chunkCount++
+                        if (chunkCount % 5 == 0) {
+                           updateState { it.copy(currentTaskStatus = "接收流式数据包中... ($chunkCount)") }
+                        }
+                    }
+                )
                 
                 updateState { currentState ->
                     val updatedPages = currentState.project.pages.map { page ->
@@ -331,9 +349,14 @@ class LayoutEditorDelegate(
                         })
                     }
                     val newHistory = history + ChatMessage("user", textToOptimize) + ChatMessage("model", optimized)
-                    currentState.copy(project = currentState.project.copy(pages = updatedPages), chatHistories = currentState.chatHistories + (historyKey to newHistory))
+                    currentState.copy(
+                        project = currentState.project.copy(pages = updatedPages), 
+                        chatHistories = currentState.chatHistories + (historyKey to newHistory),
+                        currentTaskStatus = "✅ 提示词优化完成"
+                    )
                 }
                 markDirty()
+                logger("✅ 优化完成！结果已更新至对应字段。")
                 optimized
             }
         }

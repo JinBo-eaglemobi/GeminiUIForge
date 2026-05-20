@@ -59,6 +59,13 @@ class AIGenerationService(
         AppLogger.i(TAG, message)
     }
 
+    /**
+     * 验证图片 URI 列表的合法性。
+     * 支持 http/https 链接、data:image Base64 数据以及本地文件路径。
+     *
+     * @param imageUris 图片 URI 列表。
+     * @return 如果验证失败，返回错误描述字符串；如果全部验证通过，返回 null。
+     */
     suspend fun validateImageUris(imageUris: List<String>): String? {
         val client = NetworkClient.shared
         for ((index, uri) in imageUris.withIndex()) {
@@ -85,8 +92,24 @@ class AIGenerationService(
     }
 
     /**
-     * 核心生图方法，根据选中的 GeminiModel 自动路由到 Imagen 或 Native Gemini 生成逻辑。
-     * 现在支持从设置中读取默认生图数量，并自动拆分为并发批次请求（单次上限 4 张）。
+     * 核心生图方法，根据选中的 [GeminiModel] 自动路由到 Imagen 或 Native Gemini 生成逻辑。
+     * 支持从设置中读取默认生图数量，并自动拆分为并发批次请求（单次上限 4 张）。
+     *
+     * @param model 使用的 Gemini 模型。
+     * @param blockType 块类型（用于 Prompt 生成）。
+     * @param userPrompt 用户输入的原始提示词。
+     * @param apiKey API 密钥。
+     * @param maxRetries 最大重试次数。
+     * @param targetWidth 目标宽度（可选）。
+     * @param targetHeight 目标高度（可选）。
+     * @param isPng 是否生成 PNG 格式。
+     * @param imageSize 图像尺寸（如 "1k"）。
+     * @param style 图像风格。
+     * @param referenceImageUri 参考图 URI（可选）。
+     * @param isVertexAI 是否使用 Vertex AI 环境。
+     * @param onLog 日志输出回调。
+     * @param onImageGenerated 每生成一张图片的回调。
+     * @return 生成的图片 URI 列表。
      */
     suspend fun generateImages(
         model: GeminiModel,
@@ -284,6 +307,18 @@ class AIGenerationService(
         }
     }
 
+    /**
+     * 使用 Gemini 模型分析图片并提取 UI 模板结构。
+     * 支持并发处理多张图片，并流式返回解析结果。
+     *
+     * @param imageUris 需要分析的图片 URI 列表。
+     * @param apiKey API 密钥。
+     * @param maxRetries 最大重试次数。
+     * @param onLog 日志输出回调。
+     * @param onProgress 进度更新回调。
+     * @param onChunk 解析结果的流式片段回调。
+     * @return 解析后的项目状态 [ProjectState]。
+     */
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun analyzeImagesForTemplate(
         imageUris: List<String>,
@@ -471,14 +506,27 @@ class AIGenerationService(
         }
     }
 
+    /**
+     * 使用 AI 优化用户的生图提示词 (流式请求)。
+     *
+     * @param originalPrompt 原始提示词。
+     * @param apiKey API 密钥。
+     * @param maxRetries 最大重试次数。
+     * @param history 对话历史记录。
+     * @param onLog 日志输出回调。
+     * @param onChunk 解析结果的流式片段回调。
+     * @return 优化后的提示词字符串。
+     */
     suspend fun optimizePrompt(
         originalPrompt: String,
         apiKey: String,
         maxRetries: Int = 3,
-        history: List<ChatMessage> = emptyList()
+        history: List<ChatMessage> = emptyList(),
+        onLog: (String) -> Unit = {},
+        onChunk: (String) -> Unit = {}
     ): String {
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
-        val url = ApiConfig.getGenerateContentEndpoint(apiKey)
+        val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
 
         val promptTemplate = promptManager.getPrompt("ai_optimize_prompt")
         val fullPrompt = promptTemplate.replace("{0}", originalPrompt)
@@ -508,7 +556,22 @@ class AIGenerationService(
         var lastException: Exception? = null
         for (attempt in 0..maxRetries) {
             try {
-                return geminiClient.generateContent(url, requestBody)
+                if (attempt > 0) {
+                    syncLog("⚠️ 提示词优化重试中 (${attempt + 1})...", onLog)
+                }
+                val accumulatedText = StringBuilder()
+                geminiClient.streamGenerateContent(
+                    url = url,
+                    requestBody = requestBody,
+                    onLog = onLog,
+                    onChunk = { chunk ->
+                        accumulatedText.append(chunk)
+                        onChunk(chunk)
+                    }
+                )
+                val finalString = accumulatedText.toString()
+                if (finalString.isEmpty()) throw Exception("优化响应为空")
+                return finalString
             } catch (e: Exception) {
                 lastException = e
                 if (attempt < maxRetries) delay((1000L * (attempt + 1)).milliseconds)

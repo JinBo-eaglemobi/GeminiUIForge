@@ -245,7 +245,7 @@
     <string name="label_bottom_short">B</string>
     <string name="label_width_short">W</string>
     <string name="label_height_short">H</string>
-    <string name="log_title">History Logs ({0})</string>
+    <string name="log_title">History Logs (%1$s)</string>
     <string name="action_copy_log">Copy Log</string>
     <string name="toast_log_copied">Log copied to clipboard.</string>
     <string name="action_open_in_explorer">Open in Explorer</string>
