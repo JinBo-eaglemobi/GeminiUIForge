@@ -1,27 +1,34 @@
-package org.gemini.ui.forge.ui.feature.workspace
+package org.gemini.ui.forge.ui.feature
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.app.PromptLanguage
+import org.gemini.ui.forge.model.app.ShortcutAction
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.CanvasArea
 import org.gemini.ui.forge.ui.component.HierarchySidebar
+import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.dialog.*
+import org.gemini.ui.forge.ui.feature.workspace.UnifiedPropertyPanel
+import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 
 /**
@@ -38,8 +45,8 @@ fun ProjectWorkspaceScreen(
     configManager: ConfigManager,
     effectiveApiKey: String,
     initialPromptLang: PromptLanguage,
-    saveEvent: kotlinx.coroutines.flow.SharedFlow<Unit>,
-    shortcutEvent: kotlinx.coroutines.flow.SharedFlow<org.gemini.ui.forge.model.app.ShortcutAction>,
+    saveEvent: SharedFlow<Unit>,
+    shortcutEvent: SharedFlow<ShortcutAction>,
     onSaveRequest: (String, ProjectState) -> Unit,
     onDirtyChanged: (Boolean) -> Unit
 ) {
@@ -65,12 +72,12 @@ fun ProjectWorkspaceScreen(
     LaunchedEffect(viewModel.requestSaveEvent) { viewModel.requestSaveEvent.collect { onSaveRequest(initialProjectName, state.project) } }
     LaunchedEffect(shortcutEvent) { 
         shortcutEvent.collect { action ->
-            org.gemini.ui.forge.utils.AppLogger.d("WorkspaceScreen", "📌 收到快捷键: ${action.name}")
-            if (action == org.gemini.ui.forge.model.app.ShortcutAction.DELETE) {
+            AppLogger.d("WorkspaceScreen", "📌 收到快捷键: ${action.name}")
+            if (action == ShortcutAction.DELETE) {
                 if (state.selectedBlockId != null) {
                     blockToDelete = state.selectedBlockId
                 } else {
-                    org.gemini.ui.forge.utils.Toast.show("请先选择要删除的模块", org.gemini.ui.forge.ui.component.ToastType.INFO)
+                    Toast.show("请先选择要删除的模块", ToastType.INFO)
                 }
             } else {
                 viewModel.shortcutManager.handleAction(action) 
@@ -217,7 +224,7 @@ fun ProjectWorkspaceScreen(
                 Box(Modifier.fillMaxSize().padding(16.dp)) {
                     FilledTonalIconButton(
                         onClick = { viewModel.historyManager.toggleHistoryPanel(true) },
-                        modifier = Modifier.align(androidx.compose.ui.Alignment.TopStart).size(40.dp),
+                        modifier = Modifier.align(Alignment.TopStart).size(40.dp),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
                         )
@@ -242,7 +249,7 @@ fun ProjectWorkspaceScreen(
                     apiKey = effectiveApiKey,
                     onRefineClick = { refineTargetId = it; showVisualRefine = true },
                     onSetReferenceAreaClick = { id -> referenceAreaTargetId = id; showReferenceArea = true },
-                    onShowHistory = { id -> 
+                    onShowHistory = { id ->
                         coroutineScope.launch {
                             historicalImages = viewModel.assetManager.loadHistoricalImages(id)
                             showHistoricalDialog = true

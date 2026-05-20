@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.home
+package org.gemini.ui.forge.ui.feature
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.gemini.ui.forge.model.app.UIModule
+import org.gemini.ui.forge.ui.feature.workspace.ModuleCard
 import org.gemini.ui.forge.ui.theme.AppShapes
 
 /**

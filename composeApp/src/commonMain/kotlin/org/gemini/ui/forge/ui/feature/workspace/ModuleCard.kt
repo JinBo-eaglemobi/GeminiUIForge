@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.home
+package org.gemini.ui.forge.ui.feature.workspace
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -18,8 +18,11 @@ import org.jetbrains.compose.resources.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.FolderOpen
+import org.gemini.ui.forge.formatTimestamp
 import org.gemini.ui.forge.model.app.UIModule
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.getPlatform
 
 /**
  * 首页展示的模块卡片组件。
@@ -73,7 +76,7 @@ fun ModuleCard(module: UIModule, onOpenWorkspace: () -> Unit, onDelete: () -> Un
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 val rawTitle = if (module.nameRes != null) stringResource(module.nameRes) else module.nameStr ?: "Unknown"
-                val displayTitle = if (rawTitle.length > 20) rawTitle.take(20) + "..." else rawTitle
+                val displayTitle = if (rawTitle.length > 15) rawTitle.take(15) + "..." else rawTitle
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -87,7 +90,7 @@ fun ModuleCard(module: UIModule, onOpenWorkspace: () -> Unit, onDelete: () -> Un
                     val createdAt = module.projectState?.createdAt ?: 0L
                     if (createdAt > 0L) {
                         Text(
-                            text = org.gemini.ui.forge.formatTimestamp(createdAt),
+                            text = formatTimestamp(createdAt),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -95,15 +98,27 @@ fun ModuleCard(module: UIModule, onOpenWorkspace: () -> Unit, onDelete: () -> Un
                 }
 
                 if (module.absolutePath != null) {
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete Template",
-                            tint = MaterialTheme.colorScheme.error
-                        )
+                    Row {
+                        IconButton(
+                            onClick = { getPlatform().openInFileExplorer(module.absolutePath) },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = "Open Folder",
+                                tint = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Template",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             }

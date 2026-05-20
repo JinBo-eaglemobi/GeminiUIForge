@@ -24,8 +24,7 @@ import kotlinx.coroutines.delay
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
-import org.gemini.ui.forge.ui.feature.home.HomeScreen
-import org.gemini.ui.forge.ui.feature.analysis.TemplateGeneratorScreen
+import org.gemini.ui.forge.ui.feature.HomeScreen
 import org.gemini.ui.forge.ui.component.AppTopBar
 import org.gemini.ui.forge.ui.theme.AppTheme
 import org.gemini.ui.forge.service.*
@@ -40,6 +39,7 @@ import org.gemini.ui.forge.viewmodel.AppSettingsViewModel
 import org.gemini.ui.forge.viewmodel.AppUpdateViewModel
 import org.gemini.ui.forge.viewmodel.AppViewModel
 import org.gemini.ui.forge.ui.component.*
+import org.gemini.ui.forge.ui.feature.ProjectWorkspaceScreen
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.theme.AppSpacing
 
@@ -421,7 +421,7 @@ fun App(typography: Typography? = null) {
                                 }
 
                                 AppScreen.PROJECT_WORKSPACE -> {
-                                    org.gemini.ui.forge.ui.feature.workspace.ProjectWorkspaceScreen(
+                                    ProjectWorkspaceScreen(
                                         initialProject = appState.project,
                                         initialProjectName = appState.projectName,
                                         templateRepo = templateRepo,

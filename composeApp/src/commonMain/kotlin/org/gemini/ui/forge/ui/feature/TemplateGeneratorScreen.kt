@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.ui.feature.analysis
+package org.gemini.ui.forge.ui.feature
 
 import androidx.compose.foundation.layout.*
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
