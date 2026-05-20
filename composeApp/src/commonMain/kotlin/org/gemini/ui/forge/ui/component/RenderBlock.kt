@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -32,11 +33,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import org.gemini.ui.forge.model.ui.BlockProperties
-import org.gemini.ui.forge.model.ui.ImageResizeMode
 import org.gemini.ui.forge.model.ui.NinePatchConfig
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
@@ -296,31 +295,75 @@ fun RenderBlock(
         } else if (block.type == UIBlockType.REEL) {
             val reelProps = block.properties as? BlockProperties.ReelProperties
             if (reelProps != null) {
-                val gridColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                Canvas(Modifier.fillMaxSize()) {
-                    val rows = reelProps.rows.coerceAtLeast(1)
-                    val cols = reelProps.columns.coerceAtLeast(1)
-                    val sw = (1.dp).toPx() / zoom
+                val rows = reelProps.rows.coerceAtLeast(1)
+                val cols = reelProps.columns.coerceAtLeast(1)
 
-                    // 绘制垂直分割线
-                    for (i in 1 until cols) {
-                        val x = size.width * i / cols
-                        drawLine(
-                            gridColor,
-                            start = androidx.compose.ui.geometry.Offset(x, 0f),
-                            end = androidx.compose.ui.geometry.Offset(x, size.height),
-                            strokeWidth = sw
-                        )
+                if (reelProps.items.isNotEmpty()) {
+                    // 使用固定的随机种子保证重组时不会疯狂闪烁
+                    val randomItems = androidx.compose.runtime.remember(block.id, rows, cols, reelProps.items) {
+                        val rnd = kotlin.random.Random(block.id.hashCode())
+                        List(rows * cols) { reelProps.items.random(rnd) }
                     }
-                    // 绘制水平分割线
-                    for (i in 1 until rows) {
-                        val y = size.height * i / rows
-                        drawLine(
-                            gridColor,
-                            start = androidx.compose.ui.geometry.Offset(0f, y),
-                            end = androidx.compose.ui.geometry.Offset(size.width, y),
-                            strokeWidth = sw
-                        )
+
+                    androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+                        for (r in 0 until rows) {
+                            androidx.compose.foundation.layout.Row(Modifier.weight(1f).fillMaxWidth()) {
+                                for (c in 0 until cols) {
+                                    val item = randomItems[r * cols + c]
+                                    Box(
+                                        modifier = Modifier.weight(1f).fillMaxHeight()
+                                            .border(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (item.currentImageUri != null) {
+                                            coil3.compose.AsyncImage(
+                                                model = item.currentImageUri.getAbsolutePath(),
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Fit
+                                            )
+                                        } else {
+                                            val fallbackText = item.userPromptZh.ifBlank { item.userPromptEn }.ifBlank { "Symbol" }
+                                            Text(
+                                                text = fallbackText,
+                                                modifier = Modifier.fillMaxWidth().padding(4.dp),
+                                                textAlign = TextAlign.Center,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 3,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    val gridColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                    Canvas(Modifier.fillMaxSize()) {
+                        val sw = (1.dp).toPx() / zoom
+
+                        // 绘制垂直分割线
+                        for (i in 1 until cols) {
+                            val x = size.width * i / cols
+                            drawLine(
+                                gridColor,
+                                start = androidx.compose.ui.geometry.Offset(x, 0f),
+                                end = androidx.compose.ui.geometry.Offset(x, size.height),
+                                strokeWidth = sw
+                            )
+                        }
+                        // 绘制水平分割线
+                        for (i in 1 until rows) {
+                            val y = size.height * i / rows
+                            drawLine(
+                                gridColor,
+                                start = androidx.compose.ui.geometry.Offset(0f, y),
+                                end = androidx.compose.ui.geometry.Offset(size.width, y),
+                                strokeWidth = sw
+                            )
+                        }
                     }
                 }
             }
