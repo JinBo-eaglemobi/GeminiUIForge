@@ -95,6 +95,9 @@ fun ReelSymbolManagerDialog(
                 ) {
                     Icon(Icons.Default.AddCircle, "添加", tint = MaterialTheme.colorScheme.primary)
                 }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, "关闭", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         },
         text = {

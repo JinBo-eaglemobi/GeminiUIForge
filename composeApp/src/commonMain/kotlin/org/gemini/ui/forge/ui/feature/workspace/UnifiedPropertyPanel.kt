@@ -120,8 +120,12 @@ fun CollapsibleSection(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f)
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(16.dp))
+            HorizontalDivider(
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
             )
         }
         AnimatedVisibility(visible = expanded) {
@@ -132,6 +136,5 @@ fun CollapsibleSection(
                 content()
             }
         }
-        HorizontalDivider(modifier = Modifier.alpha(0.4f), color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
