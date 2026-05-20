@@ -354,7 +354,7 @@ fun BlockSpecificProperties(
                 }
             }
 
-            HorizontalDivider(Modifier.padding(vertical = LocalAppSpacing.current.small).alpha(0.3f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
 
             // 仅仅提供一个入口按钮
             Button(
