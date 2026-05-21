@@ -27,11 +27,15 @@ fun CompileConfigDialog(
     onConfirm: (CompileConfig) -> Unit
 ) {
     var rootDir by remember { mutableStateOf(initialConfig.rootDir) }
+    var envDir by remember { mutableStateOf(initialConfig.envDir) }
     var scriptPath by remember { mutableStateOf(initialConfig.scriptPath) }
     var outputDir by remember { mutableStateOf(initialConfig.outputDir) }
 
     val pickRootDir = rememberDirectoryPicker(stringResource(Res.string.compile_pick_dir)) {
         if (it != null) rootDir = it
+    }
+    val pickEnvDir = rememberDirectoryPicker(stringResource(Res.string.compile_pick_dir)) {
+        if (it != null) envDir = it
     }
     val pickScript = rememberFilePicker(stringResource(Res.string.compile_pick_file), listOf("js")) {
         if (it != null) scriptPath = it
@@ -51,6 +55,20 @@ fun CompileConfigDialog(
                     shape = AppShapes.medium,
                     trailingIcon = {
                         IconButton(onClick = pickRootDir) {
+                            Icon(Icons.Default.FolderOpen, contentDescription = null)
+                        }
+                    }
+                )
+
+                // 运行环境目录
+                SelectAllOutlinedTextField(
+                    value = envDir,
+                    onValueChange = { envDir = it },
+                    label = { Text(stringResource(Res.string.compile_env_dir)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AppShapes.medium,
+                    trailingIcon = {
+                        IconButton(onClick = pickEnvDir) {
                             Icon(Icons.Default.FolderOpen, contentDescription = null)
                         }
                     }
@@ -84,7 +102,7 @@ fun CompileConfigDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onConfirm(CompileConfig(rootDir, scriptPath, outputDir))
+                    onConfirm(CompileConfig(rootDir, scriptPath, outputDir, envDir))
                 },
                 shape = AppShapes.medium
             ) {

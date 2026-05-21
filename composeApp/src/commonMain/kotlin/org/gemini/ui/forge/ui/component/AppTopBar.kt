@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +35,7 @@ import org.gemini.ui.forge.ui.theme.AppShapes
  * @param onGenerateTemplateClicked 点击 AI 生成模板的回调。
  * @param onCloudAssetManagerClicked 点击云端资产管理的回调。
  * @param onCompileClicked 点击编译配置的回调。
+ * @param onPlayClicked 点击本地预览的回调。
  * @param onSaveClicked 点击保存项目的回调。
  * @param onSettingsClicked 点击应用设置的回调。
  * @param onHelpClicked 点击帮助的回调。
@@ -45,6 +47,7 @@ fun AppTopBar(
     onGenerateTemplateClicked: () -> Unit = {},
     onCloudAssetManagerClicked: () -> Unit = {},
     onCompileClicked: () -> Unit = {},
+    onPlayClicked: () -> Unit = {},
     onSaveClicked: () -> Unit = {},
     onSettingsClicked: () -> Unit = {},
     onHelpClicked: () -> Unit = {}
@@ -143,6 +146,12 @@ fun AppTopBar(
                     }
                 } else if (currentScreen == AppScreen.TEMPLATE_EDITOR || currentScreen == AppScreen.TEMPLATE_ASSET_GEN || currentScreen == AppScreen.PROJECT_WORKSPACE) {
                     if (currentScreen == AppScreen.PROJECT_WORKSPACE) {
+                        IconButton(
+                            onClick = onPlayClicked,
+                            modifier = Modifier.tip(stringResource(Res.string.play_tip))
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = stringResource(Res.string.menu_play))
+                        }
                         IconButton(
                             onClick = onCompileClicked,
                             modifier = Modifier.tip(stringResource(Res.string.compile_tip))

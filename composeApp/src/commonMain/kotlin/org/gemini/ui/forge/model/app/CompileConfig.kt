@@ -10,5 +10,6 @@ import kotlinx.serialization.Serializable
 data class CompileConfig(
     val rootDir: String = "",
     val scriptPath: String = "",
-    val outputDir: String = ""
+    val outputDir: String = "",
+    val envDir: String = ""
 )

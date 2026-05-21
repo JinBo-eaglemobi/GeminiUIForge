@@ -19,6 +19,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.repository.TemplateRepository
@@ -223,7 +224,22 @@ fun App(typography: Typography? = null) {
                                 settingsViewModel.saveCompileConfig(config)
                                 appViewModel.updateCompileConfig(config)
                                 showCompileDialog = false
-                                // TODO: Implement compilation logic if needed
+                                
+                                // 执行编译导出逻辑
+                                coroutineScope.launch {
+                                    val compilerService = org.gemini.ui.forge.service.CompilerService(storage)
+                                    val success = compilerService.compileProject(
+                                        projectName = appState.projectName,
+                                        projectState = appState.project,
+                                        rootDir = config.rootDir,
+                                        outputDir = config.outputDir
+                                    )
+                                    if (success) {
+                                        Toast.show("编译导出成功", ToastType.SUCCESS)
+                                    } else {
+                                        Toast.show("编译导出失败，请查看日志", ToastType.ERROR)
+                                    }
+                                }
                             }
                         )
                     }
@@ -359,6 +375,7 @@ fun App(typography: Typography? = null) {
                     val statusMessage by AppLogger.statusMessage.collectAsState()
                     val showLogViewer by AppLogger.showLogViewer.collectAsState()
                     val memoryLogs by AppLogger.memoryLogs.collectAsState()
+                    val playErrorStr = org.jetbrains.compose.resources.stringResource(geminiuiforge.composeapp.generated.resources.Res.string.play_error_no_root)
 
                     if (showLogViewer) {
                         LogViewerDialog(
@@ -382,6 +399,19 @@ fun App(typography: Typography? = null) {
                                 onGenerateTemplateClicked = { appViewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
                                 onCloudAssetManagerClicked = { showCloudAssetDialog = true },
                                 onCompileClicked = { showCompileDialog = true },
+                                onPlayClicked = {
+                                    val config = globalState.compileConfig
+                                    if (config.rootDir.isBlank()) {
+                                        Toast.show(playErrorStr, ToastType.ERROR)
+                                    } else {
+                                        val root = config.rootDir.trim().replace("\\", "/").removeSuffix("/")
+                                        val out = config.outputDir.trim().replace("\\", "/").removePrefix("/").removeSuffix("/")
+                                        val basePath = if (out.isNotEmpty()) "$root/$out" else root
+                                        val separatorPrefix = if (basePath.startsWith("/")) "file://" else "file:///"
+                                        val url = "$root/bin/index.html"
+                                        getPlatform().openInBrowser(url)
+                                    }
+                                },
                                 onSaveClicked = {
                                     appViewModel.dispatchSaveEvent()
                                 },

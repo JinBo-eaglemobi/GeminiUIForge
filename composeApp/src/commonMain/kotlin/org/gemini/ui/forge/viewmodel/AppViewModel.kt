@@ -119,6 +119,7 @@ class AppViewModel(
             }
 
             val compileRootDir = configManager.loadKey("COMPILE_ROOT_DIR") ?: ""
+            val compileEnvDir = configManager.loadKey("COMPILE_ENV_DIR") ?: ""
             val compileScriptPath = configManager.loadKey("COMPILE_SCRIPT_PATH") ?: ""
             val compileOutputDir = configManager.loadKey("COMPILE_OUTPUT_DIR") ?: ""
 
@@ -135,6 +136,7 @@ class AppViewModel(
                         layoutMode = layoutMode,
                         compileConfig = CompileConfig(
                             rootDir = compileRootDir,
+                            envDir = compileEnvDir,
                             scriptPath = compileScriptPath,
                             outputDir = compileOutputDir
                         )

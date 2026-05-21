@@ -269,6 +269,7 @@
     <string name="menu_compile">编译资源</string>
     <string name="compile_config_title">编译环境配置</string>
     <string name="compile_env_root">运行环境根目录 (Root)</string>
+    <string name="compile_env_dir">运行环境目录</string>
     <string name="compile_script_path">编译脚本文件 (Node.js)</string>
     <string name="compile_output_dir">资源保存目录</string>
     <string name="compile_output_dir_hint">位于 Root 目录内</string>
@@ -276,4 +277,7 @@
     <string name="compile_pick_dir">选择目录</string>
     <string name="compile_pick_file">选择文件</string>
     <string name="compile_tip">配置并运行资源编译脚本</string>
+    <string name="menu_play">本地预览</string>
+    <string name="play_tip">在本地默认浏览器中运行并预览</string>
+    <string name="play_error_no_root">请先点击编译按钮，配置编译环境的 Root 根目录</string>
 </resources>

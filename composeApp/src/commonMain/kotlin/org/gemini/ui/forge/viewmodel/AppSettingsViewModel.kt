@@ -89,6 +89,7 @@ class AppSettingsViewModel(
     fun saveCompileConfig(config: org.gemini.ui.forge.model.app.CompileConfig) {
         viewModelScope.launch {
             configManager.saveKey("COMPILE_ROOT_DIR", config.rootDir)
+            configManager.saveKey("COMPILE_ENV_DIR", config.envDir)
             configManager.saveKey("COMPILE_SCRIPT_PATH", config.scriptPath)
             configManager.saveKey("COMPILE_OUTPUT_DIR", config.outputDir)
         }
