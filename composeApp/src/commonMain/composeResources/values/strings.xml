@@ -270,4 +270,12 @@
     <string name="menu_play">Run in Browser</string>
     <string name="play_tip">Run and preview in local browser</string>
     <string name="play_error_no_root">Please configure the compile environment root directory first</string>
+    <!-- Multi-selection properties panel -->
+    <string name="multiselect_title">Multiple Modules Selected</string>
+    <string name="multiselect_desc">A total of %1$d modules are selected.</string>
+    <string name="multiselect_tips_title">Supported Operations:</string>
+    <string name="multiselect_tip_arrow">• Use Arrow keys (↑ / ↓ / ← / →) for precise movement</string>
+    <string name="multiselect_tip_shift">• Hold Shift + Arrow keys to move 10x faster</string>
+    <string name="multiselect_tip_drag">• Drag any selected module on the canvas to move them all</string>
+    <string name="multiselect_note">⚠️ Note: Modifying or viewing other properties is not supported under multi-selection to avoid attributes conflict.</string>
 </resources>

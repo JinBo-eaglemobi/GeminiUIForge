@@ -280,4 +280,12 @@
     <string name="menu_play">本地预览</string>
     <string name="play_tip">在本地默认浏览器中运行并预览</string>
     <string name="play_error_no_root">请先点击编译按钮，配置编译环境的 Root 根目录</string>
+    <!-- Multi-selection properties panel -->
+    <string name="multiselect_title">已选中多个策划模块</string>
+    <string name="multiselect_desc">当前共选中了 %1$d 个模块。</string>
+    <string name="multiselect_tips_title">支持的快捷操作：</string>
+    <string name="multiselect_tip_arrow">• 使用方向键 (↑ / ↓ / ← / →) 进行像素级精确移动</string>
+    <string name="multiselect_tip_shift">• 配合 Shift + 方向键以 10 倍速快速位移</string>
+    <string name="multiselect_tip_drag">• 在画布上直接拖拽任意选中模块进行同步移动</string>
+    <string name="multiselect_note">⚠️ 注意：多选状态下不支持显示与统一修改其他非坐标属性，以防属性冲突。</string>
 </resources>

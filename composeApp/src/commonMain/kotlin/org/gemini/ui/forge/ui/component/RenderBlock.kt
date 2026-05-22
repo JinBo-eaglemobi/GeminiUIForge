@@ -167,6 +167,7 @@ fun RenderBlock(
     isHideOutlines: Boolean,
     density: Density,
     selectedBlockId: String?,
+    selectedBlockIds: Set<String> = emptySet(),
     editingGroupId: String?
 ) {
     if (!block.isVisible) return
@@ -396,12 +397,13 @@ fun RenderBlock(
             parentY = currentY,
             baseScale = baseScale,
             zoom = zoom,
-            isSelected = child.id == selectedBlockId,
+            isSelected = child.id == selectedBlockId || selectedBlockIds.contains(child.id),
             isDimmed = isDimmed,
             isVisualMode = isVisualMode,
             isHideOutlines = isHideOutlines,
             density = density,
             selectedBlockId = selectedBlockId,
+            selectedBlockIds = selectedBlockIds,
             editingGroupId = editingGroupId
         )
     }

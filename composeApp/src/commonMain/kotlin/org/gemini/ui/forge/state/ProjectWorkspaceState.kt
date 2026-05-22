@@ -18,6 +18,8 @@ data class ProjectWorkspaceState(
     val selectedPageId: String? = project.pages.firstOrNull()?.id,
     /** 当前选中的块 ID */
     val selectedBlockId: String? = null,
+    /** 当前选中的块 ID 集合 */
+    val selectedBlockIds: Set<String> = if (selectedBlockId != null) setOf(selectedBlockId) else emptySet(),
     /** 正在编辑的组 ID (Isolated Mode) */
     val editingGroupId: String? = null,
 

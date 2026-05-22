@@ -16,9 +16,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -64,7 +68,8 @@ fun CanvasArea(
     pageHeight: Float,
     blocks: List<UIBlock>,
     selectedBlockId: String?,
-    onBlockClicked: (String?) -> Unit,
+    selectedBlockIds: Set<String> = emptySet(),
+    onBlockClicked: (String?, Boolean) -> Unit,
     onBlockDoubleClicked: (String) -> Unit = {},
     onBlockDragStart: (String) -> Unit = {},
     onBlockDragged: (String, Float, Float) -> Unit = { _, _, _ -> },
@@ -212,21 +217,33 @@ fun CanvasArea(
                             Image(bitmap = refBitmap, contentDescription = null, alpha = referenceOpacity, modifier = Modifier.offset(x = offsetX.dp, y = offsetY.dp).size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp), contentScale = ContentScale.FillBounds)
                         }
 
+                        var isMultiSelectActive by remember { mutableStateOf(false) }
+
                         Box(
                             modifier = Modifier.fillMaxSize()
+                                .pointerInput(Unit) {
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                                            isMultiSelectActive = event.keyboardModifiers.isShiftPressed ||
+                                                    event.keyboardModifiers.isCtrlPressed ||
+                                                    event.keyboardModifiers.isMetaPressed
+                                        }
+                                    }
+                                }
                                 .pointerInput(Unit) {
                                     detectTapGestures(
                                         onDoubleTap = { offset ->
                                             val lx = (offset.x / density.density - currentOffsetX) / currentBaseScale
                                             val ly = (offset.y / density.density - currentOffsetY) / currentBaseScale
                                             val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
-                                            if (hitBlock != null) currentOnBlockDoubleClicked(hitBlock.id) else if (currentEditingGroupId != null) currentOnExitGroupEdit() else currentOnBlockClicked(null)
+                                            if (hitBlock != null) currentOnBlockDoubleClicked(hitBlock.id) else if (currentEditingGroupId != null) currentOnExitGroupEdit() else currentOnBlockClicked(null, false)
                                         },
                                         onTap = { offset ->
                                             val lx = (offset.x / density.density - currentOffsetX) / currentBaseScale
                                             val ly = (offset.y / density.density - currentOffsetY) / currentBaseScale
                                             val hitBlock = findHitBlock(currentBlocks, lx, ly, 0f, 0f, currentEditingGroupId)
-                                            currentOnBlockClicked(hitBlock?.id)
+                                            currentOnBlockClicked(hitBlock?.id, isMultiSelectActive)
                                         }
                                     )
                                 }
@@ -257,9 +274,11 @@ fun CanvasArea(
                             currentBlocks.forEach { block ->
                                 RenderBlock(
                                     block = block, parentX = offsetX, parentY = offsetY, baseScale = baseScale, zoom = zoom,
-                                    isSelected = block.id == selectedBlockId, isDimmed = shouldDim(block, editingGroupId),
+                                    isSelected = block.id == selectedBlockId || selectedBlockIds.contains(block.id),
+                                    isDimmed = shouldDim(block, editingGroupId),
                                     isVisualMode = isVisualMode, isHideOutlines = isHideOutlines,
-                                    density = density, selectedBlockId = selectedBlockId, editingGroupId = editingGroupId
+                                    density = density, selectedBlockId = selectedBlockId,
+                                    selectedBlockIds = selectedBlockIds, editingGroupId = editingGroupId
                                 )
                             }
                         }

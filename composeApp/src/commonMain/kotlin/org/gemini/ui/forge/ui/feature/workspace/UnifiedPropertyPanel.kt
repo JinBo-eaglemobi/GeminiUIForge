@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.feature.workspace.property.AssetGenPropertyContent
@@ -45,48 +46,133 @@ fun UnifiedPropertyPanel(
     onDeleteRequest: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableStateOf(0) }
-
-    Column(modifier = modifier.fillMaxSize()) {
-        // 顶部导航选项卡
-        TabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = Color.Transparent,
-            divider = {}
+    if (state.selectedBlockIds.size > 1) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(LocalAppSpacing.current.medium)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.medium)
         ) {
-            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }) {
-                Box(Modifier.padding(vertical = 12.dp)) {
-                    Text(stringResource(Res.string.editor_properties), style = MaterialTheme.typography.labelLarge)
-                }
-            }
-            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }) {
-                Box(Modifier.padding(vertical = 12.dp)) {
-                    Text(stringResource(Res.string.editor_gen_settings), style = MaterialTheme.typography.labelLarge)
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.outlinedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = stringResource(Res.string.multiselect_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Text(
+                        text = stringResource(Res.string.multiselect_desc, state.selectedBlockIds.size),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                    Text(
+                        text = stringResource(Res.string.multiselect_tips_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(Res.string.multiselect_tip_arrow),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = stringResource(Res.string.multiselect_tip_shift),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = stringResource(Res.string.multiselect_tip_drag),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                    Text(
+                        text = stringResource(Res.string.multiselect_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        lineHeight = 16.sp
+                    )
                 }
             }
         }
+    } else {
+        var selectedTab by remember { mutableStateOf(0) }
 
-        // 内容滚动区
-        Box(
-            modifier = Modifier.weight(1f).padding(LocalAppSpacing.current.medium).verticalScroll(rememberScrollState())
-        ) {
-            if (selectedTab == 0) {
-                LayoutPropertyContent(
-                    state = state,
-                    viewModel = viewModel,
-                    apiKey = apiKey,
-                    onRefineClick = onRefineClick,
-                    onSetReferenceAreaClick = onSetReferenceAreaClick,
-                    onShowHistory = onShowHistory,
-                    onDeleteRequest = onDeleteRequest
-                )
-            } else {
-                AssetGenPropertyContent(
-                    state = state,
-                    viewModel = viewModel,
-                    apiKey = apiKey,
-                    onShowHistory = onShowHistory
-                )
+        Column(modifier = modifier.fillMaxSize()) {
+            // 顶部导航选项卡
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = Color.Transparent,
+                divider = {}
+            ) {
+                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }) {
+                    Box(Modifier.padding(vertical = 12.dp)) {
+                        Text(stringResource(Res.string.editor_properties), style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }) {
+                    Box(Modifier.padding(vertical = 12.dp)) {
+                        Text(stringResource(Res.string.editor_gen_settings), style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+
+            // 内容滚动区
+            Box(
+                modifier = Modifier.weight(1f).padding(LocalAppSpacing.current.medium).verticalScroll(rememberScrollState())
+            ) {
+                if (selectedTab == 0) {
+                    LayoutPropertyContent(
+                        state = state,
+                        viewModel = viewModel,
+                        apiKey = apiKey,
+                        onRefineClick = onRefineClick,
+                        onSetReferenceAreaClick = onSetReferenceAreaClick,
+                        onShowHistory = onShowHistory,
+                        onDeleteRequest = onDeleteRequest
+                    )
+                } else {
+                    AssetGenPropertyContent(
+                        state = state,
+                        viewModel = viewModel,
+                        apiKey = apiKey,
+                        onShowHistory = onShowHistory
+                    )
+                }
             }
         }
     }

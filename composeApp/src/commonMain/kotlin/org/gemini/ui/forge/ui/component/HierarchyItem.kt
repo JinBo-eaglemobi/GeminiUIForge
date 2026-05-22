@@ -38,6 +38,11 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.jetbrains.compose.resources.stringResource
@@ -70,10 +75,11 @@ fun HierarchyItem(
     isHovered: Boolean,
     dropPosition: DropPosition,
     locateTrigger: Long,
-    onBlockClicked: (String?) -> Unit,
+    onBlockClicked: (String?, Boolean) -> Unit,
     onBlockDoubleClicked: (String) -> Unit,
     onBoundsCalculated: (String, Rect) -> Unit,
     selectedBlockId: String?,
+    selectedBlockIds: Set<String> = emptySet(),
     draggedBlockId: String?,
     hoveredBlockId: String?,
     onToggleVisibility: (String, Boolean) -> Unit
@@ -83,6 +89,7 @@ fun HierarchyItem(
 
     // 针对每个图层项目，申请一个视口定位请求器
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    var isMultiSelectActive by remember { mutableStateOf(false) }
 
     // 自动展开包含选中图层的父级组
     LaunchedEffect(selectedBlockId) {
@@ -137,8 +144,18 @@ fun HierarchyItem(
                         else -> Color.Transparent
                     }
                 )
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            isMultiSelectActive = event.keyboardModifiers.isShiftPressed ||
+                                    event.keyboardModifiers.isCtrlPressed ||
+                                    event.keyboardModifiers.isMetaPressed
+                        }
+                    }
+                }
                 .combinedClickable(
-                    onClick = { onBlockClicked(block.id) },
+                    onClick = { onBlockClicked(block.id, isMultiSelectActive) },
                     onDoubleClick = { onBlockDoubleClicked(block.id) }
                 )
                 .padding(start = (8 + depth * 16).dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
@@ -200,7 +217,7 @@ fun HierarchyItem(
                     HierarchyItem(
                         block = child,
                         depth = depth + 1,
-                        isSelected = child.id == selectedBlockId,
+                        isSelected = child.id == selectedBlockId || selectedBlockIds.contains(child.id),
                         isDragged = child.id == draggedBlockId,
                         isHovered = child.id == hoveredBlockId,
                         dropPosition = dropPosition,
@@ -209,6 +226,7 @@ fun HierarchyItem(
                         onBlockDoubleClicked = onBlockDoubleClicked,
                         onBoundsCalculated = onBoundsCalculated,
                         selectedBlockId = selectedBlockId,
+                        selectedBlockIds = selectedBlockIds,
                         draggedBlockId = draggedBlockId,
                         hoveredBlockId = hoveredBlockId,
                         onToggleVisibility = onToggleVisibility

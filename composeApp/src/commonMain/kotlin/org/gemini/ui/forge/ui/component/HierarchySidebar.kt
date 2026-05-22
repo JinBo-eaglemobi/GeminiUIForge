@@ -60,7 +60,8 @@ import kotlin.time.Duration.Companion.milliseconds
 fun HierarchySidebar(
     blocks: List<UIBlock>,
     selectedBlockId: String?,
-    onBlockClicked: (String?) -> Unit,
+    selectedBlockIds: Set<String> = emptySet(),
+    onBlockClicked: (String?, Boolean) -> Unit,
     onBlockDoubleClicked: (String) -> Unit = {},
     onMoveBlock: (String, String?, DropPosition) -> Unit = { _, _, _ -> },
     onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit = { _, _, _, _ -> },
@@ -292,10 +293,11 @@ fun HierarchySidebar(
                             HierarchyItem(
                                 block = block,
                                 depth = 0,
-                                isSelected = block.id == selectedBlockId,
+                                isSelected = block.id == selectedBlockId || selectedBlockIds.contains(block.id),
                                 isDragged = block.id == draggedBlockId,
                                 isHovered = block.id == hoveredBlockId,
                                 selectedBlockId = selectedBlockId,
+                                selectedBlockIds = selectedBlockIds,
                                 draggedBlockId = draggedBlockId,
                                 hoveredBlockId = hoveredBlockId,
                                 dropPosition = dropPosition,

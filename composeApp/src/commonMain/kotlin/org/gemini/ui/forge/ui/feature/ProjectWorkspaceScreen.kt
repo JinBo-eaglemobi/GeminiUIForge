@@ -9,6 +9,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
@@ -68,6 +72,10 @@ fun ProjectWorkspaceScreen(
     var blockToDelete by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
+    // 键盘修饰键状态（多选判定）
+    var isShiftPressed by remember { mutableStateOf(false) }
+    var isCtrlPressed by remember { mutableStateOf(false) }
+
     // 生命周期与全局事件监听
     LaunchedEffect(saveEvent) { saveEvent.collect { onSaveRequest(initialProjectName, state.project) } }
     LaunchedEffect(viewModel.requestSaveEvent) { viewModel.requestSaveEvent.collect { onSaveRequest(initialProjectName, state.project) } }
@@ -76,20 +84,24 @@ fun ProjectWorkspaceScreen(
             AppLogger.d("WorkspaceScreen", "📌 收到快捷键: ${action.name}")
             when (action) {
                 ShortcutAction.DELETE -> {
-                    if (state.selectedBlockId != null) {
+                    if (state.selectedBlockIds.size > 1) {
+                        viewModel.historyManager.saveSnapshot("批量删除模块")
+                        state.selectedBlockIds.forEach { viewModel.layoutEditor.deleteBlock(it) }
+                        viewModel.onBlockClicked(null)
+                    } else if (state.selectedBlockId != null) {
                         blockToDelete = state.selectedBlockId
                     } else {
                         Toast.show("请先选择要删除的模块", ToastType.INFO)
                     }
                 }
-                ShortcutAction.MOVE_UP -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 0f, -1f) }
-                ShortcutAction.MOVE_UP_FAST -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 0f, -10f) }
-                ShortcutAction.MOVE_DOWN -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 0f, 1f) }
-                ShortcutAction.MOVE_DOWN_FAST -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 0f, 10f) }
-                ShortcutAction.MOVE_LEFT -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, -1f, 0f) }
-                ShortcutAction.MOVE_LEFT_FAST -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, -10f, 0f) }
-                ShortcutAction.MOVE_RIGHT -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 1f, 0f) }
-                ShortcutAction.MOVE_RIGHT_FAST -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 10f, 0f) }
+                ShortcutAction.MOVE_UP -> viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, 0f, -1f)
+                ShortcutAction.MOVE_UP_FAST -> viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, 0f, -10f)
+                ShortcutAction.MOVE_DOWN -> viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, 0f, 1f)
+                ShortcutAction.MOVE_DOWN_FAST -> viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, 0f, 10f)
+                ShortcutAction.MOVE_LEFT -> viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, -1f, 0f)
+                ShortcutAction.MOVE_LEFT_FAST -> viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, -10f, 0f)
+                ShortcutAction.MOVE_RIGHT -> viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, 1f, 0f)
+                ShortcutAction.MOVE_RIGHT_FAST -> viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, 10f, 0f)
                 else -> viewModel.shortcutManager.handleAction(action)
             }
         } 
@@ -175,7 +187,17 @@ fun ProjectWorkspaceScreen(
     }
 
     // --- 主 UI 布局渲染 ---
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(
+        Modifier.fillMaxSize().pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    isShiftPressed = event.keyboardModifiers.isShiftPressed
+                    isCtrlPressed = event.keyboardModifiers.isCtrlPressed || event.keyboardModifiers.isMetaPressed
+                }
+            }
+        }
+    ) {
         val totalWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
         var leftWeight by remember { mutableStateOf(0.2f) }
         var centerWeight by remember { mutableStateOf(0.55f) }
@@ -187,7 +209,8 @@ fun ProjectWorkspaceScreen(
                 HierarchySidebar(
                     blocks = state.currentPage?.blocks ?: emptyList(),
                     selectedBlockId = state.selectedBlockId,
-                    onBlockClicked = { viewModel.onBlockClicked(it) },
+                    selectedBlockIds = state.selectedBlockIds,
+                    onBlockClicked = { id, isMulti -> viewModel.onBlockClicked(id, isMulti) },
                     onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
                     onMoveBlock = { src, target, pos -> viewModel.layoutEditor.moveBlock(src, target, pos) },
                     onToggleVisibility = { id, visible -> viewModel.layoutEditor.toggleBlockVisibility(id, visible) },
@@ -212,6 +235,7 @@ fun ProjectWorkspaceScreen(
                     pageWidth = state.currentPage?.width ?: 1080f,
                     pageHeight = state.currentPage?.height ?: 1920f,
                     selectedBlockId = state.selectedBlockId,
+                    selectedBlockIds = state.selectedBlockIds,
                     editingGroupId = state.editingGroupId,
                     isVisualMode = state.isVisualMode,
                     onToggleVisualMode = { viewModel.toggleVisualMode() },
@@ -222,10 +246,16 @@ fun ProjectWorkspaceScreen(
                     referenceUri = state.referenceImageUri?.getAbsolutePath(),
                     referenceOpacity = state.referenceOpacity,
                     onReferenceOpacityChange = { opacity -> viewModel.updateReferenceOpacity(opacity) },
-                    onBlockClicked = { viewModel.onBlockClicked(it) },
+                    onBlockClicked = { id, isMulti -> viewModel.onBlockClicked(id, isMulti) },
                     onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
                     onBlockDragStart = { viewModel.historyManager.saveSnapshot("拖动模块位置") },
-                    onBlockDragged = { id, dx, dy -> viewModel.layoutEditor.moveBlockBy(id, dx, dy) },
+                    onBlockDragged = { id, dx, dy ->
+                        if (state.selectedBlockIds.contains(id)) {
+                            viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, dx, dy)
+                        } else {
+                            viewModel.layoutEditor.moveBlockBy(id, dx, dy)
+                        }
+                    },
                     onExitGroupEdit = { viewModel.updateState { s -> s.copy(editingGroupId = null) } },
                     stageBackgroundColor = state.stageBackgroundColor
                 )

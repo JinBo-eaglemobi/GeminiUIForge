@@ -85,7 +85,11 @@ class LayoutEditorDelegate(
                     } else page.copy(blocks = page.blocks + newBlock)
                 } else page
             }
-            currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = newBlockId)
+            currentState.copy(
+                project = currentState.project.copy(pages = updatedPages),
+                selectedBlockId = newBlockId,
+                selectedBlockIds = setOf(newBlockId)
+            )
         }
         markDirty()
     }
@@ -100,6 +104,7 @@ class LayoutEditorDelegate(
             currentState.copy(
                 project = currentState.project.copy(pages = updatedPages),
                 selectedBlockId = if (currentState.selectedBlockId == blockId) null else currentState.selectedBlockId,
+                selectedBlockIds = currentState.selectedBlockIds - blockId,
                 editingGroupId = if (currentState.editingGroupId == blockId) null else currentState.editingGroupId
             )
         }
@@ -171,16 +176,25 @@ class LayoutEditorDelegate(
     }
 
     fun moveBlockBy(blockId: String, dx: Float, dy: Float) {
+        moveBlocksBy(setOf(blockId), dx, dy)
+    }
+
+    fun moveBlocksBy(blockIds: Set<String>, dx: Float, dy: Float) {
+        if (blockIds.isEmpty()) return
         val pageId = getState().selectedPageId ?: return
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
-                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
-                        block.copy(bounds = block.bounds.copy(
-                            left = block.bounds.left + dx, top = block.bounds.top + dy,
-                            right = block.bounds.right + dx, bottom = block.bounds.bottom + dy
-                        ))
-                    })
+                    var currentBlocks = page.blocks
+                    for (blockId in blockIds) {
+                        currentBlocks = updateBlockInList(currentBlocks, blockId) { block ->
+                            block.copy(bounds = block.bounds.copy(
+                                left = block.bounds.left + dx, top = block.bounds.top + dy,
+                                right = block.bounds.right + dx, bottom = block.bounds.bottom + dy
+                            ))
+                        }
+                    }
+                    page.copy(blocks = currentBlocks)
                 } else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
@@ -235,7 +249,11 @@ class LayoutEditorDelegate(
                     } else page.copy(blocks = page.blocks + newBlock)
                 } else page
             }
-            currentState.copy(project = currentState.project.copy(pages = updatedPages), selectedBlockId = newBlock.id)
+            currentState.copy(
+                project = currentState.project.copy(pages = updatedPages),
+                selectedBlockId = newBlock.id,
+                selectedBlockIds = setOf(newBlock.id)
+            )
         }
         markDirty()
         Toast.show("已粘贴模块 ${newBlock.id}", ToastType.SUCCESS)

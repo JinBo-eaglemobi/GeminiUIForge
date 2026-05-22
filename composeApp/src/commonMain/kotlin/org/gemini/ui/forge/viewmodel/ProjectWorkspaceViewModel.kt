@@ -291,11 +291,30 @@ class ProjectWorkspaceViewModel(
     }
 
     /** 处理模块点击选中 */
-    fun onBlockClicked(blockId: String?) {
-        _state.update {
-            it.copy(
-                selectedBlockId = if (blockId == null) null else if (it.selectedBlockId == blockId) null else blockId
-            )
+    fun onBlockClicked(blockId: String?, isMultiSelect: Boolean = false) {
+        _state.update { currentState ->
+            if (blockId == null) {
+                currentState.copy(selectedBlockId = null, selectedBlockIds = emptySet())
+            } else if (isMultiSelect) {
+                val currentSet = currentState.selectedBlockIds
+                val newSet = if (currentSet.contains(blockId)) {
+                    currentSet - blockId
+                } else {
+                    currentSet + blockId
+                }
+                currentState.copy(
+                    selectedBlockIds = newSet,
+                    selectedBlockId = newSet.firstOrNull()
+                )
+            } else {
+                val alreadySelected = currentState.selectedBlockIds.contains(blockId) && currentState.selectedBlockIds.size == 1
+                val newId = if (alreadySelected) null else blockId
+                val newSet = if (newId != null) setOf(newId) else emptySet()
+                currentState.copy(
+                    selectedBlockId = newId,
+                    selectedBlockIds = newSet
+                )
+            }
         }
     }
 
