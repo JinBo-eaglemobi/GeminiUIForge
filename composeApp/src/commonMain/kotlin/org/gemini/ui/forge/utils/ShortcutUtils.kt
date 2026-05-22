@@ -38,6 +38,10 @@ object ShortcutUtils {
             "z" -> event.key == Key.Z
             "y" -> event.key == Key.Y
             "f2" -> event.key == Key.F2
+            "up" -> event.key == Key.DirectionUp
+            "down" -> event.key == Key.DirectionDown
+            "left" -> event.key == Key.DirectionLeft
+            "right" -> event.key == Key.DirectionRight
             "delete" -> {
                 val isMac = hostOs.isMacOS || hostOs == OS.Ios
                 if (isMac) event.key == Key.Delete || event.key == Key.Backspace else event.key == Key.Delete
@@ -47,7 +51,7 @@ object ShortcutUtils {
 
         if (isKeyMatch) {
             AppLogger.d("ShortcutUtils", "✅ 快捷键匹配成功: $shortcut")
-            Toast.show("收到快捷键: $shortcut", org.gemini.ui.forge.ui.component.ToastType.INFO)
+//            Toast.show("收到快捷键: $shortcut", org.gemini.ui.forge.ui.component.ToastType.INFO)
         }
 
         return isKeyMatch

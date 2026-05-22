@@ -207,12 +207,12 @@ fun BlockSpecificProperties(
                     onColorChanged = { onPropertiesChanged(props.copy(textColor = it)) },
                     modifier = Modifier.weight(1.5f)
                 )
-                SelectAllOutlinedTextField(
+                org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
                     value = props.textSize.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(textSize = it.toIntOrNull() ?: props.textSize)) },
                     label = { Text("字号") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    isFloat = false
                 )
             }
             Spacer(Modifier.height(LocalAppSpacing.current.small))
@@ -223,12 +223,12 @@ fun BlockSpecificProperties(
                     onColorChanged = { onPropertiesChanged(props.copy(strokeColor = it)) },
                     modifier = Modifier.weight(1.5f)
                 )
-                SelectAllOutlinedTextField(
+                org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
                     value = props.strokeWidth.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(strokeWidth = it.toFloatOrNull() ?: props.strokeWidth)) },
                     label = { Text("描边宽度") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    isFloat = true
                 )
             }
         }
@@ -262,12 +262,12 @@ fun BlockSpecificProperties(
                     onColorChanged = { onPropertiesChanged(props.copy(textColor = it)) },
                     modifier = Modifier.weight(1.5f)
                 )
-                SelectAllOutlinedTextField(
+                org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
                     value = props.textSize.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(textSize = it.toIntOrNull() ?: props.textSize)) },
                     label = { Text("字号") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    isFloat = false
                 )
             }
             Spacer(Modifier.height(LocalAppSpacing.current.small))
@@ -278,24 +278,24 @@ fun BlockSpecificProperties(
                     onColorChanged = { onPropertiesChanged(props.copy(strokeColor = it)) },
                     modifier = Modifier.weight(1.5f)
                 )
-                SelectAllOutlinedTextField(
+                org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
                     value = props.strokeWidth.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(strokeWidth = it.toFloatOrNull() ?: props.strokeWidth)) },
                     label = { Text("描边宽") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    isFloat = true
                 )
             }
             Spacer(Modifier.height(LocalAppSpacing.current.small))
-            SelectAllOutlinedTextField(
+            org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
                 value = if (props.maxLength == -1) "" else props.maxLength.toString(),
                 onValueChange = { 
-                    val maxLen = if (it.isBlank()) -1 else it.toIntOrNull() ?: props.maxLength
+                    val maxLen = if (it.isBlank() || it == "0") -1 else it.toIntOrNull() ?: props.maxLength
                     onPropertiesChanged(props.copy(maxLength = maxLen)) 
                 },
-                label = { Text("最大输入长度 (-1表示不限)") },
+                label = { Text("最大输入长度 (-1或清空表示不限)") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                isFloat = false
             )
         }
         UIBlockType.IMAGE, UIBlockType.SYMBOL, UIBlockType.BACKGROUND, UIBlockType.LOADER -> {
@@ -308,20 +308,20 @@ fun BlockSpecificProperties(
             Text("转轴核心配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
 
             Row(horizontalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
-                SelectAllOutlinedTextField(
+                org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
                     value = props.rows.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(rows = it.toIntOrNull() ?: props.rows)) },
                     label = { Text("行数") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true,
+                    isFloat = false,
                     enabled = !state.isGenerating
                 )
-                SelectAllOutlinedTextField(
+                org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
                     value = props.columns.toString(),
                     onValueChange = { onPropertiesChanged(props.copy(columns = it.toIntOrNull() ?: props.columns)) },
                     label = { Text("列数") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true,
+                    isFloat = false,
                     enabled = !state.isGenerating
                 )
             }

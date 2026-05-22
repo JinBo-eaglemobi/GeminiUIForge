@@ -28,6 +28,7 @@ import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.model.app.*
 import androidx.compose.material3.HorizontalDivider
 import kotlinx.coroutines.launch
+import org.jetbrains.skiko.hostOs
 
 /**
  * 应用程序全局设置对话框。
@@ -124,7 +125,12 @@ fun AppSettingsDialog(
     onCheckUpdate: () -> Unit = {},
     onStartUpdate: (UpdateInfo) -> Unit = {}
 ) {
-    var selectedCategory by remember { mutableStateOf(initialCategory) }
+    val isPc = remember { hostOs.isWindows || hostOs.isMacOS || hostOs.isLinux }
+    var selectedCategory by remember {
+        mutableStateOf(
+            if (!isPc && initialCategory == SettingCategory.SHORTCUTS) SettingCategory.GENERAL else initialCategory
+        )
+    }
     var leftWeight by remember { mutableStateOf(0.3f) }
 
     LaunchedEffect(Unit) {
@@ -170,7 +176,7 @@ fun AppSettingsDialog(
                                 modifier = Modifier.fillMaxSize().verticalScroll(leftScrollState).padding(LocalAppSpacing.current.small),
                                 verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.extraSmall)
                             ) {
-                                SettingCategory.entries.forEach { category ->
+                                SettingCategory.entries.filter { isPc || it != SettingCategory.SHORTCUTS }.forEach { category ->
                                     val isSelected = selectedCategory == category
                                     Surface(
                                         modifier = Modifier

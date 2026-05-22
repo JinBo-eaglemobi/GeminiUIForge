@@ -74,14 +74,23 @@ fun ProjectWorkspaceScreen(
     LaunchedEffect(shortcutEvent) { 
         shortcutEvent.collect { action ->
             AppLogger.d("WorkspaceScreen", "📌 收到快捷键: ${action.name}")
-            if (action == ShortcutAction.DELETE) {
-                if (state.selectedBlockId != null) {
-                    blockToDelete = state.selectedBlockId
-                } else {
-                    Toast.show("请先选择要删除的模块", ToastType.INFO)
+            when (action) {
+                ShortcutAction.DELETE -> {
+                    if (state.selectedBlockId != null) {
+                        blockToDelete = state.selectedBlockId
+                    } else {
+                        Toast.show("请先选择要删除的模块", ToastType.INFO)
+                    }
                 }
-            } else {
-                viewModel.shortcutManager.handleAction(action) 
+                ShortcutAction.MOVE_UP -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 0f, -1f) }
+                ShortcutAction.MOVE_UP_FAST -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 0f, -10f) }
+                ShortcutAction.MOVE_DOWN -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 0f, 1f) }
+                ShortcutAction.MOVE_DOWN_FAST -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 0f, 10f) }
+                ShortcutAction.MOVE_LEFT -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, -1f, 0f) }
+                ShortcutAction.MOVE_LEFT_FAST -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, -10f, 0f) }
+                ShortcutAction.MOVE_RIGHT -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 1f, 0f) }
+                ShortcutAction.MOVE_RIGHT_FAST -> state.selectedBlockId?.let { viewModel.layoutEditor.moveBlockBy(it, 10f, 0f) }
+                else -> viewModel.shortcutManager.handleAction(action)
             }
         } 
     }

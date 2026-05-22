@@ -29,6 +29,7 @@ class ShortcutManagerDelegate(
             ShortcutAction.CUT -> layoutEditor.cut()
             ShortcutAction.RENAME -> layoutEditor.triggerRename()
             ShortcutAction.DELETE -> layoutEditor.deleteSelectedBlock()
+            else -> { /* 其他如位移快捷键动作在 UI 层由 ProjectWorkspaceScreen 拦截消费 */ }
         }
     }
 }

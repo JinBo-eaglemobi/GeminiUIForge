@@ -325,9 +325,6 @@ fun LayoutPropertyContent(
     }
 }
 
-/**
- * 带有数值校验的单行数字输入项。
- */
 @Composable
 private fun EditableInfoItem(
     label: String,
@@ -335,13 +332,11 @@ private fun EditableInfoItem(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    SelectAllOutlinedTextField(
+    org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
         value = value,
-        onValueChange = { if (it.isEmpty() || it.toFloatOrNull() != null) onValueChange(it) },
+        onValueChange = onValueChange,
         label = { Text(label, style = MaterialTheme.typography.labelSmall) },
         modifier = modifier.tip("输入数字以精确调整坐标或尺寸"),
-        shape = AppShapes.small,
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        isFloat = true
     )
 }

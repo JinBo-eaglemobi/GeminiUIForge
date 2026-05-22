@@ -73,19 +73,19 @@ fun AddLayerDialog(onDismiss: () -> Unit, onConfirm: (String, UIBlockType, Float
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SelectAllOutlinedTextField(
+                    org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
                         value = widthStr,
                         onValueChange = { widthStr = it },
                         label = { Text("宽度") },
                         modifier = Modifier.weight(1f),
-                        shape = AppShapes.medium
+                        isFloat = true
                     )
-                    SelectAllOutlinedTextField(
+                    org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
                         value = heightStr,
                         onValueChange = { heightStr = it },
                         label = { Text("高度") },
                         modifier = Modifier.weight(1f),
-                        shape = AppShapes.medium
+                        isFloat = true
                     )
                 }
             }

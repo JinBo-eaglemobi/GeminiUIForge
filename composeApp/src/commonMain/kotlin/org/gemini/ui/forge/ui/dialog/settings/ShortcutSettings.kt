@@ -35,7 +35,13 @@ fun ShortcutSettings(
 
     SettingSectionTitle(stringResource(Res.string.settings_shortcuts_title))
 
-    shortcuts.forEach { (action, currentKey) ->
+    shortcuts.filterKeys { action ->
+        action in listOf(
+            ShortcutAction.UNDO, ShortcutAction.REDO, ShortcutAction.SAVE,
+            ShortcutAction.RENAME, ShortcutAction.DELETE, ShortcutAction.COPY,
+            ShortcutAction.PASTE, ShortcutAction.CUT
+        )
+    }.forEach { (action, currentKey) ->
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).padding(vertical = LocalAppSpacing.current.extraSmall),
             verticalAlignment = Alignment.CenterVertically,
@@ -50,6 +56,7 @@ fun ShortcutSettings(
                 ShortcutAction.COPY -> stringResource(Res.string.shortcut_copy)
                 ShortcutAction.PASTE -> stringResource(Res.string.shortcut_paste)
                 ShortcutAction.CUT -> stringResource(Res.string.shortcut_cut)
+                else -> ""
             }
 
             Column(modifier = Modifier.weight(1f)) {
