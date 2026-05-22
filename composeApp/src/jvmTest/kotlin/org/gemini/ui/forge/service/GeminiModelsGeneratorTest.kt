@@ -82,6 +82,9 @@ class GeminiModelsGeneratorTest {
 
         sb.appendLine("}")
 
+        println(sb)
+        return@runBlocking
+
         // 定位到公共源码目录下的 GeminiModel.kt 文件
         // Gradle 测试运行时的 user.dir 通常是子项目目录 (composeApp)
         val targetFile = File("src/commonMain/kotlin/org/gemini/ui/forge/GeminiModel.kt")

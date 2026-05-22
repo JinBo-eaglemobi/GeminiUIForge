@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.GeminiModel
+import org.gemini.ui.forge.utils.LocalFileStorage
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -23,7 +24,7 @@ class AIGenerationServiceConnectivityTest {
         // 实例化真实依赖 (因为 ConfigManager 是 expect 类，在 JVM 测试环境下会有对应实现)
         val configManager = ConfigManager()
         val cloudAssetManager = CloudAssetManager(configManager)
-        val service = AIGenerationService(cloudAssetManager, configManager)
+        val service = AIGenerationService(LocalFileStorage(), cloudAssetManager, configManager)
 
         println("开始测试 Google AI Studio (Imagen) 请求...")
 
@@ -51,7 +52,7 @@ class AIGenerationServiceConnectivityTest {
         val apiKey = getApiKey()
         val configManager = ConfigManager()
         val cloudAssetManager = CloudAssetManager(configManager)
-        val service = AIGenerationService(cloudAssetManager, configManager)
+        val service = AIGenerationService(LocalFileStorage(), cloudAssetManager, configManager)
 
         println("\n🚀 开始测试 Vertex AI 专用 Endpoint 请求...")
 

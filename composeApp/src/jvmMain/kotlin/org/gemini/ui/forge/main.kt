@@ -5,6 +5,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.app_icon
+import org.jetbrains.compose.resources.painterResource
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.runBlocking
 import org.gemini.ui.forge.manager.ConfigManager
@@ -51,7 +54,7 @@ fun main(args: Array<String>) {
                         } else {
                             // 开发环境或纯 jar 环境
                             val javaHome = System.getProperty("java.home")
-                            val javaBin = java.io.File(javaHome, "bin/java" + (if (hostOs.isWindows) ".exe" else "")).absolutePath
+                            val javaBin = File(javaHome, "bin/java" + (if (hostOs.isWindows) ".exe" else "")).absolutePath
                             command.add(javaBin)
                             command.add("-cp")
                             command.add(appPath)
@@ -111,7 +114,8 @@ fun main(args: Array<String>) {
                 exitApplication()
             },
             title = "Gemini UI Forge v${ProjectConfig.VERSION}",
-            state = windowState
+            state = windowState,
+            icon = painterResource(Res.drawable.app_icon)
         ) {
             App()
         }
