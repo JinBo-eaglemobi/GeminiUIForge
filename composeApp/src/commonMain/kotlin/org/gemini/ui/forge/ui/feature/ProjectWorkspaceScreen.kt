@@ -53,6 +53,7 @@ fun ProjectWorkspaceScreen(
     initialPromptLang: PromptLanguage,
     saveEvent: SharedFlow<Unit>,
     shortcutEvent: SharedFlow<ShortcutAction>,
+    projectSettingsEvent: SharedFlow<Unit> = kotlinx.coroutines.flow.MutableSharedFlow(),
     onSaveRequest: (String, ProjectState) -> Unit,
     onDirtyChanged: (Boolean) -> Unit
 ) {
@@ -70,6 +71,7 @@ fun ProjectWorkspaceScreen(
     var showHistoricalDialog by remember { mutableStateOf(false) }
     var historicalImages by remember { mutableStateOf<List<TemplateFile>>(emptyList()) }
     var blockToDelete by remember { mutableStateOf<String?>(null) }
+    var showProjectSettingsDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     // 键盘修饰键状态（多选判定）
@@ -79,6 +81,7 @@ fun ProjectWorkspaceScreen(
     // 生命周期与全局事件监听
     LaunchedEffect(saveEvent) { saveEvent.collect { onSaveRequest(initialProjectName, state.project) } }
     LaunchedEffect(viewModel.requestSaveEvent) { viewModel.requestSaveEvent.collect { onSaveRequest(initialProjectName, state.project) } }
+    LaunchedEffect(projectSettingsEvent) { projectSettingsEvent.collect { showProjectSettingsDialog = true } }
     LaunchedEffect(shortcutEvent) { 
         shortcutEvent.collect { action ->
             AppLogger.d("WorkspaceScreen", "📌 收到快捷键: ${action.name}")
@@ -109,6 +112,18 @@ fun ProjectWorkspaceScreen(
     LaunchedEffect(initialProject) { viewModel.reload(initialProject) }
 
     // --- 对话框组件集成 ---
+
+    // 项目设置弹窗
+    if (showProjectSettingsDialog) {
+        org.gemini.ui.forge.ui.dialog.ProjectSettingsDialog(
+            initialPath = state.resourceConfigPath,
+            onDismiss = { showProjectSettingsDialog = false },
+            onConfirm = { path ->
+                viewModel.updateResourceConfigPath(path)
+                showProjectSettingsDialog = false
+            }
+        )
+    }
 
     // AI 任务执行进度与日志弹窗
     if (state.showAITaskDialog) {

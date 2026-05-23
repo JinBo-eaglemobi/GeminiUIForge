@@ -1,4 +1,5 @@
 package org.gemini.ui.forge.model.ui
+
 import org.gemini.ui.forge.data.TemplateFile
 import kotlinx.serialization.Serializable
 import androidx.compose.runtime.Stable
@@ -28,7 +29,8 @@ data class UIBlock(
     val userPromptZh: String = "",
     val children: List<UIBlock> = emptyList(),
     val isVisible: Boolean = true, // 新增：图层是否可见
-    val properties: BlockProperties? = null // 新增：不同类型模块的专属属性
+    val properties: BlockProperties? = null, // 新增：不同类型模块的专属属性
+    val resourceBindingPath: List<String> = emptyList() // 新增：资源绑定层级路径
 ) {
     /** 自动拼接基础类别描述与用户自定义描述，形成最终发给生图模型的完整 Prompt */
     val fullPrompt: String
@@ -37,4 +39,25 @@ data class UIBlock(
     /** 向下兼容字段：优先返回中文描述，无则返回英文 */
     val userPrompt: String
         get() = userPromptZh.ifBlank { userPromptEn }
+
+
+    fun postProcess(): UIBlock {
+        // 递归处理子级
+        val processedChildren = children.map { it.postProcess() }
+
+        return if (type == UIBlockType.REEL) {
+            // 如果是转轴且包含子级，则将其子级直接作为 items 并入属性中，然后清空子级
+            if (processedChildren.isNotEmpty()) {
+                val currentProps = properties as? BlockProperties.ReelProperties ?: BlockProperties.ReelProperties()
+                // 直接使用 processedChildren 作为新的 items
+                val updatedProps = currentProps.copy(items = currentProps.items + processedChildren.onEach { })
+                copy(properties = updatedProps, children = emptyList())
+            } else {
+                // 没有子级说明已经解析过，或者是一个空的 REEL，无需覆盖原有属性
+                copy(children = processedChildren)
+            }
+        } else {
+            copy(children = processedChildren)
+        }
+    }
 }

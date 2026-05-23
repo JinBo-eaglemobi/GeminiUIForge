@@ -288,4 +288,32 @@
     <string name="multiselect_tip_shift">• 配合 Shift + 方向键以 10 倍速快速位移</string>
     <string name="multiselect_tip_drag">• 在画布上直接拖拽任意选中模块进行同步移动</string>
     <string name="multiselect_note">⚠️ 注意：多选状态下不支持显示与统一修改其他非坐标属性，以防属性冲突。</string>
+
+    <!-- 导出资源绑定 -->
+    <string name="res_binding_title">导出资源规范绑定</string>
+    <string name="res_binding_parent_limit">父模块绑定限制：</string>
+    <string name="res_binding_parent_bound">父级已绑定资源: %1$s</string>
+    <string name="res_binding_parent_bound_desc">当前模块只能从父级绑定的资源数组中选择匹配的资源名称。</string>
+    <string name="res_binding_path_select">资源层级路径选择：</string>
+    <string name="res_binding_level_label">%1$d 级:</string>
+    <string name="res_binding_placeholder">请选择...</string>
+    <string name="res_binding_empty">无可用资源项</string>
+    <string name="res_binding_add_level">增加层级</string>
+    <string name="res_binding_delete_level">删除当前及子层级</string>
+    <string name="res_binding_explanation">绑定资源意义解释：</string>
+    <string name="res_binding_action_bind">绑定</string>
+    <string name="res_binding_btn_label">绑定导出资源</string>
+    <string name="res_binding_btn_bound">已绑定: %1$s</string>
+    <string name="res_binding_btn_tip_placeholder">点击选择或更改该模块绑定的导出资源规范</string>
+
+    <!-- 项目设置 (资源路径配置) -->
+    <string name="proj_settings_title">项目配置设置</string>
+    <string name="proj_settings_path_label">绑定资源配置表路径 (支持外部绝对路径)：</string>
+    <string name="proj_settings_path_placeholder">例如：D:\\Project\\newGame\\Project\\image_resource_config.json</string>
+    <string name="proj_settings_path_empty_err">路径不能为空</string>
+    <string name="proj_settings_path_read_err">无法读取该路径下的文件，请检查文件路径是否正确。</string>
+    <string name="proj_settings_path_parse_err">解析 JSON 失败。文件内容不符合配置规范。\n错误: %1$s</string>
+    <string name="proj_settings_path_hint">注：配置表应为标准的 JSON 格式。校验有效后将激活该项目的资源属性绑定功能。</string>
+    <string name="proj_settings_validating">校验中...</string>
+    <string name="proj_settings_btn_save">保存并验证</string>
 </resources>

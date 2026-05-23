@@ -244,6 +244,8 @@ fun App(typography: Typography? = null) {
                         )
                     }
 
+
+
                     if (showExitConfirmDialog) {
                         AlertDialog(
                             onDismissRequest = { showExitConfirmDialog = false },
@@ -419,7 +421,8 @@ fun App(typography: Typography? = null) {
                                     settingsInitialCategory = SettingCategory.GENERAL
                                     showSettingsDialog = true
                                 },
-                                onHelpClicked = { showHelpDialog = true }
+                                onHelpClicked = { showHelpDialog = true },
+                                onProjectSettingsClicked = { appViewModel.dispatchProjectSettingsEvent() }
                             )
                         },
                         bottomBar = {
@@ -490,6 +493,7 @@ fun App(typography: Typography? = null) {
                                         initialPromptLang = globalState.promptLangPref,
                                         saveEvent = appViewModel.saveEvent,
                                         shortcutEvent = appViewModel.shortcutEvent,
+                                        projectSettingsEvent = appViewModel.projectSettingsEvent,
                                         onSaveRequest = { name, project ->
                                             appViewModel.saveProject(name, project)
                                         },

@@ -50,7 +50,8 @@ fun AppTopBar(
     onPlayClicked: () -> Unit = {},
     onSaveClicked: () -> Unit = {},
     onSettingsClicked: () -> Unit = {},
-    onHelpClicked: () -> Unit = {}
+    onHelpClicked: () -> Unit = {},
+    onProjectSettingsClicked: () -> Unit = {}
 ) {
     val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
 
@@ -164,6 +165,16 @@ fun AppTopBar(
                         modifier = Modifier.tip("保存当前项目修改 (Ctrl+S)")
                     ) {
                         Icon(Icons.Default.Save, contentDescription = "Save Layout", tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                
+                // 项目设置按钮 (仅在项目工作空间显示)
+                if (currentScreen == AppScreen.PROJECT_WORKSPACE) {
+                    IconButton(
+                        onClick = onProjectSettingsClicked,
+                        modifier = Modifier.tip("项目资源配置设置")
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "Project Settings", tint = MaterialTheme.colorScheme.secondary)
                     }
                 }
                 

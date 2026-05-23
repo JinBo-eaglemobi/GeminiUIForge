@@ -136,7 +136,8 @@ class ProjectWorkspaceViewModel(
                     isVisualMode = wsConfig?.isVisualMode ?: false,
                     isHideOutlines = wsConfig?.isHideOutlines ?: false,
                     referenceMode = wsConfig?.referenceMode ?: org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN,
-                    referenceOpacity = wsConfig?.referenceOpacity ?: 0.4f
+                    referenceOpacity = wsConfig?.referenceOpacity ?: 0.4f,
+                    resourceConfigPath = wsConfig?.resourceConfigPath
                 )
             }
         }
@@ -145,6 +146,17 @@ class ProjectWorkspaceViewModel(
     /** 重新加载项目数据 */
     fun reload(newProject: ProjectState) {
         if (_state.value.project == newProject) return
+        
+        // 如果物理层级结构（页面、模块）完全一致，仅非物理的配置或元数据路径发生变化，
+        // 则执行静默内存更新，保留用户的撤销/重做历史和当前选中状态。
+        if (_state.value.project.pages == newProject.pages &&
+            _state.value.project.globalStyle == newProject.globalStyle &&
+            _state.value.project.styleReferenceUri == newProject.styleReferenceUri
+        ) {
+            _state.update { it.copy(project = newProject) }
+            return
+        }
+
         viewModelScope.launch {
             val wsConfig = templateRepo.loadWorkspaceConfig(_state.value.projectName)
             _state.update {
@@ -161,7 +173,8 @@ class ProjectWorkspaceViewModel(
                     isVisualMode = wsConfig?.isVisualMode ?: false,
                     isHideOutlines = wsConfig?.isHideOutlines ?: false,
                     referenceMode = wsConfig?.referenceMode ?: org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN,
-                    referenceOpacity = wsConfig?.referenceOpacity ?: 0.4f
+                    referenceOpacity = wsConfig?.referenceOpacity ?: 0.4f,
+                    resourceConfigPath = wsConfig?.resourceConfigPath
                 )
             }
         }
@@ -175,7 +188,8 @@ class ProjectWorkspaceViewModel(
             isVisualMode = currentState.isVisualMode,
             isHideOutlines = currentState.isHideOutlines,
             referenceMode = currentState.referenceMode,
-            referenceOpacity = currentState.referenceOpacity
+            referenceOpacity = currentState.referenceOpacity,
+            resourceConfigPath = currentState.resourceConfigPath
         )
         viewModelScope.launch {
             templateRepo.saveWorkspaceConfig(currentState.projectName, config)
@@ -372,6 +386,30 @@ class ProjectWorkspaceViewModel(
             assetManager.updateBlockProperties(block.id, newProps)
         }
         closeButtonGenDialog()
+    }
+
+    /** 更新当前项目的资源配置路径 */
+    fun updateResourceConfigPath(path: String?) {
+        _state.update { currentState ->
+            currentState.copy(resourceConfigPath = path)
+        }
+        saveWorkspaceConfig()
+    }
+
+    /** 更新特定模块的资源绑定规范路径 */
+    fun updateBlockResourceBinding(blockId: String, bindingPath: List<String>) {
+        historyManager.saveSnapshot("更改资源绑定")
+        _state.update { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == currentState.selectedPageId) {
+                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { 
+                        it.copy(resourceBindingPath = bindingPath)
+                    })
+                } else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+        markDirty()
     }
 
     // --- 内部递归辅助 ---

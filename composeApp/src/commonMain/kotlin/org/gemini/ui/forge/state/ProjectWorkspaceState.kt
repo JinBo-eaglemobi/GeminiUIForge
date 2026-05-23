@@ -76,6 +76,7 @@ data class ProjectWorkspaceState(
     val showHistoryPanel: Boolean = false,
     val statusMessage: String = "就绪",
     val showLogViewer: Boolean = false,
+    val resourceConfigPath: String? = null,
 
     /** 历史记录快照 (Undo/Redo) */
     val undoStack: List<org.gemini.ui.forge.model.history.HistoryEntry> = emptyList(),

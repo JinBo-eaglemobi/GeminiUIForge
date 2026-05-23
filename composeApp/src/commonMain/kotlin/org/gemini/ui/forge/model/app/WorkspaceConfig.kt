@@ -17,5 +17,7 @@ data class WorkspaceConfig(
     /** 参考图显示模式 */
     val referenceMode: ReferenceDisplayMode = ReferenceDisplayMode.HIDDEN,
     /** 参考图透明度 */
-    val referenceOpacity: Float = 0.4f
+    val referenceOpacity: Float = 0.4f,
+    /** 本地资源配置表绝对路径 */
+    val resourceConfigPath: String? = null
 )

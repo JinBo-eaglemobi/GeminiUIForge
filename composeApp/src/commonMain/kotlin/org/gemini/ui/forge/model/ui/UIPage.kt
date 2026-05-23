@@ -1,4 +1,5 @@
 package org.gemini.ui.forge.model.ui
+
 import org.gemini.ui.forge.data.TemplateFile
 import kotlinx.serialization.Serializable
 
@@ -20,4 +21,8 @@ data class UIPage(
     val height: Float = 1920f,
     val sourceImageUri: TemplateFile? = null,
     val blocks: List<UIBlock> = emptyList()
-)
+) {
+    fun postProcess(): UIPage {
+        return copy(blocks = blocks.map { it.postProcess() })
+    }
+}

@@ -278,4 +278,32 @@
     <string name="multiselect_tip_shift">• Hold Shift + Arrow keys to move 10x faster</string>
     <string name="multiselect_tip_drag">• Drag any selected module on the canvas to move them all</string>
     <string name="multiselect_note">⚠️ Note: Modifying or viewing other properties is not supported under multi-selection to avoid attributes conflict.</string>
+
+    <!-- Export Resource Binding -->
+    <string name="res_binding_title">Export Resource Binding</string>
+    <string name="res_binding_parent_limit">Parent Binding Limit:</string>
+    <string name="res_binding_parent_bound">Parent already bound to: %1$s</string>
+    <string name="res_binding_parent_bound_desc">Current module can only choose matched resources from the parent bound array.</string>
+    <string name="res_binding_path_select">Select Resource Path:</string>
+    <string name="res_binding_level_label">Level %1$d:</string>
+    <string name="res_binding_placeholder">Select...</string>
+    <string name="res_binding_empty">No available resources</string>
+    <string name="res_binding_add_level">Add Level</string>
+    <string name="res_binding_delete_level">Delete level and its children</string>
+    <string name="res_binding_explanation">Interpretation of Bound Resource:</string>
+    <string name="res_binding_action_bind">Bind</string>
+    <string name="res_binding_btn_label">Export Resource</string>
+    <string name="res_binding_btn_bound">Bound: %1$s</string>
+    <string name="res_binding_btn_tip_placeholder">Click to select or modify export resource specification binding for this block</string>
+
+    <!-- Project Settings (Resource Path Config) -->
+    <string name="proj_settings_title">Project Settings</string>
+    <string name="proj_settings_path_label">Resource Config Path (Supports external absolute path):</string>
+    <string name="proj_settings_path_placeholder">e.g. D:\\Project\\newGame\\Project\\image_resource_config.json</string>
+    <string name="proj_settings_path_empty_err">Path cannot be empty</string>
+    <string name="proj_settings_path_read_err">Cannot read file at path, please verify it is correct.</string>
+    <string name="proj_settings_path_parse_err">Failed to parse JSON. Content does not match specification.\nError: %1$s</string>
+    <string name="proj_settings_path_hint">Note: Config table should be in standard JSON format. Validating it will activate the resource attribute binding feature.</string>
+    <string name="proj_settings_validating">Validating...</string>
+    <string name="proj_settings_btn_save">Save &amp; Verify</string>
 </resources>

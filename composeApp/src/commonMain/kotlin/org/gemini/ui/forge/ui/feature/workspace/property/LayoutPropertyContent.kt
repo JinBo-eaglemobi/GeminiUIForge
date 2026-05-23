@@ -8,6 +8,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.ui.UIBlockType
+import org.gemini.ui.forge.model.ui.ResourceItem
+import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
@@ -18,8 +20,18 @@ import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.input.KeyboardType
 import org.gemini.ui.forge.ui.feature.workspace.CollapsibleSection
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.json.Json
+
+@OptIn(ExperimentalSerializationApi::class)
+private val looseJson = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+    allowTrailingComma = true
+}
 
 /**
  * 渲染布局编辑相关的属性内容。
@@ -37,6 +49,33 @@ fun LayoutPropertyContent(
     onDeleteRequest: (String) -> Unit
 ) {
     val selectedBlock = state.selectedBlock
+
+    var showBindingDialog by remember { mutableStateOf(false) }
+    var configData by remember { mutableStateOf<Map<String, List<ResourceItem>>?>(null) }
+    var configError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(state.resourceConfigPath) {
+        val path = state.resourceConfigPath
+        if (path.isNullOrBlank()) {
+            configData = null
+            configError = null
+        } else {
+            try {
+                val bytes = org.gemini.ui.forge.data.readBytesInternal(path)
+                if (bytes != null) {
+                    val content = bytes.decodeToString()
+                    configData = looseJson.decodeFromString<Map<String, List<ResourceItem>>>(content)
+                    configError = null
+                } else {
+                    configData = null
+                    configError = "无法读取配置文件"
+                }
+            } catch (e: Exception) {
+                configData = null
+                configError = e.message ?: "解析失败"
+            }
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
@@ -165,6 +204,90 @@ fun LayoutPropertyContent(
                     singleLine = true,
                     shape = AppShapes.medium
                 )
+
+                // 绑定导出资源规范组件
+                val currentConfig = configData
+                val currentError = configError
+                if (!state.resourceConfigPath.isNullOrBlank()) {
+                    if (currentError != null) {
+                        SelectionContainer {
+                            Text(
+                                text = "加载配置文件失败:\n$currentError",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+                    }
+                    if (currentConfig != null) {
+                        val bindingPath = selectedBlock.resourceBindingPath
+                        val hasBinding = bindingPath.isNotEmpty()
+                        
+                        val lastDescription = remember(bindingPath, currentConfig) {
+                            if (hasBinding) {
+                                if (bindingPath.size >= 2) {
+                                    val groupKey = bindingPath[0]
+                                    val itemKey = bindingPath[1]
+                                    currentConfig[groupKey]?.find { it.key == itemKey }?.description
+                                } else {
+                                    null
+                                }
+                            } else null
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = stringResource(Res.string.res_binding_title),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            
+                            OutlinedButton(
+                                onClick = { showBindingDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .tip(lastDescription ?: stringResource(Res.string.res_binding_btn_tip_placeholder)),
+                                shape = AppShapes.medium,
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = if (hasBinding) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = if (hasBinding) Icons.Default.Link else Icons.Default.LinkOff,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = if (hasBinding) stringResource(Res.string.res_binding_btn_bound, bindingPath.joinToString(" > ")) 
+                                           else stringResource(Res.string.res_binding_btn_label),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        if (showBindingDialog) {
+                            val parentBlock = remember(selectedBlock, state.currentPage?.blocks) {
+                                state.currentPage?.blocks?.let { findClosestBoundAncestor(it, selectedBlock.id) }
+                            }
+                            org.gemini.ui.forge.ui.dialog.ResourceBindingDialog(
+                                block = selectedBlock,
+                                parentBlock = parentBlock,
+                                configData = currentConfig,
+                                onDismiss = { showBindingDialog = false },
+                                onConfirm = { finalPath ->
+                                    viewModel.updateBlockResourceBinding(selectedBlock.id, finalPath)
+                                    showBindingDialog = false
+                                }
+                            )
+                        }
+                    }
+                }
+
 
                 // 物理坐标与尺寸实时输入
                 Surface(
@@ -340,3 +463,36 @@ private fun EditableInfoItem(
         isFloat = true
     )
 }
+
+/**
+ * 递归辅助寻找指定 blockId 在 blocks 列表中的所有祖先节点（从根到直接父节点）。
+ */
+private fun findAncestorChain(blocks: List<UIBlock>, targetId: String, currentChain: List<UIBlock> = emptyList()): List<UIBlock>? {
+    for (block in blocks) {
+        if (block.id == targetId) {
+            return currentChain
+        }
+        val found = findAncestorChain(block.children, targetId, currentChain + block)
+        if (found != null) {
+            return found
+        }
+    }
+    return null
+}
+
+/**
+ * 寻找指定 blockId 的最近一个已绑定资源的祖先节点。
+ * 如果所有祖先节点都没有绑定资源，则返回其直接父节点（或 null）。
+ */
+private fun findClosestBoundAncestor(blocks: List<UIBlock>, targetId: String): UIBlock? {
+    val chain = findAncestorChain(blocks, targetId) ?: return null
+    // 从最近的父级（列表尾部）开始向上寻找
+    for (ancestor in chain.reversed()) {
+        if (ancestor.resourceBindingPath.isNotEmpty()) {
+            return ancestor
+        }
+    }
+    // 如果没有任何祖先绑定了资源，则回退/兼容至直接父节点
+    return chain.lastOrNull()
+}
+

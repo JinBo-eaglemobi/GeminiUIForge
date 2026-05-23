@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import org.gemini.ui.forge.state.app.AppState
 import org.gemini.ui.forge.state.ui.ProjectState
-import org.gemini.ui.forge.state.ui.postProcess
 
 /**
  * 应用的主控制 ViewModel
@@ -42,6 +41,18 @@ class AppViewModel(
 
     private val _shortcutEvent = MutableSharedFlow<ShortcutAction>(extraBufferCapacity = 1)
     val shortcutEvent: SharedFlow<ShortcutAction> = _shortcutEvent.asSharedFlow()
+
+    private val _projectSettingsEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val projectSettingsEvent: SharedFlow<Unit> = _projectSettingsEvent.asSharedFlow()
+
+    /**
+     * 派发项目设置弹出事件
+     */
+    fun dispatchProjectSettingsEvent() {
+        viewModelScope.launch {
+            _projectSettingsEvent.emit(Unit)
+        }
+    }
 
     /**
      * 派发保存事件，通知当前活动的 Screen 执行保存逻辑
