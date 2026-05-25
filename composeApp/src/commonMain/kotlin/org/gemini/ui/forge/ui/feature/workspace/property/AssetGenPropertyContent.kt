@@ -37,8 +37,7 @@ import geminiuiforge.composeapp.generated.resources.*
 fun AssetGenPropertyContent(
     state: ProjectWorkspaceState,
     viewModel: ProjectWorkspaceViewModel,
-    apiKey: String,
-    onShowHistory: (String) -> Unit
+    apiKey: String
 ) {
     val selectedBlock = state.selectedBlock ?: return
     var showImageEditor by remember { mutableStateOf(false) }
@@ -124,7 +123,7 @@ fun AssetGenPropertyContent(
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
-                onClick = { onShowHistory(selectedBlock.id) },
+                onClick = { viewModel.showHistoricalDialog(selectedBlock.id) },
                 modifier = Modifier.weight(1f),
                 shape = AppShapes.medium
             ) {

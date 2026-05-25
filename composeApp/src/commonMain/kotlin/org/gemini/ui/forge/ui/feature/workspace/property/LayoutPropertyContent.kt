@@ -38,11 +38,7 @@ import org.gemini.ui.forge.ui.component.ToastType
 fun LayoutPropertyContent(
     state: ProjectWorkspaceState,
     viewModel: ProjectWorkspaceViewModel,
-    apiKey: String,
-    onRefineClick: (String?) -> Unit,
-    onSetReferenceAreaClick: (String) -> Unit,
-    onShowHistory: (String) -> Unit = {},
-    onDeleteRequest: (String) -> Unit
+    apiKey: String
 ) {
     val selectedBlock = state.selectedBlock
 
@@ -175,7 +171,7 @@ fun LayoutPropertyContent(
                 ) {
                     // AI 辅助全局功能
                     Button(
-                        onClick = { onRefineClick(null) },
+                        onClick = { viewModel.showVisualRefine(null) },
                         modifier = Modifier.fillMaxWidth().tip("基于 AI 视觉识别重构整个页面的布局结构")
                     ) {
                         Icon(Icons.Default.AutoFixHigh, null)
@@ -456,7 +452,7 @@ fun LayoutPropertyContent(
                         apiKey = apiKey,
                         viewModel = viewModel,
                         state = state,
-                        onShowHistory = onShowHistory,
+                        onShowHistory = { viewModel.showHistoricalDialog(it) },
                         onPropertiesChanged = { viewModel.assetManager.updateBlockProperties(selectedBlock.id, it) }
                     )
                 }
@@ -470,8 +466,8 @@ fun LayoutPropertyContent(
                 // AI 结构重塑与参考区域
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = { onRefineClick(selectedBlock.id) },
-                        modifier = Modifier.weight(1f).tip("通过 AI 自动分析并重塑该模块的内部层级结构")
+                        onClick = { viewModel.showVisualRefine(selectedBlock.id) },
+                        modifier = Modifier.weight(1f).tip("通过 AI 自动 analysis 并重塑该模块的内部层级结构")
                     ) {
                         Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
@@ -479,7 +475,7 @@ fun LayoutPropertyContent(
                     }
 
                     OutlinedButton(
-                        onClick = { onSetReferenceAreaClick(selectedBlock.id) },
+                        onClick = { viewModel.showReferenceArea(selectedBlock.id) },
                         modifier = Modifier.weight(1f).tip("从原图中截取局部区域作为该模块的 AI 生成参考图")
                     ) {
                         Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
@@ -490,7 +486,7 @@ fun LayoutPropertyContent(
 
                 // 删除模块
                 Button(
-                    onClick = { onDeleteRequest(selectedBlock.id) },
+                    onClick = { viewModel.showDeleteConfirmation(selectedBlock.id) },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.fillMaxWidth().tip("从项目中永久移除此模块及其子模块"),
                     shape = AppShapes.medium,

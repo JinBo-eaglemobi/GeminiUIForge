@@ -461,5 +461,48 @@ class ProjectWorkspaceViewModel(
         markDirty()
     }
 
+    // --- 交互对话框及状态控制 ---
 
+    /** 显示区域重塑对话框 */
+    fun showVisualRefine(blockId: String?) {
+        updateState { it.copy(showVisualRefine = true, refineTargetId = blockId) }
+    }
+
+    /** 隐藏区域重塑对话框 */
+    fun hideVisualRefine() {
+        updateState { it.copy(showVisualRefine = false, refineTargetId = null) }
+    }
+
+    /** 显示参考区域裁剪对话框 */
+    fun showReferenceArea(blockId: String) {
+        updateState { it.copy(showReferenceArea = true, referenceAreaTargetId = blockId) }
+    }
+
+    /** 隐藏参考区域裁剪对话框 */
+    fun hideReferenceArea() {
+        updateState { it.copy(showReferenceArea = false, referenceAreaTargetId = null) }
+    }
+
+    /** 异步加载历史生成图片并显示历史对话框 */
+    fun showHistoricalDialog(blockId: String) {
+        viewModelScope.launch {
+            val images = assetManager.loadHistoricalImages(blockId)
+            updateState { it.copy(showHistoricalDialog = true, historicalImages = images) }
+        }
+    }
+
+    /** 隐藏历史对话框 */
+    fun hideHistoricalDialog() {
+        updateState { it.copy(showHistoricalDialog = false, historicalImages = emptyList()) }
+    }
+
+    /** 显示删除确认对话框 */
+    fun showDeleteConfirmation(blockId: String) {
+        updateState { it.copy(showDeleteBlockConfirmation = true, pendingDeleteBlockId = blockId) }
+    }
+
+    /** 隐藏删除确认对话框 */
+    fun hideDeleteConfirmation() {
+        updateState { it.copy(showDeleteBlockConfirmation = false, pendingDeleteBlockId = null) }
+    }
 }

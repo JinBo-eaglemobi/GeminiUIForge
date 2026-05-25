@@ -40,10 +40,6 @@ fun UnifiedPropertyPanel(
     state: ProjectWorkspaceState,
     viewModel: ProjectWorkspaceViewModel,
     apiKey: String,
-    onRefineClick: (String?) -> Unit,
-    onSetReferenceAreaClick: (String) -> Unit,
-    onShowHistory: (String) -> Unit,
-    onDeleteRequest: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (state.selectedBlockIds.size > 1) {
@@ -159,18 +155,13 @@ fun UnifiedPropertyPanel(
                     LayoutPropertyContent(
                         state = state,
                         viewModel = viewModel,
-                        apiKey = apiKey,
-                        onRefineClick = onRefineClick,
-                        onSetReferenceAreaClick = onSetReferenceAreaClick,
-                        onShowHistory = onShowHistory,
-                        onDeleteRequest = onDeleteRequest
+                        apiKey = apiKey
                     )
                 } else {
                     AssetGenPropertyContent(
                         state = state,
                         viewModel = viewModel,
-                        apiKey = apiKey,
-                        onShowHistory = onShowHistory
+                        apiKey = apiKey
                     )
                 }
             }

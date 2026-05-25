@@ -36,6 +36,12 @@ data class ProjectWorkspaceState(
     val defaultRefineInstructionNew: String = "",
     val showDeleteBlockConfirmation: Boolean = false,
     val pendingDeleteBlockId: String? = null,
+    val showVisualRefine: Boolean = false,
+    val refineTargetId: String? = null,
+    val showReferenceArea: Boolean = false,
+    val referenceAreaTargetId: String? = null,
+    val showHistoricalDialog: Boolean = false,
+    val historicalImages: List<TemplateFile> = emptyList(),
     val chatHistories: Map<String, List<org.gemini.ui.forge.model.api.ChatMessage>> = emptyMap(),
 
     /** 界面持久化配置 */

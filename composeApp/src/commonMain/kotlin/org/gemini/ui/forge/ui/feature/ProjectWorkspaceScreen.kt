@@ -64,14 +64,7 @@ fun ProjectWorkspaceScreen(
     val state by viewModel.state.collectAsState()
 
     // 交互辅助状态
-    var showVisualRefine by remember { mutableStateOf(false) }
-    var refineTargetId by remember { mutableStateOf<String?>(null) }
-    var showReferenceArea by remember { mutableStateOf(false) }
-    var referenceAreaTargetId by remember { mutableStateOf<String?>(null) }
-    var showHistoricalDialog by remember { mutableStateOf(false) }
-    var historicalImages by remember { mutableStateOf<List<TemplateFile>>(emptyList()) }
     var showImageEditorForBlock by remember { mutableStateOf<Pair<UIBlock, TemplateFile>?>(null) }
-    var blockToDelete by remember { mutableStateOf<String?>(null) }
     var showProjectSettingsDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
@@ -92,10 +85,12 @@ fun ProjectWorkspaceScreen(
                         viewModel.historyManager.saveSnapshot("批量删除模块")
                         state.selectedBlockIds.forEach { viewModel.layoutEditor.deleteBlock(it) }
                         viewModel.onBlockClicked(null)
-                    } else if (state.selectedBlockId != null) {
-                        blockToDelete = state.selectedBlockId
                     } else {
-                        Toast.show("请先选择要删除的模块", ToastType.INFO)
+                        state.selectedBlockId?.let { selectedId ->
+                            viewModel.showDeleteConfirmation(selectedId)
+                        } ?: run {
+                            Toast.show("请先选择要删除的模块", ToastType.INFO)
+                        }
                     }
                 }
                 ShortcutAction.MOVE_UP -> viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, 0f, -1f)
@@ -141,69 +136,64 @@ fun ProjectWorkspaceScreen(
                 } else {
                     viewModel.updateState { it.copy(showAITaskDialog = false) }
                     state.selectedBlock?.id?.let { blockId ->
-                        coroutineScope.launch {
-                            historicalImages = viewModel.assetManager.loadHistoricalImages(blockId)
-                            showHistoricalDialog = true
-                        }
+                        viewModel.showHistoricalDialog(blockId)
                     }
                 }
             },
             onDismiss = { 
                 viewModel.updateState { it.copy(showAITaskDialog = false) }
                 state.selectedBlock?.id?.let { blockId ->
-                    coroutineScope.launch {
-                        historicalImages = viewModel.assetManager.loadHistoricalImages(blockId)
-                        showHistoricalDialog = true
-                    }
+                    viewModel.showHistoricalDialog(blockId)
                 }
             }
         )
     }
 
     // 视觉区域重塑引导对话框
-    if (showVisualRefine) {
+    if (state.showVisualRefine) {
         VisualRefineDialog(
-            blockId = refineTargetId,
+            blockId = state.refineTargetId,
             imageUri = state.currentPage?.sourceImageUri,
             pageWidth = state.currentPage?.width ?: 1080f,
             pageHeight = state.currentPage?.height ?: 1920f,
-            initialInstruction = if (refineTargetId != null) state.defaultRefineInstructionUpdate else state.defaultRefineInstructionNew,
-            onDismiss = { showVisualRefine = false },
+            initialInstruction = if (state.refineTargetId != null) state.defaultRefineInstructionUpdate else state.defaultRefineInstructionNew,
+            onDismiss = { viewModel.hideVisualRefine() },
             onConfirm = { rect, instr, useChat, _, _, _ ->
-                showVisualRefine = false
-                viewModel.layoutEditor.onRefineArea(refineTargetId, rect, instr, effectiveApiKey, useChat) { }
+                val targetId = state.refineTargetId
+                viewModel.hideVisualRefine()
+                viewModel.layoutEditor.onRefineArea(targetId, rect, instr, effectiveApiKey, useChat) { }
             }
         )
     }
 
     // 历史资产选择对话框
-    if (showHistoricalDialog) {
+    if (state.showHistoricalDialog) {
         val targetBlock = state.selectedBlock
         AssetSelectionDialog(
             title = "历史生成记录",
-            candidates = historicalImages,
+            candidates = state.historicalImages,
             targetWidth = targetBlock?.bounds?.width ?: 0f,
             targetHeight = targetBlock?.bounds?.height ?: 0f,
-            onDismiss = { showHistoricalDialog = false },
+            onDismiss = { viewModel.hideHistoricalDialog() },
             onImageSelected = { selectedFile -> 
                 viewModel.assetManager.onImageSelected(selectedFile)
-                showHistoricalDialog = false 
+                viewModel.hideHistoricalDialog() 
             },
             onCropRequested = { selectedFile ->
                 viewModel.assetManager.onImageSelected(selectedFile)
-                showHistoricalDialog = false
+                viewModel.hideHistoricalDialog()
                 if (targetBlock != null) {
                     showImageEditorForBlock = targetBlock to selectedFile
                 }
             },
             onDeleteImages = { uris -> 
                 viewModel.assetManager.deleteHistoricalImages(uris)
-                historicalImages = historicalImages.filterNot { it in uris }
+                viewModel.updateState { it.copy(historicalImages = it.historicalImages.filterNot { img -> img in uris }) }
             },
             onClearAll = { 
                 targetBlock?.id?.let { id ->
                     viewModel.assetManager.clearAllHistory(id)
-                    historicalImages = emptyList()
+                    viewModel.updateState { it.copy(historicalImages = emptyList()) }
                 }
             }
         )
@@ -300,47 +290,40 @@ fun ProjectWorkspaceScreen(
                 UnifiedPropertyPanel(
                     state = state,
                     viewModel = viewModel,
-                    apiKey = effectiveApiKey,
-                    onRefineClick = { refineTargetId = it; showVisualRefine = true },
-                    onSetReferenceAreaClick = { id -> referenceAreaTargetId = id; showReferenceArea = true },
-                    onShowHistory = { id ->
-                        coroutineScope.launch {
-                            historicalImages = viewModel.assetManager.loadHistoricalImages(id)
-                            showHistoricalDialog = true
-                        }
-                    },
-                    onDeleteRequest = { blockToDelete = it }
+                    apiKey = effectiveApiKey
                 )
             }
         }
         
         // 删除确认对话框
-        if (blockToDelete != null) {
+        val pendingId = state.pendingDeleteBlockId
+        if (state.showDeleteBlockConfirmation && pendingId != null) {
             AppConfirmDialog(
                 title = "确认删除",
-                message = "是否永久删除模块 $blockToDelete 及其所有子模块？此操作无法撤销。",
+                message = "是否永久删除模块 $pendingId 及其所有子模块？此操作无法撤销。",
                 confirmText = "确认删除",
                 isDestructive = true,
                 onConfirm = {
-                    viewModel.layoutEditor.deleteBlock(blockToDelete!!)
-                    blockToDelete = null
+                    viewModel.layoutEditor.deleteBlock(pendingId)
+                    viewModel.hideDeleteConfirmation()
                 },
-                onDismiss = { blockToDelete = null }
+                onDismiss = { viewModel.hideDeleteConfirmation() }
             )
         }
         
         // 参考区域截图对话框
-        if (showReferenceArea && state.currentPage?.sourceImageUri != null) {
+        if (state.showReferenceArea && state.currentPage?.sourceImageUri != null) {
             ReferenceAreaCropDialog(
-                blockId = referenceAreaTargetId ?: "",
+                blockId = state.referenceAreaTargetId ?: "",
                 imageUri = state.currentPage!!.sourceImageUri!!,
                 pageWidth = state.currentPage!!.width,
                 pageHeight = state.currentPage!!.height,
-                onDismiss = { showReferenceArea = false },
+                onDismiss = { viewModel.hideReferenceArea() },
                 onConfirm = { rect ->
-                    showReferenceArea = false
-                    referenceAreaTargetId?.let { blockId ->
-                        viewModel.layoutEditor.onSetReferenceArea(blockId, rect)
+                    val blockId = state.referenceAreaTargetId
+                    viewModel.hideReferenceArea()
+                    blockId?.let { id ->
+                        viewModel.layoutEditor.onSetReferenceArea(id, rect)
                     }
                 }
             )
