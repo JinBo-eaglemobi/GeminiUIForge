@@ -20,7 +20,7 @@ import kotlinx.coroutines.*
 import org.gemini.ui.forge.manager.CloudAssetManager
 
 import androidx.compose.material.icons.filled.Add
-import org.gemini.ui.forge.utils.rememberImagePicker
+import org.gemini.ui.forge.utils.rememberFilePicker
 
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
@@ -32,7 +32,7 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * 允许用户浏览、批量上传、刷新同步以及批量删除保存在 Gemini 云端的资产文件。
  *
- * @param cloudAssetManager 负责管理云端资产状态和操作的管理器实例。
+ * @param cloudAssetManager 负责管理云端资产状态 and 操作的管理器实例。
  * @param onDismiss 点击关闭或取消时的回调。
  */
 @Composable
@@ -41,7 +41,6 @@ fun CloudAssetDialog(
     onDismiss: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
-// ... 内部代码 ...
     val assets by cloudAssetManager.assets.collectAsState()
     var isSyncing by remember { mutableStateOf(false) }
     
@@ -56,40 +55,40 @@ fun CloudAssetDialog(
 
     val uploadPrepStr = stringResource(Res.string.cloud_assets_uploading_prepare)
     
-    // 图片选择器逻辑：并发上传优化
-    val imagePicker = rememberImagePicker { uris ->
-        coroutineScope.launch {
-            // 并发启动所有上传任务
-            coroutineScope {
-                uris.map { uri ->
-                    async {
-                        val displayName = uri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "unnamed_image" }
-                        try {
-                            val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(uri)
-                            if (bytes != null) {
-                                val mimeType = org.gemini.ui.forge.utils.getMimeType(uri)
-                                // 初始化进度
-                                uploadingTasks[displayName] = 0f to uploadPrepStr
-                                
-                                cloudAssetManager.getOrUploadFile(displayName, bytes, mimeType) { progress, status ->
-                                    uploadingTasks[displayName] = progress to status
-                                }
+    // 图片选择器逻辑：使用统一的单选 rememberFilePicker
+    val imagePicker = rememberFilePicker(
+        title = "选择上传文件",
+        isFolder = false,
+        extensions = listOf("png", "jpg", "jpeg", "webp"),
+        onResult = { uri ->
+            if (uri != null) {
+                coroutineScope.launch {
+                    val displayName = uri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "unnamed_image" }
+                    try {
+                        val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(uri)
+                        if (bytes != null) {
+                            val mimeType = org.gemini.ui.forge.utils.getMimeType(uri)
+                            // 初始化进度
+                            uploadingTasks[displayName] = 0f to uploadPrepStr
+                            
+                            cloudAssetManager.getOrUploadFile(displayName, bytes, mimeType) { progress, status ->
+                                uploadingTasks[displayName] = progress to status
                             }
-                        } catch (e: Exception) {
-                            val errorMsg = org.jetbrains.compose.resources.getString(Res.string.cloud_assets_upload_failed, e.message ?: "Unknown")
-                            uploadingTasks[displayName] = 0f to errorMsg
-                        } finally {
-                            // 上传成功或彻底失败后停留 1.5 秒再从“上传列表”移除，让用户看一眼结果
-                            delay(1500L.milliseconds)
-                            uploadingTasks.remove(displayName)
                         }
+                    } catch (e: Exception) {
+                        val errorMsg = org.jetbrains.compose.resources.getString(Res.string.cloud_assets_upload_failed, e.message ?: "Unknown")
+                        uploadingTasks[displayName] = 0f to errorMsg
+                    } finally {
+                        // 上传成功或彻底失败后停留 1.5 秒再从“上传列表”移除，让用户看一眼结果
+                        delay(1500L.milliseconds)
+                        uploadingTasks.remove(displayName)
                     }
-                }.awaitAll()
+                    
+                    cloudAssetManager.syncFiles()
+                }
             }
-            
-            cloudAssetManager.syncFiles()
         }
-    }
+    )
 
     // 弹窗打开时自动同步一次
     LaunchedEffect(Unit) {

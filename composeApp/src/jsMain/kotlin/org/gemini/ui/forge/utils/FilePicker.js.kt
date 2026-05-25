@@ -14,49 +14,14 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
-@Composable
-actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
-    return {
-        val input = document.createElement("input") as HTMLInputElement
-        input.type = "file"
-        input.accept = "image/png, image/jpeg, image/webp"
-        input.multiple = true
-        
-        input.onchange = {
-            val files = input.files
-            if (files != null && files.length > 0) {
-                MainScope().launch {
-                    val resultPaths = mutableListOf<String>()
-                    val storage = LocalFileStorage()
-                    for (i in 0 until files.length) {
-                        val file = files.item(i)
-                        if (file != null) {
-                            val bytes = readFileAsByteArray(file)
-                            val timestamp = getCurrentTimeMillis()
-                            val opfsPath = "imports/img_${timestamp}_${file.name}"
-                            storage.saveBytesToFile(opfsPath, bytes)
-                            resultPaths.add(opfsPath)
-                        }
-                    }
-                    onResult(resultPaths)
-                }
-            }
-            null
-        }
-        input.click()
-    }
-}
 
-@Composable
-actual fun TemplateFile.rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
-    return rememberImagePicker(onResult)
-}
 
 @Composable
 actual fun rememberFilePicker(
     title: String,
     isFolder: Boolean,
     extensions: List<String>,
+    initialPath: String?,
     onResult: (String?) -> Unit
 ): () -> Unit {
     return {

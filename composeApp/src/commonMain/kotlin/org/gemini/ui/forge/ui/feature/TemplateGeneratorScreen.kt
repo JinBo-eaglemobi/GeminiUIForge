@@ -25,7 +25,7 @@ import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.dialog.AITaskProgressDialog
 import org.gemini.ui.forge.ui.dialog.CloudAssetDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.utils.rememberImagePicker
+import org.gemini.ui.forge.utils.rememberFilePicker
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.manager.*
 
@@ -118,13 +118,17 @@ fun TemplateGeneratorScreen(
         )
     }
 
-    val imagePicker = rememberImagePicker { uris ->
-        if (uris.isNotEmpty()) {
-            val current = inputUris.trim()
-            val newUris = uris.joinToString("\n")
-            inputUris = if (current.isEmpty()) newUris else "$current\n$newUris"
+    val imagePicker = rememberFilePicker(
+        title = "选择本地图片",
+        isFolder = false,
+        extensions = listOf("png", "jpg", "jpeg", "webp"),
+        onResult = { uri ->
+            if (uri != null) {
+                val current = inputUris.trim()
+                inputUris = if (current.isEmpty()) uri else "$current\n$uri"
+            }
         }
-    }
+    )
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(

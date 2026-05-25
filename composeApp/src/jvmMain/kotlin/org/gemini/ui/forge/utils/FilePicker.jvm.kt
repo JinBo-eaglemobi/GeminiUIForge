@@ -51,49 +51,13 @@ private fun getWarmChooser(title: String, isFolder: Boolean, extensions: List<St
     return chooser
 }
 
-@Composable
-actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
-    return {
-        Thread {
-            val activeWindow = java.awt.Window.getWindows().firstOrNull { it.isActive }
-            val dialog = FileDialog(activeWindow as? Frame, "Select Images", FileDialog.LOAD)
-            dialog.isAlwaysOnTop = true
-            dialog.isMultipleMode = true
-            dialog.isVisible = true
-            val files = dialog.files
-            if (files != null && files.isNotEmpty()) {
-                onResult(files.map { it.absolutePath })
-            }
-            dialog.dispose()
-        }.start()
-    }
-}
-
-@Composable
-actual fun TemplateFile.rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
-    val initialDir = this.getAbsolutePath()
-    return {
-        Thread {
-            val activeWindow = java.awt.Window.getWindows().firstOrNull { it.isActive }
-            val dialog = FileDialog(activeWindow as? Frame, "Select Images", FileDialog.LOAD)
-            dialog.isAlwaysOnTop = true
-            dialog.directory = initialDir
-            dialog.isMultipleMode = true
-            dialog.isVisible = true
-            val files = dialog.files
-            if (files != null && files.isNotEmpty()) {
-                onResult(files.map { it.absolutePath })
-            }
-            dialog.dispose()
-        }.start()
-    }
-}
 
 @Composable
 actual fun rememberFilePicker(
     title: String,
     isFolder: Boolean,
     extensions: List<String>,
+    initialPath: String?,
     onResult: (String?) -> Unit
 ): () -> Unit {
     LaunchedEffect(Unit) {
@@ -106,6 +70,17 @@ actual fun rememberFilePicker(
         Thread {
             val activeWindow = java.awt.Window.getWindows().firstOrNull { it.isActive }
             val chooser = getWarmChooser(title, isFolder, extensions)
+            
+            if (!initialPath.isNullOrEmpty()) {
+                var initFile = java.io.File(initialPath)
+                while (initFile != null && !initFile.exists()) {
+                    initFile = initFile.parentFile
+                }
+                if (initFile != null && initFile.exists()) {
+                    chooser.currentDirectory = if (initFile.isDirectory) initFile else initFile.parentFile
+                }
+            }
+
             val dialog = object : javax.swing.JDialog(activeWindow as? Frame, title, true) {}
             dialog.isAlwaysOnTop = true
             dialog.layout = java.awt.BorderLayout()
