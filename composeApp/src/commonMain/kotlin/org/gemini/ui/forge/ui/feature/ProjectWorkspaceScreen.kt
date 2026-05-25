@@ -115,7 +115,7 @@ fun ProjectWorkspaceScreen(
 
     // 项目设置弹窗
     if (showProjectSettingsDialog) {
-        org.gemini.ui.forge.ui.dialog.ProjectSettingsDialog(
+        ProjectSettingsDialog(
             initialPath = state.resourceConfigPath,
             onDismiss = { showProjectSettingsDialog = false },
             onConfirm = { path ->

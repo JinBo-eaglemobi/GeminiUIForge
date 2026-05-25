@@ -17,6 +17,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.getCurrentTimeMillis
@@ -50,141 +52,170 @@ fun AppToastContainer(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // 倒计时的剩余进度 (1.0 -> 0.0)
-    var progress by remember { mutableStateOf(1f) }
+    // 维护一个活动的 Toast 数据，作为 Popup 存在的生命周期依据
+    var activeToastData by remember { mutableStateOf<ToastData?>(null) }
 
-    // 监听数据变化，启动自动关闭定时器和进度条动画
+    // 监听数据变化，同步给本地的活动数据，或者在关闭时延迟销毁 Popup
     LaunchedEffect(toastData) {
         if (toastData != null) {
-            progress = 1f
-            val startTime = getCurrentTimeMillis()
-            val duration = toastData.durationMillis
-
-            launch {
-                while (true) {
-                    val elapsed = getCurrentTimeMillis() - startTime
-                    if (elapsed >= duration) {
-                        progress = 0f
-                        break
-                    }
-                    progress = 1f - (elapsed.toFloat() / duration)
-                    delay(16.milliseconds) // 约 60fps 刷新一次
-                }
-            }
-
-            delay(duration.milliseconds)
-            onDismiss()
+            activeToastData = toastData
+        } else {
+            // 延迟 350 毫秒，等待 AnimatedVisibility 的退出动画（300ms）播放完毕后再销毁 Popup
+            delay(350.milliseconds)
+            activeToastData = null
         }
     }
 
-    AnimatedVisibility(
-        visible = toastData != null,
-        // 从顶部以外的位置向下滑入
-        enter = slideInVertically(
-            initialOffsetY = { -it - 50 },
-            animationSpec = tween(durationMillis = 300)
-        ) + fadeIn(animationSpec = tween(300)),
-        // 向上滑出
-        exit = slideOutVertically(
-            targetOffsetY = { -it - 50 },
-            animationSpec = tween(durationMillis = 300)
-        ) + fadeOut(animationSpec = tween(300)),
-        modifier = modifier
-    ) {
-        toastData?.let { data ->
-            val colorScheme = MaterialTheme.colorScheme
-            // 根据主题底色的亮度来粗略判断当前是深色还是浅色模式，以便单独调配“成功”的绿色
-            val isDark = colorScheme.surface.luminance() < 0.5f
+    if (activeToastData != null) {
+        Popup(
+            alignment = Alignment.TopCenter,
+            properties = PopupProperties(
+                focusable = false, // 不抢占输入框焦点，使用户仍可在 Dialog 中继续打字
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
+        ) {
+            // 倒计时的剩余进度 (1.0 -> 0.0)
+            var progress by remember(activeToastData?.id) { mutableStateOf(1f) }
 
-            // 根据类型设定背景色
-            val backgroundColor = when (data.type) {
-                ToastType.SUCCESS -> if (isDark) Color(0xFF1B5E20) else Color(0xFFE8F5E9)
-                ToastType.ERROR -> colorScheme.errorContainer
-                ToastType.INFO -> colorScheme.primaryContainer
-            }
+            // 监听活动数据的倒计时定时器与进度条更新
+            LaunchedEffect(activeToastData) {
+                val currentData = activeToastData
+                if (currentData != null) {
+                    progress = 1f
+                    val startTime = getCurrentTimeMillis()
+                    val duration = currentData.durationMillis
 
-            // 根据类型设定文字和图标的颜色
-            val contentColor = when (data.type) {
-                ToastType.SUCCESS -> if (isDark) Color(0xFFA5D6A7) else Color(0xFF2E7D32)
-                ToastType.ERROR -> colorScheme.onErrorContainer
-                ToastType.INFO -> colorScheme.onPrimaryContainer
-            }
-
-            // 根据类型设定图标
-            val icon = when (data.type) {
-                ToastType.SUCCESS -> Icons.Default.CheckCircle
-                ToastType.ERROR -> Icons.Default.Error
-                ToastType.INFO -> Icons.Default.Info
-            }
-
-            Surface(
-                modifier = Modifier
-                    .padding(top = 16.dp, start = 16.dp, end = 16.dp)
-                    // 限制最小和最大宽度，为操作按钮留出空间
-                    .widthIn(min = 250.dp, max = 500.dp)
-                    .shadow(8.dp, RoundedCornerShape(8.dp)),
-                shape = RoundedCornerShape(8.dp),
-                color = backgroundColor,
-                contentColor = contentColor
-            ) {
-                Column {
-                    Row(
-                        modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = contentColor
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = data.message,
-                            style = MaterialTheme.typography.bodySmall, // 更紧凑的字体
-                            color = contentColor,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        // 如果传入了操作按钮，则渲染
-                        if (data.actionLabel != null && data.onAction != null) {
-                            TextButton(
-                                onClick = {
-                                    data.onAction.invoke()
-                                    onDismiss()
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp),
-                                modifier = Modifier.height(28.dp),
-                                colors = ButtonDefaults.textButtonColors(contentColor = contentColor)
-                            ) {
-                                Text(data.actionLabel, style = MaterialTheme.typography.labelMedium)
+                    launch {
+                        while (true) {
+                            val elapsed = getCurrentTimeMillis() - startTime
+                            if (elapsed >= duration) {
+                                progress = 0f
+                                break
                             }
-                            Spacer(modifier = Modifier.width(4.dp))
-                        }
-
-                        // 手动关闭按钮
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = contentColor.copy(alpha = 0.7f),
-                                modifier = Modifier.size(16.dp)
-                            )
+                            progress = 1f - (elapsed.toFloat() / duration)
+                            delay(16.milliseconds) // 约 60fps 刷新一次
                         }
                     }
 
-                    // 底部平滑倒计时进度条
-                    LinearProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier.fillMaxWidth().height(3.dp),
-                        color = contentColor.copy(alpha = 0.5f),
-                        trackColor = Color.Transparent,
-                        drawStopIndicator = {} // 禁用圆角端点（Compose M3 中默认有的端点）
-                    )
+                    delay(duration.milliseconds)
+                    // 如果在此期间 toast 没被手动 dismiss 且仍是当前这条数据，则自动触发 dismiss
+                    if (toastData?.id == currentData.id) {
+                        onDismiss()
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = toastData != null && toastData.id == activeToastData?.id,
+                // 从顶部以外的位置向下滑入
+                enter = slideInVertically(
+                    initialOffsetY = { -it - 50 },
+                    animationSpec = tween(durationMillis = 300)
+                ) + fadeIn(animationSpec = tween(300)),
+                // 向上滑出
+                exit = slideOutVertically(
+                    targetOffsetY = { -it - 50 },
+                    animationSpec = tween(durationMillis = 300)
+                ) + fadeOut(animationSpec = tween(300)),
+                modifier = modifier
+            ) {
+                activeToastData?.let { data ->
+                    val colorScheme = MaterialTheme.colorScheme
+                    // 根据主题底色的亮度来粗略判断当前是深色还是浅色模式，以便单独调配“成功”的绿色
+                    val isDark = colorScheme.surface.luminance() < 0.5f
+
+                    // 根据类型设定背景色
+                    val backgroundColor = when (data.type) {
+                        ToastType.SUCCESS -> if (isDark) Color(0xFF1B5E20) else Color(0xFFE8F5E9)
+                        ToastType.ERROR -> colorScheme.errorContainer
+                        ToastType.INFO -> colorScheme.primaryContainer
+                    }
+
+                    // 根据类型设定文字和图标的颜色
+                    val contentColor = when (data.type) {
+                        ToastType.SUCCESS -> if (isDark) Color(0xFFA5D6A7) else Color(0xFF2E7D32)
+                        ToastType.ERROR -> colorScheme.onErrorContainer
+                        ToastType.INFO -> colorScheme.onPrimaryContainer
+                    }
+
+                    // 根据类型设定图标
+                    val icon = when (data.type) {
+                        ToastType.SUCCESS -> Icons.Default.CheckCircle
+                        ToastType.ERROR -> Icons.Default.Error
+                        ToastType.INFO -> Icons.Default.Info
+                    }
+
+                    Surface(
+                        modifier = Modifier
+                            .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+                            // 限制最小和最大宽度，为操作按钮留出空间
+                            .widthIn(min = 250.dp, max = 500.dp)
+                            .shadow(8.dp, RoundedCornerShape(8.dp)),
+                        shape = RoundedCornerShape(8.dp),
+                        color = backgroundColor,
+                        contentColor = contentColor
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = contentColor
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = data.message,
+                                    style = MaterialTheme.typography.bodySmall, // 更紧凑的字体
+                                    color = contentColor,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                // 如果传入了操作按钮，则渲染
+                                if (data.actionLabel != null && data.onAction != null) {
+                                    TextButton(
+                                        onClick = {
+                                            data.onAction.invoke()
+                                            onDismiss()
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp),
+                                        modifier = Modifier.height(28.dp),
+                                        colors = ButtonDefaults.textButtonColors(contentColor = contentColor)
+                                    ) {
+                                        Text(data.actionLabel, style = MaterialTheme.typography.labelMedium)
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                }
+
+                                // 手动关闭按钮
+                                IconButton(
+                                    onClick = onDismiss,
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Close",
+                                        tint = contentColor.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            // 底部平滑倒计时进度条
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier.fillMaxWidth().height(3.dp),
+                                color = contentColor.copy(alpha = 0.5f),
+                                trackColor = Color.Transparent,
+                                drawStopIndicator = {} // 禁用圆角端点（Compose M3 中默认有的端点）
+                            )
+                        }
+                    }
                 }
             }
         }

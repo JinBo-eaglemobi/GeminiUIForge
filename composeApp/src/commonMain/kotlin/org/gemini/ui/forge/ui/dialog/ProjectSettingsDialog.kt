@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -16,6 +17,7 @@ import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.rememberFilePicker
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import org.gemini.ui.forge.utils.Toast
@@ -40,6 +42,7 @@ fun ProjectSettingsDialog(
     var pathInput by remember { mutableStateOf(initialPath ?: "") }
     var isValidating by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isCurrentPathValidated by remember(pathInput) { mutableStateOf(false) } // 路径字符一变动自动重置为未验证
     val coroutineScope = rememberCoroutineScope()
 
     // 预加载多语言文案，避免在 onClick/协程 非 Composable 作用域内调用 stringResource 导致编译错误
@@ -68,6 +71,7 @@ fun ProjectSettingsDialog(
         text = {
             val filePicker = rememberFilePicker(
                 title = "选择资源命名规范 JSON 配置文件",
+                initialPath = pathInput,
                 extensions = listOf("json")
             ) { selectedPath ->
                 if (selectedPath != null) {
@@ -98,15 +102,68 @@ fun ProjectSettingsDialog(
                     singleLine = true,
                     isError = errorMessage != null,
                     trailingIcon = {
-                        IconButton(
-                            onClick = filePicker,
-                            modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(end = 4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.FolderOpen,
-                                contentDescription = "选择配置文件",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                            IconButton(
+                                onClick = {
+                                    if (pathInput.isBlank()) {
+                                        errorMessage = errEmpty
+                                        return@IconButton
+                                    }
+                                    isValidating = true
+                                    errorMessage = null
+                                    coroutineScope.launch {
+                                        try {
+                                            val bytes = readBytesInternal(pathInput)
+                                            if (bytes == null) {
+                                                errorMessage = errRead
+                                                isValidating = false
+                                                return@launch
+                                            }
+                                            val content = bytes.decodeToString()
+                                            looseJson.decodeFromString<Map<String, Map<String, ResourceItem>>>(content)
+                                            
+                                            // 验证通过，打上绿灯标记并一键流转保存同步刷新
+                                            isCurrentPathValidated = true
+                                            onConfirm(pathInput)
+                                            Toast.show("配置解析校验成功并已刷新！", ToastType.SUCCESS)
+                                        } catch (e: Exception) {
+                                            val detail = e.stackTraceToString()
+                                            errorMessage = errParseTemplate.replace("%1\$s", detail).replace("%s", detail)
+                                        } finally {
+                                            isValidating = false
+                                        }
+                                    }
+                                },
+                                enabled = !isValidating,
+                                modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                            ) {
+                                if (isValidating) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "验证并刷新配置",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = filePicker,
+                                modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = "选择配置文件",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
                 )
@@ -135,6 +192,11 @@ fun ProjectSettingsDialog(
                         errorMessage = errEmpty
                         return@Button
                     }
+                    if (isCurrentPathValidated) {
+                        // 已经经过一键刷新验证通过，直接保存秒存，防止重复验证
+                        onConfirm(pathInput)
+                        return@Button
+                    }
                     isValidating = true
                     errorMessage = null
                     coroutineScope.launch {
@@ -154,7 +216,7 @@ fun ProjectSettingsDialog(
                             onConfirm(pathInput)
                         } catch (e: Exception) {
                             val detail = e.stackTraceToString()
-                            errorMessage = errParseTemplate.replace($$"%1$s", detail).replace("%s", detail)
+                            errorMessage = errParseTemplate.replace("%1\$s", detail).replace("%s", detail)
                         } finally {
                             isValidating = false
                         }

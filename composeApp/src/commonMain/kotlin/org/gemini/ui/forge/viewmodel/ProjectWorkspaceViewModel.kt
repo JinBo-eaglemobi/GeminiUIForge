@@ -391,9 +391,21 @@ class ProjectWorkspaceViewModel(
     /** 更新当前项目的资源配置路径 */
     fun updateResourceConfigPath(path: String?) {
         _state.update { currentState ->
-            currentState.copy(resourceConfigPath = path)
+            currentState.copy(
+                resourceConfigPath = path,
+                resourceConfigRefreshTrigger = org.gemini.ui.forge.getCurrentTimeMillis()
+            )
         }
         saveWorkspaceConfig()
+    }
+
+    /** 手动触发资源命名规范配置文件的重新读取与刷新 */
+    fun refreshResourceConfig() {
+        _state.update { currentState ->
+            currentState.copy(
+                resourceConfigRefreshTrigger = org.gemini.ui.forge.getCurrentTimeMillis()
+            )
+        }
     }
 
     /** 更新特定模块的资源绑定规范路径 */

@@ -49,9 +49,8 @@ fun LayoutPropertyContent(
     var showBindingDialog by remember { mutableStateOf(false) }
     var configData by remember { mutableStateOf<Map<String, List<ResourceItem>>?>(null) }
     var configError by remember { mutableStateOf<String?>(null) }
-    var refreshTrigger by remember { mutableStateOf(0) }
 
-    LaunchedEffect(state.resourceConfigPath, refreshTrigger) {
+    LaunchedEffect(state.resourceConfigPath, state.resourceConfigRefreshTrigger) {
         val path = state.resourceConfigPath
         if (path.isNullOrBlank()) {
             configData = null
@@ -64,20 +63,20 @@ fun LayoutPropertyContent(
                     val parsed = looseJson.decodeFromString<Map<String, Map<String, ResourceItem>>>(content)
                     configData = parsed.mapValues { it.value.values.toList() }
                     configError = null
-                    if (refreshTrigger > 0) {
+                    if (state.resourceConfigRefreshTrigger > 0L) {
                         Toast.show("配置文件刷新成功", ToastType.SUCCESS)
                     }
                 } else {
                     configData = null
                     configError = "无法读取配置文件"
-                    if (refreshTrigger > 0) {
+                    if (state.resourceConfigRefreshTrigger > 0L) {
                         Toast.show("配置文件刷新失败: 无法读取文件", ToastType.ERROR)
                     }
                 }
             } catch (e: Exception) {
                 configData = null
                 configError = e.message ?: "解析失败"
-                if (refreshTrigger > 0) {
+                if (state.resourceConfigRefreshTrigger > 0L) {
                     Toast.show("配置文件刷新失败: ${e.message ?: "解析失败"}", ToastType.ERROR)
                 }
             }
@@ -271,7 +270,7 @@ fun LayoutPropertyContent(
                                     color = if (isBindingInvalid) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                                 )
                                 IconButton(
-                                    onClick = { refreshTrigger++ },
+                                    onClick = { viewModel.refreshResourceConfig() },
                                     modifier = Modifier
                                         .size(24.dp)
                                         .pointerHoverIcon(PointerIcon.Hand)
