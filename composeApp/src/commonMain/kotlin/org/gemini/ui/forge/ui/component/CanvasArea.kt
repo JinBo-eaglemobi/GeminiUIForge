@@ -32,6 +32,8 @@ import geminiuiforge.composeapp.generated.resources.action_exit
 import geminiuiforge.composeapp.generated.resources.group_editing_indicator_prefix
 import org.gemini.ui.forge.ResizeVerticalIcon
 import org.gemini.ui.forge.model.app.ReferenceDisplayMode
+import org.gemini.ui.forge.state.ProjectWorkspaceState
+import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.utils.*
 import org.jetbrains.compose.resources.stringResource
@@ -42,53 +44,28 @@ import kotlin.math.min
  * 画布区域组件：负责渲染基础 Slots 模板及已绑定的图片。
  * 支持缩放、平移、模块选中、拖拽以及参考图对比等核心交互功能。
  *
- * @param pageWidth 页面原始宽度（逻辑单位）
- * @param pageHeight 页面原始高度（逻辑单位）
- * @param blocks 渲染的 UI 模块列表
- * @param selectedBlockId 当前选中的模块 ID
- * @param onBlockClicked 模块点击回调
- * @param onBlockDoubleClicked 模块双击回调
- * @param onBlockDragStart 开始拖拽回调
- * @param onBlockDragged 拖拽进行中回调
- * @param editingGroupId 当前处于隔离编辑模式的组 ID
- * @param onExitGroupEdit 退出组编辑模式的回调
- * @param referenceMode 参考图显示模式
- * @param referenceUri 参考图的资源路径或 Base64 字符串
- * @param referenceOpacity 参考图透明度
- * @param isVisualMode 是否为视觉模式（显示生成图）
- * @param onToggleVisualMode 切换视觉模式的回调
- * @param isHideOutlines 是否隐藏模块描边
- * @param onToggleHideOutlines 切换隐藏描边的回调
- * @param isReadOnly 是否为只读模式
- * @param stageBackgroundColor 舞台背景颜色
+ * @param state 项目工作区状态
+ * @param viewModel 项目工作区视图模型
+ * @param modifier 外部修饰符
  */
 @Composable
 fun CanvasArea(
-    pageWidth: Float,
-    pageHeight: Float,
-    blocks: List<UIBlock>,
-    selectedBlockId: String?,
-    selectedBlockIds: Set<String> = emptySet(),
-    onBlockClicked: (String?, Boolean) -> Unit,
-    onBlockDoubleClicked: (String) -> Unit = {},
-    onBlockDragStart: (String) -> Unit = {},
-    onBlockDragged: (String, Float, Float) -> Unit = { _, _, _ -> },
-    onBlockDragEnd: (String) -> Unit = {},
-    editingGroupId: String? = null,
-    onExitGroupEdit: () -> Unit = {},
-    referenceMode: ReferenceDisplayMode = ReferenceDisplayMode.HIDDEN,
-    onReferenceModeChange: (ReferenceDisplayMode) -> Unit = {},
-    referenceUri: String? = null,
-    referenceOpacity: Float = 0.4f,
-    onReferenceOpacityChange: (Float) -> Unit = {},
-    isVisualMode: Boolean = false,
-    onToggleVisualMode: () -> Unit = {},
-    isHideOutlines: Boolean = false,
-    onToggleHideOutlines: () -> Unit = {},
-    isReadOnly: Boolean = false,
-    stageBackgroundColor: String = "#2D2D2D",
+    state: ProjectWorkspaceState,
+    viewModel: ProjectWorkspaceViewModel,
     modifier: Modifier = Modifier
 ) {
+    val pageWidth = state.currentPage?.width ?: 1080f
+    val pageHeight = state.currentPage?.height ?: 1920f
+    val blocks = state.currentPage?.blocks ?: emptyList()
+    val editingGroupId = state.editingGroupId
+    val referenceMode = state.referenceMode
+    val referenceUri = state.referenceImageUri?.getAbsolutePath()
+    val referenceOpacity = state.referenceOpacity
+    val isVisualMode = state.isVisualMode
+    val isHideOutlines = state.isHideOutlines
+    val stageBackgroundColor = state.stageBackgroundColor
+    val isReadOnly = false
+
     var zoom by remember { mutableStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
@@ -121,15 +98,6 @@ fun CanvasArea(
         pan = Offset.Zero
     }
 
-    val currentBlocks by rememberUpdatedState(blocks)
-    val currentEditingGroupId by rememberUpdatedState(editingGroupId)
-    val currentOnBlockClicked by rememberUpdatedState(onBlockClicked)
-    val currentOnBlockDoubleClicked by rememberUpdatedState(onBlockDoubleClicked)
-    val currentOnBlockDragged by rememberUpdatedState(onBlockDragged)
-    val currentOnBlockDragStart by rememberUpdatedState(onBlockDragStart)
-    val currentOnBlockDragEnd by rememberUpdatedState(onBlockDragEnd)
-    val currentOnExitGroupEdit by rememberUpdatedState(onExitGroupEdit)
-
     val refBitmapState = produceState<ImageBitmap?>(null, referenceUri) {
         value = referenceUri?.decodeBase64ToBitmap()
     }
@@ -149,10 +117,16 @@ fun CanvasArea(
                     shape = RoundedCornerShape(8.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Image(bitmap = refBitmap, contentDescription = "Ref", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                    Image(
+                        bitmap = refBitmap,
+                        contentDescription = "Ref",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
                 }
                 Box(
-                    modifier = Modifier.fillMaxWidth().height(4.dp).background(MaterialTheme.colorScheme.outlineVariant).pointerHoverIcon(ResizeVerticalIcon)
+                    modifier = Modifier.fillMaxWidth().height(4.dp).background(MaterialTheme.colorScheme.outlineVariant)
+                        .pointerHoverIcon(ResizeVerticalIcon)
                         .draggable(orientation = Orientation.Vertical, state = rememberDraggableState { delta ->
                             val deltaWeight = delta / totalHeightPx
                             splitWeight = (splitWeight + deltaWeight).coerceIn(0.1f, 0.9f)
@@ -160,21 +134,20 @@ fun CanvasArea(
                 )
             }
 
-            val canvasWeight = if (referenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
+            val canvasWeight =
+                if (referenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
             Box(modifier = Modifier.weight(canvasWeight).fillMaxWidth().clipToBounds()) {
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val maxBlockRight = currentBlocks.maxOfOrNull { it.bounds.right } ?: 0f
-                    val maxBlockBottom = currentBlocks.maxOfOrNull { it.bounds.bottom } ?: 0f
+                    val maxBlockRight = blocks.maxOfOrNull { it.bounds.right } ?: 0f
+                    val maxBlockBottom = blocks.maxOfOrNull { it.bounds.bottom } ?: 0f
                     val effectiveWidth = maxOf(pageWidth, maxBlockRight)
                     val effectiveHeight = maxOf(pageHeight, maxBlockBottom)
 
                     val baseScale = min(maxWidth.value / effectiveWidth, maxHeight.value / effectiveHeight) * 0.9f
-                    val offsetX = (maxWidth.value - (effectiveWidth * baseScale)) / 2 + (effectiveWidth - pageWidth) / 2 * baseScale
-                    val offsetY = (maxHeight.value - (effectiveHeight * baseScale)) / 2 + (effectiveHeight - pageHeight) / 2 * baseScale
-
-                    val currentBaseScale by rememberUpdatedState(baseScale)
-                    val currentOffsetX by rememberUpdatedState(offsetX)
-                    val currentOffsetY by rememberUpdatedState(offsetY)
+                    val offsetX =
+                        (maxWidth.value - (effectiveWidth * baseScale)) / 2 + (effectiveWidth - pageWidth) / 2 * baseScale
+                    val offsetY =
+                        (maxHeight.value - (effectiveHeight * baseScale)) / 2 + (effectiveHeight - pageHeight) / 2 * baseScale
 
                     var isInteractingWithBlock by remember { mutableStateOf(false) }
 
@@ -205,16 +178,30 @@ fun CanvasArea(
                                 }
                             }
                             .graphicsLayer {
-                                scaleX = zoom; scaleY = zoom; translationX = pan.x; translationY = pan.y; transformOrigin = TransformOrigin(0f, 0f)
+                                scaleX = zoom; scaleY = zoom; translationX = pan.x; translationY =
+                                pan.y; transformOrigin = TransformOrigin(0f, 0f)
                             }
                     ) {
                         Box(
-                            modifier = Modifier.offset(x = offsetX.dp, y = offsetY.dp).size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp)
-                                .background(stageColor).border(BorderStroke((1.dp / zoom) / baseScale, MaterialTheme.colorScheme.outlineVariant))
+                            modifier = Modifier.offset(x = offsetX.dp, y = offsetY.dp)
+                                .size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp)
+                                .background(stageColor).border(
+                                    BorderStroke(
+                                        (1.dp / zoom) / baseScale,
+                                        MaterialTheme.colorScheme.outlineVariant
+                                    )
+                                )
                         )
 
                         if (referenceMode == ReferenceDisplayMode.OVERLAY && refBitmap != null) {
-                            Image(bitmap = refBitmap, contentDescription = null, alpha = referenceOpacity, modifier = Modifier.offset(x = offsetX.dp, y = offsetY.dp).size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp), contentScale = ContentScale.FillBounds)
+                            Image(
+                                bitmap = refBitmap,
+                                contentDescription = null,
+                                alpha = referenceOpacity,
+                                modifier = Modifier.offset(x = offsetX.dp, y = offsetY.dp)
+                                    .size(width = (pageWidth * baseScale).dp, height = (pageHeight * baseScale).dp),
+                                contentScale = ContentScale.FillBounds
+                            )
                         }
 
                         var isMultiSelectActive by remember { mutableStateOf(false) }
@@ -231,54 +218,76 @@ fun CanvasArea(
                                         }
                                     }
                                 }
-                                .pointerInput(Unit) {
+                                .pointerInput(blocks, editingGroupId, offsetX, offsetY, baseScale) {
                                     detectTapGestures(
                                         onDoubleTap = { offset ->
-                                            val lx = (offset.x / density.density - currentOffsetX) / currentBaseScale
-                                            val ly = (offset.y / density.density - currentOffsetY) / currentBaseScale
-                                            val hitBlock = currentBlocks.findHitBlock(lx, ly, 0f, 0f, currentEditingGroupId)
-                                            if (hitBlock != null) currentOnBlockDoubleClicked(hitBlock.id) else if (currentEditingGroupId != null) currentOnExitGroupEdit() else currentOnBlockClicked(null, false)
+                                            val lx = (offset.x / density.density - offsetX) / baseScale
+                                            val ly = (offset.y / density.density - offsetY) / baseScale
+                                            val hitBlock =
+                                                blocks.findHitBlock(lx, ly, 0f, 0f, editingGroupId)
+                                            if (hitBlock != null) viewModel.onBlockDoubleClicked(hitBlock.id) else if (editingGroupId != null) viewModel.exitGroupEdit() else viewModel.onBlockClicked(
+                                                null,
+                                                false
+                                            )
                                         },
                                         onTap = { offset ->
-                                            val lx = (offset.x / density.density - currentOffsetX) / currentBaseScale
-                                            val ly = (offset.y / density.density - currentOffsetY) / currentBaseScale
-                                            val hitBlock = currentBlocks.findHitBlock(lx, ly, 0f, 0f, currentEditingGroupId)
-                                            currentOnBlockClicked(hitBlock?.id, isMultiSelectActive)
+                                            val lx = (offset.x / density.density - offsetX) / baseScale
+                                            val ly = (offset.y / density.density - offsetY) / baseScale
+                                            val hitBlock =
+                                                blocks.findHitBlock(lx, ly, 0f, 0f, editingGroupId)
+                                            viewModel.onBlockClicked(hitBlock?.id, isMultiSelectActive)
                                         }
                                     )
                                 }
-                                .pointerInput(isReadOnly) {
+                                .pointerInput(blocks, editingGroupId, offsetX, offsetY, baseScale, isReadOnly) {
                                     if (isReadOnly) return@pointerInput
-                                    var dragTargetId: String? = null; var isPanningStage = false
+                                    var dragTargetId: String? = null
+                                    var isPanningStage = false
                                     detectDragGestures(
                                         onDragStart = { offset ->
-                                            val lx = (offset.x / density.density - currentOffsetX) / currentBaseScale
-                                            val ly = (offset.y / density.density - currentOffsetY) / currentBaseScale
-                                            val hitBlock = currentBlocks.findHitBlock(lx, ly, 0f, 0f, currentEditingGroupId)
-                                            if (hitBlock != null) { dragTargetId = hitBlock.id; isPanningStage = false; isInteractingWithBlock = true; currentOnBlockDragStart(hitBlock.id) }
-                                            else { dragTargetId = null; isPanningStage = true; isInteractingWithBlock = false }
+                                            val lx = (offset.x / density.density - offsetX) / baseScale
+                                            val ly = (offset.y / density.density - offsetY) / baseScale
+                                            val hitBlock =
+                                                blocks.findHitBlock(lx, ly, 0f, 0f, editingGroupId)
+                                            if (hitBlock != null) {
+                                                dragTargetId = hitBlock.id
+                                                isPanningStage = false
+                                                isInteractingWithBlock = true
+                                                viewModel.historyManager.saveSnapshot("拖动模块位置")
+                                            } else {
+                                                dragTargetId = null; isPanningStage = true; isInteractingWithBlock =
+                                                    false
+                                            }
                                         },
                                         onDrag = { change, dragAmount ->
                                             change.consume()
                                             if (isPanningStage) pan += dragAmount else if (dragTargetId != null) {
-                                                val logicalDx = dragAmount.x / density.density / currentBaseScale
-                                                val logicalDy = dragAmount.y / density.density / currentBaseScale
-                                                currentOnBlockDragged(dragTargetId!!, logicalDx, logicalDy)
+                                                val logicalDx = dragAmount.x / density.density / baseScale
+                                                val logicalDy = dragAmount.y / density.density / baseScale
+                                                if (state.selectedBlockIds.contains(dragTargetId)) {
+                                                    viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, logicalDx, logicalDy)
+                                                } else {
+                                                    viewModel.layoutEditor.moveBlockBy(dragTargetId!!, logicalDx, logicalDy)
+                                                }
                                             }
                                         },
-                                        onDragEnd = { dragTargetId?.let { currentOnBlockDragEnd(it) }; dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false },
-                                        onDragCancel = { dragTargetId?.let { currentOnBlockDragEnd(it) }; dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false }
+                                        onDragEnd = {
+                                            dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false
+                                        },
+                                        onDragCancel = {
+                                            dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false
+                                        }
                                     )
                                 }
                         ) {
-                            currentBlocks.forEach { block ->
+                            blocks.forEach { block ->
                                 RenderBlock(
-                                    block = block, parentX = offsetX, parentY = offsetY, baseScale = baseScale, zoom = zoom,
-                                    isSelected = block.id == selectedBlockId || selectedBlockIds.contains(block.id),
-                                    isDimmed = block.shouldDim(editingGroupId),
-                                    isVisualMode = isVisualMode, isHideOutlines = isHideOutlines,
-                                    density = density, selectedBlockId = selectedBlockId,
-                                    selectedBlockIds = selectedBlockIds, editingGroupId = editingGroupId
+                                    block = block,
+                                    parentX = offsetX,
+                                    parentY = offsetY,
+                                    baseScale = baseScale,
+                                    zoom = zoom,
+                                    state = state
                                 )
                             }
                         }
@@ -288,27 +297,54 @@ fun CanvasArea(
         }
 
         if (editingGroupId != null) {
-            Surface(modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 68.dp), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primary, shadowElevation = 4.dp) {
-                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Layers, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimary)
+            Surface(
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 68.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.primary,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Layers,
+                        null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
                     Spacer(Modifier.width(8.dp))
-                    Text(text = "${stringResource(Res.string.group_editing_indicator_prefix)} $editingGroupId", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary)
+                    Text(
+                        text = "${stringResource(Res.string.group_editing_indicator_prefix)} $editingGroupId",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
                     Spacer(Modifier.width(12.dp))
-                    VerticalDivider(modifier = Modifier.height(16.dp), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f))
+                    VerticalDivider(
+                        modifier = Modifier.height(16.dp),
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f)
+                    )
                     Spacer(Modifier.width(8.dp))
-                    Text(text = stringResource(Res.string.action_exit), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.clickable { onExitGroupEdit() }.padding(4.dp))
+                    Text(
+                        text = stringResource(Res.string.action_exit),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.clickable { viewModel.exitGroupEdit() }.padding(4.dp)
+                    )
                 }
             }
         }
 
-        val currentCanvasWeight = if (referenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
+        val currentCanvasWeight =
+            if (referenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
         CanvasFloatingControlBar(
             zoom = zoom, updateZoom = ::updateZoom, onResetZoom = { zoom = 1f; pan = Offset.Zero },
-            isVisualMode = isVisualMode, onToggleVisualMode = onToggleVisualMode,
-            isHideOutlines = isHideOutlines, onToggleHideOutlines = onToggleHideOutlines,
+            isVisualMode = isVisualMode, onToggleVisualMode = { viewModel.toggleVisualMode() },
+            isHideOutlines = isHideOutlines, onToggleHideOutlines = { viewModel.toggleHideOutlines() },
             referenceUri = referenceUri, internalReferenceMode = referenceMode,
-            onReferenceModeChange = onReferenceModeChange,
-            internalReferenceOpacity = referenceOpacity, onReferenceOpacityChange = onReferenceOpacityChange,
+            onReferenceModeChange = { viewModel.updateReferenceMode(it) },
+            internalReferenceOpacity = referenceOpacity, onReferenceOpacityChange = { viewModel.updateReferenceOpacity(it) },
             centerOffset = Offset(containerWidthPx / 2f, (containerHeightPx * currentCanvasWeight) / 2f),
             modifier = Modifier.align(Alignment.TopCenter)
         )

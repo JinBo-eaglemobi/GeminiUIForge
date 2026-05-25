@@ -39,7 +39,9 @@ import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.NinePatchConfig
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
+import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.utils.decodeToBitmap
+import org.gemini.ui.forge.utils.shouldDim
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -146,13 +148,6 @@ fun RenderStyledText(
  * @param parentY 父容器的绝对 Y 坐标
  * @param baseScale 画布的基础缩放比例（适配不同屏幕尺寸）
  * @param zoom 用户的实时缩放倍数
- * @param isSelected 当前模块是否被选中
- * @param isDimmed 是否因为处于隔离编辑模式而被置灰显示
- * @param isVisualMode 是否处于视觉预览模式（隐藏线框）
- * @param isHideOutlines 是否隐藏模块描边
- * @param density 屏幕密度，用于 dp 转换
- * @param selectedBlockId 当前全局选中的模块 ID
- * @param editingGroupId 当前正在编辑的分组 ID
  */
 @Composable
 fun RenderBlock(
@@ -161,16 +156,19 @@ fun RenderBlock(
     parentY: Float,
     baseScale: Float,
     zoom: Float,
-    isSelected: Boolean,
-    isDimmed: Boolean, // 是否因为处于隔离模式而被置灰
-    isVisualMode: Boolean,
-    isHideOutlines: Boolean,
-    density: Density,
-    selectedBlockId: String?,
-    selectedBlockIds: Set<String> = emptySet(),
-    editingGroupId: String?
+    state: ProjectWorkspaceState
 ) {
     if (!block.isVisible) return
+
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val editingGroupId = state.editingGroupId
+    val isVisualMode = state.isVisualMode
+    val isHideOutlines = state.isHideOutlines
+    val selectedBlockId = state.selectedBlockId
+    val selectedBlockIds = state.selectedBlockIds
+
+    val isSelected = block.id == selectedBlockId || selectedBlockIds.contains(block.id)
+    val isDimmed = block.shouldDim(editingGroupId)
 
     // 1. 异步加载图片位图：根据模块关联的 URI 加载图片
     val imageBitmapState =
@@ -397,14 +395,7 @@ fun RenderBlock(
             parentY = currentY,
             baseScale = baseScale,
             zoom = zoom,
-            isSelected = child.id == selectedBlockId || selectedBlockIds.contains(child.id),
-            isDimmed = isDimmed,
-            isVisualMode = isVisualMode,
-            isHideOutlines = isHideOutlines,
-            density = density,
-            selectedBlockId = selectedBlockId,
-            selectedBlockIds = selectedBlockIds,
-            editingGroupId = editingGroupId
+            state = state
         )
     }
 }

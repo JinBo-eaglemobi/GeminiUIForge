@@ -279,33 +279,8 @@ fun ProjectWorkspaceScreen(
             // [中] 核心画布区域
             Box(Modifier.weight(centerWeight).fillMaxHeight()) {
                 CanvasArea(
-                    blocks = state.currentPage?.blocks ?: emptyList(),
-                    pageWidth = state.currentPage?.width ?: 1080f,
-                    pageHeight = state.currentPage?.height ?: 1920f,
-                    selectedBlockId = state.selectedBlockId,
-                    selectedBlockIds = state.selectedBlockIds,
-                    editingGroupId = state.editingGroupId,
-                    isVisualMode = state.isVisualMode,
-                    onToggleVisualMode = { viewModel.toggleVisualMode() },
-                    isHideOutlines = state.isHideOutlines,
-                    onToggleHideOutlines = { viewModel.toggleHideOutlines() },
-                    referenceMode = state.referenceMode,
-                    onReferenceModeChange = { mode -> viewModel.updateReferenceMode(mode) },
-                    referenceUri = state.referenceImageUri?.getAbsolutePath(),
-                    referenceOpacity = state.referenceOpacity,
-                    onReferenceOpacityChange = { opacity -> viewModel.updateReferenceOpacity(opacity) },
-                    onBlockClicked = { id, isMulti -> viewModel.onBlockClicked(id, isMulti) },
-                    onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
-                    onBlockDragStart = { viewModel.historyManager.saveSnapshot("拖动模块位置") },
-                    onBlockDragged = { id, dx, dy ->
-                        if (state.selectedBlockIds.contains(id)) {
-                            viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, dx, dy)
-                        } else {
-                            viewModel.layoutEditor.moveBlockBy(id, dx, dy)
-                        }
-                    },
-                    onExitGroupEdit = { viewModel.exitGroupEdit() },
-                    stageBackgroundColor = state.stageBackgroundColor
+                    state = state,
+                    viewModel = viewModel
                 )
 
                 // 悬浮历史入口
