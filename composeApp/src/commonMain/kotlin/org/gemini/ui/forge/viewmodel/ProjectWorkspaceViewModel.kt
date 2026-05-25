@@ -332,14 +332,61 @@ class ProjectWorkspaceViewModel(
         }
     }
 
-    /** 处理模块双击进入组编辑 */
-    fun onBlockDoubleClicked(blockId: String) {
-        _state.update {
-            val newGroupId = if (it.editingGroupId == blockId) null else blockId
-            it.copy(
-                editingGroupId = newGroupId,
-                selectedBlockId = if (newGroupId != null) null else it.selectedBlockId 
+    /** 寻找目标模块的父组 ID */
+    private fun findParentBlockId(blocks: List<UIBlock>, targetId: String, currentParentId: String? = null): String? {
+        for (block in blocks) {
+            if (block.id == targetId) {
+                return currentParentId
+            }
+            val found = findParentBlockId(block.children, targetId, block.id)
+            if (found != null) {
+                return found
+            }
+        }
+        return null
+    }
+
+    /** 退出当前组编辑模式（返回父组，并清除选中） */
+    fun exitGroupEdit() {
+        _state.update { currentState ->
+            val currentPage = currentState.currentPage
+            val parentId = if (currentPage != null && currentState.editingGroupId != null) {
+                findParentBlockId(currentPage.blocks, currentState.editingGroupId)
+            } else {
+                null
+            }
+            currentState.copy(
+                editingGroupId = parentId,
+                selectedBlockId = null,
+                selectedBlockIds = emptySet()
             )
+        }
+    }
+
+    /** 处理模块双击进入或退出组编辑 */
+    fun onBlockDoubleClicked(blockId: String) {
+        _state.update { currentState ->
+            if (currentState.editingGroupId == blockId) {
+                // 如果双击的是当前正在编辑的组，则退回父编辑组
+                val currentPage = currentState.currentPage
+                val parentId = if (currentPage != null) {
+                    findParentBlockId(currentPage.blocks, blockId)
+                } else {
+                    null
+                }
+                currentState.copy(
+                    editingGroupId = parentId,
+                    selectedBlockId = null,
+                    selectedBlockIds = emptySet()
+                )
+            } else {
+                // 如果双击的是其它组，进入该组，并清除模块选中状态
+                currentState.copy(
+                    editingGroupId = blockId,
+                    selectedBlockId = null,
+                    selectedBlockIds = emptySet()
+                )
+            }
         }
     }
 

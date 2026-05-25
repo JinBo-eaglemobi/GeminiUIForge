@@ -271,7 +271,7 @@ fun ProjectWorkspaceScreen(
                             viewModel.layoutEditor.moveBlockBy(id, dx, dy)
                         }
                     },
-                    onExitGroupEdit = { viewModel.updateState { s -> s.copy(editingGroupId = null) } },
+                    onExitGroupEdit = { viewModel.exitGroupEdit() },
                     stageBackgroundColor = state.stageBackgroundColor
                 )
 

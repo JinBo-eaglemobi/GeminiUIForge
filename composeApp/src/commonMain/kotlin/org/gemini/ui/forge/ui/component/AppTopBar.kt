@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.ui.text.font.FontWeight
 
 import androidx.compose.ui.draw.drawBehind
@@ -174,7 +175,7 @@ fun AppTopBar(
                         onClick = onProjectSettingsClicked,
                         modifier = Modifier.tip("项目资源配置设置")
                     ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Project Settings", tint = MaterialTheme.colorScheme.secondary)
+                        Icon(Icons.Default.Tune, contentDescription = "Project Settings", tint = MaterialTheme.colorScheme.secondary)
                     }
                 }
                 
