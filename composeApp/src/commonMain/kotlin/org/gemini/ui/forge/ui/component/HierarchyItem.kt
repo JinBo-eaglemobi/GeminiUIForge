@@ -31,8 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
@@ -46,45 +44,54 @@ import androidx.compose.ui.input.pointer.isMetaPressed
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.graphics.Color
 
 /**
- * 递归渲染的单一图层组件
+ * 大纲图层层级树中所有节点共享的交互上下文。
+ *
+ * 聚合了本地拖拽、多选、悬停、一键展开和视口滚动信号。
+ */
+data class HierarchyInteractionContext(
+    val selectedBlockId: String?,
+    val selectedBlockIds: Set<String> = emptySet(),
+    val draggedBlockId: String?,
+    val hoveredBlockId: String?,
+    val dropPosition: DropPosition,
+    val locateTrigger: Long,
+    val expandCollapseTrigger: Pair<Long, Boolean> = 0L to true,
+    val itemBounds: MutableMap<String, androidx.compose.ui.geometry.Rect>
+)
+
+/**
+ * 递归渲染的单一图层树节点组件。
  *
  * @param block UI 模块数据
  * @param depth 当前嵌套层级（控制缩进宽度）
- * @param isSelected 自身是否被选中
- * @param isDragged 自身是否正在被拖拽（渲染时如果命中，自身会降低不透明度隐藏）
- * @param isHovered 自身是否为当前被拖拽到的目标位置节点
- * @param dropPosition 当前的目标拖拽模式（作为前节点/作为后节点/作为内部子节点）
- * @param locateTrigger 发起自动定位到被选中项的强制时间戳信号
- * @param onBlockClicked 单击事件
- * @param onBlockDoubleClicked 双击事件
- * @param onBoundsCalculated 报告自身边界的回调，用于长按和拖拽碰撞检测
- * @param selectedBlockId 全局选中的 ID（用于传递给子组件）
- * @param draggedBlockId 全局拖拽中的源 ID（用于传递给子组件）
- * @param hoveredBlockId 全局悬停目标 ID（用于传递给子组件）
- * @param onToggleVisibility 隐藏/显示功能开关
+ * @param viewModel 项目工作区全局控制器
+ * @param context 树中所有子节点共享的本地交互上下文
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HierarchyItem(
     block: UIBlock,
     depth: Int,
-    isSelected: Boolean,
-    isDragged: Boolean,
-    isHovered: Boolean,
-    dropPosition: DropPosition,
-    locateTrigger: Long,
-    expandCollapseTrigger: Pair<Long, Boolean> = 0L to true,
-    onBlockClicked: (String?, Boolean) -> Unit,
-    onBlockDoubleClicked: (String) -> Unit,
-    onBoundsCalculated: (String, Rect) -> Unit,
-    selectedBlockId: String?,
-    selectedBlockIds: Set<String> = emptySet(),
-    draggedBlockId: String?,
-    hoveredBlockId: String?,
-    onToggleVisibility: (String, Boolean) -> Unit
+    viewModel: org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel,
+    context: HierarchyInteractionContext
 ) {
+    // --- 内部化解构 Context 属性以实现声明式渲染 ---
+    val selectedBlockId = context.selectedBlockId
+    val selectedBlockIds = context.selectedBlockIds
+    val draggedBlockId = context.draggedBlockId
+    val hoveredBlockId = context.hoveredBlockId
+    val dropPosition = context.dropPosition
+    val locateTrigger = context.locateTrigger
+    val expandCollapseTrigger = context.expandCollapseTrigger
+    val itemBounds = context.itemBounds
+
+    val isSelected = block.id == selectedBlockId || selectedBlockIds.contains(block.id)
+    val isDragged = block.id == draggedBlockId
+    val isHovered = block.id == hoveredBlockId
+
     var expanded by remember { mutableStateOf(true) }
     val hasChildren = block.children.isNotEmpty()
 
@@ -116,10 +123,10 @@ fun HierarchyItem(
                 .fillMaxWidth()
                 .bringIntoViewRequester(bringIntoViewRequester)
                 // 报告自己的布局坐标给外层容器，用于碰撞检测
-                .onGloballyPositioned { coords -> onBoundsCalculated(block.id, coords.boundsInWindow()) }
+                .onGloballyPositioned { coords -> itemBounds[block.id] = coords.boundsInWindow() }
                 .drawWithContent {
                     drawContent()
-                    // 若被拖拽至该目标之上，渲染反馈指示器：上面边缘高亮，下面边缘高亮
+                    // 若被拖拽至该目标之上，渲染反馈指示器
                     if (isHovered && isDragged.not() && draggedBlockId != null) {
                         when (dropPosition) {
                             DropPosition.BEFORE -> drawLine(
@@ -140,7 +147,6 @@ fun HierarchyItem(
                         }
                     }
                 }
-                // 如果自身被拖拽中，变淡显示；如果是目标且置入内部，增加底层高亮
                 .background(
                     when {
                         isHovered && draggedBlockId != null && dropPosition == DropPosition.INSIDE -> MaterialTheme.colorScheme.secondaryContainer.copy(
@@ -163,13 +169,12 @@ fun HierarchyItem(
                     }
                 }
                 .combinedClickable(
-                    onClick = { onBlockClicked(block.id, isMultiSelectActive) },
-                    onDoubleClick = { onBlockDoubleClicked(block.id) }
+                    onClick = { viewModel.onBlockClicked(block.id, isMultiSelectActive) },
+                    onDoubleClick = { viewModel.onBlockDoubleClicked(block.id) }
                 )
                 .padding(start = (8 + depth * 16).dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 有子节点时提供展开/收起按钮
             if (hasChildren) {
                 IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(20.dp)) {
                     Icon(
@@ -181,7 +186,6 @@ fun HierarchyItem(
             } else Spacer(Modifier.width(20.dp))
             Spacer(Modifier.width(4.dp))
 
-            // 模块的特定组件图标
             Icon(
                 imageVector = block.type.getIcon(),
                 contentDescription = null,
@@ -190,14 +194,12 @@ fun HierarchyItem(
             )
             Spacer(Modifier.width(6.dp))
             Column(modifier = Modifier.weight(1f)) {
-                // 图层组件类型名称
                 Text(
                     text = stringResource(block.type.getDisplayNameRes()),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                 )
-                // 图层唯一 ID
                 Text(
                     text = block.id,
                     style = MaterialTheme.typography.labelSmall,
@@ -205,8 +207,8 @@ fun HierarchyItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             }
-            // 隐藏/显示眼睛图标
-            IconButton(onClick = { onToggleVisibility(block.id, !block.isVisible) }, modifier = Modifier.size(24.dp)) {
+            // 隐藏/显示眼睛图标，直接对 viewModel 发起行为控制
+            IconButton(onClick = { viewModel.layoutEditor.toggleBlockVisibility(block.id, !block.isVisible) }, modifier = Modifier.size(24.dp)) {
                 Icon(
                     imageVector = if (block.isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                     contentDescription = "Vis",
@@ -218,38 +220,22 @@ fun HierarchyItem(
             }
         }
 
-        // 递归子节点渲染
+        // 递归子节点渲染，极简状态透传
         if (hasChildren && expanded) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 block.children.forEach { child ->
                     HierarchyItem(
                         block = child,
                         depth = depth + 1,
-                        isSelected = child.id == selectedBlockId || selectedBlockIds.contains(child.id),
-                        isDragged = child.id == draggedBlockId,
-                        isHovered = child.id == hoveredBlockId,
-                        dropPosition = dropPosition,
-                        locateTrigger = locateTrigger,
-                        expandCollapseTrigger = expandCollapseTrigger,
-                        onBlockClicked = onBlockClicked,
-                        onBlockDoubleClicked = onBlockDoubleClicked,
-                        onBoundsCalculated = onBoundsCalculated,
-                        selectedBlockId = selectedBlockId,
-                        selectedBlockIds = selectedBlockIds,
-                        draggedBlockId = draggedBlockId,
-                        hoveredBlockId = hoveredBlockId,
-                        onToggleVisibility = onToggleVisibility
+                        viewModel = viewModel,
+                        context = context
                     )
                 }
             }
         }
     }
-
 }
 
-/**
- * 递归判断 targetId 是否为 currentBlock 的后代节点。
- */
 private fun isDescendantOfLocal(currentBlock: UIBlock, targetId: String): Boolean {
     if (currentBlock.id == targetId) return true
     return currentBlock.children.any { isDescendantOfLocal(it, targetId) }

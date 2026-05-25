@@ -301,23 +301,32 @@ fun HierarchySidebar(
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
                     blocks.forEach { block ->
                         key(block.id) {
+                            val interactionContext = remember(
+                                selectedBlockId,
+                                selectedBlockIds,
+                                draggedBlockId,
+                                hoveredBlockId,
+                                dropPosition,
+                                locateTrigger,
+                                expandCollapseTrigger,
+                                itemBounds
+                            ) {
+                                HierarchyInteractionContext(
+                                    selectedBlockId = selectedBlockId,
+                                    selectedBlockIds = selectedBlockIds,
+                                    draggedBlockId = draggedBlockId,
+                                    hoveredBlockId = hoveredBlockId,
+                                    dropPosition = dropPosition,
+                                    locateTrigger = locateTrigger,
+                                    expandCollapseTrigger = expandCollapseTrigger,
+                                    itemBounds = itemBounds
+                                )
+                            }
                             HierarchyItem(
                                 block = block,
                                 depth = 0,
-                                isSelected = block.id == selectedBlockId || selectedBlockIds.contains(block.id),
-                                isDragged = block.id == draggedBlockId,
-                                isHovered = block.id == hoveredBlockId,
-                                selectedBlockId = selectedBlockId,
-                                selectedBlockIds = selectedBlockIds,
-                                draggedBlockId = draggedBlockId,
-                                hoveredBlockId = hoveredBlockId,
-                                dropPosition = dropPosition,
-                                locateTrigger = locateTrigger,
-                                expandCollapseTrigger = expandCollapseTrigger,
-                                onBlockClicked = { id, isMulti -> viewModel.onBlockClicked(id, isMulti) },
-                                onBlockDoubleClicked = { id -> viewModel.onBlockDoubleClicked(id) },
-                                onBoundsCalculated = { id, rect -> itemBounds[id] = rect },
-                                onToggleVisibility = { id, visible -> viewModel.layoutEditor.toggleBlockVisibility(id, visible) }
+                                viewModel = viewModel,
+                                context = interactionContext
                             )
                         }
                     }
