@@ -70,6 +70,7 @@ fun ProjectWorkspaceScreen(
     var referenceAreaTargetId by remember { mutableStateOf<String?>(null) }
     var showHistoricalDialog by remember { mutableStateOf(false) }
     var historicalImages by remember { mutableStateOf<List<TemplateFile>>(emptyList()) }
+    var showImageEditorForBlock by remember { mutableStateOf<Pair<UIBlock, TemplateFile>?>(null) }
     var blockToDelete by remember { mutableStateOf<String?>(null) }
     var showProjectSettingsDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
@@ -134,8 +135,28 @@ fun ProjectWorkspaceScreen(
             isProcessing = state.isGenerating,
             isLogVisible = state.isGenerationLogVisible,
             onToggleLogVisibility = { viewModel.updateState { it.copy(isGenerationLogVisible = !it.isGenerationLogVisible) } },
-            onActionClick = { if (state.isGenerating) viewModel.assetGen.cancelGeneration() else viewModel.updateState { it.copy(showAITaskDialog = false) } },
-            onDismiss = { viewModel.updateState { it.copy(showAITaskDialog = false) } }
+            onActionClick = { 
+                if (state.isGenerating) {
+                    viewModel.assetGen.cancelGeneration() 
+                } else {
+                    viewModel.updateState { it.copy(showAITaskDialog = false) }
+                    state.selectedBlock?.id?.let { blockId ->
+                        coroutineScope.launch {
+                            historicalImages = viewModel.assetManager.loadHistoricalImages(blockId)
+                            showHistoricalDialog = true
+                        }
+                    }
+                }
+            },
+            onDismiss = { 
+                viewModel.updateState { it.copy(showAITaskDialog = false) }
+                state.selectedBlock?.id?.let { blockId ->
+                    coroutineScope.launch {
+                        historicalImages = viewModel.assetManager.loadHistoricalImages(blockId)
+                        showHistoricalDialog = true
+                    }
+                }
+            }
         )
     }
 
@@ -161,8 +182,20 @@ fun ProjectWorkspaceScreen(
         AssetSelectionDialog(
             title = "历史生成记录",
             candidates = historicalImages,
+            targetWidth = targetBlock?.bounds?.width ?: 0f,
+            targetHeight = targetBlock?.bounds?.height ?: 0f,
             onDismiss = { showHistoricalDialog = false },
-            onImageSelected = { viewModel.assetManager.onImageSelected(it); showHistoricalDialog = false },
+            onImageSelected = { selectedFile -> 
+                viewModel.assetManager.onImageSelected(selectedFile)
+                showHistoricalDialog = false 
+            },
+            onCropRequested = { selectedFile ->
+                viewModel.assetManager.onImageSelected(selectedFile)
+                showHistoricalDialog = false
+                if (targetBlock != null) {
+                    showImageEditorForBlock = targetBlock to selectedFile
+                }
+            },
             onDeleteImages = { uris -> 
                 viewModel.assetManager.deleteHistoricalImages(uris)
                 historicalImages = historicalImages.filterNot { it in uris }
@@ -343,6 +376,30 @@ fun ProjectWorkspaceScreen(
                     referenceAreaTargetId?.let { blockId ->
                         viewModel.layoutEditor.onSetReferenceArea(blockId, rect)
                     }
+                }
+            )
+        }
+
+        // 历史记录应用不合规时弹出的切图/烘焙对话框
+        if (showImageEditorForBlock != null) {
+            val (block, file) = showImageEditorForBlock!!
+            ImageEditorDialog(
+                block = block,
+                initialImageUri = file.getAbsolutePath(),
+                onDismiss = { showImageEditorForBlock = null },
+                onConfirm = { bytes, mode, config, cropBytes ->
+                    viewModel.assetManager.bakeBlockImage(
+                        block.id,
+                        mode,
+                        config,
+                        block.bounds.width.toInt(),
+                        block.bounds.height.toInt(),
+                        block.bounds.width.toInt(),
+                        block.bounds.height.toInt(),
+                        bytes,
+                        cropBytes
+                    )
+                    showImageEditorForBlock = null
                 }
             )
         }
