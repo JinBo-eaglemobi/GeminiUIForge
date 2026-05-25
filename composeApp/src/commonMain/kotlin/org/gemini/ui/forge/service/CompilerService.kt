@@ -10,6 +10,9 @@ import org.gemini.ui.forge.model.ui.UIPage
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
+import org.gemini.ui.forge.model.ui.ResourceItem
+import org.gemini.ui.forge.utils.ResourceBindingValidator
+import org.gemini.ui.forge.utils.looseJson
 
 @Serializable
 data class ExportedNode(
@@ -54,9 +57,41 @@ class CompilerService(private val fileStorage: LocalFileStorage) {
         projectName: String,
         projectState: ProjectState,
         rootDir: String,
-        outputDir: String
+        outputDir: String,
+        resourceConfigPath: String? = null
     ): Boolean {
         return try {
+            // 1. 如果配置了资源绑定路径，先加载并校验全量资源的有效性
+            val configPath = resourceConfigPath
+            if (!configPath.isNullOrBlank()) {
+                val configBytes = org.gemini.ui.forge.data.readBytesInternal(configPath)
+                if (configBytes == null) {
+                    AppLogger.e("Compiler", "导出失败：未能读取资源绑定配置文件 $configPath")
+                    return false
+                }
+                val configContent = configBytes.decodeToString()
+                val configData = try {
+                    val parsed = looseJson.decodeFromString<Map<String, Map<String, ResourceItem>>>(configContent)
+                    parsed.mapValues { it.value.values.toList() }
+                } catch (e: Exception) {
+                    AppLogger.e("Compiler", "导出失败：解析资源绑定配置文件异常", e)
+                    return false
+                }
+
+                // 执行失效分析弱校验
+                val invalidReports = ResourceBindingValidator.validateProjectBindings(projectState, configData)
+                if (invalidReports.isNotEmpty()) {
+                    AppLogger.e("Compiler", "【导出拦截】导出失败：检测到 [${invalidReports.size}] 处模块的资源绑定已失效。必须在属性面板中修正或清除所有警告才可以进行导出！")
+                    invalidReports.forEach { report ->
+                        AppLogger.e(
+                            "Compiler",
+                            "-> 失效详情：页面ID [${report.pageId}] (${report.pageName}) | 模块ID [${report.blockId}] (${report.blockName}) | 断链层级 [${report.invalidIndex}] (找不到 Key: \"${report.invalidKey}\") | 完整绑定路径: ${report.fullPath.joinToString(" -> ")}"
+                        )
+                    }
+                    return false
+                }
+            }
+
             val normalizedRoot = rootDir.replace("\\", "/").removeSuffix("/")
             val normalizedOutput = outputDir.replace("\\", "/").removePrefix("/").removeSuffix("/")
             

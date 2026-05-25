@@ -13,16 +13,16 @@ import org.gemini.ui.forge.data.readBytesInternal
 import org.gemini.ui.forge.model.ui.ResourceItem
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.utils.rememberFilePicker
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.utils.looseJson
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
 
-@OptIn(ExperimentalSerializationApi::class)
-private val looseJson = Json {
-    ignoreUnknownKeys = true
-    coerceInputValues = true
-    allowTrailingComma = true
-}
 
 /**
  * 项目设置弹窗，目前主要用于配置并验证导出资源的命名规范 JSON 配置表。
@@ -66,6 +66,16 @@ fun ProjectSettingsDialog(
             )
         },
         text = {
+            val filePicker = rememberFilePicker(
+                title = "选择资源命名规范 JSON 配置文件",
+                extensions = listOf("json")
+            ) { selectedPath ->
+                if (selectedPath != null) {
+                    pathInput = selectedPath
+                    errorMessage = null
+                }
+            }
+
             Column(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -86,7 +96,19 @@ fun ProjectSettingsDialog(
                     modifier = Modifier.fillMaxWidth(),
                     shape = AppShapes.medium,
                     singleLine = true,
-                    isError = errorMessage != null
+                    isError = errorMessage != null,
+                    trailingIcon = {
+                        IconButton(
+                            onClick = filePicker,
+                            modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = "选择配置文件",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 )
 
                 if (errorMessage != null) {
@@ -126,7 +148,7 @@ fun ProjectSettingsDialog(
                             }
                             val content = bytes.decodeToString()
                             // 校验 JSON 格式（使用支持尾部逗号的宽容解析器）
-                            looseJson.decodeFromString<Map<String, List<ResourceItem>>>(content)
+                            looseJson.decodeFromString<Map<String, Map<String, ResourceItem>>>(content)
                             
                             // 校验通过
                             onConfirm(pathInput)

@@ -8,11 +8,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.model.app.CompileConfig
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.utils.rememberDirectoryPicker
 import org.gemini.ui.forge.utils.rememberFilePicker
 import org.jetbrains.compose.resources.stringResource
 
@@ -31,13 +32,13 @@ fun CompileConfigDialog(
     var scriptPath by remember { mutableStateOf(initialConfig.scriptPath) }
     var outputDir by remember { mutableStateOf(initialConfig.outputDir) }
 
-    val pickRootDir = rememberDirectoryPicker(stringResource(Res.string.compile_pick_dir)) {
+    val pickRootDir = rememberFilePicker(stringResource(Res.string.compile_pick_dir), isFolder = true) {
         if (it != null) rootDir = it
     }
-    val pickEnvDir = rememberDirectoryPicker(stringResource(Res.string.compile_pick_dir)) {
+    val pickEnvDir = rememberFilePicker(stringResource(Res.string.compile_pick_dir), isFolder = true) {
         if (it != null) envDir = it
     }
-    val pickScript = rememberFilePicker(stringResource(Res.string.compile_pick_file), listOf("js")) {
+    val pickScript = rememberFilePicker(stringResource(Res.string.compile_pick_file), isFolder = false, extensions = listOf("js")) {
         if (it != null) scriptPath = it
     }
 
@@ -54,7 +55,10 @@ fun CompileConfigDialog(
                     modifier = Modifier.fillMaxWidth(),
                     shape = AppShapes.medium,
                     trailingIcon = {
-                        IconButton(onClick = pickRootDir) {
+                        IconButton(
+                            onClick = pickRootDir,
+                            modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                        ) {
                             Icon(Icons.Default.FolderOpen, contentDescription = null)
                         }
                     }
@@ -68,7 +72,10 @@ fun CompileConfigDialog(
                     modifier = Modifier.fillMaxWidth(),
                     shape = AppShapes.medium,
                     trailingIcon = {
-                        IconButton(onClick = pickEnvDir) {
+                        IconButton(
+                            onClick = pickEnvDir,
+                            modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                        ) {
                             Icon(Icons.Default.FolderOpen, contentDescription = null)
                         }
                     }
@@ -82,7 +89,10 @@ fun CompileConfigDialog(
                     modifier = Modifier.fillMaxWidth(),
                     shape = AppShapes.medium,
                     trailingIcon = {
-                        IconButton(onClick = pickScript) {
+                        IconButton(
+                            onClick = pickScript,
+                            modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                        ) {
                             Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null)
                         }
                     }

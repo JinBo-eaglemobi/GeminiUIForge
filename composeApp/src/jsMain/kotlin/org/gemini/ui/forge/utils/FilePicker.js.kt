@@ -53,60 +53,55 @@ actual fun TemplateFile.rememberImagePicker(onResult: (List<String>) -> Unit): (
 }
 
 @Composable
-actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): () -> Unit {
-    // Directory picking in browser via <input webkitdirectory>
+actual fun rememberFilePicker(
+    title: String,
+    isFolder: Boolean,
+    extensions: List<String>,
+    onResult: (String?) -> Unit
+): () -> Unit {
     return {
         val input = document.createElement("input") as HTMLInputElement
         input.type = "file"
-        input.setAttribute("webkitdirectory", "true")
-        
-        input.onchange = {
-            val files = input.files
-            if (files != null && files.length > 0) {
-                // Just return a dummy path or the first file's webkitRelativePath
-                val path = files.item(0)?.asDynamic()?.webkitRelativePath?.toString()?.substringBefore("/")
-                onResult(path)
-            } else {
-                onResult(null)
-            }
-            null
-        }
-        input.click()
-    }
-}
-
-@Composable
-actual fun rememberFilePicker(title: String, extensions: List<String>, onResult: (String?) -> Unit): () -> Unit {
-    return {
-        val input = document.createElement("input") as HTMLInputElement
-        input.type = "file"
-        if (extensions.isNotEmpty()) {
-            input.accept = extensions.joinToString(",") { 
-                when (it) {
-                    "js" -> "application/javascript"
-                    "json" -> "application/json"
-                    else -> ".$it"
+        if (isFolder) {
+            input.setAttribute("webkitdirectory", "true")
+            input.onchange = {
+                val files = input.files
+                if (files != null && files.length > 0) {
+                    val path = files.item(0)?.asDynamic()?.webkitRelativePath?.toString()?.substringBefore("/")
+                    onResult(path)
+                } else {
+                    onResult(null)
                 }
+                null
             }
-        }
-        
-        input.onchange = {
-            val files = input.files
-            if (files != null && files.length > 0) {
-                MainScope().launch {
-                    val file = files.item(0)
-                    if (file != null) {
-                        val bytes = readFileAsByteArray(file)
-                        val storage = LocalFileStorage()
-                        val opfsPath = "imports/${file.name}"
-                        storage.saveBytesToFile(opfsPath, bytes)
-                        onResult(opfsPath)
+        } else {
+            if (extensions.isNotEmpty()) {
+                input.accept = extensions.joinToString(",") { 
+                    when (it) {
+                        "js" -> "application/javascript"
+                        "json" -> "application/json"
+                        else -> ".$it"
                     }
                 }
-            } else {
-                onResult(null)
             }
-            null
+            input.onchange = {
+                val files = input.files
+                if (files != null && files.length > 0) {
+                    MainScope().launch {
+                        val file = files.item(0)
+                        if (file != null) {
+                            val bytes = readFileAsByteArray(file)
+                            val storage = LocalFileStorage()
+                            val opfsPath = "imports/${file.name}"
+                            storage.saveBytesToFile(opfsPath, bytes)
+                            onResult(opfsPath)
+                        }
+                    }
+                } else {
+                    onResult(null)
+                }
+                null
+            }
         }
         input.click()
     }

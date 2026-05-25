@@ -17,7 +17,9 @@ import org.gemini.ui.forge.model.app.LayoutMode
 import org.gemini.ui.forge.model.app.ThemeMode
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.utils.rememberDirectoryPicker
+import org.gemini.ui.forge.utils.rememberFilePicker
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
 import org.jetbrains.skiko.KotlinBackend
@@ -202,7 +204,7 @@ fun GeneralSettings(
     // Storage
     if (getPlatform().name != "Web with Kotlin/JS") {
         var pathInput by remember { mutableStateOf(currentStorageDir) }
-        val dirPicker = rememberDirectoryPicker(stringResource(Res.string.settings_storage_dir_title)) { path ->
+        val dirPicker = rememberFilePicker(stringResource(Res.string.settings_storage_dir_title), isFolder = true) { path ->
             if (path != null) {
                 pathInput = path; onStorageDirSaved(path)
             }
@@ -212,7 +214,14 @@ fun GeneralSettings(
             onValueChange = { pathInput = it; onStorageDirSaved(it) },
             label = { Text(stringResource(Res.string.settings_storage_dir_title)) },
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            trailingIcon = { IconButton(onClick = { dirPicker() }) { Icon(Icons.Default.Folder, null) } },
+            trailingIcon = { 
+                IconButton(
+                    onClick = { dirPicker() },
+                    modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                ) { 
+                    Icon(Icons.Default.Folder, null) 
+                } 
+            },
             shape = AppShapes.medium
         )
     }

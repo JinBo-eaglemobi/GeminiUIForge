@@ -20,12 +20,20 @@ actual fun rememberImagePicker(onResult: (List<String>) -> Unit): () -> Unit {
 }
 
 @Composable
-actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): () -> Unit {
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
-        // Note: Android SAF URIs don't convert directly to standard java.io.File paths without ContentResolver
-        // Since LocalFileStorage uses java.io.File, changing dir this way is complex on Android.
-        // We will pass the URI string back, but it likely won't work perfectly for java.io.File.
-        // Usually on Android we fallback to returning null or we can try.
+actual fun rememberFilePicker(
+    title: String,
+    isFolder: Boolean,
+    extensions: List<String>,
+    onResult: (String?) -> Unit
+): () -> Unit {
+    val dirLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+        if (uri != null) {
+            onResult(uri.toString())
+        } else {
+            onResult(null)
+        }
+    }
+    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
             onResult(uri.toString())
         } else {
@@ -33,29 +41,18 @@ actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): 
         }
     }
     return {
-        launcher.launch(null)
-    }
-}
-
-@Composable
-actual fun rememberFilePicker(title: String, extensions: List<String>, onResult: (String?) -> Unit): () -> Unit {
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            onResult(uri.toString())
+        if (isFolder) {
+            dirLauncher.launch(null)
         } else {
-            onResult(null)
+            val mimeType = if (extensions.isNotEmpty()) {
+                when (extensions.first()) {
+                    "js" -> "application/javascript"
+                    "json" -> "application/json"
+                    else -> "*/*"
+                }
+            } else "*/*"
+            fileLauncher.launch(mimeType)
         }
-    }
-    return {
-        val mimeType = if (extensions.isNotEmpty()) {
-            // 简化 MIME 类型映射
-            when (extensions.first()) {
-                "js" -> "application/javascript"
-                "json" -> "application/json"
-                else -> "*/*"
-            }
-        } else "*/*"
-        launcher.launch(mimeType)
     }
 }
 

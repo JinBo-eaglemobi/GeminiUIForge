@@ -22,16 +22,33 @@ private fun ensureSystemLaf() {
 }
 
 private var preWarmedChooser: JFileChooser? = null
-private fun getWarmChooser(title: String): JFileChooser {
+private fun getWarmChooser(title: String, isFolder: Boolean, extensions: List<String>): JFileChooser {
     ensureSystemLaf()
     if (preWarmedChooser == null) {
-        preWarmedChooser = JFileChooser().apply {
-            fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-        }
+        preWarmedChooser = JFileChooser()
     }
-    // 每次弹出时应用新的标题（实现多语言实时切换）
-    preWarmedChooser!!.dialogTitle = title
-    return preWarmedChooser!!
+    val chooser = preWarmedChooser!!
+    chooser.dialogTitle = title
+    chooser.fileSelectionMode = if (isFolder) JFileChooser.DIRECTORIES_ONLY else JFileChooser.FILES_ONLY
+    
+    // 清除旧的文件过滤器
+    val oldFilters = chooser.choosableFileFilters
+    for (f in oldFilters) {
+        chooser.removeChoosableFileFilter(f)
+    }
+    
+    if (!isFolder && extensions.isNotEmpty()) {
+        val filter = javax.swing.filechooser.FileNameExtensionFilter(
+            extensions.joinToString(", ") { "*.$it" },
+            *extensions.toTypedArray()
+        )
+        chooser.fileFilter = filter
+        chooser.isAcceptAllFileFilterUsed = false
+    } else {
+        chooser.fileFilter = null
+        chooser.isAcceptAllFileFilterUsed = true
+    }
+    return chooser
 }
 
 @Composable
@@ -73,17 +90,22 @@ actual fun TemplateFile.rememberImagePicker(onResult: (List<String>) -> Unit): (
 }
 
 @Composable
-actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): () -> Unit {
+actual fun rememberFilePicker(
+    title: String,
+    isFolder: Boolean,
+    extensions: List<String>,
+    onResult: (String?) -> Unit
+): () -> Unit {
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            getWarmChooser(title)
+            getWarmChooser(title, isFolder, extensions)
         }
     }
 
     return {
         Thread {
             val activeWindow = java.awt.Window.getWindows().firstOrNull { it.isActive }
-            val chooser = getWarmChooser(title)
+            val chooser = getWarmChooser(title, isFolder, extensions)
             val dialog = object : javax.swing.JDialog(activeWindow as? Frame, title, true) {}
             dialog.isAlwaysOnTop = true
             dialog.layout = java.awt.BorderLayout()
@@ -159,27 +181,3 @@ actual fun rememberDirectoryPicker(title: String, onResult: (String?) -> Unit): 
     }
 }
 
-@Composable
-actual fun rememberFilePicker(title: String, extensions: List<String>, onResult: (String?) -> Unit): () -> Unit {
-    return {
-        Thread {
-            val activeWindow = java.awt.Window.getWindows().firstOrNull { it.isActive }
-            val dialog = FileDialog(activeWindow as? Frame, title, FileDialog.LOAD)
-            dialog.isAlwaysOnTop = true
-            if (extensions.isNotEmpty()) {
-                // 为 AWT FileDialog 简化处理扩展名过滤
-                dialog.file = extensions.joinToString(";") { "*.$it" }
-            }
-            dialog.isVisible = true
-            val file = if (dialog.file != null) {
-                val dir = dialog.directory
-                val fileName = dialog.file
-                if (dir != null && fileName != null) {
-                    java.io.File(dir, fileName).absolutePath
-                } else null
-            } else null
-            onResult(file)
-            dialog.dispose()
-        }.start()
-    }
-}

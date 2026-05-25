@@ -16,6 +16,7 @@ import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.feature.workspace.BlockSpecificProperties
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.utils.looseJson
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
@@ -23,16 +24,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.input.KeyboardType
 import org.gemini.ui.forge.ui.feature.workspace.CollapsibleSection
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.json.Json
-
-@OptIn(ExperimentalSerializationApi::class)
-private val looseJson = Json {
-    ignoreUnknownKeys = true
-    coerceInputValues = true
-    allowTrailingComma = true
-}
-
 /**
  * 渲染布局编辑相关的属性内容。
  * 包含页面设置、批量生成入口、模块物理坐标、ID、类型切换及删除操作。
@@ -64,7 +55,8 @@ fun LayoutPropertyContent(
                 val bytes = org.gemini.ui.forge.data.readBytesInternal(path)
                 if (bytes != null) {
                     val content = bytes.decodeToString()
-                    configData = looseJson.decodeFromString<Map<String, List<ResourceItem>>>(content)
+                    val parsed = looseJson.decodeFromString<Map<String, Map<String, ResourceItem>>>(content)
+                    configData = parsed.mapValues { it.value.values.toList() }
                     configError = null
                 } else {
                     configData = null
@@ -223,8 +215,22 @@ fun LayoutPropertyContent(
                         val bindingPath = selectedBlock.resourceBindingPath
                         val hasBinding = bindingPath.isNotEmpty()
                         
+                        val firstInvalidInfo = remember(bindingPath, currentConfig) {
+                            org.gemini.ui.forge.utils.ResourceBindingValidator.findFirstInvalidKey(bindingPath, currentConfig)
+                        }
+                        val isBindingInvalid = hasBinding && firstInvalidInfo != null
+
+                        LaunchedEffect(isBindingInvalid, firstInvalidInfo, bindingPath) {
+                            if (isBindingInvalid && firstInvalidInfo != null) {
+                                org.gemini.ui.forge.utils.AppLogger.w(
+                                    "ResourceBinding",
+                                    "检测到模块 (ID: ${selectedBlock.id}) 的资源绑定失效：未能在最新 JSON 配置中定位到层级[${firstInvalidInfo.first}]的Key[\"${firstInvalidInfo.second}\"]。当前完整路径为：${bindingPath.joinToString(" -> ")}"
+                                )
+                            }
+                        }
+
                         val lastDescription = remember(bindingPath, currentConfig) {
-                            if (hasBinding) {
+                            if (hasBinding && !isBindingInvalid) {
                                 if (bindingPath.size >= 2) {
                                     val groupKey = bindingPath[0]
                                     val itemKey = bindingPath[1]
@@ -242,7 +248,7 @@ fun LayoutPropertyContent(
                             Text(
                                 text = stringResource(Res.string.res_binding_title),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
+                                color = if (isBindingInvalid) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                             )
                             
                             OutlinedButton(
@@ -252,11 +258,17 @@ fun LayoutPropertyContent(
                                     .tip(lastDescription ?: stringResource(Res.string.res_binding_btn_tip_placeholder)),
                                 shape = AppShapes.medium,
                                 colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = if (hasBinding) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    contentColor = if (isBindingInvalid) {
+                                        MaterialTheme.colorScheme.error
+                                    } else if (hasBinding) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
                                 )
                             ) {
                                 Icon(
-                                    imageVector = if (hasBinding) Icons.Default.Link else Icons.Default.LinkOff,
+                                    imageVector = if (isBindingInvalid) Icons.Default.Warning else if (hasBinding) Icons.Default.Link else Icons.Default.LinkOff,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -266,6 +278,15 @@ fun LayoutPropertyContent(
                                            else stringResource(Res.string.res_binding_btn_label),
                                     style = MaterialTheme.typography.bodySmall,
                                     maxLines = 1
+                                )
+                            }
+
+                            if (isBindingInvalid && firstInvalidInfo != null) {
+                                Text(
+                                    text = "⚠️ 绑定资源失效 (找不到: \"${firstInvalidInfo.second}\")",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(top = 2.dp)
                                 )
                             }
                         }

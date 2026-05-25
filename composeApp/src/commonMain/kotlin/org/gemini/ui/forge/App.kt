@@ -227,12 +227,14 @@ fun App(typography: Typography? = null) {
                                 
                                 // 执行编译导出逻辑
                                 coroutineScope.launch {
+                                    val wsConfig = templateRepo.loadWorkspaceConfig(appState.projectName)
                                     val compilerService = org.gemini.ui.forge.service.CompilerService(storage)
                                     val success = compilerService.compileProject(
                                         projectName = appState.projectName,
                                         projectState = appState.project,
                                         rootDir = config.rootDir,
-                                        outputDir = config.outputDir
+                                        outputDir = config.outputDir,
+                                        resourceConfigPath = wsConfig?.resourceConfigPath
                                     )
                                     if (success) {
                                         Toast.show("编译导出成功", ToastType.SUCCESS)

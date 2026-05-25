@@ -20,15 +20,11 @@ import kotlinx.serialization.json.*
 import org.gemini.ui.forge.model.ui.ResourceItem
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.utils.looseJson
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
 
-@OptIn(ExperimentalSerializationApi::class)
-private val looseJson = Json {
-    ignoreUnknownKeys = true
-    coerceInputValues = true
-    allowTrailingComma = true
-}
+
 
 /**
  * 层级资源绑定设置弹窗。
