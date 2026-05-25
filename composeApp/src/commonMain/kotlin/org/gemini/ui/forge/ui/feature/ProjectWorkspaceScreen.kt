@@ -255,17 +255,8 @@ fun ProjectWorkspaceScreen(
             // [左] 图层树面板
             Surface(Modifier.weight(leftWeight).fillMaxHeight(), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
                 HierarchySidebar(
-                    blocks = state.currentPage?.blocks ?: emptyList(),
-                    selectedBlockId = state.selectedBlockId,
-                    selectedBlockIds = state.selectedBlockIds,
-                    onBlockClicked = { id, isMulti -> viewModel.onBlockClicked(id, isMulti) },
-                    onBlockDoubleClicked = { viewModel.onBlockDoubleClicked(it) },
-                    onMoveBlock = { src, target, pos -> viewModel.layoutEditor.moveBlock(src, target, pos) },
-                    onToggleVisibility = { id, visible -> viewModel.layoutEditor.toggleBlockVisibility(id, visible) },
-                    onToggleAllVisibility = { visible -> viewModel.layoutEditor.toggleAllBlocksVisibility(visible) },
-                    onAddCustomBlock = { _, type, _, _ -> viewModel.layoutEditor.addBlock(type) },
-                    onRenameBlock = { old, new -> viewModel.layoutEditor.renameBlock(old, new) },
-                    renameRequestEvent = viewModel.requestRenameEvent
+                    state = state,
+                    viewModel = viewModel
                 )
             }
 

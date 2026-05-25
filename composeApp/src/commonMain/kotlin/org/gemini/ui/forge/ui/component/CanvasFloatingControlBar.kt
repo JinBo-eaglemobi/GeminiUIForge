@@ -13,6 +13,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.app.ReferenceDisplayMode
+import org.gemini.ui.forge.state.ProjectWorkspaceState
+import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import kotlin.math.roundToInt
 
 /**
@@ -28,16 +30,9 @@ import kotlin.math.roundToInt
  * @param zoom 当前画布的缩放比例（1.0 代表 100%）。
  * @param updateZoom 触发缩放更新的回调，接收新的缩放值和缩放的中心坐标 (Centroid)。
  * @param onResetZoom 触发复位操作的回调，将画布恢复初始状态。
- * @param isVisualMode 当前是否处于“视觉模式”（即隐藏占位线框，仅展示图像）。
- * @param onToggleVisualMode 触发视觉模式切换的回调。
- * @param isHideOutlines 当前是否处于“隐藏描边模式”。
- * @param onToggleHideOutlines 触发隐藏描边模式切换的回调。
- * @param referenceUri 参考图的资源路径或 Base64 字符串。若为 null，则不显示参考图控制选项。
- * @param internalReferenceMode 当前参考图的显示模式（HIDDEN: 隐藏, SPLIT: 分屏, OVERLAY: 叠加）。
- * @param onReferenceModeChange 改变参考图显示模式的回调。
- * @param internalReferenceOpacity 叠加模式下参考图的不透明度（0.0 到 1.0）。
- * @param onReferenceOpacityChange 改变参考图不透明度的回调（仅在 OVERLAY 模式下显示调节滑块）。
  * @param centerOffset 当前视口的中心点坐标，用于基于屏幕中心进行缩放。
+ * @param state 项目工作区状态
+ * @param viewModel 项目工作区视图模型
  * @param modifier 修饰符。
  */
 @Composable
@@ -45,18 +40,13 @@ fun CanvasFloatingControlBar(
     zoom: Float,
     updateZoom: (Float, Offset) -> Unit,
     onResetZoom: () -> Unit,
-    isVisualMode: Boolean,
-    onToggleVisualMode: () -> Unit,
-    isHideOutlines: Boolean = false,
-    onToggleHideOutlines: () -> Unit = {},
-    referenceUri: String?,
-    internalReferenceMode: ReferenceDisplayMode,
-    onReferenceModeChange: (ReferenceDisplayMode) -> Unit,
-    internalReferenceOpacity: Float,
-    onReferenceOpacityChange: (Float) -> Unit,
     centerOffset: Offset,
+    state: ProjectWorkspaceState,
+    viewModel: ProjectWorkspaceViewModel,
     modifier: Modifier = Modifier
 ) {
+    val referenceUri = state.referenceImageUri?.getAbsolutePath()
+
     // 浮动面板的外层容器设置，包含圆角、背景色、边框和阴影，确保在画布上清晰可见
     Surface(
         modifier = modifier.padding(top = 12.dp),
@@ -121,16 +111,16 @@ fun CanvasFloatingControlBar(
             // 3. 视觉模式切换区 (Visual Mode Toggle)
             // ==========================================
             IconToggleButton(
-                checked = isVisualMode,
-                onCheckedChange = { onToggleVisualMode() },
+                checked = state.isVisualMode,
+                onCheckedChange = { viewModel.toggleVisualMode() },
                 modifier = Modifier.size(28.dp).tip("切换视觉/线框模式")
             ) {
                 Icon(
-                    imageVector = if (isVisualMode) Icons.Default.AutoFixNormal else Icons.Default.AutoFixOff,
+                    imageVector = if (state.isVisualMode) Icons.Default.AutoFixNormal else Icons.Default.AutoFixOff,
                     contentDescription = "视觉模式",
                     modifier = Modifier.size(18.dp),
                     // 开启时高亮显示
-                    tint = if (isVisualMode) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                    tint = if (state.isVisualMode) MaterialTheme.colorScheme.primary else LocalContentColor.current
                 )
             }
 
@@ -138,15 +128,15 @@ fun CanvasFloatingControlBar(
             // 4. 隐藏描边切换区 (Hide Outlines Toggle)
             // ==========================================
             IconToggleButton(
-                checked = isHideOutlines,
-                onCheckedChange = { onToggleHideOutlines() },
+                checked = state.isHideOutlines,
+                onCheckedChange = { viewModel.toggleHideOutlines() },
                 modifier = Modifier.size(28.dp).tip("显示/隐藏模块边框")
             ) {
                 Icon(
-                    imageVector = if (isHideOutlines) Icons.Default.GridOff else Icons.Default.GridOn,
+                    imageVector = if (state.isHideOutlines) Icons.Default.GridOff else Icons.Default.GridOn,
                     contentDescription = "隐藏描边",
                     modifier = Modifier.size(18.dp),
-                    tint = if (isHideOutlines) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                    tint = if (state.isHideOutlines) MaterialTheme.colorScheme.primary else LocalContentColor.current
                 )
             }
 
@@ -158,12 +148,12 @@ fun CanvasFloatingControlBar(
                 VerticalDivider(modifier = Modifier.height(16.dp))
 
                 // 参考图全局开关：判断当前是否是非隐藏状态
-                val isRefEnabled = internalReferenceMode != ReferenceDisplayMode.HIDDEN
+                val isRefEnabled = state.referenceMode != ReferenceDisplayMode.HIDDEN
                 IconToggleButton(
                     checked = isRefEnabled,
                     onCheckedChange = {
                         // 开启时默认进入分屏模式，关闭时设为隐藏
-                        onReferenceModeChange(if (it) ReferenceDisplayMode.SPLIT else ReferenceDisplayMode.HIDDEN)
+                        viewModel.updateReferenceMode(if (it) ReferenceDisplayMode.SPLIT else ReferenceDisplayMode.HIDDEN)
                     },
                     modifier = Modifier.size(28.dp).tip("显示/隐藏参考图")
                 ) {
@@ -181,38 +171,38 @@ fun CanvasFloatingControlBar(
 
                     // 分屏模式按钮 (SPLIT)
                     IconToggleButton(
-                        checked = internalReferenceMode == ReferenceDisplayMode.SPLIT,
-                        onCheckedChange = { onReferenceModeChange(ReferenceDisplayMode.SPLIT) },
+                        checked = state.referenceMode == ReferenceDisplayMode.SPLIT,
+                        onCheckedChange = { viewModel.updateReferenceMode(ReferenceDisplayMode.SPLIT) },
                         modifier = Modifier.size(28.dp).tip("分屏对比模式")
                     ) {
                         Icon(
                             imageVector = Icons.Default.VerticalSplit,
                             contentDescription = "分屏模式",
                             modifier = Modifier.size(18.dp),
-                            tint = if (internalReferenceMode == ReferenceDisplayMode.SPLIT) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                            tint = if (state.referenceMode == ReferenceDisplayMode.SPLIT) MaterialTheme.colorScheme.primary else LocalContentColor.current
                         )
                     }
 
                     // 叠加模式按钮 (OVERLAY)
                     IconToggleButton(
-                        checked = internalReferenceMode == ReferenceDisplayMode.OVERLAY,
-                        onCheckedChange = { onReferenceModeChange(ReferenceDisplayMode.OVERLAY) },
+                        checked = state.referenceMode == ReferenceDisplayMode.OVERLAY,
+                        onCheckedChange = { viewModel.updateReferenceMode(ReferenceDisplayMode.OVERLAY) },
                         modifier = Modifier.size(28.dp).tip("半透明叠加模式")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Layers,
                             contentDescription = "叠加模式",
                             modifier = Modifier.size(18.dp),
-                            tint = if (internalReferenceMode == ReferenceDisplayMode.OVERLAY) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                            tint = if (state.referenceMode == ReferenceDisplayMode.OVERLAY) MaterialTheme.colorScheme.primary else LocalContentColor.current
                         )
                     }
 
                     // 当处于叠加模式时，展示透明度调节滑块
-                    if (internalReferenceMode == ReferenceDisplayMode.OVERLAY) {
+                    if (state.referenceMode == ReferenceDisplayMode.OVERLAY) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Slider(
-                            value = internalReferenceOpacity,
-                            onValueChange = onReferenceOpacityChange,
+                            value = state.referenceOpacity,
+                            onValueChange = { viewModel.updateReferenceOpacity(it) },
                             modifier = Modifier.width(100.dp).height(24.dp).tip("调节参考图透明度"),
                             // 透明度限制在 10% 到 100% 之间
                             valueRange = 0.1f..1f

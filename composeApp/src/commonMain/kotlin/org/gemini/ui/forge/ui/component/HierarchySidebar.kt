@@ -29,50 +29,37 @@ import geminiuiforge.composeapp.generated.resources.*
 import kotlin.math.roundToInt
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.utils.findBlockById
-import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.ui.dialog.AddLayerDialog
 import org.gemini.ui.forge.ui.dialog.RenameLayerDialog
 import kotlin.time.Duration.Companion.milliseconds
+import org.gemini.ui.forge.state.ProjectWorkspaceState
+import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 
 /**
  * UI 图层层级面板组件
  * 负责渲染应用模块的层级结构（类似 Photoshop / Figma 的图层面板）。
  * 支持选中、重命名、隐藏/显示控制，以及长按拖拽调整图层层级（排序及父子嵌套关系）。
  *
- * @param blocks UI 模块数据列表（树形结构）
- * @param selectedBlockId 当前全局被选中的模块 ID
- * @param onBlockClicked 单击选中图层的回调
- * @param onBlockDoubleClicked 双击图层的回调（通常用于触发进入隔离编辑模式）
- * @param onMoveBlock 拖拽移动图层结束时的回调，参数：源图层ID, 目标图层ID(可为空代表移至顶层), 拖拽释放位置(Before/After/Inside)
- * @param onAddCustomBlock 顶部工具栏添加新图层的回调
- * @param onRenameBlock 触发图层重命名的回调
- * @param onToggleVisibility 切换单个图层显示/隐藏状态的回调
- * @param onToggleAllVisibility 批量切换所有图层显示/隐藏状态的回调
+ * @param state 项目工作区状态
+ * @param viewModel 项目工作区视图模型
  * @param modifier 外部修饰符
- * @param isReadOnly 是否为只读模式（如果是，将禁用拖拽、重命名、添加等操作）
  */
 @Composable
 fun HierarchySidebar(
-    blocks: List<UIBlock>,
-    selectedBlockId: String?,
-    selectedBlockIds: Set<String> = emptySet(),
-    onBlockClicked: (String?, Boolean) -> Unit,
-    onBlockDoubleClicked: (String) -> Unit = {},
-    onMoveBlock: (String, String?, DropPosition) -> Unit = { _, _, _ -> },
-    onAddCustomBlock: (String, UIBlockType, Float, Float) -> Unit = { _, _, _, _ -> },
-    onRenameBlock: (String, String) -> Unit = { _, _ -> },
-    onToggleVisibility: (String, Boolean) -> Unit = { _, _ -> },
-    onToggleAllVisibility: (Boolean) -> Unit = {},
-    renameRequestEvent: SharedFlow<Unit> = MutableSharedFlow(),
-    modifier: Modifier = Modifier,
-    isReadOnly: Boolean = false
+    state: ProjectWorkspaceState,
+    viewModel: ProjectWorkspaceViewModel,
+    modifier: Modifier = Modifier
 ) {
+    val blocks = state.currentPage?.blocks ?: emptyList()
+    val selectedBlockId = state.selectedBlockId
+    val selectedBlockIds = state.selectedBlockIds
+    val isReadOnly = false
+    val renameRequestEvent = viewModel.requestRenameEvent
+
     // ---- 拖拽与高亮状态 ----
     var draggedBlockId by remember { mutableStateOf<String?>(null) } // 当前正在拖拽的源图层 ID
     var hoveredBlockId by remember { mutableStateOf<String?>(null) } // 当前被拖拽到的目标上方图层 ID
@@ -115,7 +102,7 @@ fun HierarchySidebar(
         AddLayerDialog(
             onDismiss = { showAddDialog = false },
             onConfirm = { id, type, w, h ->
-                onAddCustomBlock(id, type, w, h)
+                viewModel.layoutEditor.addBlock(type)
                 showAddDialog = false
             }
         )
@@ -126,7 +113,7 @@ fun HierarchySidebar(
             initialId = selectedBlockId,
             onDismiss = { showRenameDialog = null },
             onConfirm = { newId ->
-                onRenameBlock(selectedBlockId, newId)
+                viewModel.layoutEditor.renameBlock(selectedBlockId, newId)
                 showRenameDialog = null
             }
         )
@@ -137,79 +124,79 @@ fun HierarchySidebar(
     Box(modifier = modifier.fillMaxHeight()) {
         Column(
             modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .onGloballyPositioned { listCoordinates = it }
-            .pointerInput(blocks, isReadOnly) {
-                if (isReadOnly) return@pointerInput
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val windowOffset = listCoordinates?.localToWindow(down.position) ?: down.position
-                    val allIds = mutableSetOf<String>()
-                    fun walk(l: List<UIBlock>) {
-                        l.forEach { walk(it.children); allIds.add(it.id) }
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .onGloballyPositioned { listCoordinates = it }
+                .pointerInput(blocks, isReadOnly) {
+                    if (isReadOnly) return@pointerInput
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val windowOffset = listCoordinates?.localToWindow(down.position) ?: down.position
+                        val allIds = mutableSetOf<String>()
+                        fun walk(l: List<UIBlock>) {
+                            l.forEach { walk(it.children); allIds.add(it.id) }
+                        }
+                        walk(blocks)
+                        val hit = itemBounds.entries.toList().asReversed()
+                            .filter { it.key in allIds }
+                            .find { it.value.contains(windowOffset) }
+                        pressedBlockId = hit?.key
                     }
-                    walk(blocks)
-                    val hit = itemBounds.entries.toList().asReversed()
-                        .filter { it.key in allIds }
-                        .find { it.value.contains(windowOffset) }
-                    pressedBlockId = hit?.key
                 }
-            }
-            .pointerInput(blocks, isReadOnly) {
-                if (isReadOnly) return@pointerInput
-                detectDragGesturesAfterLongPress(
-                    onDragStart = { offset ->
-                        val sourceId = pressedBlockId
-                        if (sourceId != null) {
-                            draggedBlockId = sourceId
-                            val blockObj = blocks.findBlockById(sourceId)
-                            if (blockObj != null) {
-                                dragShadowIcon = blockObj.type.getIcon()
-                                dragShadowLabel = blockObj.id
+                .pointerInput(blocks, isReadOnly) {
+                    if (isReadOnly) return@pointerInput
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            val sourceId = pressedBlockId
+                            if (sourceId != null) {
+                                draggedBlockId = sourceId
+                                val blockObj = blocks.findBlockById(sourceId)
+                                if (blockObj != null) {
+                                    dragShadowIcon = blockObj.type.getIcon()
+                                    dragShadowLabel = blockObj.id
+                                }
+                                dragPosition = offset
                             }
-                            dragPosition = offset
-                        }
-                    },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        dragPosition = change.position
-                        val windowOffset = listCoordinates?.localToWindow(change.position) ?: change.position
-                        val hit = itemBounds.entries.toList().asReversed().find { it.value.contains(windowOffset) }    
-                        if (hit != null) {
-                            hoveredBlockId = hit.key
-                            val rect = hit.value
-                            val margin = rect.height * 0.15f
-                            val y = windowOffset.y
-                            dropPosition = when {
-                                y < rect.top + margin -> DropPosition.BEFORE
-                                y > rect.bottom - margin -> DropPosition.AFTER
-                                else -> DropPosition.INSIDE
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            dragPosition = change.position
+                            val windowOffset = listCoordinates?.localToWindow(change.position) ?: change.position
+                            val hit = itemBounds.entries.toList().asReversed().find { it.value.contains(windowOffset) }    
+                            if (hit != null) {
+                                hoveredBlockId = hit.key
+                                val rect = hit.value
+                                val margin = rect.height * 0.15f
+                                val y = windowOffset.y
+                                dropPosition = when {
+                                    y < rect.top + margin -> DropPosition.BEFORE
+                                    y > rect.bottom - margin -> DropPosition.AFTER
+                                    else -> DropPosition.INSIDE
+                                }
+                            } else {
+                                hoveredBlockId = null
+                                dropPosition = DropPosition.INSIDE
                             }
-                        } else {
-                            hoveredBlockId = null
-                            dropPosition = DropPosition.INSIDE
+                        },
+                        onDragEnd = {
+                            if (draggedBlockId != null && hoveredBlockId != draggedBlockId) {
+                                viewModel.layoutEditor.moveBlock(draggedBlockId!!, hoveredBlockId, dropPosition)
+                            }
+                            draggedBlockId = null
+                            pressedBlockId = null
+                            dragShadowIcon = null
+                            dragShadowLabel = null
+                            dragPosition = null
+                        },
+                        onDragCancel = {
+                            draggedBlockId = null
+                            pressedBlockId = null
+                            dragShadowIcon = null
+                            dragShadowLabel = null
+                            dragPosition = null
                         }
-                    },
-                    onDragEnd = {
-                        if (draggedBlockId != null && hoveredBlockId != draggedBlockId) {
-                            onMoveBlock(draggedBlockId!!, hoveredBlockId, dropPosition)
-                        }
-                        draggedBlockId = null
-                        pressedBlockId = null
-                        dragShadowIcon = null
-                        dragShadowLabel = null
-                        dragPosition = null
-                    },
-                    onDragCancel = {
-                        draggedBlockId = null
-                        pressedBlockId = null
-                        dragShadowIcon = null
-                        dragShadowLabel = null
-                        dragPosition = null
-                    }
-                )
-            }
+                    )
+                }
         ) {
             Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {   
                 Icon(
@@ -284,7 +271,7 @@ fun HierarchySidebar(
 
                 val allVisible = blocks.isNotEmpty() && checkAllVisible(blocks)
                 IconButton(
-                    onClick = { onToggleAllVisibility(!allVisible) }, 
+                    onClick = { viewModel.layoutEditor.toggleAllBlocksVisibility(!allVisible) }, 
                     modifier = Modifier.size(28.dp).tip("一键显示/隐藏所有图层")
                 ) {        
                     Icon(
@@ -327,10 +314,10 @@ fun HierarchySidebar(
                                 dropPosition = dropPosition,
                                 locateTrigger = locateTrigger,
                                 expandCollapseTrigger = expandCollapseTrigger,
-                                onBlockClicked = onBlockClicked,
-                                onBlockDoubleClicked = onBlockDoubleClicked,
+                                onBlockClicked = { id, isMulti -> viewModel.onBlockClicked(id, isMulti) },
+                                onBlockDoubleClicked = { id -> viewModel.onBlockDoubleClicked(id) },
                                 onBoundsCalculated = { id, rect -> itemBounds[id] = rect },
-                                onToggleVisibility = onToggleVisibility
+                                onToggleVisibility = { id, visible -> viewModel.layoutEditor.toggleBlockVisibility(id, visible) }
                             )
                         }
                     }
@@ -376,4 +363,3 @@ fun HierarchySidebar(
         }
     }
 }
-

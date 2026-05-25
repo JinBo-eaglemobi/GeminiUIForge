@@ -336,16 +336,14 @@ fun CanvasArea(
             }
         }
 
-        val currentCanvasWeight =
-            if (referenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
+        val currentCanvasWeight = if (referenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
         CanvasFloatingControlBar(
-            zoom = zoom, updateZoom = ::updateZoom, onResetZoom = { zoom = 1f; pan = Offset.Zero },
-            isVisualMode = isVisualMode, onToggleVisualMode = { viewModel.toggleVisualMode() },
-            isHideOutlines = isHideOutlines, onToggleHideOutlines = { viewModel.toggleHideOutlines() },
-            referenceUri = referenceUri, internalReferenceMode = referenceMode,
-            onReferenceModeChange = { viewModel.updateReferenceMode(it) },
-            internalReferenceOpacity = referenceOpacity, onReferenceOpacityChange = { viewModel.updateReferenceOpacity(it) },
+            zoom = zoom,
+            updateZoom = ::updateZoom,
+            onResetZoom = { zoom = 1f; pan = Offset.Zero },
             centerOffset = Offset(containerWidthPx / 2f, (containerHeightPx * currentCanvasWeight) / 2f),
+            state = state,
+            viewModel = viewModel,
             modifier = Modifier.align(Alignment.TopCenter)
         )
     }
