@@ -15,6 +15,8 @@ import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.utils.findParentBlockId
+import org.gemini.ui.forge.utils.updateBlockInList
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.state.ProjectWorkspaceState
@@ -280,7 +282,7 @@ class ProjectWorkspaceViewModel(
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) {
-                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { 
+                    page.copy(blocks = page.blocks.updateBlockInList(blockId) { 
                         it.copy(bounds = SerialRect(left, top, right, bottom))
                     })
                 } else page
@@ -296,7 +298,7 @@ class ProjectWorkspaceViewModel(
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) {
-                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { it.copy(type = type) })
+                    page.copy(blocks = page.blocks.updateBlockInList(blockId) { it.copy(type = type) })
                 } else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
@@ -332,26 +334,14 @@ class ProjectWorkspaceViewModel(
         }
     }
 
-    /** 寻找目标模块的父组 ID */
-    private fun findParentBlockId(blocks: List<UIBlock>, targetId: String, currentParentId: String? = null): String? {
-        for (block in blocks) {
-            if (block.id == targetId) {
-                return currentParentId
-            }
-            val found = findParentBlockId(block.children, targetId, block.id)
-            if (found != null) {
-                return found
-            }
-        }
-        return null
-    }
+
 
     /** 退出当前组编辑模式（返回父组，并清除选中） */
     fun exitGroupEdit() {
         _state.update { currentState ->
             val currentPage = currentState.currentPage
             val parentId = if (currentPage != null && currentState.editingGroupId != null) {
-                findParentBlockId(currentPage.blocks, currentState.editingGroupId)
+                currentPage.blocks.findParentBlockId(currentState.editingGroupId)
             } else {
                 null
             }
@@ -370,7 +360,7 @@ class ProjectWorkspaceViewModel(
                 // 如果双击的是当前正在编辑的组，则退回父编辑组
                 val currentPage = currentState.currentPage
                 val parentId = if (currentPage != null) {
-                    findParentBlockId(currentPage.blocks, blockId)
+                    currentPage.blocks.findParentBlockId(blockId)
                 } else {
                     null
                 }
@@ -461,7 +451,7 @@ class ProjectWorkspaceViewModel(
         _state.update { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) {
-                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { 
+                    page.copy(blocks = page.blocks.updateBlockInList(blockId) { 
                         it.copy(resourceBindingPath = bindingPath)
                     })
                 } else page
@@ -471,19 +461,5 @@ class ProjectWorkspaceViewModel(
         markDirty()
     }
 
-    // --- 内部递归辅助 ---
 
-    private fun updateBlockInList(
-        blocks: List<UIBlock>,
-        blockId: String,
-        transform: (UIBlock) -> UIBlock
-    ): List<UIBlock> {
-        return blocks.map { block ->
-            if (block.id == blockId) transform(block)
-            else {
-                val newChildren = updateBlockInList(block.children, blockId, transform)
-                if (newChildren !== block.children) block.copy(children = newChildren) else block
-            }
-        }
-    }
 }

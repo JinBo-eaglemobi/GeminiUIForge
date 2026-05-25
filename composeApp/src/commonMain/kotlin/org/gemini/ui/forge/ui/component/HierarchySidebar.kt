@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.utils.findBlockById
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.ui.dialog.AddLayerDialog
 import org.gemini.ui.forge.ui.dialog.RenameLayerDialog
@@ -161,7 +162,7 @@ fun HierarchySidebar(
                         val sourceId = pressedBlockId
                         if (sourceId != null) {
                             draggedBlockId = sourceId
-                            val blockObj = findBlockById(blocks, sourceId)
+                            val blockObj = blocks.findBlockById(sourceId)
                             if (blockObj != null) {
                                 dragShadowIcon = blockObj.type.getIcon()
                                 dragShadowLabel = blockObj.id
@@ -352,15 +353,3 @@ fun HierarchySidebar(
     }
 }
 
-/**
- * 递归查询指定 ID 对应的 UI 节点对象。
- * 供拖拽开始时收集节点图标和文案信息等。
- */
-private fun findBlockById(blocks: List<UIBlock>, id: String): UIBlock? {
-    for (block in blocks) {
-        if (block.id == id) return block
-        val found = findBlockById(block.children, id)
-        if (found != null) return found
-    }
-    return null
-}

@@ -48,7 +48,7 @@ class LayoutEditorDelegate(
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
-                    page.copy(blocks = updateBlockInList(page.blocks, oldId) { block -> block.copy(id = newId) })
+                    page.copy(blocks = page.blocks.updateBlockInList(oldId) { block -> block.copy(id = newId) })
                 } else page
             }
             currentState.copy(
@@ -72,7 +72,7 @@ class LayoutEditorDelegate(
             var top = (currentPage.height - height) / 2f
 
             if (editingGroupId != null) {
-                findBlockById(currentPage.blocks, editingGroupId)?.let { group ->
+                currentPage.blocks.findBlockById(editingGroupId)?.let { group ->
                     left = (group.bounds.width - width) / 2f
                     top = (group.bounds.height - height) / 2f
                 }
@@ -81,7 +81,7 @@ class LayoutEditorDelegate(
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
                     if (editingGroupId != null) {
-                        page.copy(blocks = updateBlockInList(page.blocks, editingGroupId) { group -> group.copy(children = group.children + newBlock) })
+                        page.copy(blocks = page.blocks.updateBlockInList(editingGroupId) { group -> group.copy(children = group.children + newBlock) })
                     } else page.copy(blocks = page.blocks + newBlock)
                 } else page
             }
@@ -117,7 +117,7 @@ class LayoutEditorDelegate(
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
-                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { it.copy(isVisible = isVisible) })
+                    page.copy(blocks = page.blocks.updateBlockInList(blockId) { it.copy(isVisible = isVisible) })
                 } else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
@@ -148,13 +148,13 @@ class LayoutEditorDelegate(
         saveSnapshot("移动模块层级: $draggedBlockId")
         updateState { currentState ->
             val currentPage = currentState.currentPage ?: return@updateState currentState
-            val draggedBlock = findBlockById(currentPage.blocks, draggedBlockId) ?: return@updateState currentState
+            val draggedBlock = currentPage.blocks.findBlockById(draggedBlockId) ?: return@updateState currentState
             if (targetId != null && isDescendantOfBlock(targetId, draggedBlock)) return@updateState currentState
             
             val draggedAbsBounds = getAbsoluteBounds(currentPage.blocks, draggedBlockId) ?: draggedBlock.bounds
             val newBlocks = removeBlockRecursive(currentPage.blocks, draggedBlockId)
             
-            val actualParentId = if (targetId == null) null else if (dropPosition == DropPosition.INSIDE) targetId else getParentIdOf(currentPage.blocks, targetId)
+            val actualParentId = if (targetId == null) null else if (dropPosition == DropPosition.INSIDE) targetId else currentPage.blocks.findParentBlockId(targetId)
             val targetAbsBounds = if (actualParentId != null) getAbsoluteBounds(newBlocks, actualParentId) else null
             
             val newRelativeBounds = if (targetAbsBounds != null) SerialRect(
@@ -166,7 +166,7 @@ class LayoutEditorDelegate(
             
             val updatedDraggedBlock = draggedBlock.copy(bounds = newRelativeBounds)
             val resultBlocks = if (targetId == null) newBlocks + updatedDraggedBlock 
-                else if (dropPosition == DropPosition.INSIDE) updateBlockInList(newBlocks, targetId) { it.copy(children = it.children + updatedDraggedBlock) } 
+                else if (dropPosition == DropPosition.INSIDE) newBlocks.updateBlockInList(targetId) { it.copy(children = it.children + updatedDraggedBlock) } 
                 else insertBlockSibling(newBlocks, targetId, updatedDraggedBlock, dropPosition)
             
             val updatedPages = currentState.project.pages.map { if (it.id == pageId) it.copy(blocks = resultBlocks) else it }
@@ -187,7 +187,7 @@ class LayoutEditorDelegate(
                 if (page.id == pageId) {
                     var currentBlocks = page.blocks
                     for (blockId in blockIds) {
-                        currentBlocks = updateBlockInList(currentBlocks, blockId) { block ->
+                        currentBlocks = currentBlocks.updateBlockInList(blockId) { block ->
                             block.copy(bounds = block.bounds.copy(
                                 left = block.bounds.left + dx, top = block.bounds.top + dy,
                                 right = block.bounds.right + dx, bottom = block.bounds.bottom + dy
@@ -206,7 +206,7 @@ class LayoutEditorDelegate(
 
     fun copy() {
         val selectedId = getState().selectedBlockId ?: return
-        val block = getState().currentPage?.blocks?.let { findBlockById(it, selectedId) }
+        val block = getState().currentPage?.blocks?.findBlockById(selectedId)
         if (block != null) {
             clipboardBlock = block
             Toast.show("已复制模块 ${block.id}", ToastType.SUCCESS)
@@ -215,7 +215,7 @@ class LayoutEditorDelegate(
 
     fun cut() {
         val selectedId = getState().selectedBlockId ?: return
-        val block = getState().currentPage?.blocks?.let { findBlockById(it, selectedId) }
+        val block = getState().currentPage?.blocks?.findBlockById(selectedId)
         if (block != null) {
             clipboardBlock = block
             deleteBlock(selectedId)
@@ -245,7 +245,7 @@ class LayoutEditorDelegate(
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
                     if (editingGroupId != null) {
-                        page.copy(blocks = updateBlockInList(page.blocks, editingGroupId) { group -> group.copy(children = group.children + newBlock) })
+                        page.copy(blocks = page.blocks.updateBlockInList(editingGroupId) { group -> group.copy(children = group.children + newBlock) })
                     } else page.copy(blocks = page.blocks + newBlock)
                 } else page
             }
@@ -324,7 +324,7 @@ class LayoutEditorDelegate(
     }
 
     fun optimizePrompt(blockId: String, apiKey: String, lang: PromptLanguage, useChatContext: Boolean = false) {
-        val block = findBlockById(getState().project.pages.flatMap { it.blocks }, blockId) ?: return
+        val block = getState().project.pages.flatMap { it.blocks }.findBlockById(blockId) ?: return
         val textToOptimize = if (lang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
         if (textToOptimize.isBlank()) return
         
@@ -362,7 +362,7 @@ class LayoutEditorDelegate(
                 
                 updateState { currentState ->
                     val updatedPages = currentState.project.pages.map { page ->
-                        page.copy(blocks = updateBlockInList(page.blocks, blockId) { b ->
+                        page.copy(blocks = page.blocks.updateBlockInList(blockId) { b ->
                             if (lang == PromptLanguage.EN) b.copy(userPromptEn = optimized) else b.copy(userPromptZh = optimized)
                         })
                     }
@@ -426,7 +426,7 @@ class LayoutEditorDelegate(
                     val updatedPages = state.project.pages.map { page ->
                         if (page.id == currentPage.id) {
                             page.copy(
-                                blocks = updateBlockInList(page.blocks, blockId) { block ->
+                                blocks = page.blocks.updateBlockInList(blockId) { block ->
                                     block.copy(referenceImage = savedFile)
                                 }
                             )
@@ -450,25 +450,6 @@ class LayoutEditorDelegate(
         updateState { it.copy(generationLogs = it.generationLogs + msg, showAITaskDialog = true) }
     }
 
-    private fun findBlockById(blocks: List<UIBlock>, id: String): UIBlock? {
-        for (block in blocks) {
-            if (block.id == id) return block
-            val found = findBlockById(block.children, id)
-            if (found != null) return found
-        }
-        return null
-    }
-
-    private fun updateBlockInList(blocks: List<UIBlock>, blockId: String, transform: (UIBlock) -> UIBlock): List<UIBlock> {
-        return blocks.map { block ->
-            if (block.id == blockId) transform(block)
-            else {
-                val newChildren = updateBlockInList(block.children, blockId, transform)
-                if (newChildren !== block.children) block.copy(children = newChildren) else block
-            }
-        }
-    }
-
     private fun removeBlockRecursive(blocks: List<UIBlock>, idToRemove: String): List<UIBlock> {
         return blocks.filterNot { it.id == idToRemove }
             .map { it.copy(children = removeBlockRecursive(it.children, idToRemove)) }
@@ -486,15 +467,6 @@ class LayoutEditorDelegate(
 
     private fun isDescendantOfBlock(targetId: String, currentBlock: UIBlock): Boolean =
         currentBlock.id == targetId || currentBlock.children.any { isDescendantOfBlock(targetId, it) }
-
-    private fun getParentIdOf(blocks: List<UIBlock>, targetId: String, currentParentId: String? = null): String? {
-        for (block in blocks) {
-            if (block.id == targetId) return currentParentId
-            val found = getParentIdOf(block.children, targetId, block.id)
-            if (found != null) return found
-        }
-        return null
-    }
 
     private fun insertBlockSibling(blocks: List<UIBlock>, targetId: String, blockToInsert: UIBlock, position: DropPosition): List<UIBlock> {
         val index = blocks.indexOfFirst { it.id == targetId }

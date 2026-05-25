@@ -2,6 +2,7 @@ package org.gemini.ui.forge.state
 
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.utils.findBlockById
 
 /**
  * 布局编辑器专用的运行时状态
@@ -40,14 +41,5 @@ data class TemplateEditorState(
     val pendingDeleteBlockId: String? = null
 ) {
     val currentPage get() = project.pages.find { it.id == selectedPageId }
-    val selectedBlock: UIBlock? get() = currentPage?.let { page -> findBlockById(page.blocks, selectedBlockId ?: editingGroupId ?: "") }
-
-    private fun findBlockById(blocks: List<UIBlock>, id: String): UIBlock? {
-        for (block in blocks) {
-            if (block.id == id) return block
-            val found = findBlockById(block.children, id)
-            if (found != null) return found
-        }
-        return null
-    }
+    val selectedBlock: UIBlock? get() = currentPage?.blocks?.findBlockById(selectedBlockId ?: editingGroupId ?: "")
 }

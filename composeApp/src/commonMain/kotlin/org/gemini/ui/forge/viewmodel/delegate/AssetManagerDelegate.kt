@@ -56,7 +56,7 @@ class AssetManagerDelegate(
         saveSnapshot("绑定资源图: $blockId")
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
-                if (page.id == pageId) page.copy(blocks = updateBlockInList(page.blocks, blockId) {
+                if (page.id == pageId) page.copy(blocks = page.blocks.updateBlockInList(blockId) {
                     it.copy(currentImageUri = imageUri)
                 }) else page
             }
@@ -78,7 +78,7 @@ class AssetManagerDelegate(
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) {
-                    page.copy(blocks = updateBlockInList(page.blocks, blockId) { block ->
+                    page.copy(blocks = page.blocks.updateBlockInList(blockId) { block ->
                         val props = block.properties as? BlockProperties.ReelProperties ?: BlockProperties.ReelProperties()
                         val newItems = props.items.map { item ->
                             if (item.id == itemId) item.copy(currentImageUri = imageUri) else item
@@ -98,7 +98,7 @@ class AssetManagerDelegate(
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) page.copy(
-                    blocks = updateBlockInList(page.blocks, blockId) { it.copy(currentImageUri = null) }) else page
+                    blocks = page.blocks.updateBlockInList(blockId) { it.copy(currentImageUri = null) }) else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
@@ -247,7 +247,7 @@ class AssetManagerDelegate(
         originalCropBytes: ByteArray? = null
     ) {
         val currentState = getState()
-        val block = findBlockById(currentState.project.pages.flatMap { it.blocks }, blockId) ?: return
+        val block = currentState.project.pages.flatMap { it.blocks }.findBlockById(blockId) ?: return
         val currentUri = block.currentImageUri
         if (currentUri == null && imageBytes == null) return
         
@@ -275,7 +275,7 @@ class AssetManagerDelegate(
                     updateState { s ->
                         val updatedPages = s.project.pages.map { page ->
                             if (page.id == s.selectedPageId) page.copy(
-                                blocks = updateBlockInList(page.blocks, blockId) {
+                                blocks = page.blocks.updateBlockInList(blockId) {
                                     it.copy(
                                         currentImageUri = newFile,
                                         resizeMode = ImageResizeMode.STRETCH,
@@ -306,7 +306,7 @@ class AssetManagerDelegate(
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) page.copy(
-                    blocks = updateBlockInList(page.blocks, blockId) { 
+                    blocks = page.blocks.updateBlockInList(blockId) { 
                         if (lang == PromptLanguage.EN) it.copy(userPromptEn = prompt) else it.copy(userPromptZh = prompt)
                     }) else page
             }
@@ -321,7 +321,7 @@ class AssetManagerDelegate(
         updateState { currentState ->
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) page.copy(
-                    blocks = updateBlockInList(page.blocks, blockId) { it.copy(properties = properties) }) else page
+                    blocks = page.blocks.updateBlockInList(blockId) { it.copy(properties = properties) }) else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))
         }
@@ -344,24 +344,5 @@ class AssetManagerDelegate(
         updateBlockProperties(block.id, newProps)
     }
 
-    // --- 内部辅助 ---
 
-    private fun findBlockById(blocks: List<UIBlock>, id: String): UIBlock? {
-        for (block in blocks) {
-            if (block.id == id) return block
-            val found = findBlockById(block.children, id)
-            if (found != null) return found
-        }
-        return null
-    }
-
-    private fun updateBlockInList(blocks: List<UIBlock>, blockId: String, transform: (UIBlock) -> UIBlock): List<UIBlock> {
-        return blocks.map { block ->
-            if (block.id == blockId) transform(block)
-            else {
-                val newChildren = updateBlockInList(block.children, blockId, transform)
-                if (newChildren !== block.children) block.copy(children = newChildren) else block
-            }
-        }
-    }
 }
