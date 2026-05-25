@@ -12,12 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.utils.rememberImagePicker
+import org.gemini.ui.forge.utils.rememberFilePicker
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 
 /**
@@ -30,11 +29,14 @@ fun AdvancedSettingsDialog(
     viewModel: ProjectWorkspaceViewModel,
     onDismiss: () -> Unit
 ) {
-    val projectName = state.projectName.replace(" ", "_")
-    val projectAssetsBase = TemplateFile("templates/$projectName/assets")
-    val imagePicker = projectAssetsBase.rememberImagePicker { uris ->
-        uris.firstOrNull()?.let { viewModel.assetManager.setReferenceImageExternal(it) }
-    }
+    val imagePicker = rememberFilePicker(
+        title = "选择风格参考图",
+        isFolder = false,
+        extensions = listOf("png", "jpg", "jpeg", "webp"),
+        onResult = { uri ->
+            uri?.let { viewModel.assetManager.setReferenceImageExternal(it) }
+        }
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,

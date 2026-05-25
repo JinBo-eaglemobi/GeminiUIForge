@@ -24,6 +24,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.input.KeyboardType
 import org.gemini.ui.forge.ui.feature.workspace.CollapsibleSection
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.ui.component.ToastType
 /**
  * 渲染布局编辑相关的属性内容。
  * 包含页面设置、批量生成入口、模块物理坐标、ID、类型切换及删除操作。
@@ -44,8 +49,9 @@ fun LayoutPropertyContent(
     var showBindingDialog by remember { mutableStateOf(false) }
     var configData by remember { mutableStateOf<Map<String, List<ResourceItem>>?>(null) }
     var configError by remember { mutableStateOf<String?>(null) }
+    var refreshTrigger by remember { mutableStateOf(0) }
 
-    LaunchedEffect(state.resourceConfigPath) {
+    LaunchedEffect(state.resourceConfigPath, refreshTrigger) {
         val path = state.resourceConfigPath
         if (path.isNullOrBlank()) {
             configData = null
@@ -58,13 +64,22 @@ fun LayoutPropertyContent(
                     val parsed = looseJson.decodeFromString<Map<String, Map<String, ResourceItem>>>(content)
                     configData = parsed.mapValues { it.value.values.toList() }
                     configError = null
+                    if (refreshTrigger > 0) {
+                        Toast.show("配置文件刷新成功", ToastType.SUCCESS)
+                    }
                 } else {
                     configData = null
                     configError = "无法读取配置文件"
+                    if (refreshTrigger > 0) {
+                        Toast.show("配置文件刷新失败: 无法读取文件", ToastType.ERROR)
+                    }
                 }
             } catch (e: Exception) {
                 configData = null
                 configError = e.message ?: "解析失败"
+                if (refreshTrigger > 0) {
+                    Toast.show("配置文件刷新失败: ${e.message ?: "解析失败"}", ToastType.ERROR)
+                }
             }
         }
     }
@@ -245,11 +260,33 @@ fun LayoutPropertyContent(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text(
-                                text = stringResource(Res.string.res_binding_title),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isBindingInvalid) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(Res.string.res_binding_title),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isBindingInvalid) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                )
+                                IconButton(
+                                    onClick = { refreshTrigger++ },
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .pointerHoverIcon(PointerIcon.Hand)
+                                        .tip("重新读取并解析最新的配置表"),
+                                    colors = IconButtonDefaults.iconButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "刷新配置",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
                             
                             OutlinedButton(
                                 onClick = { showBindingDialog = true },
