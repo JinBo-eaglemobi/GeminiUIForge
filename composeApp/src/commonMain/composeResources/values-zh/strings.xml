@@ -139,6 +139,8 @@
     <!-- New Internationalized Strings (Chinese) -->
     <string name="hierarchy_title">图层层级</string>
     <string name="hierarchy_move_to_top">移至顶层</string>
+    <string name="hierarchy_expand_all">一键展开</string>
+    <string name="hierarchy_collapse_all">一键折叠</string>
     <string name="screen_home">首页</string>
     <string name="screen_template_asset_gen">资源生成模式</string>
     <string name="screen_template_editor">布局编辑模式</string>

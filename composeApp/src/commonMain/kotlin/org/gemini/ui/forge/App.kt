@@ -17,6 +17,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import geminiuiforge.composeapp.generated.resources.*
@@ -56,7 +57,7 @@ private var originalSystemLanguage: String? = null
 @Composable
 fun App(typography: Typography? = null) {
     if (originalSystemLanguage == null) {
-        originalSystemLanguage = androidx.compose.ui.text.intl.Locale.current.language
+        originalSystemLanguage = Locale.current.language
     }
 
     var languageKey by remember { mutableStateOf(0) }

@@ -92,6 +92,7 @@ fun HierarchySidebar(
     var showRenameDialog by remember { mutableStateOf<String?>(null) }
     var isAutoTrackEnabled by remember { mutableStateOf(true) } // 是否开启自动定位功能
     var locateTrigger by remember { mutableStateOf(0L) } // 触发器时间戳：通知内部组件执行自动滚动定位
+    var expandCollapseTrigger by remember { mutableStateOf(0L to true) } // 新增：一键展开/折叠触发器 (时间戳 to 是否展开)
 
     // 监听外部重命名请求
     LaunchedEffect(renameRequestEvent) {
@@ -233,20 +234,25 @@ fun HierarchySidebar(
                     )
                 }
                 Spacer(Modifier.width(4.dp))
-                fun checkAllVisible(list: List<UIBlock>): Boolean {
-                    return list.all { it.isVisible && checkAllVisible(it.children) }
-                }
-
-                val allVisible = blocks.isNotEmpty() && checkAllVisible(blocks)
                 IconButton(
-                    onClick = { onToggleAllVisibility(!allVisible) }, 
-                    modifier = Modifier.size(28.dp).tip("一键显示/隐藏所有图层")
-                ) {        
+                    onClick = { expandCollapseTrigger = getCurrentTimeMillis() to true },
+                    modifier = Modifier.size(28.dp).tip(stringResource(Res.string.hierarchy_expand_all))
+                ) {
                     Icon(
-                        imageVector = if (allVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,       
-                        contentDescription = "All Vis",
-                        modifier = Modifier.size(18.dp),
-                        tint = if (allVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        imageVector = Icons.Default.UnfoldMore,
+                        contentDescription = "Expand All",
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                IconButton(
+                    onClick = { expandCollapseTrigger = getCurrentTimeMillis() to false },
+                    modifier = Modifier.size(28.dp).tip(stringResource(Res.string.hierarchy_collapse_all))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.UnfoldLess,
+                        contentDescription = "Collapse All",
+                        modifier = Modifier.size(18.dp)
                     )
                 }
                 if (!isReadOnly) {
@@ -270,6 +276,23 @@ fun HierarchySidebar(
                             )
                         )
                     }
+                }
+                Spacer(Modifier.width(4.dp))
+                fun checkAllVisible(list: List<UIBlock>): Boolean {
+                    return list.all { it.isVisible && checkAllVisible(it.children) }
+                }
+
+                val allVisible = blocks.isNotEmpty() && checkAllVisible(blocks)
+                IconButton(
+                    onClick = { onToggleAllVisibility(!allVisible) }, 
+                    modifier = Modifier.size(28.dp).tip("一键显示/隐藏所有图层")
+                ) {        
+                    Icon(
+                        imageVector = if (allVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,       
+                        contentDescription = "All Vis",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (allVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             if (!isReadOnly && draggedBlockId != null && hoveredBlockId == null) {
@@ -303,6 +326,7 @@ fun HierarchySidebar(
                                 hoveredBlockId = hoveredBlockId,
                                 dropPosition = dropPosition,
                                 locateTrigger = locateTrigger,
+                                expandCollapseTrigger = expandCollapseTrigger,
                                 onBlockClicked = onBlockClicked,
                                 onBlockDoubleClicked = onBlockDoubleClicked,
                                 onBoundsCalculated = { id, rect -> itemBounds[id] = rect },

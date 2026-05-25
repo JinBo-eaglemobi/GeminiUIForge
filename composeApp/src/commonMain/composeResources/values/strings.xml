@@ -129,6 +129,8 @@
     <!-- New Internationalized Strings -->
     <string name="hierarchy_title">Hierarchy</string>
     <string name="hierarchy_move_to_top">Move to Top</string>
+    <string name="hierarchy_expand_all">Expand All</string>
+    <string name="hierarchy_collapse_all">Collapse All</string>
     <string name="screen_home">Home</string>
     <string name="screen_template_asset_gen">Asset Generation</string>
     <string name="screen_template_editor">Layout Design</string>

@@ -37,9 +37,11 @@ fun NumberOutlinedTextField(
     var localText by remember { mutableStateOf(normalizeNumberString(value, isFloat)) }
     var focusInitialValue by remember { mutableStateOf(value) }
     var isFocused by remember { mutableStateOf(false) }
+    var isDraggingState by remember { mutableStateOf(false) }
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
 
     LaunchedEffect(value) {
-        if (!isFocused) {
+        if (!isFocused && !isDraggingState) {
             localText = normalizeNumberString(value, isFloat)
         }
     }
@@ -79,11 +81,11 @@ fun NumberOutlinedTextField(
                         if (!isValid) {
                             val fallback = normalizeNumberString(focusInitialValue, isFloat)
                             localText = fallback
-                            onValueChange(fallback)
+                            currentOnValueChange(fallback)
                         } else {
                             val normalized = normalizeNumberString(localText, isFloat)
                             localText = normalized
-                            onValueChange(normalized)
+                            currentOnValueChange(normalized)
                         }
                     }
                 }
@@ -103,7 +105,7 @@ fun NumberOutlinedTextField(
                                                 val newVal = currentVal + step
                                                 val formatted = normalizeNumberString(newVal.toString(), isFloat)
                                                 localText = formatted
-                                                onValueChange(formatted)
+                                                currentOnValueChange(formatted)
                                             }
                                         }
                                     }
@@ -152,6 +154,7 @@ fun NumberOutlinedTextField(
                                         // 判定拖拽的阈值为 8 像素
                                         if (totalDistance > 8f) {
                                             isDragging = true
+                                            isDraggingState = true
                                         }
                                     }
 
@@ -170,7 +173,7 @@ fun NumberOutlinedTextField(
                                             val newVal = currentVal + steps
                                             val formatted = normalizeNumberString(newVal.toString(), isFloat)
                                             localText = formatted
-                                            onValueChange(formatted)
+                                            currentOnValueChange(formatted)
                                         }
                                     }
                                 } else {
@@ -184,6 +187,11 @@ fun NumberOutlinedTextField(
                                     if (!isDragging && duration < 300L && finalDistance < 8f) {
                                         focusRequester.requestFocus()
                                     }
+                                    
+                                    if (isDragging) {
+                                        focusInitialValue = localText
+                                    }
+                                    isDraggingState = false
                                     break
                                 }
                             }

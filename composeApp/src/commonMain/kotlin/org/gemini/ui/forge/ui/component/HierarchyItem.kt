@@ -75,6 +75,7 @@ fun HierarchyItem(
     isHovered: Boolean,
     dropPosition: DropPosition,
     locateTrigger: Long,
+    expandCollapseTrigger: Pair<Long, Boolean> = 0L to true,
     onBlockClicked: (String?, Boolean) -> Unit,
     onBlockDoubleClicked: (String) -> Unit,
     onBoundsCalculated: (String, Rect) -> Unit,
@@ -100,6 +101,13 @@ fun HierarchyItem(
 
     // 当自动定位触发，且自身为选中图层时，请求滚动到视口中
     LaunchedEffect(locateTrigger) { if (locateTrigger > 0L && isSelected) bringIntoViewRequester.bringIntoView() }
+
+    // 监听一键展开/折叠触发器
+    LaunchedEffect(expandCollapseTrigger) {
+        if (expandCollapseTrigger.first > 0L) {
+            expanded = expandCollapseTrigger.second
+        }
+    }
 
     val indicatorColor = Color(0xFF03A9F4)
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -222,6 +230,7 @@ fun HierarchyItem(
                         isHovered = child.id == hoveredBlockId,
                         dropPosition = dropPosition,
                         locateTrigger = locateTrigger,
+                        expandCollapseTrigger = expandCollapseTrigger,
                         onBlockClicked = onBlockClicked,
                         onBlockDoubleClicked = onBlockDoubleClicked,
                         onBoundsCalculated = onBoundsCalculated,
