@@ -123,7 +123,7 @@ fun ProjectSettingsDialog(
                                                 return@launch
                                             }
                                             val content = bytes.decodeToString()
-                                            looseJson.decodeFromString<Map<String, Map<String, ResourceItem>>>(content)
+                                            looseJson.decodeFromString<List<ResourceItem>>(content)
                                             
                                             // 验证通过，打上绿灯标记并一键流转保存同步刷新
                                             isCurrentPathValidated = true
@@ -210,7 +210,7 @@ fun ProjectSettingsDialog(
                             }
                             val content = bytes.decodeToString()
                             // 校验 JSON 格式（使用支持尾部逗号的宽容解析器）
-                            looseJson.decodeFromString<Map<String, Map<String, ResourceItem>>>(content)
+                            looseJson.decodeFromString<List<ResourceItem>>(content)
                             
                             // 校验通过
                             onConfirm(pathInput)

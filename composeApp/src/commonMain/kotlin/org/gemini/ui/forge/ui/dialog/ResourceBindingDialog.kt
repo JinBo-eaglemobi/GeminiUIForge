@@ -36,7 +36,7 @@ import geminiuiforge.composeapp.generated.resources.*
 fun ResourceBindingDialog(
     block: UIBlock,
     parentBlock: UIBlock?,
-    configData: Map<String, List<ResourceItem>>,
+    configData: List<ResourceItem>,
     onDismiss: () -> Unit,
     onConfirm: (List<String>) -> Unit
 ) {
@@ -66,65 +66,16 @@ fun ResourceBindingDialog(
     // 每一级下拉菜单展开状态
     val expandedStates = remember { mutableStateMapOf<Int, Boolean>() }
 
-    // 解析 value 字段为 ResourceItem 列表（兼容 JsonArray 与 JsonPrimitive 格式）
-    fun parseValueToItems(value: JsonElement): List<ResourceItem>? {
-        // 1. 如果本身就是 JsonArray
-        if (value is JsonArray) {
-            try {
-                return looseJson.decodeFromJsonElement<List<ResourceItem>>(value)
-            } catch (e: Exception) {
-                // 忽略
-            }
-            try {
-                val stringList = looseJson.decodeFromJsonElement<List<String>>(value)
-                return stringList.map { ResourceItem(key = it) }
-            } catch (e: Exception) {
-                // 忽略
-            }
-            return null
-        }
-
-        // 2. 如果是 JsonPrimitive (字符串或普通值)
-        if (value is JsonPrimitive) {
-            val strContent = value.content
-            if (strContent.isBlank()) return null
-            val trimmed = strContent.trim()
-            if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return null
-
-            // 尝试解析字符串内的 JSON 数组
-            try {
-                return looseJson.decodeFromString<List<ResourceItem>>(trimmed)
-            } catch (e: Exception) {
-                // 忽略
-            }
-            try {
-                val stringList = looseJson.decodeFromString<List<String>>(trimmed)
-                return stringList.map { ResourceItem(key = it) }
-            } catch (e: Exception) {
-                // 忽略
-            }
-        }
-
-        return null
-    }
-
     // 核心寻找算法：给定一条相对或绝对路径，获取其下一级包含的所有子 ResourceItem 列表
     fun getChildrenForPath(path: List<String>): List<ResourceItem> {
         if (path.isEmpty()) {
-            // 顶层：直接把顶层 configData.keys 包装为 ResourceItem 列表
-            return configData.keys.map { ResourceItem(key = it) }
+            return configData
         }
 
-        // 获取顶级 group 的 items
-        val rootKey = path[0]
-        var currentItems = configData[rootKey] ?: return emptyList()
-
-        // 沿着路径向下级联钻取每一个选定的 item
-        for (i in 1 until path.size) {
-            val currentKey = path[i]
-            val matchItem = currentItems.find { it.key == currentKey } ?: return emptyList()
-            val nextItems = parseValueToItems(matchItem.value) ?: return emptyList()
-            currentItems = nextItems
+        var currentItems = configData
+        for (key in path) {
+            val matchItem = currentItems.find { it.key == key } ?: return emptyList()
+            currentItems = matchItem.child ?: emptyList()
         }
 
         return currentItems
@@ -266,7 +217,12 @@ fun ResourceBindingDialog(
                                             DropdownMenuItem(
                                                 text = {
                                                     Column {
-                                                        Text(optionItem.key, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                                        val displayName = if (!optionItem.type.isNullOrBlank()) {
+                                                            "${optionItem.type}（${optionItem.key}）"
+                                                        } else {
+                                                            optionItem.key
+                                                        }
+                                                        Text(displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                                         if (optionItem.description.isNotBlank()) {
                                                             Text(
                                                                 text = optionItem.description, 

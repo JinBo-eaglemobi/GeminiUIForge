@@ -15,75 +15,25 @@ import org.gemini.ui.forge.state.ui.ProjectState
 object ResourceBindingValidator {
 
     /**
-     * 解析 value 字段为 ResourceItem 列表（兼容 JsonArray 与 JsonPrimitive 格式）
-     */
-    fun parseValueToItems(value: JsonElement): List<ResourceItem>? {
-        if (value is JsonArray) {
-            try {
-                return looseJson.decodeFromJsonElement<List<ResourceItem>>(value)
-            } catch (e: Exception) {
-                // 忽略
-            }
-            try {
-                val stringList = looseJson.decodeFromJsonElement<List<String>>(value)
-                return stringList.map { ResourceItem(key = it) }
-            } catch (e: Exception) {
-                // 忽略
-            }
-            return null
-        }
-
-        if (value is JsonPrimitive) {
-            val strContent = value.content
-            if (strContent.isBlank()) return null
-            val trimmed = strContent.trim()
-            if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return null
-
-            try {
-                return looseJson.decodeFromString<List<ResourceItem>>(trimmed)
-            } catch (e: Exception) {
-                // 忽略
-            }
-            try {
-                val stringList = looseJson.decodeFromString<List<String>>(trimmed)
-                return stringList.map { ResourceItem(key = it) }
-            } catch (e: Exception) {
-                // 忽略
-            }
-        }
-
-        return null
-    }
-
-    /**
      * 校验给定的完整路径是否在 configData 中合法存在。
      * 如果存在失效，返回第一个失效的 key 信息及层级，或者返回 null 表示完全有效。
      * 
      * @param path 待校验的绑定路径
-     * @param configData 当前加载的配置文件 Map
+     * @param configData 当前加载的配置文件列表（树形结构）
      * @return 失效的信息对 (层级索引, 失效的key)；若完全有效则返回 null
      */
-    fun findFirstInvalidKey(path: List<String>, configData: Map<String, List<ResourceItem>>): Pair<Int, String>? {
+    fun findFirstInvalidKey(path: List<String>, configData: List<ResourceItem>): Pair<Int, String>? {
         if (path.isEmpty()) return null
 
-        val rootKey = path[0]
-        var currentItems: List<ResourceItem>? = configData[rootKey]
-        if (currentItems == null) {
-            return Pair(0, rootKey)
-        }
-
-        for (i in 1 until path.size) {
+        var currentItems = configData
+        for (i in path.indices) {
             val currentKey = path[i]
-            val matchItem = currentItems?.find { it.key == currentKey }
+            val matchItem = currentItems.find { it.key == currentKey }
             if (matchItem == null) {
                 return Pair(i, currentKey)
             }
             if (i < path.size - 1) {
-                val nextItems = parseValueToItems(matchItem.value)
-                if (nextItems == null) {
-                    return Pair(i + 1, path[i + 1])
-                }
-                currentItems = nextItems
+                currentItems = matchItem.child ?: return Pair(i + 1, path[i + 1])
             }
         }
 
@@ -95,7 +45,7 @@ object ResourceBindingValidator {
      */
     fun validateProjectBindings(
         projectState: ProjectState,
-        configData: Map<String, List<ResourceItem>>
+        configData: List<ResourceItem>
     ): List<InvalidBindingReport> {
         val result = mutableListOf<InvalidBindingReport>()
         

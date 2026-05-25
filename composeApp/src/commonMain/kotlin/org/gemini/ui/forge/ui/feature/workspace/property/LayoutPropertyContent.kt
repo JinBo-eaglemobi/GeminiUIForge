@@ -47,7 +47,7 @@ fun LayoutPropertyContent(
     val selectedBlock = state.selectedBlock
 
     var showBindingDialog by remember { mutableStateOf(false) }
-    var configData by remember { mutableStateOf<Map<String, List<ResourceItem>>?>(null) }
+    var configData by remember { mutableStateOf<List<ResourceItem>?>(null) }
     var configError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(state.resourceConfigPath, state.resourceConfigRefreshTrigger) {
@@ -60,8 +60,8 @@ fun LayoutPropertyContent(
                 val bytes = org.gemini.ui.forge.data.readBytesInternal(path)
                 if (bytes != null) {
                     val content = bytes.decodeToString()
-                    val parsed = looseJson.decodeFromString<Map<String, Map<String, ResourceItem>>>(content)
-                    configData = parsed.mapValues { it.value.values.toList() }
+                    val parsed = looseJson.decodeFromString<List<ResourceItem>>(content)
+                    configData = parsed
                     configError = null
                     if (state.resourceConfigRefreshTrigger > 0L) {
                         Toast.show("配置文件刷新成功", ToastType.SUCCESS)
@@ -245,13 +245,13 @@ fun LayoutPropertyContent(
 
                         val lastDescription = remember(bindingPath, currentConfig) {
                             if (hasBinding && !isBindingInvalid) {
-                                if (bindingPath.size >= 2) {
-                                    val groupKey = bindingPath[0]
-                                    val itemKey = bindingPath[1]
-                                    currentConfig[groupKey]?.find { it.key == itemKey }?.description
-                                } else {
-                                    null
+                                var currentItems = currentConfig
+                                var foundItem: ResourceItem? = null
+                                for (key in bindingPath) {
+                                    foundItem = currentItems?.find { it.key == key }
+                                    currentItems = foundItem?.child
                                 }
+                                foundItem?.description
                             } else null
                         }
 

@@ -71,8 +71,7 @@ class CompilerService(private val fileStorage: LocalFileStorage) {
                 }
                 val configContent = configBytes.decodeToString()
                 val configData = try {
-                    val parsed = looseJson.decodeFromString<Map<String, Map<String, ResourceItem>>>(configContent)
-                    parsed.mapValues { it.value.values.toList() }
+                    looseJson.decodeFromString<List<ResourceItem>>(configContent)
                 } catch (e: Exception) {
                     AppLogger.e("Compiler", "导出失败：解析资源绑定配置文件异常", e)
                     return false
