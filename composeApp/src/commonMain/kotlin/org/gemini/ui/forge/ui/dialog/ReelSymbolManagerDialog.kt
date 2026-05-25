@@ -45,11 +45,9 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 fun ReelSymbolManagerDialog(
     props: BlockProperties.ReelProperties,
     onDismiss: () -> Unit,
-    onPropertiesChanged: (BlockProperties) -> Unit,
     viewModel: ProjectWorkspaceViewModel,
     apiKey: String,
-    state: ProjectWorkspaceState,
-    onShowHistory: (String) -> Unit
+    state: ProjectWorkspaceState
 ) {
     val scope = rememberCoroutineScope()
 
@@ -213,7 +211,7 @@ fun ReelSymbolManagerDialog(
 
                                 // 历史生成记录按钮
                                 IconButton(onClick = {
-                                    onShowHistory(item.id)
+                                    viewModel.showHistoricalDialog(item.id)
                                 }, modifier = Modifier.size(32.dp).tip("查看历史候选图")) {
                                     Icon(
                                         Icons.Default.History,
@@ -283,7 +281,7 @@ fun ReelSymbolManagerDialog(
                 val newItems = props.items.toMutableList().apply {
                     removeAt(itemToDeleteIndex!!)
                 }
-                onPropertiesChanged(props.copy(items = newItems))
+                viewModel.assetManager.updateBlockProperties(state.selectedBlock?.id ?: "", props.copy(items = newItems))
                 itemToDeleteIndex = null
             }
         )
@@ -395,7 +393,7 @@ fun ReelSymbolManagerDialog(
                             props.items + targetItem
                         }
 
-                        onPropertiesChanged(props.copy(items = newItems))
+                        viewModel.assetManager.updateBlockProperties(state.selectedBlock?.id ?: "", props.copy(items = newItems))
                         showAddItemDialog = false
                     }) {
                         Text("保存信息")
@@ -445,7 +443,7 @@ fun ReelSymbolManagerDialog(
                     props.items + targetItem
                 }
 
-                onPropertiesChanged(props.copy(items = newItems))
+                viewModel.assetManager.updateBlockProperties(state.selectedBlock?.id ?: "", props.copy(items = newItems))
 
                 // 2. 触发生成逻辑，强制使用当前选中 Tab 的语言
                 val finalPromptText = if (promptTab == 0) targetItem.userPromptZh else targetItem.userPromptEn

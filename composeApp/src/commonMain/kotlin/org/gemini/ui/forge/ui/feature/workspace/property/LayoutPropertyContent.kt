@@ -447,13 +447,9 @@ fun LayoutPropertyContent(
                     onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, "专属属性配置", !it) }
                 ) {
                     BlockSpecificProperties(
-                        blockType = selectedBlock.type,
-                        properties = selectedBlock.properties,
-                        apiKey = apiKey,
                         viewModel = viewModel,
                         state = state,
-                        onShowHistory = { viewModel.showHistoricalDialog(it) },
-                        onPropertiesChanged = { viewModel.assetManager.updateBlockProperties(selectedBlock.id, it) }
+                        apiKey = apiKey
                     )
                 }
             }

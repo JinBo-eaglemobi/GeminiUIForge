@@ -34,16 +34,16 @@ import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 
 @Composable
 fun BlockSpecificProperties(
-    blockType: UIBlockType,
-    properties: BlockProperties?,
-    apiKey: String,
     viewModel: ProjectWorkspaceViewModel,
     state: ProjectWorkspaceState,
-    onShowPressedHistory: () -> Unit = {},
-    onShowDisabledHistory: () -> Unit = {},
-    onShowHistory: (String) -> Unit = {},
-    onPropertiesChanged: (BlockProperties) -> Unit
+    apiKey: String
 ) {
+    val selectedBlock = state.selectedBlock ?: return
+    val blockType = selectedBlock.type
+    val properties = selectedBlock.properties
+    val onPropertiesChanged = { props: BlockProperties ->
+        viewModel.assetManager.updateBlockProperties(selectedBlock.id, props)
+    }
     when (blockType) {
         UIBlockType.BUTTON -> {
             val props = properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
@@ -111,7 +111,7 @@ fun BlockSpecificProperties(
                                     }
                                 }
                                 IconButton(
-                                    onClick = onShowPressedHistory,
+                                    onClick = { viewModel.showHistoricalDialog(selectedBlock.id + "_pressed") },
                                     modifier = Modifier.align(Alignment.TopEnd).size(LocalAppSpacing.current.large).padding(LocalAppSpacing.current.extraSmall)
                                 ) {
                                     Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
@@ -142,7 +142,7 @@ fun BlockSpecificProperties(
                                     }
                                 }
                                 IconButton(
-                                    onClick = onShowDisabledHistory,
+                                    onClick = { viewModel.showHistoricalDialog(selectedBlock.id + "_disabled") },
                                     modifier = Modifier.align(Alignment.TopEnd).size(LocalAppSpacing.current.large).padding(LocalAppSpacing.current.extraSmall)
                                 ) {
                                     Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
@@ -372,11 +372,9 @@ fun BlockSpecificProperties(
                 ReelSymbolManagerDialog(
                     props = props,
                     onDismiss = { showSymbolManager = false },
-                    onPropertiesChanged = onPropertiesChanged,
                     viewModel = viewModel,
                     apiKey = apiKey,
-                    state = state,
-                    onShowHistory = onShowHistory
+                    state = state
                 )
             }
         }
