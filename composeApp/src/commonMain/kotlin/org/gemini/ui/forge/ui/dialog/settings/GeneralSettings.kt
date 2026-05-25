@@ -32,28 +32,20 @@ import org.jetbrains.skiko.kotlinBackend
  *
  * 提供应用主题、布局模式、界面语言以及本地存储目录的配置选项。
  *
- * @param currentTheme 当前选择的主题模式
- * @param currentLayoutMode 当前选择的布局模式
- * @param currentLanguage 当前选择的界面语言
- * @param currentStorageDir 当前配置的存储目录
- * @param onThemeSelected 选择主题模式回调
- * @param onLayoutModeSelected 选择布局模式回调
- * @param onLanguageSelected 选择界面语言回调
- * @param onStorageDirSaved 保存存储目录回调
+ * @param globalState 全局状态管理对象，包含各项底层设置的当前状态
+ * @param currentJvmXmx 当前配置的 JVM 内存限制大小，默认 "2G"
+ * @param appViewModel 全局 App 视图模型，负责全局操作状态和语言偏好的控制下发
+ * @param settingsViewModel 设置相关的业务逻辑视图模型，控制主题、布局、语言和目录路径的本地保存
+ * @param onLanguageChanged 语言改变时的回调，用于通知外层组件重新加载资源
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeneralSettings(
-    currentTheme: ThemeMode,
-    currentLayoutMode: LayoutMode,
-    currentLanguage: String,
-    currentStorageDir: String,
+    globalState: org.gemini.ui.forge.state.app.AppGlobalState,
     currentJvmXmx: String = "2G",
-    onThemeSelected: (ThemeMode) -> Unit,
-    onLayoutModeSelected: (LayoutMode) -> Unit,
-    onLanguageSelected: (String) -> Unit,
-    onStorageDirSaved: (String) -> Unit,
-    onJvmXmxSaved: (String) -> Unit = {}
+    appViewModel: org.gemini.ui.forge.viewmodel.AppViewModel,
+    settingsViewModel: org.gemini.ui.forge.viewmodel.AppSettingsViewModel,
+    onLanguageChanged: () -> Unit
 ) {
     val isCompact = LocalMinimumInteractiveComponentSize.current == 0.dp
     val coroutineScope = rememberCoroutineScope()
@@ -65,6 +57,7 @@ fun GeneralSettings(
     if (kotlinBackend == KotlinBackend.JVM && isDesktop) {
         var showRestartDialog by remember { mutableStateOf(false) }
         var memoryExpanded by remember { mutableStateOf(false) }
+        var jvmXmxInput by remember(currentJvmXmx) { mutableStateOf(currentJvmXmx) }
         val memoryOptions = listOf("1G", "2G", "4G", "8G", "12G", "16G")
 
         if (showRestartDialog) {
@@ -91,7 +84,7 @@ fun GeneralSettings(
 
         ExposedDropdownMenuBox(expanded = memoryExpanded, onExpandedChange = { memoryExpanded = !memoryExpanded }) {
             SelectAllOutlinedTextField(
-                value = currentJvmXmx,
+                value = jvmXmxInput,
                 onValueChange = {}, readOnly = true,
                 label = { Text(stringResource(Res.string.settings_jvm_xmx)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(memoryExpanded) },
@@ -103,9 +96,12 @@ fun GeneralSettings(
                     DropdownMenuItem(
                         text = { Text(option) },
                         onClick = {
-                            if (currentJvmXmx != option) {
-                                onJvmXmxSaved(option)
-                                showRestartDialog = true
+                            if (jvmXmxInput != option) {
+                                coroutineScope.launch {
+                                    settingsViewModel.getConfigManager().saveJvmXmx(option)
+                                    jvmXmxInput = option
+                                    showRestartDialog = true
+                                }
                             }
                             memoryExpanded = false
                         },
@@ -124,7 +120,7 @@ fun GeneralSettings(
         ThemeMode.LIGHT to stringResource(Res.string.theme_light),
         ThemeMode.DARK to stringResource(Res.string.theme_dark)
     )
-    val currentThemeLabel = themeOptions.find { it.first == currentTheme }?.second ?: ""
+    val currentThemeLabel = themeOptions.find { it.first == globalState.themeMode }?.second ?: ""
 
     ExposedDropdownMenuBox(expanded = themeExpanded, onExpandedChange = { themeExpanded = !themeExpanded }) {
         SelectAllOutlinedTextField(
@@ -139,7 +135,7 @@ fun GeneralSettings(
             themeOptions.forEach { (mode, label) ->
                 DropdownMenuItem(
                     text = { Text(label) },
-                    onClick = { onThemeSelected(mode); themeExpanded = false }
+                    onClick = { appViewModel.setThemeMode(mode); themeExpanded = false }
                 , contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else MenuDefaults.DropdownMenuItemContentPadding, modifier = if (isCompact) Modifier.height(32.dp) else Modifier)
             }
         }
@@ -152,7 +148,7 @@ fun GeneralSettings(
         LayoutMode.TOUCH to stringResource(Res.string.layout_mode_touch),
         LayoutMode.COMPACT to stringResource(Res.string.layout_mode_compact)
     )
-    val currentLayoutLabel = layoutOptions.find { it.first == currentLayoutMode }?.second ?: ""
+    val currentLayoutLabel = layoutOptions.find { it.first == globalState.layoutMode }?.second ?: ""
 
     ExposedDropdownMenuBox(expanded = layoutExpanded, onExpandedChange = { layoutExpanded = !layoutExpanded }) {
         SelectAllOutlinedTextField(
@@ -167,7 +163,11 @@ fun GeneralSettings(
             layoutOptions.forEach { (mode, label) ->
                 DropdownMenuItem(
                     text = { Text(label) },
-                    onClick = { onLayoutModeSelected(mode); layoutExpanded = false }
+                    onClick = {
+                        settingsViewModel.saveLayoutMode(mode)
+                        appViewModel.setLayoutMode(mode)
+                        layoutExpanded = false
+                    }
                 , contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else MenuDefaults.DropdownMenuItemContentPadding, modifier = if (isCompact) Modifier.height(32.dp) else Modifier)
             }
         }
@@ -180,7 +180,7 @@ fun GeneralSettings(
         "zh" to stringResource(Res.string.language_chinese),
         "en" to stringResource(Res.string.language_english)
     )
-    val displayLangLabel = langOptions.find { it.first == currentLanguage }?.second ?: currentLanguage
+    val displayLangLabel = langOptions.find { it.first == globalState.languageCode }?.second ?: globalState.languageCode
 
     ExposedDropdownMenuBox(expanded = langExpanded, onExpandedChange = { langExpanded = !langExpanded }) {
         SelectAllOutlinedTextField(
@@ -195,7 +195,12 @@ fun GeneralSettings(
             langOptions.forEach { (code, label) ->
                 DropdownMenuItem(
                     text = { Text(label) },
-                    onClick = { onLanguageSelected(code); langExpanded = false }
+                    onClick = {
+                        settingsViewModel.saveLanguage(code)
+                        appViewModel.setLanguage(code)
+                        onLanguageChanged()
+                        langExpanded = false
+                    }
                 , contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else MenuDefaults.DropdownMenuItemContentPadding, modifier = if (isCompact) Modifier.height(32.dp) else Modifier)
             }
         }
@@ -203,15 +208,27 @@ fun GeneralSettings(
 
     // Storage
     if (getPlatform().name != "Web with Kotlin/JS") {
-        var pathInput by remember { mutableStateOf(currentStorageDir) }
+        var pathInput by remember(globalState.templateStorageDir) { mutableStateOf(globalState.templateStorageDir) }
         val dirPicker = rememberFilePicker(stringResource(Res.string.settings_storage_dir_title), isFolder = true) { path ->
             if (path != null) {
-                pathInput = path; onStorageDirSaved(path)
+                pathInput = path
+                coroutineScope.launch {
+                    if (settingsViewModel.updateStorageDir(path)) {
+                        appViewModel.updateStorageDirState(path)
+                    }
+                }
             }
         }
         SelectAllOutlinedTextField(
             value = pathInput,
-            onValueChange = { pathInput = it; onStorageDirSaved(it) },
+            onValueChange = { path ->
+                pathInput = path
+                coroutineScope.launch {
+                    if (settingsViewModel.updateStorageDir(path)) {
+                        appViewModel.updateStorageDirState(path)
+                    }
+                }
+            },
             label = { Text(stringResource(Res.string.settings_storage_dir_title)) },
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             trailingIcon = { 

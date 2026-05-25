@@ -291,88 +291,18 @@ fun App(typography: Typography? = null) {
                         HelpDialog(onDismiss = { showHelpDialog = false })
                     }
 
-                    val pipPackages by envViewModel.pipPackages.collectAsState()
-                    val isPipLoading by envViewModel.isPipLoading.collectAsState()
-                    val pipLogs by envViewModel.pipLogs.collectAsState()
-                    val isPipActionInProgress by envViewModel.isPipActionInProgress.collectAsState()
-                    val searchResult by envViewModel.searchResult.collectAsState()
-                    val isSearching by envViewModel.isSearching.collectAsState()
-                    val topMarketPackages by envViewModel.topMarketPackages.collectAsState()
-                    val isMarketLoading by envViewModel.isMarketLoading.collectAsState()
-                    val marketPage by envViewModel.marketPage.collectAsState()
-
                     if (showSettingsDialog) {
                         AppSettingsDialog(
-                            currentTheme = globalState.themeMode,
-                            currentLayoutMode = globalState.layoutMode,
-                            currentLanguage = globalState.languageCode,
-                            currentApiKey = globalState.apiKey,
-                            currentStorageDir = globalState.templateStorageDir,
-                            currentMaxRetries = globalState.maxRetries,
-                            currentImageGenCount = globalState.imageGenCount,
-                            currentPromptLang = globalState.promptLangPref,
-                            shortcuts = globalState.shortcuts,
-                            envStatus = envStatus,
-                            pipPackages = pipPackages,
-                            isPipLoading = isPipLoading,
-                            pipLogs = pipLogs,
-                            isPipActionInProgress = isPipActionInProgress,
-                            searchResult = searchResult,
-                            isSearching = isSearching,
-                            topMarketPackages = topMarketPackages,
-                            isMarketLoading = isMarketLoading,
-                            marketPage = marketPage,
+                            globalState = globalState,
+                            appViewModel = appViewModel,
+                            settingsViewModel = settingsViewModel,
+                            envViewModel = envViewModel,
+                            updateViewModel = updateViewModel,
                             initialCategory = settingsInitialCategory,
-                            updateStatus = updateStatus,
-                            configManager = configManager,
                             onDismiss = { showSettingsDialog = false },
-                            onLanguageSelected = {
-                                settingsViewModel.saveLanguage(it)
-                                appViewModel.setLanguage(it); languageKey++
-                            },
-                            onLayoutModeSelected = {
-                                settingsViewModel.saveLayoutMode(it)
-                                appViewModel.setLayoutMode(it)
-                            },
-                            onThemeSelected = { appViewModel.setThemeMode(it) },
-                            onApiKeySaved = {
-                                settingsViewModel.saveApiKey(it)
-                                appViewModel.updateApiKey(it)
-                            },
-                            onStorageDirSaved = { path ->
-                                coroutineScope.launch {
-                                    if (settingsViewModel.updateStorageDir(path)) appViewModel.updateStorageDirState(
-                                        path
-                                    )
-                                }
-                            },
-                            onMaxRetriesSaved = {
-                                settingsViewModel.saveMaxRetries(it)
-                                appViewModel.updateMaxRetriesState(it)
-                            },
-                            onImageGenCountSaved = {
-                                settingsViewModel.saveImageGenCount(it)
-                                appViewModel.updateImageGenCountState(it)
-                            },
-                            onPromptLangSelected = {
-                                settingsViewModel.savePromptLanguagePref(it)
-                                appViewModel.setPromptLanguagePref(it)
-                            },
-                            onShortcutSaved = { action, key ->
-                                settingsViewModel.saveShortcut(action, key)
-                                appViewModel.updateShortcutState(action, key)
-                            },
-                            onCheckEnv = { envViewModel.checkEnvironment() },
-                            onInstallEnvItem = { envViewModel.installEnvironmentItem(it) },
-                            onUninstallEnvItem = { envViewModel.uninstallEnvironmentItem(it) },
-                            onBatchInstallPip = { envViewModel.batchInstallPipPackages(it) },
-                            onBatchUninstallPip = { envViewModel.batchUninstallPipPackages(it) },
-                            onOpenPackageUrl = { envViewModel.openPackageHome(it) },
-                            onSearchPipPackage = { envViewModel.searchPipPackage(it) },
-                            onClearSearchResult = { envViewModel.clearSearchResult() },
-                            onLoadMarketPage = { envViewModel.loadMarketPage(it) },
-                            onCheckUpdate = { updateViewModel.checkForUpdates() },
-                            onStartUpdate = { updateViewModel.performUpdate(it) }
+                            onLanguageChanged = {
+                                languageKey++
+                            }
                         )
                     }
 

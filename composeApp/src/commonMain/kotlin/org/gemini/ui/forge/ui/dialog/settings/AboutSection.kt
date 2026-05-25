@@ -31,16 +31,13 @@ import androidx.compose.material3.LinearProgressIndicator
  * 展示应用图标、名称、当前版本号、版权信息以及更新检测界面。
  * 支持手动检测更新和下载更新。
  *
- * @param updateStatus 当前更新状态（空闲、检查中、有可用更新、下载中等）
- * @param onCheckUpdate 触发检查更新的回调
- * @param onStartUpdate 触发开始下载更新的回调
+ * @param updateViewModel 应用程序检查更新的视图模型，负责升级检测和升级动作触发
  */
 @Composable
 fun AboutSection(
-    updateStatus: UpdateStatus,
-    onCheckUpdate: () -> Unit,
-    onStartUpdate: (UpdateInfo) -> Unit
+    updateViewModel: org.gemini.ui.forge.viewmodel.AppUpdateViewModel
 ) {
+    val statusState by updateViewModel.status.collectAsState()
 
     SettingSectionTitle(stringResource(Res.string.settings_category_about))
 
@@ -90,9 +87,9 @@ fun AboutSection(
                 Modifier.padding(LocalAppSpacing.current.medium),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                when (updateStatus) {
+                when (val status = statusState) {
                     is UpdateStatus.Idle -> {
-                        Button(onClick = onCheckUpdate, shape = AppShapes.medium) {
+                        Button(onClick = updateViewModel::checkForUpdates, shape = AppShapes.medium) {
                             Icon(Icons.Default.SystemUpdateAlt, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(LocalAppSpacing.current.small))
                             Text(stringResource(Res.string.update_check_action))
@@ -110,28 +107,28 @@ fun AboutSection(
 
                     is UpdateStatus.Available -> {
                         Text(
-                            stringResource(Res.string.update_available_title, updateStatus.info.version),
+                            stringResource(Res.string.update_available_title, status.info.version),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            updateStatus.info.releaseNotes,
+                            status.info.releaseNotes,
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(vertical = LocalAppSpacing.current.small)
                         )
-                        Button(onClick = { onStartUpdate(updateStatus.info) }, shape = AppShapes.medium) {
+                        Button(onClick = { updateViewModel.performUpdate(status.info) }, shape = AppShapes.medium) {
                             Text(stringResource(Res.string.update_action_now))
                         }
                     }
 
                     is UpdateStatus.Downloading -> {
                         LinearProgressIndicator(
-                            progress = { updateStatus.progress },
+                            progress = { status.progress },
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                                 .height(LocalAppSpacing.current.small).clip(CircleShape)
                         )
                         Text(
-                            stringResource(Res.string.update_downloading, (updateStatus.progress * 100).toInt()),
+                            stringResource(Res.string.update_downloading, (status.progress * 100).toInt()),
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(top = LocalAppSpacing.current.small)
                         )
@@ -156,7 +153,7 @@ fun AboutSection(
                             style = MaterialTheme.typography.bodyMedium
                         )
                         TextButton(
-                            onClick = onCheckUpdate,
+                            onClick = updateViewModel::checkForUpdates,
                             modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall)
                         ) {
                             Text(
@@ -167,9 +164,9 @@ fun AboutSection(
                     }
 
                     is UpdateStatus.Error -> {
-                        Text(updateStatus.message, color = MaterialTheme.colorScheme.error)
+                        Text(status.message, color = MaterialTheme.colorScheme.error)
                         Button(
-                            onClick = onCheckUpdate,
+                            onClick = updateViewModel::checkForUpdates,
                             modifier = Modifier.padding(top = LocalAppSpacing.current.small),
                             shape = AppShapes.medium
                         ) { Text(stringResource(Res.string.update_check_action)) }

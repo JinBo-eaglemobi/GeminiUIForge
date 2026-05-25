@@ -35,95 +35,26 @@ import org.jetbrains.skiko.hostOs
  *
  * 包含常规、AI、环境、快捷键和关于等多个设置分类面板的切换和展示。
  *
- * @param currentTheme 当前选中的主题模式。
- * @param currentLayoutMode 当前选中的布局模式。
- * @param currentLanguage 当前选中的语言（如 "zh", "en", "auto"）。
- * @param currentApiKey 当前配置的 Gemini API 密钥。
- * @param currentStorageDir 当前配置的本地存储目录路径。
- * @param currentMaxRetries AI 生成失败时的最大重试次数，默认 3。
- * @param currentImageGenCount 每次批量生图生成的数量，默认 4。
- * @param currentPromptLang 生成提示词使用的语言偏好，默认为自动。
- * @param shortcuts 当前快捷键配置的映射。
- * @param envStatus Python 等环境状态检测结果。
- * @param pipPackages 本地已安装的 Pip 包列表。
- * @param isPipLoading 是否正在加载 Pip 包列表。
- * @param pipLogs Pip 操作执行日志。
- * @param isPipActionInProgress 是否正在进行 Pip 相关的安装/卸载操作。
- * @param searchResult 云端市场包的搜索结果。
- * @param isSearching 是否正在搜索。
- * @param topMarketPackages 云端市场热门推荐包列表。
- * @param isMarketLoading 是否正在加载市场数据。
- * @param marketPage 市场数据的当前分页索引。
+ * @param globalState 全局状态管理对象，包含各项底层设置的当前状态
+ * @param appViewModel 全局 App 视图模型，负责全局操作状态的下发
+ * @param settingsViewModel 设置相关的业务逻辑视图模型，控制通用/AI/快捷键持久化配置
+ * @param envViewModel 环境依赖与包管理的视图模型，维护核心依赖检测和 Python 生态状态
+ * @param updateViewModel 应用程序检查更新的视图模型，负责升级检测和升级动作触发
  * @param initialCategory 打开对话框时默认选中的设置分类。
- * @param updateStatus 应用程序更新状态。
  * @param onDismiss 关闭对话框的回调。
- * @param onLanguageSelected 选择语言后的回调。
- * @param onLayoutModeSelected 选择布局模式后的回调。
- * @param onThemeSelected 选择主题模式后的回调。
- * @param onApiKeySaved 保存 API 密钥的回调。
- * @param onStorageDirSaved 保存存储目录的回调。
- * @param onMaxRetriesSaved 保存最大重试次数的回调。
- * @param onImageGenCountSaved 保存每次生图数量的回调。
- * @param onPromptLangSelected 选择提示词语言的回调。
- * @param onShortcutSaved 保存修改后的快捷键的回调。
- * @param onCheckEnv 触发重新检测环境状态的回调。
- * @param onInstallEnvItem 安装指定环境组件（如 Python）的回调。
- * @param onUninstallEnvItem 卸载指定环境组件的回调。
- * @param onBatchInstallPip 批量安装 Pip 包的回调。
- * @param onBatchUninstallPip 批量卸载 Pip 包的回调。
- * @param onOpenPackageUrl 在浏览器中打开 Pip 包详情链接的回调。
- * @param onSearchPipPackage 在云端市场搜索 Pip 包的回调。
- * @param onClearSearchResult 清除搜索结果的回调。
- * @param onLoadMarketPage 加载市场指定分页数据的回调。
- * @param onCheckUpdate 触发检查应用更新的回调。
- * @param onStartUpdate 确认开始下载并更新应用的回调。
+ * @param onLanguageChanged 语言改变时的回调，用于通知父组件刷新资源
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppSettingsDialog(
-    currentTheme: ThemeMode,
-    currentLayoutMode: LayoutMode,
-    currentLanguage: String,
-    currentApiKey: String,
-    currentStorageDir: String,
-    currentMaxRetries: Int = 3,
-    currentImageGenCount: Int = 4,
-    currentPromptLang: PromptLanguage = PromptLanguage.AUTO,
-    shortcuts: Map<ShortcutAction, String>,
-    envStatus: FullEnvironmentStatus,
-    pipPackages: List<PipPackageInfo> = emptyList(),
-    isPipLoading: Boolean = false,
-    pipLogs: List<String> = emptyList(),
-    isPipActionInProgress: Boolean = false,
-    searchResult: PipPackageInfo? = null,
-    isSearching: Boolean = false,
-    topMarketPackages: List<PipPackageInfo> = emptyList(),
-    isMarketLoading: Boolean = false,
-    marketPage: Int = 0,
+    globalState: org.gemini.ui.forge.state.app.AppGlobalState,
+    appViewModel: org.gemini.ui.forge.viewmodel.AppViewModel,
+    settingsViewModel: org.gemini.ui.forge.viewmodel.AppSettingsViewModel,
+    envViewModel: org.gemini.ui.forge.viewmodel.AppEnvViewModel,
+    updateViewModel: org.gemini.ui.forge.viewmodel.AppUpdateViewModel,
     initialCategory: SettingCategory = SettingCategory.GENERAL,
-    updateStatus: UpdateStatus = UpdateStatus.Idle,
-    configManager: org.gemini.ui.forge.manager.ConfigManager,
     onDismiss: () -> Unit,
-    onLanguageSelected: (String) -> Unit,
-    onLayoutModeSelected: (LayoutMode) -> Unit,
-    onThemeSelected: (ThemeMode) -> Unit,
-    onApiKeySaved: (String) -> Unit,
-    onStorageDirSaved: (String) -> Unit,
-    onMaxRetriesSaved: (Int) -> Unit = {},
-    onImageGenCountSaved: (Int) -> Unit = {},
-    onPromptLangSelected: (PromptLanguage) -> Unit = {},
-    onShortcutSaved: (ShortcutAction, String) -> Unit = { _, _ -> },
-    onCheckEnv: () -> Unit = {},
-    onInstallEnvItem: (String) -> Unit = {},
-    onUninstallEnvItem: (String) -> Unit = {},
-    onBatchInstallPip: (List<String>) -> Unit = {},
-    onBatchUninstallPip: (List<String>) -> Unit = {},
-    onOpenPackageUrl: (String) -> Unit = {},
-    onSearchPipPackage: (String) -> Unit = {},
-    onClearSearchResult: () -> Unit = {},
-    onLoadMarketPage: (Int) -> Unit = {},
-    onCheckUpdate: () -> Unit = {},
-    onStartUpdate: (UpdateInfo) -> Unit = {}
+    onLanguageChanged: () -> Unit
 ) {
     val isPc = remember { hostOs.isWindows || hostOs.isMacOS || hostOs.isLinux }
     var selectedCategory by remember {
@@ -233,6 +164,7 @@ fun AppSettingsDialog(
                             val rightScrollState = rememberScrollState()
                             val coroutineScope = rememberCoroutineScope()
                             var currentJvmXmx by remember { mutableStateOf("2G") }
+                            val configManager = remember { settingsViewModel.getConfigManager() }
                             
                             LaunchedEffect(Unit) {
                                 currentJvmXmx = configManager.loadJvmXmx()
@@ -244,49 +176,31 @@ fun AppSettingsDialog(
                             ) {
                                 when (selectedCategory) {
                                     SettingCategory.GENERAL -> GeneralSettings(
-                                        currentTheme, currentLayoutMode, currentLanguage, currentStorageDir,
+                                        globalState = globalState,
                                         currentJvmXmx = currentJvmXmx,
-                                        onThemeSelected = onThemeSelected, 
-                                        onLayoutModeSelected = onLayoutModeSelected, 
-                                        onLanguageSelected = onLanguageSelected, 
-                                        onStorageDirSaved = onStorageDirSaved,
-                                        onJvmXmxSaved = { 
-                                            coroutineScope.launch {
-                                                configManager.saveJvmXmx(it)
-                                                currentJvmXmx = it
-                                            }
-                                        }
+                                        appViewModel = appViewModel,
+                                        settingsViewModel = settingsViewModel,
+                                        onLanguageChanged = onLanguageChanged
                                     )
 
                                     SettingCategory.AI -> AISettings(
-                                        currentApiKey, currentMaxRetries, currentImageGenCount, currentPromptLang,
-                                        onApiKeySaved, onMaxRetriesSaved, onImageGenCountSaved, onPromptLangSelected
+                                        globalState = globalState,
+                                        appViewModel = appViewModel,
+                                        settingsViewModel = settingsViewModel
                                     )
 
                                     SettingCategory.ENVIRONMENT -> EnvironmentSettings(
-                                        status = envStatus,
-                                        pipPackages = pipPackages,
-                                        isPipLoading = isPipLoading,
-                                        pipLogs = pipLogs,
-                                        isPipActionInProgress = isPipActionInProgress,
-                                        searchResult = searchResult,
-                                        isSearching = isSearching,
-                                        topMarketPackages = topMarketPackages,
-                                        isMarketLoading = isMarketLoading,
-                                        marketPage = marketPage,
-                                        onCheck = onCheckEnv,
-                                        onInstall = onInstallEnvItem,
-                                        onUninstall = onUninstallEnvItem,
-                                        onBatchInstallPip = onBatchInstallPip,
-                                        onBatchUninstallPip = onBatchUninstallPip,
-                                        onOpenPackageUrl = onOpenPackageUrl,
-                                        onSearchPipPackage = onSearchPipPackage,
-                                        onClearSearchResult = onClearSearchResult,
-                                        onLoadMarketPage = onLoadMarketPage
+                                        envViewModel = envViewModel
                                     )
 
-                                    SettingCategory.SHORTCUTS -> ShortcutSettings(shortcuts, onShortcutSaved)
-                                    SettingCategory.ABOUT -> AboutSection(updateStatus, onCheckUpdate, onStartUpdate)
+                                    SettingCategory.SHORTCUTS -> ShortcutSettings(
+                                        globalState = globalState,
+                                        appViewModel = appViewModel,
+                                        settingsViewModel = settingsViewModel
+                                    )
+                                    SettingCategory.ABOUT -> AboutSection(
+                                        updateViewModel = updateViewModel
+                                    )
                                 }
                             }
                             VerticalScrollbarAdapter(

@@ -36,48 +36,22 @@ import androidx.compose.material3.HorizontalDivider
  * 分为三个选项卡：核心依赖、本地扩展管理和云端探索市场。
  * 支持检测系统环境、管理本地 Pip 包以及搜索和安装 PyPI 上的扩展包。
  *
- * @param status 核心依赖的状态信息
- * @param pipPackages 本地已安装的 Pip 包列表
- * @param isPipLoading 是否正在加载本地 Pip 包
- * @param pipLogs Pip 安装/卸载过程的日志
- * @param isPipActionInProgress 是否正在执行 Pip 操作
- * @param searchResult 云端搜索到的 Pip 包信息
- * @param isSearching 是否正在搜索云端 Pip 包
- * @param topMarketPackages 云端市场热门包列表
- * @param isMarketLoading 是否正在加载云端市场数据
- * @param marketPage 云端市场当前页码
- * @param onCheck 触发重新检测环境的回调
- * @param onInstall 单个包安装回调
- * @param onUninstall 单个包卸载回调
- * @param onBatchInstallPip 批量安装 Pip 包回调
- * @param onBatchUninstallPip 批量卸载 Pip 包回调
- * @param onOpenPackageUrl 在浏览器中打开包详情页的回调
- * @param onSearchPipPackage 搜索云端 Pip 包回调
- * @param onClearSearchResult 清除搜索结果回调
- * @param onLoadMarketPage 加载云端市场指定页码回调
+ * @param envViewModel 环境依赖与包管理的视图模型，集中负责环境检测和 Pip 包生态操作
  */
 @Composable
 fun EnvironmentSettings(
-    status: FullEnvironmentStatus,
-    pipPackages: List<PipPackageInfo>,
-    isPipLoading: Boolean,
-    pipLogs: List<String>,
-    isPipActionInProgress: Boolean,
-    searchResult: PipPackageInfo?,
-    isSearching: Boolean,
-    topMarketPackages: List<PipPackageInfo>,
-    isMarketLoading: Boolean,
-    marketPage: Int,
-    onCheck: () -> Unit,
-    onInstall: (String) -> Unit,
-    onUninstall: (String) -> Unit,
-    onBatchInstallPip: (List<String>) -> Unit,
-    onBatchUninstallPip: (List<String>) -> Unit,
-    onOpenPackageUrl: (String) -> Unit,
-    onSearchPipPackage: (String) -> Unit,
-    onClearSearchResult: () -> Unit,
-    onLoadMarketPage: (Int) -> Unit
+    envViewModel: org.gemini.ui.forge.viewmodel.AppEnvViewModel
 ) {
+    val status by envViewModel.status.collectAsState()
+    val pipPackages by envViewModel.pipPackages.collectAsState()
+    val isPipLoading by envViewModel.isPipLoading.collectAsState()
+    val pipLogs by envViewModel.pipLogs.collectAsState()
+    val isPipActionInProgress by envViewModel.isPipActionInProgress.collectAsState()
+    val searchResult by envViewModel.searchResult.collectAsState()
+    val isSearching by envViewModel.isSearching.collectAsState()
+    val topMarketPackages by envViewModel.topMarketPackages.collectAsState()
+    val isMarketLoading by envViewModel.isMarketLoading.collectAsState()
+    val marketPage by envViewModel.marketPage.collectAsState()
     val isCompact = LocalMinimumInteractiveComponentSize.current == 0.dp
 
     var envTab by remember { mutableStateOf(0) }
@@ -99,7 +73,7 @@ fun EnvironmentSettings(
                     .background(if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent)
                     .clickable {
                         envTab = index
-                        if (index == 2 && topMarketPackages.isEmpty()) onLoadMarketPage(0)
+                        if (index == 2 && topMarketPackages.isEmpty()) envViewModel.loadMarketPage(0)
                     }
                     .padding(vertical = LocalAppSpacing.current.small),
                 contentAlignment = Alignment.Center
@@ -123,7 +97,7 @@ fun EnvironmentSettings(
             verticalAlignment = Alignment.CenterVertically
         ) {
             SettingSectionTitle(stringResource(Res.string.env_python_check_title))
-            TextButton(onClick = onCheck, enabled = !status.isChecking) {
+            TextButton(onClick = { envViewModel.checkEnvironment() }, enabled = !status.isChecking) {
                 if (status.isChecking) CircularProgressIndicator(
                     Modifier.size(LocalAppSpacing.current.medium),
                     strokeWidth = 2.dp
@@ -188,7 +162,7 @@ fun EnvironmentSettings(
 
                         if (item.isOutdated && !item.isInstalling) {
                             Button(
-                                onClick = { onInstall(item.name) },
+                                onClick = { envViewModel.installEnvironmentItem(item.name) },
                                 shape = AppShapes.medium,
                                 contentPadding = PaddingValues(
                                     horizontal = 12.dp,
@@ -203,7 +177,7 @@ fun EnvironmentSettings(
 
                         if (!item.isInstalled) {
                             Button(
-                                onClick = { onInstall(item.name) },
+                                onClick = { envViewModel.installEnvironmentItem(item.name) },
                                 enabled = !item.isInstalling,
                                 shape = AppShapes.medium,
                                 contentPadding = PaddingValues(
@@ -224,7 +198,7 @@ fun EnvironmentSettings(
                             }
                         } else {
                             OutlinedButton(
-                                onClick = { onUninstall(item.name) },
+                                onClick = { envViewModel.uninstallEnvironmentItem(item.name) },
                                 enabled = !item.isInstalling,
                                 shape = AppShapes.medium,
                                 contentPadding = PaddingValues(
@@ -285,7 +259,7 @@ fun EnvironmentSettings(
                     }
                     Spacer(Modifier.height(12.dp))
                     Button(
-                        onClick = { onInstall("python") },
+                        onClick = { envViewModel.installEnvironmentItem("python") },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                         shape = AppShapes.medium
@@ -311,7 +285,7 @@ fun EnvironmentSettings(
                 if (selectedPackages.isNotEmpty()) {
                     OutlinedButton(
                         onClick = {
-                            onBatchUninstallPip(selectedPackages.toList())
+                            envViewModel.batchUninstallPipPackages(selectedPackages.toList())
                             selectedPackages = emptySet()
                         },
                         enabled = !isPipActionInProgress,
@@ -321,7 +295,7 @@ fun EnvironmentSettings(
                     }
                     Button(
                         onClick = {
-                            onBatchInstallPip(selectedPackages.toList())
+                            envViewModel.batchInstallPipPackages(selectedPackages.toList())
                             selectedPackages = emptySet()
                         },
                         enabled = !isPipActionInProgress
@@ -329,7 +303,7 @@ fun EnvironmentSettings(
                         Text("更新已选 (${selectedPackages.size})", fontSize = 12.sp)
                     }
                 }
-                TextButton(onClick = onCheck, enabled = !isPipLoading && !isPipActionInProgress) {
+                TextButton(onClick = { envViewModel.checkEnvironment() }, enabled = !isPipLoading && !isPipActionInProgress) {
                     if (isPipLoading) CircularProgressIndicator(
                         Modifier.size(LocalAppSpacing.current.medium),
                         strokeWidth = 2.dp
@@ -437,7 +411,7 @@ fun EnvironmentSettings(
                                 }
 
                                 IconButton(
-                                    onClick = { onOpenPackageUrl(pkg.name) },
+                                    onClick = { envViewModel.openPackageHome(pkg.name) },
                                     modifier = Modifier.size(LocalAppSpacing.current.extraLarge)
                                 ) {
                                     Icon(
@@ -450,7 +424,7 @@ fun EnvironmentSettings(
                                 if (pkg.isOutdated) {
                                     Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
                                     Button(
-                                        onClick = { onBatchInstallPip(listOf(pkg.name)) },
+                                        onClick = { envViewModel.batchInstallPipPackages(listOf(pkg.name)) },
                                         enabled = !isPipActionInProgress,
                                         shape = AppShapes.medium,
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
@@ -477,7 +451,7 @@ fun EnvironmentSettings(
             if (selectedPackages.isNotEmpty()) {
                 Button(
                     onClick = {
-                        onBatchInstallPip(selectedPackages.toList())
+                        envViewModel.batchInstallPipPackages(selectedPackages.toList())
                         selectedPackages = emptySet()
                     },
                     enabled = !isPipActionInProgress
@@ -499,11 +473,11 @@ fun EnvironmentSettings(
             trailingIcon = {
                 Row {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = ""; onClearSearchResult() }) {
+                        IconButton(onClick = { searchQuery = ""; envViewModel.clearSearchResult() }) {
                             Icon(Icons.Default.Clear, contentDescription = "Clear")
                         }
                     }
-                    IconButton(onClick = { onSearchPipPackage(searchQuery) }) {
+                    IconButton(onClick = { envViewModel.searchPipPackage(searchQuery) }) {
                         if (isSearching) CircularProgressIndicator(
                             Modifier.size(LocalAppSpacing.current.medium),
                             strokeWidth = 2.dp
@@ -514,7 +488,8 @@ fun EnvironmentSettings(
             }
         )
 
-        if (searchResult != null) {
+        val result = searchResult
+        if (result != null) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = LocalAppSpacing.current.extraSmall),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -525,7 +500,7 @@ fun EnvironmentSettings(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
-                IconButton(onClick = onClearSearchResult, modifier = Modifier.size(24.dp)) {
+                IconButton(onClick = { envViewModel.clearSearchResult() }, modifier = Modifier.size(24.dp)) {
                     Icon(Icons.Default.Close, contentDescription = "Clear Search", modifier = Modifier.size(16.dp))
                 }
             }
@@ -538,25 +513,25 @@ fun EnvironmentSettings(
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         SelectionContainer {
-                            Text(searchResult.name, fontWeight = FontWeight.Bold)
+                            Text(result.name, fontWeight = FontWeight.Bold)
                         }
-                        Text(searchResult.description, style = MaterialTheme.typography.labelSmall)
-                        if (!searchResult.latestVersion.isNullOrEmpty()) {
+                        Text(result.description, style = MaterialTheme.typography.labelSmall)
+                        if (!result.latestVersion.isNullOrEmpty()) {
                             Text(
-                                "最新版本: ${searchResult.latestVersion}",
+                                "最新版本: ${result.latestVersion}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     IconButton(
-                        onClick = { onOpenPackageUrl(searchResult.name) },
+                        onClick = { envViewModel.openPackageHome(result.name) },
                         modifier = Modifier.padding(horizontal = 4.dp)
                     ) {
                         Icon(Icons.Default.Info, "详情", tint = MaterialTheme.colorScheme.primary)
                     }
                     Button(
-                        onClick = { onBatchInstallPip(listOf(searchResult.name)) },
+                        onClick = { envViewModel.batchInstallPipPackages(listOf(result.name)) },
                         enabled = !isPipActionInProgress,
                         shape = AppShapes.medium,
                         contentPadding = PaddingValues(
@@ -600,12 +575,12 @@ fun EnvironmentSettings(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (marketPage > 0) {
                     TextButton(
-                        onClick = { onLoadMarketPage(marketPage - 1) },
+                        onClick = { envViewModel.loadMarketPage(marketPage - 1) },
                         enabled = !isMarketLoading
                     ) { Text("上一页", fontSize = 12.sp) }
                 }
                 Text("第 ${marketPage + 1} 页", style = MaterialTheme.typography.labelSmall)
-                TextButton(onClick = { onLoadMarketPage(marketPage + 1) }, enabled = !isMarketLoading) {
+                TextButton(onClick = { envViewModel.loadMarketPage(marketPage + 1) }, enabled = !isMarketLoading) {
                     Text(
                         "下一页",
                         fontSize = 12.sp
@@ -671,7 +646,7 @@ fun EnvironmentSettings(
                                 }
 
                                 IconButton(
-                                    onClick = { onOpenPackageUrl(pkg.name) },
+                                    onClick = { envViewModel.openPackageHome(pkg.name) },
                                     modifier = Modifier.size(36.dp)
                                 ) {
                                     Icon(
@@ -703,7 +678,7 @@ fun EnvironmentSettings(
                                     )
                                 } else {
                                     Button(
-                                        onClick = { onBatchInstallPip(listOf(pkg.name)) },
+                                        onClick = { envViewModel.batchInstallPipPackages(listOf(pkg.name)) },
                                         enabled = !isPipActionInProgress,
                                         shape = AppShapes.medium,
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),

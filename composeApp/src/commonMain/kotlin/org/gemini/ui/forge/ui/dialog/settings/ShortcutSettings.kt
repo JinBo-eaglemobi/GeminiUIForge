@@ -23,19 +23,21 @@ import org.jetbrains.compose.resources.stringResource
  *
  * 允许用户查看并修改应用内各种操作（如撤销、重做、保存等）绑定的快捷键。
  *
- * @param shortcuts 当前快捷键绑定映射，键为操作类型，值为快捷键组合字符串
- * @param onShortcutSaved 快捷键修改保存回调
+ * @param globalState 全局状态管理对象，包含各项底层设置的当前状态
+ * @param appViewModel 全局 App 视图模型，负责全局操作快捷键绑定状态的维护
+ * @param settingsViewModel 设置相关的业务逻辑视图模型，控制快捷键绑定方案的持久化配置保存
  */
 @Composable
 fun ShortcutSettings(
-    shortcuts: Map<ShortcutAction, String>,
-    onShortcutSaved: (ShortcutAction, String) -> Unit
+    globalState: org.gemini.ui.forge.state.app.AppGlobalState,
+    appViewModel: org.gemini.ui.forge.viewmodel.AppViewModel,
+    settingsViewModel: org.gemini.ui.forge.viewmodel.AppSettingsViewModel
 ) {
     val isCompact = LocalMinimumInteractiveComponentSize.current == 0.dp
 
     SettingSectionTitle(stringResource(Res.string.settings_shortcuts_title))
 
-    shortcuts.filterKeys { action ->
+    globalState.shortcuts.filterKeys { action ->
         action in listOf(
             ShortcutAction.UNDO, ShortcutAction.REDO, ShortcutAction.SAVE,
             ShortcutAction.RENAME, ShortcutAction.DELETE, ShortcutAction.COPY,
@@ -74,7 +76,8 @@ fun ShortcutSettings(
                 value = editingKey,
                 onValueChange = {
                     editingKey = it
-                    onShortcutSaved(action, it)
+                    settingsViewModel.saveShortcut(action, it)
+                    appViewModel.updateShortcutState(action, it)
                 },
                 modifier = Modifier.width(160.dp),
                 textStyle = MaterialTheme.typography.bodyMedium,
