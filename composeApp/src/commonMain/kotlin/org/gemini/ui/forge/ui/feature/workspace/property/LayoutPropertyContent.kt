@@ -1,34 +1,34 @@
 package org.gemini.ui.forge.ui.feature.workspace.property
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.unit.dp
-import org.gemini.ui.forge.model.ui.UIBlockType
+import geminiuiforge.composeapp.generated.resources.*
+import org.gemini.ui.forge.data.readBytesInternal
 import org.gemini.ui.forge.model.ui.ResourceItem
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.ProjectWorkspaceState
-import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
-import org.gemini.ui.forge.ui.component.getDisplayNameRes
-import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.component.*
+import org.gemini.ui.forge.ui.dialog.ResourceBindingDialog
 import org.gemini.ui.forge.ui.feature.workspace.BlockSpecificProperties
+import org.gemini.ui.forge.ui.feature.workspace.CollapsibleSection
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.ResourceBindingValidator
+import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.utils.looseJson
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.jetbrains.compose.resources.stringResource
-import geminiuiforge.composeapp.generated.resources.*
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.ui.text.input.KeyboardType
-import org.gemini.ui.forge.ui.feature.workspace.CollapsibleSection
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.pointerHoverIcon
-import org.gemini.ui.forge.utils.Toast
-import org.gemini.ui.forge.ui.component.ToastType
+
 /**
  * 渲染布局编辑相关的属性内容。
  * 包含页面设置、批量生成入口、模块物理坐标、ID、类型切换及删除操作。
@@ -53,7 +53,7 @@ fun LayoutPropertyContent(
             configError = null
         } else {
             try {
-                val bytes = org.gemini.ui.forge.data.readBytesInternal(path)
+                val bytes = readBytesInternal(path)
                 if (bytes != null) {
                     val content = bytes.decodeToString()
                     val parsed = looseJson.decodeFromString<List<ResourceItem>>(content)
@@ -226,13 +226,13 @@ fun LayoutPropertyContent(
                         val hasBinding = bindingPath.isNotEmpty()
                         
                         val firstInvalidInfo = remember(bindingPath, currentConfig) {
-                            org.gemini.ui.forge.utils.ResourceBindingValidator.findFirstInvalidKey(bindingPath, currentConfig)
+                            ResourceBindingValidator.findFirstInvalidKey(bindingPath, currentConfig)
                         }
                         val isBindingInvalid = hasBinding && firstInvalidInfo != null
 
                         LaunchedEffect(isBindingInvalid, firstInvalidInfo, bindingPath) {
-                            if (isBindingInvalid && firstInvalidInfo != null) {
-                                org.gemini.ui.forge.utils.AppLogger.w(
+                            if (isBindingInvalid) {
+                                AppLogger.w(
                                     "ResourceBinding",
                                     "检测到模块 (ID: ${selectedBlock.id}) 的资源绑定失效：未能在最新 JSON 配置中定位到层级[${firstInvalidInfo.first}]的Key[\"${firstInvalidInfo.second}\"]。当前完整路径为：${bindingPath.joinToString(" -> ")}"
                                 )
@@ -327,7 +327,7 @@ fun LayoutPropertyContent(
                             val parentBlock = remember(selectedBlock, state.currentPage?.blocks) {
                                 state.currentPage?.blocks?.let { findClosestBoundAncestor(it, selectedBlock.id) }
                             }
-                            org.gemini.ui.forge.ui.dialog.ResourceBindingDialog(
+                            ResourceBindingDialog(
                                 block = selectedBlock,
                                 parentBlock = parentBlock,
                                 configData = currentConfig,
@@ -504,12 +504,12 @@ private fun EditableInfoItem(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
+    NumberOutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label, style = MaterialTheme.typography.labelSmall) },
         modifier = modifier.tip("输入数字以精确调整坐标或尺寸"),
-        isFloat = true
+        isFloat = false
     )
 }
 

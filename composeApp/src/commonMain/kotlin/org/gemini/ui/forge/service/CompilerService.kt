@@ -17,10 +17,10 @@ data class ExportedNode(
     val id: String,
     val type: String,
     val name: String,
-    val x: Float,
-    val y: Float,
-    val width: Float,
-    val height: Float,
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
     val description: String,
     val imagePath: String?,
     val children: List<ExportedNode> = emptyList()
@@ -30,8 +30,8 @@ data class ExportedNode(
 data class ExportedPage(
     val id: String,
     val name: String,
-    val width: Float,
-    val height: Float,
+    val width: Int,
+    val height: Int,
     val blocks: List<ExportedNode>
 )
 
@@ -132,8 +132,8 @@ class CompilerService {
                 ExportedPage(
                     id = page.id,
                     name = page.nameStr,
-                    width = page.width,
-                    height = page.height,
+                    width = page.width.toInt(),
+                    height = page.height.toInt(),
                     blocks = exportedBlocks
                 )
             }
@@ -181,6 +181,18 @@ class CompilerService {
         }
     }
 
+    /**
+     * 计算二进制数据的 FNV-1a 32位哈希值并返回8位十六进制字符串
+     */
+    private fun calculateFnv1aHash(data: ByteArray): String {
+        var hash = 0x811c9dc5L
+        for (b in data) {
+            hash = hash xor (b.toInt() and 0xFF).toLong()
+            hash = (hash * 0x01000193) and 0xFFFFFFFFL
+        }
+        return hash.toString(16).padStart(8, '0')
+    }
+
     private suspend fun exportBlock(
         block: UIBlock, 
         targetAssetsPath: String, 
@@ -202,7 +214,7 @@ class CompilerService {
                         block.id
                     }
                     val fileName = if (obfuscateAssets) {
-                        val hash = abs(baseName.hashCode()).toString(16)
+                        val hash = calculateFnv1aHash(imageBytes)
                         "$hash.png"
                     } else {
                         "$baseName.png"
@@ -236,10 +248,10 @@ class CompilerService {
             id = block.id,
             type = block.type.name,
             name = camelName,
-            x = block.bounds.left,
-            y = block.bounds.top,
-            width = block.bounds.width,
-            height = block.bounds.height,
+            x = block.bounds.left.toInt(),
+            y = block.bounds.top.toInt(),
+            width = block.bounds.width.toInt(),
+            height = block.bounds.height.toInt(),
             description = block.userPromptZh, // 将中文描述作为功能描述
             imagePath = exportedImagePath,
             children = exportedChildren
