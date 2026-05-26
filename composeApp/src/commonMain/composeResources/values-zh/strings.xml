@@ -142,8 +142,6 @@
     <string name="hierarchy_expand_all">一键展开</string>
     <string name="hierarchy_collapse_all">一键折叠</string>
     <string name="screen_home">首页</string>
-    <string name="screen_template_asset_gen">资源生成模式</string>
-    <string name="screen_template_editor">布局编辑模式</string>
     <string name="screen_template_generator">AI 模板分析模式</string>
     <string name="dialog_add_layer_title">添加新图层</string>
     <string name="dialog_rename_layer_title">重命名图层</string>

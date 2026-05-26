@@ -26,6 +26,9 @@ import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.CanvasArea
+import org.gemini.ui.forge.viewmodel.AppViewModel
+import org.gemini.ui.forge.state.app.AppState
+import org.gemini.ui.forge.state.app.AppGlobalState
 import org.gemini.ui.forge.ui.component.HierarchySidebar
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.dialog.AppConfirmDialog
@@ -43,23 +46,23 @@ import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
  */
 @Composable
 fun ProjectWorkspaceScreen(
-    initialProject: ProjectState,
-    initialProjectName: String,
+    appViewModel: AppViewModel,
+    appState: AppState,
+    globalState: AppGlobalState,
     templateRepo: TemplateRepository,
-    cloudAssetManager: CloudAssetManager,
-    configManager: ConfigManager,
-    aiService: AIGenerationService,
-    effectiveApiKey: String,
-    initialPromptLang: PromptLanguage,
-    saveEvent: SharedFlow<Unit>,
-    shortcutEvent: SharedFlow<ShortcutAction>,
-    projectSettingsEvent: SharedFlow<Unit> = kotlinx.coroutines.flow.MutableSharedFlow(),
-    onSaveRequest: (String, ProjectState) -> Unit,
-    onDirtyChanged: (Boolean) -> Unit
+    configManager: ConfigManager
 ) {
     // 实例化核心 ViewModel
-    val viewModel: ProjectWorkspaceViewModel = viewModel(key = initialProjectName) {
-        ProjectWorkspaceViewModel(initialProject, initialProjectName, initialPromptLang, templateRepo, cloudAssetManager, aiService, onDirtyChanged)
+    val viewModel: ProjectWorkspaceViewModel = viewModel(key = appState.projectName) {
+        ProjectWorkspaceViewModel(
+            initialProject = appState.project,
+            initialProjectName = appState.projectName,
+            initialLang = globalState.promptLangPref,
+            templateRepo = templateRepo,
+            cloudAssetManager = appViewModel.cloudAssetManager,
+            aiService = appViewModel.aiService,
+            onDirtyChanged = { appViewModel.setDirty(it) }
+        )
     }
     val state by viewModel.state.collectAsState()
 
@@ -73,11 +76,23 @@ fun ProjectWorkspaceScreen(
     var isCtrlPressed by remember { mutableStateOf(false) }
 
     // 生命周期与全局事件监听
-    LaunchedEffect(saveEvent) { saveEvent.collect { onSaveRequest(initialProjectName, state.project) } }
-    LaunchedEffect(viewModel.requestSaveEvent) { viewModel.requestSaveEvent.collect { onSaveRequest(initialProjectName, state.project) } }
-    LaunchedEffect(projectSettingsEvent) { projectSettingsEvent.collect { showProjectSettingsDialog = true } }
-    LaunchedEffect(shortcutEvent) { 
-        shortcutEvent.collect { action ->
+    LaunchedEffect(appViewModel.saveEvent) {
+        appViewModel.saveEvent.collect {
+            appViewModel.saveProject(appState.projectName, state.project)
+        }
+    }
+    LaunchedEffect(viewModel.requestSaveEvent) {
+        viewModel.requestSaveEvent.collect {
+            appViewModel.saveProject(appState.projectName, state.project)
+        }
+    }
+    LaunchedEffect(appViewModel.projectSettingsEvent) {
+        appViewModel.projectSettingsEvent.collect {
+            showProjectSettingsDialog = true
+        }
+    }
+    LaunchedEffect(appViewModel.shortcutEvent) { 
+        appViewModel.shortcutEvent.collect { action ->
             AppLogger.d("WorkspaceScreen", "📌 收到快捷键: ${action.name}")
             when (action) {
                 ShortcutAction.DELETE -> {
@@ -105,7 +120,7 @@ fun ProjectWorkspaceScreen(
             }
         } 
     }
-    LaunchedEffect(initialProject) { viewModel.reload(initialProject) }
+    LaunchedEffect(appState.project) { viewModel.reload(appState.project) }
 
     // --- 对话框组件集成 ---
 
@@ -154,7 +169,7 @@ fun ProjectWorkspaceScreen(
         VisualRefineDialog(
             viewModel = viewModel,
             state = state,
-            apiKey = effectiveApiKey
+            apiKey = globalState.effectiveApiKey
         )
     }
 
@@ -206,7 +221,7 @@ fun ProjectWorkspaceScreen(
         BatchAssetGenDialog(
             blocks = findAllMissing(state.currentPage?.blocks ?: emptyList()),
             onCancel = { viewModel.updateState { it.copy(showBatchGenDialog = false) } },
-            onStartGen = { viewModel.assetGen.startBatchGeneration(effectiveApiKey, it) }
+            onStartGen = { viewModel.assetGen.startBatchGeneration(globalState.effectiveApiKey, it) }
         )
     }
 
@@ -287,7 +302,7 @@ fun ProjectWorkspaceScreen(
                 UnifiedPropertyPanel(
                     state = state,
                     viewModel = viewModel,
-                    apiKey = effectiveApiKey
+                    apiKey = globalState.effectiveApiKey
                 )
             }
         }

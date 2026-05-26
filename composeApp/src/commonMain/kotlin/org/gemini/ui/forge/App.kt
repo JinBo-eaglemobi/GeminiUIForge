@@ -369,21 +369,11 @@ fun App(typography: Typography? = null) {
 
                                 AppScreen.PROJECT_WORKSPACE -> {
                                     ProjectWorkspaceScreen(
-                                        initialProject = appState.project,
-                                        initialProjectName = appState.projectName,
+                                        appViewModel = appViewModel,
+                                        appState = appState,
+                                        globalState = globalState,
                                         templateRepo = templateRepo,
-                                        cloudAssetManager = appViewModel.cloudAssetManager,
-                                        configManager = configManager,
-                                        aiService = appViewModel.aiService,
-                                        effectiveApiKey = globalState.effectiveApiKey,
-                                        initialPromptLang = globalState.promptLangPref,
-                                        saveEvent = appViewModel.saveEvent,
-                                        shortcutEvent = appViewModel.shortcutEvent,
-                                        projectSettingsEvent = appViewModel.projectSettingsEvent,
-                                        onSaveRequest = { name, project ->
-                                            appViewModel.saveProject(name, project)
-                                        },
-                                        onDirtyChanged = { appViewModel.setDirty(it) }
+                                        configManager = configManager
                                     )
                                 }
 

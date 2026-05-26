@@ -97,10 +97,9 @@ fun AppTopBar(
                 // 当前模式标识
                 val modeNameRes = when (currentScreen) {
                     AppScreen.HOME -> Res.string.screen_home
-                    AppScreen.TEMPLATE_ASSET_GEN -> Res.string.screen_template_asset_gen
-                    AppScreen.TEMPLATE_EDITOR -> Res.string.screen_template_editor
                     AppScreen.TEMPLATE_GENERATOR -> Res.string.screen_template_generator
                     AppScreen.PROJECT_WORKSPACE -> Res.string.screen_project_workspace
+                    else -> Res.string.screen_home
                 }
                 
                 Surface(
@@ -144,7 +143,7 @@ fun AppTopBar(
                         Spacer(Modifier.width(4.dp))
                         Text(stringResource(Res.string.menu_cloud_assets), style = MaterialTheme.typography.labelLarge)
                     }
-                } else if (currentScreen == AppScreen.TEMPLATE_EDITOR || currentScreen == AppScreen.TEMPLATE_ASSET_GEN || currentScreen == AppScreen.PROJECT_WORKSPACE) {
+                } else if (currentScreen == AppScreen.PROJECT_WORKSPACE) {
                     if (currentScreen == AppScreen.PROJECT_WORKSPACE) {
                         val playErrorStr = stringResource(Res.string.play_error_no_root)
                         IconButton(
