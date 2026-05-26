@@ -64,7 +64,7 @@ class CompilerService(private val fileStorage: LocalFileStorage) {
      * @param projectName 项目名称（导出标识）
      * @param projectState 当前设计的全量 UI 项目页面状态
      * @param rootDir 本地预览/运行环境的绝对根目录
-     * @param outputDir 编译产物输出的子目录名称（相对于 rootDir，例如 "bin"）
+     * @param outputDir 导出资源（切图、图片资源等）存放的子目录名称（相对于 rootDir，相对路径，例如 "assets"）
      * @param resourceConfigPath 可选的静态资源绑定元数据 JSON 文件路径（若存在，则触发强拦截校验）
      * @return 编译、解析和文件同步全部成功则返回 `true`；若由于非法绑定被强拦截或写入异常则返回 `false`
      */
@@ -110,14 +110,11 @@ class CompilerService(private val fileStorage: LocalFileStorage) {
             val normalizedOutput = outputDir.replace("\\", "/").removePrefix("/").removeSuffix("/")
             
             // 目标资源的完整绝对路径
-            val targetDirPath = if (normalizedOutput.isNotEmpty()) {
+            val targetAssetsPath = if (normalizedOutput.isNotEmpty()) {
                 "$normalizedRoot/$normalizedOutput"
             } else {
                 normalizedRoot
             }
-
-            // 在目标目录中需要生成的 assets 文件夹路径，用于存放图片
-            val targetAssetsPath = "$targetDirPath/assets"
 
             // 确保目录存在
             createParentDirsInternal("$targetAssetsPath/dummy.txt")
@@ -143,9 +140,9 @@ class CompilerService(private val fileStorage: LocalFileStorage) {
             val jsonContent = json.encodeToString(ExportedProject.serializer(), exportedProject)
             
             // 将配置文件写入输出目录
-            writeBytesInternal("$targetDirPath/GameConfig.json", jsonContent.encodeToByteArray())
+            writeBytesInternal("$targetAssetsPath/GameConfig.json", jsonContent.encodeToByteArray())
             
-            AppLogger.d("Compiler", "成功导出项目到 $targetDirPath")
+            AppLogger.d("Compiler", "成功导出项目到 $targetAssetsPath")
             true
         } catch (e: Exception) {
             AppLogger.e("Compiler", "编译导出失败", e)
