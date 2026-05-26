@@ -10,6 +10,7 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.utils.getMimeType
 import org.gemini.ui.forge.utils.readLocalFileBytes
 import org.gemini.ui.forge.manager.*
+import org.gemini.ui.forge.utils.looseJson
 
 /**
  * 专门处理 Imagen 系列模型 (Imagen 3, Imagen 4) 的生成器
@@ -21,9 +22,6 @@ class ImagenGenerator(
 ) : BaseImageGenerator() {
 
     private val TAG = "ImagenGenerator"
-    private val jsonConfig = Json { 
-        ignoreUnknownKeys = true 
-    }
 
     suspend fun generate(
         model: String,
@@ -169,7 +167,7 @@ class ImagenGenerator(
 
             if (response.status.isSuccess()) {
                 val responseText = response.bodyAsText()
-                val jsonResponse = jsonConfig.parseToJsonElement(responseText)
+                val jsonResponse = looseJson.parseToJsonElement(responseText)
                 val predictions = jsonResponse.jsonObject["predictions"]?.jsonArray
                 val results = predictions?.mapNotNull {
                     val base64 = it.jsonObject["bytesBase64Encoded"]?.jsonPrimitive?.content

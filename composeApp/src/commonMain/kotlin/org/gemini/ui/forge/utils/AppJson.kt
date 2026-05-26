@@ -13,6 +13,8 @@ import kotlinx.serialization.json.Json
  */
 @OptIn(ExperimentalSerializationApi::class)
 val looseJson = Json {
+    prettyPrint = true
+    isLenient = true
     ignoreUnknownKeys = true
     coerceInputValues = true
     allowTrailingComma = true

@@ -31,6 +31,7 @@ fun CompileConfigDialog(
     var playDir by remember { mutableStateOf(initialConfig.playDir) }
     var scriptPath by remember { mutableStateOf(initialConfig.scriptPath) }
     var outputDir by remember { mutableStateOf(initialConfig.outputDir) }
+    var obfuscateAssets by remember { mutableStateOf(initialConfig.obfuscateAssets) }
 
     val pickRootDir = rememberFilePicker(stringResource(Res.string.compile_pick_dir), isFolder = true) {
         if (it != null) rootDir = it
@@ -107,6 +108,23 @@ fun CompileConfigDialog(
                     modifier = Modifier.fillMaxWidth(),
                     shape = AppShapes.medium
                 )
+
+                // 资源名字混淆选项
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Checkbox(
+                        checked = obfuscateAssets,
+                        onCheckedChange = { obfuscateAssets = it },
+                        modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                    )
+                    Text(
+                        text = stringResource(Res.string.compile_obfuscate_assets),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
         },
         confirmButton = {
@@ -117,7 +135,8 @@ fun CompileConfigDialog(
                             rootDir = rootDir,
                             scriptPath = scriptPath,
                             outputDir = outputDir,
-                            playDir = playDir
+                            playDir = playDir,
+                            obfuscateAssets = obfuscateAssets
                         )
                     )
                 },

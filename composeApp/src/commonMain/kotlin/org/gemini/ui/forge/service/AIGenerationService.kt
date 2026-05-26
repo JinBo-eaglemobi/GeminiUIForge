@@ -2,25 +2,27 @@ package org.gemini.ui.forge.service
 
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.serialization.json.*
+import kotlinx.coroutines.*
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.data.remote.NetworkClient
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.manager.CloudAssetManager
+import org.gemini.ui.forge.manager.ConfigManager
+import org.gemini.ui.forge.manager.PromptManager
+import org.gemini.ui.forge.manager.ScriptManager
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.api.ChatMessage
-import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.utils.AppLogger
-import kotlin.time.Duration.Companion.milliseconds
-import org.gemini.ui.forge.manager.*
 import org.gemini.ui.forge.utils.LocalFileStorage
+import org.gemini.ui.forge.utils.looseJson
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * AI 生成服务类（门面），协调 ImagenGenerator 和 GeminiImageGenerator。
@@ -31,10 +33,6 @@ class AIGenerationService(
     private val configManager: ConfigManager
 ) {
     private val TAG = "AIGenerationService"
-    private val jsonConfig = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
 
     // 初始化管理器 (使用传入的 storage)
     val promptManager = PromptManager(storage)
@@ -394,7 +392,7 @@ class AIGenerationService(
             val finalString = accumulatedText.toString()
             if (finalString.isEmpty()) throw Exception("响应为空")
             val cleanJson = geminiClient.cleanJson(finalString)
-            return jsonConfig.decodeFromString<ProjectState>(cleanJson)
+            return looseJson.decodeFromString<ProjectState>(cleanJson)
         } catch (e: Exception) {
             AppLogger.e(TAG, "分析异常", e)
             throw e
@@ -499,7 +497,7 @@ class AIGenerationService(
             val finalString = accumulatedText.toString()
             if (finalString.isEmpty()) throw Exception("响应为空")
             val cleanJson = geminiClient.cleanJson(finalString)
-            return jsonConfig.decodeFromString<List<UIPage>>(cleanJson)
+            return looseJson.decodeFromString<List<UIPage>>(cleanJson)
         } catch (e: Exception) {
             AppLogger.e(TAG, "重塑异常", e)
             throw e

@@ -23,7 +23,6 @@ class TemplateRepository(
     private val httpClient: HttpClient = NetworkClient.shared
 ) {
 
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
     val PROJECTS_DIR = "templates"
 
     /**
@@ -150,7 +149,7 @@ class TemplateRepository(
         AppLogger.i("TemplateRepository", "💾 开始保存模板 JSON: $templateName")
 
         val jsonRelPath = "$PROJECTS_DIR/$sanitizedName/template.json"
-        val content = json.encodeToString(projectState)
+        val content = looseJson.encodeToString(projectState)
         fileStorage.saveToFile(jsonRelPath, content)
         AppLogger.i("TemplateRepository", "✅ 模板 JSON 已更新")
     }
@@ -161,7 +160,7 @@ class TemplateRepository(
     suspend fun saveWorkspaceConfig(templateName: String, config: org.gemini.ui.forge.model.app.WorkspaceConfig) {
         val sanitizedName = templateName.replace(" ", "_")
         val jsonRelPath = "$PROJECTS_DIR/$sanitizedName/workspace.json"
-        val content = json.encodeToString(config)
+        val content = looseJson.encodeToString(config)
         fileStorage.saveToFile(jsonRelPath, content)
     }
 
@@ -173,7 +172,7 @@ class TemplateRepository(
         val jsonRelPath = "$PROJECTS_DIR/$sanitizedName/workspace.json"
         val content = fileStorage.readFromFile(jsonRelPath) ?: return null
         return try {
-            json.decodeFromString<org.gemini.ui.forge.model.app.WorkspaceConfig>(content)
+            looseJson.decodeFromString<org.gemini.ui.forge.model.app.WorkspaceConfig>(content)
         } catch (e: Exception) {
             AppLogger.e("TemplateRepository", "❌ 解析 workspace.json 失败: $templateName", e)
             null
@@ -219,7 +218,7 @@ class TemplateRepository(
             val content = fileStorage.readFromFile("$relativePath/template.json")
             if (content != null) {
                 try {
-                    val state = json.decodeFromString<ProjectState>(content)
+                    val state = looseJson.decodeFromString<ProjectState>(content)
                     val title = dirName.replace("_", " ")
                     AppLogger.d("TemplateRepository", "📖 已加载模板: $title")
                     title to state

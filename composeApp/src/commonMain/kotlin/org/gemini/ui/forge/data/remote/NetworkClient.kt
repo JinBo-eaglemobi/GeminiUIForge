@@ -6,6 +6,7 @@ import io.ktor.client.plugins.logging.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.looseJson
 
 /**
  * 全局共享的 HTTP 客户端。
@@ -16,11 +17,7 @@ object NetworkClient {
     val shared: HttpClient by lazy {
         HttpClient {
             install(ContentNegotiation) {
-                json(Json {
-                    prettyPrint = true
-                    isLenient = true
-                    ignoreUnknownKeys = true
-                })
+                json(looseJson)
             }
             install(HttpRequestRetry)
             install(HttpTimeout) {

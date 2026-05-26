@@ -204,6 +204,14 @@ fun App(typography: Typography? = null) {
                             initialConfig = globalState.compileConfig,
                             onDismiss = { showCompileDialog = false },
                             onConfirm = { config ->
+                                if (config.rootDir.isBlank()) {
+                                    Toast.show("请先配置运行环境根目录 (rootDir)", ToastType.ERROR)
+                                    return@CompileConfigDialog
+                                }
+                                if (config.outputDir.isBlank()) {
+                                    Toast.show("请先配置资源保存目录 (outputDir)", ToastType.ERROR)
+                                    return@CompileConfigDialog
+                                }
                                 settingsViewModel.saveCompileConfig(config)
                                 appViewModel.updateCompileConfig(config)
                                 showCompileDialog = false
@@ -211,13 +219,14 @@ fun App(typography: Typography? = null) {
                                 // 执行编译导出逻辑
                                 coroutineScope.launch {
                                     val wsConfig = templateRepo.loadWorkspaceConfig(appState.projectName)
-                                    val compilerService = CompilerService(storage)
+                                    val compilerService = CompilerService()
                                     val success = compilerService.compileProject(
                                         projectName = appState.projectName,
                                         projectState = appState.project,
                                         rootDir = config.rootDir,
                                         outputDir = config.outputDir,
-                                        resourceConfigPath = wsConfig?.resourceConfigPath
+                                        resourceConfigPath = wsConfig?.resourceConfigPath,
+                                        obfuscateAssets = config.obfuscateAssets
                                     )
                                     if (success) {
                                         Toast.show("编译导出成功", ToastType.SUCCESS)

@@ -16,5 +16,6 @@ data class CompileConfig(
     val rootDir: String = "",
     val scriptPath: String = "",
     val outputDir: String = "",
-    val playDir: String = ""
+    val playDir: String = "",
+    val obfuscateAssets: Boolean = true
 )

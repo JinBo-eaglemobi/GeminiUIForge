@@ -22,6 +22,7 @@ import io.ktor.client.plugins.logging.*
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.buffered
+import org.gemini.ui.forge.utils.looseJson
 import org.jetbrains.skiko.hostOs
 
 /**
@@ -31,9 +32,7 @@ import org.jetbrains.skiko.hostOs
 class UpdateService(private val currentVersion: String) {
     private val client = HttpClient {
         install(ContentNegotiation) {
-            json(Json { 
-                ignoreUnknownKeys = true 
-                coerceInputValues = true
+            json(Json(looseJson) {
                 encodeDefaults = true
             })
         }

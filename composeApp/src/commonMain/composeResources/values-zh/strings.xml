@@ -273,6 +273,7 @@
     <string name="compile_script_path">编译脚本文件 (Node.js)</string>
     <string name="compile_output_dir">资源保存目录</string>
     <string name="compile_output_dir_hint">位于 Root 目录内</string>
+    <string name="compile_obfuscate_assets">资源名字混淆</string>
     <string name="compile_action_start">开始编译</string>
     <string name="compile_pick_dir">选择目录</string>
     <string name="compile_pick_file">选择文件</string>

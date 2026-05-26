@@ -5,9 +5,13 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.gemini.ui.forge.data.remote.NetworkClient
 import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.looseJson
 
 /**
  * 统一的 Gemini AI 通信客户端
@@ -21,15 +25,6 @@ import org.gemini.ui.forge.utils.AppLogger
  */
 class GeminiClient {
     private val TAG = "GeminiClient"
-    
-    /** 
-     * 全局复用的 JSON 解析器配置 
-     * ignoreUnknownKeys = true 确保当 API 新增未知字段时不会导致解析崩溃。
-     */
-    private val jsonConfig = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
 
     /**
      * 执行流式生成内容请求 (Stream Generate Content)
@@ -80,7 +75,7 @@ class GeminiClient {
                             if (dataJson.isEmpty() || dataJson == "[DONE]") continue
                             
                             try {
-                                val jsonElement = jsonConfig.parseToJsonElement(dataJson)
+                                val jsonElement = looseJson.parseToJsonElement(dataJson)
                                 onRawData(jsonElement) // 向外抛出完整的响应结构，方便外部高度自定义(如图文混合)
                                 
                                 val textChunk = extractText(jsonElement)
@@ -137,7 +132,7 @@ class GeminiClient {
 
             if (response.status.isSuccess()) {
                 val responseText = response.bodyAsText()
-                val jsonElement = jsonConfig.parseToJsonElement(responseText)
+                val jsonElement = looseJson.parseToJsonElement(responseText)
                 // 尝试提取文本内容，若提取不到则视为失败
                 return extractText(jsonElement) ?: throw Exception("响应中未找到有效文本")
             } else {

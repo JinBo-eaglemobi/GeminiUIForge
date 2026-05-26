@@ -244,7 +244,7 @@ class AppViewModel(
      */
     fun playProject(playErrorStr: String) {
         val config = state.value.globalState.compileConfig
-        if (config.rootDir.isBlank() && config.playDir.isBlank()) {
+        if (config.rootDir.isBlank()) {
             Toast.show(playErrorStr, ToastType.ERROR)
         } else {
             // 如果配置了自定义播放目录 playDir，直接使用它寻找 index.html；否则退回默认的 rootDir/index.html
