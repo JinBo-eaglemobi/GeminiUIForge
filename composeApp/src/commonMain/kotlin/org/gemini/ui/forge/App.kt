@@ -31,6 +31,7 @@ import org.gemini.ui.forge.model.app.SettingCategory
 import org.gemini.ui.forge.model.app.UIModule
 import org.gemini.ui.forge.model.app.UpdateStatus
 import org.gemini.ui.forge.service.AIGenerationService
+import org.gemini.ui.forge.service.CompilerService
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.*
 import org.gemini.ui.forge.ui.dialog.AppSettingsDialog
@@ -110,7 +111,7 @@ fun App(typography: Typography? = null) {
 
             LaunchedEffect(globalState.languageCode) {
                 val effectiveLang = if (globalState.languageCode == "auto") {
-                    val sysLang = originalSystemLanguage ?: androidx.compose.ui.text.intl.Locale.current.language
+                    val sysLang = originalSystemLanguage ?: Locale.current.language
                     if (sysLang.lowercase().startsWith("zh")) "zh" else "en"
                 } else globalState.languageCode
                 setAppLanguage(effectiveLang)
@@ -229,7 +230,7 @@ fun App(typography: Typography? = null) {
                                 // 执行编译导出逻辑
                                 coroutineScope.launch {
                                     val wsConfig = templateRepo.loadWorkspaceConfig(appState.projectName)
-                                    val compilerService = org.gemini.ui.forge.service.CompilerService(storage)
+                                    val compilerService = CompilerService(storage)
                                     val success = compilerService.compileProject(
                                         projectName = appState.projectName,
                                         projectState = appState.project,
@@ -310,7 +311,7 @@ fun App(typography: Typography? = null) {
                     val statusMessage by AppLogger.statusMessage.collectAsState()
                     val showLogViewer by AppLogger.showLogViewer.collectAsState()
                     val memoryLogs by AppLogger.memoryLogs.collectAsState()
-                    val playErrorStr = org.jetbrains.compose.resources.stringResource(geminiuiforge.composeapp.generated.resources.Res.string.play_error_no_root)
+                    val playErrorStr = org.jetbrains.compose.resources.stringResource(Res.string.play_error_no_root)
 
                     if (showLogViewer) {
                         LogViewerDialog(

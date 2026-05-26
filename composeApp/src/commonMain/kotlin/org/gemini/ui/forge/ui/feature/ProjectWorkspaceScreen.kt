@@ -152,17 +152,9 @@ fun ProjectWorkspaceScreen(
     // 视觉区域重塑引导对话框
     if (state.showVisualRefine) {
         VisualRefineDialog(
-            blockId = state.refineTargetId,
-            imageUri = state.currentPage?.sourceImageUri,
-            pageWidth = state.currentPage?.width ?: 1080f,
-            pageHeight = state.currentPage?.height ?: 1920f,
-            initialInstruction = if (state.refineTargetId != null) state.defaultRefineInstructionUpdate else state.defaultRefineInstructionNew,
-            onDismiss = { viewModel.hideVisualRefine() },
-            onConfirm = { rect, instr, useChat, _, _, _ ->
-                val targetId = state.refineTargetId
-                viewModel.hideVisualRefine()
-                viewModel.layoutEditor.onRefineArea(targetId, rect, instr, effectiveApiKey, useChat) { }
-            }
+            viewModel = viewModel,
+            state = state,
+            apiKey = effectiveApiKey
         )
     }
 

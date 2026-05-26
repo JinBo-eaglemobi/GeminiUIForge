@@ -15,10 +15,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.action_refine_area
-import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.SerialRect
+import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.ImageAreaSelector
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import kotlin.math.abs
 import org.jetbrains.compose.resources.stringResource
 
@@ -28,29 +29,27 @@ import org.jetbrains.compose.resources.stringResource
  * 提供一个界面让用户在模板图片上框选特定区域，并输入重塑指令。
  * 支持设置是否携带会话历史上下文。
  *
- * @param blockId 当前编辑的模块 ID，如果为空则表示全局重塑
- * @param imageUri 待重塑的模板文件信息
- * @param pageWidth 页面原始宽度
- * @param pageHeight 页面原始高度
- * @param initialInstruction 初始重塑指令文案
- * @param onDismiss 对话框关闭回调
- * @param onConfirm 确认重塑回调，返回框选区域、指令、是否携带上下文及状态更新回调
+ * @param viewModel 统一工作区的视图模型控制中心
+ * @param state 当前全量工作区运行时状态
+ * @param apiKey 视觉 AI 解析接口调用鉴权密钥
  */
 @Composable
 fun VisualRefineDialog(
-    blockId: String?,
-    imageUri: TemplateFile?,
-    pageWidth: Float,
-    pageHeight: Float,
-    initialInstruction: String,
-    onDismiss: () -> Unit,
-    onConfirm: (SerialRect, String, Boolean, (String) -> Unit, (String) -> Unit, (Boolean) -> Unit) -> Unit
+    viewModel: ProjectWorkspaceViewModel,
+    state: ProjectWorkspaceState,
+    apiKey: String
 ) {
+    val blockId = state.refineTargetId
+    val imageUri = state.currentPage?.sourceImageUri
+    val pageWidth = state.currentPage?.width ?: 1080f
+    val pageHeight = state.currentPage?.height ?: 1920f
+    val initialInstruction = if (blockId != null) state.defaultRefineInstructionUpdate else state.defaultRefineInstructionNew
+
     var instruction by remember { mutableStateOf(initialInstruction) }
     var selectedRect by remember { mutableStateOf<SerialRect?>(null) }
     var useChatContext by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = { viewModel.hideVisualRefine() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             modifier = Modifier.fillMaxWidth(0.95f).fillMaxHeight(0.95f),
             shape = RoundedCornerShape(16.dp),
@@ -107,10 +106,21 @@ fun VisualRefineDialog(
                         Text("携带历史上下文 (会话模式)", style = MaterialTheme.typography.bodyMedium)
                     }
                     Row {
-                        TextButton(onClick = onDismiss) { Text("取消") }
+                        TextButton(onClick = { viewModel.hideVisualRefine() }) { Text("取消") }
                         Spacer(Modifier.width(8.dp))
                         Button(
-                            onClick = { selectedRect?.let { onConfirm(it, instruction, useChatContext, {}, {}, {}) } },
+                            onClick = { 
+                                selectedRect?.let { rect ->
+                                    viewModel.hideVisualRefine()
+                                    viewModel.layoutEditor.onRefineArea(
+                                        blockId,
+                                        rect,
+                                        instruction,
+                                        apiKey,
+                                        useChatContext
+                                    ) { }
+                                }
+                            },
                             enabled = selectedRect != null,
                             shape = AppShapes.medium
                         ) { Text("确认重塑") }
