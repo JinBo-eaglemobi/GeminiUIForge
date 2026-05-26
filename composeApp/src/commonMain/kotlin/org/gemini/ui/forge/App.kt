@@ -70,8 +70,6 @@ fun App(typography: Typography? = null) {
     val focusRequester = remember { FocusRequester() }
     val tooltipState = remember { GlobalTooltipState() }
 
-    var templatesList by remember { mutableStateOf(emptyList<Pair<String, ProjectState>>()) }
-
     CompositionLocalProvider(
         LocalAppSpacing provides AppSpacing(),
         LocalGlobalTooltip provides tooltipState
@@ -120,12 +118,6 @@ fun App(typography: Typography? = null) {
                 setAppLanguage(effectiveLang)
             }
 
-            LaunchedEffect(globalState.currentScreen) {
-                if (globalState.currentScreen == AppScreen.HOME) {
-                    templatesList = templateRepo.getTemplates()
-                }
-            }
-
             LaunchedEffect(updateStatus) {
                 when (updateStatus) {
                     is UpdateStatus.Available -> {
@@ -168,12 +160,6 @@ fun App(typography: Typography? = null) {
                     }
 
                     else -> {}
-                }
-            }
-
-            val availableModules = buildList {
-                templatesList.forEach { (name, projectState) ->
-                    add(UIModule(id = name, nameStr = name, projectState = projectState))
                 }
             }
 
@@ -376,27 +362,8 @@ fun App(typography: Typography? = null) {
                             when (globalState.currentScreen) {
                                 AppScreen.HOME -> {
                                     HomeScreen(
-                                        modules = availableModules,
-                                        onOpenWorkspace = { moduleId ->
-                                            availableModules.find { it.id == moduleId }?.let {
-                                                appViewModel.loadProject(
-                                                    it.nameStr ?: moduleId,
-                                                    it.projectState!!
-                                                )
-                                            }
-                                            appViewModel.navigateTo(AppScreen.PROJECT_WORKSPACE)
-                                        },
-                                        onOpenFileDir = {
-                                            coroutineScope.launch {
-                                                templateRepo.openFileDir(it)
-                                            }
-                                        },
-                                        onDeleteModule = { moduleId ->
-                                            coroutineScope.launch {
-                                                templateRepo.deleteTemplate(moduleId);
-                                                templatesList = templateRepo.getTemplates()
-                                            }
-                                        }
+                                        appViewModel = appViewModel,
+                                        templateRepo = templateRepo
                                     )
                                 }
 
