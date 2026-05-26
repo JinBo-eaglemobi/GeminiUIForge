@@ -98,13 +98,27 @@ fun AssetGenPropertyContent(
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Fingerprint, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(
+                Icons.Default.Fingerprint,
+                null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
             Spacer(Modifier.width(8.dp))
-            Text(text = "正在编辑: ${selectedBlock.id}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Text(
+                text = "正在编辑: ${selectedBlock.id}",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
             Spacer(Modifier.weight(1f))
             SuggestionChip(
                 onClick = { },
-                label = { Text(stringResource(selectedBlock.type.getDisplayNameRes()), style = MaterialTheme.typography.labelSmall) },
+                label = {
+                    Text(
+                        stringResource(selectedBlock.type.getDisplayNameRes()),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                },
                 shape = AppShapes.small,
                 border = null,
                 colors = SuggestionChipDefaults.suggestionChipColors(
@@ -150,15 +164,15 @@ fun AssetGenPropertyContent(
                                 .fillMaxHeight()
                                 .clip(AppShapes.small)
                                 .background(
-                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer 
+                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer
                                     else Color.Transparent
                                 ),
-                            text = { 
+                            text = {
                                 Text(
-                                    text = stateInfo.name, 
+                                    text = stateInfo.name,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                                ) 
+                                )
                             }
                         )
                     }
@@ -167,8 +181,13 @@ fun AssetGenPropertyContent(
         }
 
         Box(
-            Modifier.fillMaxWidth().height(180.dp).clip(AppShapes.medium).background(Color.Black.copy(alpha = 0.05f))
-                .clickable { if (currentImageToDisplay != null) showImageEditor = true }
+            Modifier.fillMaxWidth()
+                .height(180.dp)
+                .clip(AppShapes.medium)
+                .background(Color.Black.copy(alpha = 0.05f))
+                .clickable {
+                    if (currentImageToDisplay != null) showImageEditor = true
+                }
         ) {
             if (currentImageToDisplay != null) {
                 AsyncImage(
@@ -179,8 +198,17 @@ fun AssetGenPropertyContent(
                 )
             } else {
                 Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.HideImage, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline)
-                    Text("尚未绑定资源", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    Icon(
+                        Icons.Default.HideImage,
+                        null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.outline
+                    )
+                    Text(
+                        "尚未绑定资源",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 }
             }
         }
@@ -196,7 +224,7 @@ fun AssetGenPropertyContent(
                 Text("历史/切换", style = MaterialTheme.typography.labelSmall)
             }
             OutlinedButton(
-                onClick = { 
+                onClick = {
                     val updatedBlock = assetSupport.clearImageUri(currentTab)
                     viewModel.assetManager.updateBlock(updatedBlock)
                 },
@@ -213,7 +241,10 @@ fun AssetGenPropertyContent(
                 onClick = { showImageEditor = true },
                 modifier = Modifier.fillMaxWidth().height(40.dp),
                 shape = AppShapes.medium,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             ) {
                 Icon(Icons.Default.Edit, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -236,7 +267,11 @@ fun AssetGenPropertyContent(
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text("AI 提示词", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    "AI 提示词",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
                 Spacer(Modifier.weight(1f))
                 SingleChoiceSegmentedButtonRow {
                     PromptLanguage.entries.filter { it != PromptLanguage.AUTO }.forEachIndexed { index, lang ->
@@ -251,14 +286,18 @@ fun AssetGenPropertyContent(
 
             SelectAllOutlinedTextField(
                 value = prompt,
-                onValueChange = { newValue -> 
+                onValueChange = { newValue ->
                     val updatedBlock = assetSupport.updatePrompt(currentTab, effectiveLang, newValue)
                     viewModel.assetManager.updateBlock(updatedBlock)
                 },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
                 placeholder = {
                     if (otherPrompt.isNotBlank()) {
-                        Text("当前语言为空，系统将使用: ${otherPrompt.take(20)}...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                        Text(
+                            "当前语言为空，系统将使用: ${otherPrompt.take(20)}...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
                     } else {
                         Text(stringResource(Res.string.prop_prompt_hint), style = MaterialTheme.typography.bodySmall)
                     }
@@ -272,9 +311,9 @@ fun AssetGenPropertyContent(
                 Text("携带历史上下文 (会话模式)", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.weight(1f))
                 IconButton(
-                    onClick = { 
+                    onClick = {
                         // 将优化结果反馈写入对应的 blockPrompt 字段
-                        viewModel.layoutEditor.optimizePrompt(selectedBlock.id, apiKey, effectiveLang, useChatContext) 
+                        viewModel.layoutEditor.optimizePrompt(selectedBlock.id, apiKey, effectiveLang, useChatContext)
                     },
                     enabled = !state.isGenerating && (prompt.isNotBlank() || otherPrompt.isNotBlank())
                 ) {
@@ -283,15 +322,23 @@ fun AssetGenPropertyContent(
             }
         }
 
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f), shape = AppShapes.small, modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+            shape = AppShapes.small,
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Column(Modifier.padding(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = state.isGenerateTransparent, onCheckedChange = { checked -> viewModel.updateState { it.copy(isGenerateTransparent = checked) } })
+                    Checkbox(
+                        checked = state.isGenerateTransparent,
+                        onCheckedChange = { checked -> viewModel.updateState { it.copy(isGenerateTransparent = checked) } })
                     Text("生成透明背景 (PNG)", style = MaterialTheme.typography.bodySmall)
                 }
                 if (state.isGenerateTransparent) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 24.dp)) {
-                        Checkbox(checked = state.isPrioritizeCloudRemoval, onCheckedChange = { checked -> viewModel.updateState { it.copy(isPrioritizeCloudRemoval = checked) } })
+                        Checkbox(
+                            checked = state.isPrioritizeCloudRemoval,
+                            onCheckedChange = { checked -> viewModel.updateState { it.copy(isPrioritizeCloudRemoval = checked) } })
                         Text("优先云端抠图", style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -299,13 +346,17 @@ fun AssetGenPropertyContent(
         }
 
         Button(
-            onClick = { 
-                viewModel.assetGen.onRequestGeneration(apiKey, if (prompt.isNotBlank()) prompt else otherPrompt) 
+            onClick = {
+                viewModel.assetGen.onRequestGeneration(apiKey, if (prompt.isNotBlank()) prompt else otherPrompt)
             },
             modifier = Modifier.fillMaxWidth().height(48.dp),
             enabled = !state.isGenerating
         ) {
-            if (state.isGenerating) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+            if (state.isGenerating) CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                color = MaterialTheme.colorScheme.onPrimary,
+                strokeWidth = 2.dp
+            )
             else {
                 Icon(Icons.Default.Bolt, null)
                 Spacer(Modifier.width(8.dp))
@@ -316,10 +367,19 @@ fun AssetGenPropertyContent(
 }
 
 @Composable
-private fun ModelSelector(state: ProjectWorkspaceState, viewModel: ProjectWorkspaceViewModel, modifier: Modifier = Modifier) {
+private fun ModelSelector(
+    state: ProjectWorkspaceState,
+    viewModel: ProjectWorkspaceViewModel,
+    modifier: Modifier = Modifier
+) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
-        OutlinedButton(onClick = { expanded = true }, shape = AppShapes.small, modifier = Modifier.fillMaxWidth().height(40.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            shape = AppShapes.small,
+            modifier = Modifier.fillMaxWidth().height(40.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp)
+        ) {
             Text(state.selectedModel.displayName, style = MaterialTheme.typography.labelSmall, maxLines = 1)
             Icon(Icons.Default.ArrowDropDown, null)
         }
@@ -329,7 +389,13 @@ private fun ModelSelector(state: ProjectWorkspaceState, viewModel: ProjectWorksp
                     DropdownMenuItem(
                         text = { Text(model.displayName, style = MaterialTheme.typography.bodyMedium) },
                         onClick = { viewModel.updateState { it.copy(selectedModel = model) }; expanded = false },
-                        leadingIcon = { if (state.selectedModel == model) Icon(Icons.Default.Check, null, Modifier.size(18.dp)) }
+                        leadingIcon = {
+                            if (state.selectedModel == model) Icon(
+                                Icons.Default.Check,
+                                null,
+                                Modifier.size(18.dp)
+                            )
+                        }
                     )
                 }
         }
