@@ -143,15 +143,19 @@ sealed class BlockProperties {
      *
      * @property spinUri 旋转中状态（Spin）时的图片资源路径。
      * @property stopUri 停止状态（Stop）时的图片资源路径。
-     * @property spinPrompt 旋转状态的生成 Prompt。
-     * @property stopPrompt 停止状态的生成 Prompt。
+     * @property spinPromptZh 旋转状态（Spin）的中文生成 Prompt。
+     * @property spinPromptEn 旋转状态（Spin）的英文生成 Prompt。
+     * @property stopPromptZh 停止状态（Stop）的中文生成 Prompt。
+     * @property stopPromptEn 停止状态（Stop）的英文生成 Prompt。
      */
     @Serializable
     data class SpinButtonProperties(
         val spinUri: TemplateFile? = null,
         val stopUri: TemplateFile? = null,
-        val spinPrompt: String = "",
-        val stopPrompt: String = ""
+        val spinPromptZh: String = "",
+        val spinPromptEn: String = "",
+        val stopPromptZh: String = "",
+        val stopPromptEn: String = ""
     ) : BlockProperties()
 }
 

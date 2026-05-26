@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -17,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.PromptLanguage
+import org.gemini.ui.forge.model.ui.BlockProperties
+import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
@@ -31,6 +34,11 @@ import geminiuiforge.composeapp.generated.resources.*
 
 /**
  * 渲染资产生成相关的属性内容。
+ * 
+ * 针对 SPIN_BUTTON 特殊模块进行多分生图重构：
+ * 1. 在预览图上方添加 Tab 栏：默认状态 (Spin) 和 停止状态 (Stop)。
+ * 2. 切换 Tab 时，当前的对比图片、解绑、历史选择以及下方的 AI 提示词输入，完全根据切换的选项进行更新和读写。
+ * 3. 提示词采用 SpinButtonProperties 中对应的 spinPromptZh / spinPromptEn 和 stopPromptZh / stopPromptEn 独立读写。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +79,26 @@ fun AssetGenPropertyContent(
         AdvancedSettingsDialog(state, viewModel, onDismiss = { showAdvancedSettings = false })
     }
 
+    // 针对 SPIN_BUTTON 进行的分身状态检测
+    val isSpinButton = selectedBlock.type == UIBlockType.SPIN_BUTTON
+    val spinProps = selectedBlock.properties as? BlockProperties.SpinButtonProperties
+    
+    // Tab 栏状态：0 为 Spin (默认)，1 为 Stop (停止)
+    var currentTab by remember(selectedBlock.id) { mutableStateOf(0) }
+
+    // 动态重定向获取当前状态绑定的图片和历史 ID 后缀
+    val currentImageToDisplay = if (isSpinButton) {
+        if (currentTab == 0) spinProps?.spinUri else spinProps?.stopUri
+    } else {
+        selectedBlock.currentImageUri
+    }
+
+    val historicalIdSuffix = if (isSpinButton) {
+        if (currentTab == 0) "_spin" else "_stop"
+    } else {
+        ""
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Fingerprint, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
@@ -99,16 +127,43 @@ fun AssetGenPropertyContent(
                 Spacer(Modifier.width(4.dp))
                 Text("全局风格", style = MaterialTheme.typography.labelSmall)
             }
-            ModelSelector(state, viewModel, Modifier.weight(1.2f).tip("选择当前生图任务使用的 AI 模型"))
+            ModelSelector(state, viewModel, Modifier.weight(1.2f).tip("选择当前生图任务使用的 AI模型"))
+        }
+
+        // 3. 当确定当前模块有特殊生图需求的时候，在预览图上面添加tab栏，默认就是当前正常的 (Spin)
+        if (isSpinButton) {
+            TabRow(
+                selectedTabIndex = currentTab,
+                modifier = Modifier.fillMaxWidth().height(40.dp),
+                containerColor = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.primary,
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        Modifier.tabIndicatorOffset(tabPositions[currentTab]),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            ) {
+                Tab(
+                    selected = currentTab == 0,
+                    onClick = { currentTab = 0 },
+                    text = { Text("默认状态 (Spin)", style = MaterialTheme.typography.labelSmall) }
+                )
+                Tab(
+                    selected = currentTab == 1,
+                    onClick = { currentTab = 1 },
+                    text = { Text("停止状态 (Stop)", style = MaterialTheme.typography.labelSmall) }
+                )
+            }
         }
 
         Box(
             Modifier.fillMaxWidth().height(180.dp).clip(AppShapes.medium).background(Color.Black.copy(alpha = 0.05f))
-                .clickable { if (selectedBlock.currentImageUri != null) showImageEditor = true }
+                .clickable { if (currentImageToDisplay != null) showImageEditor = true }
         ) {
-            if (selectedBlock.currentImageUri != null) {
+            if (currentImageToDisplay != null) {
                 AsyncImage(
-                    model = selectedBlock.currentImageUri.getAbsolutePath(),
+                    model = currentImageToDisplay.getAbsolutePath(),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize().padding(8.dp),
                     contentScale = ContentScale.Fit
@@ -123,8 +178,8 @@ fun AssetGenPropertyContent(
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
-                onClick = { viewModel.showHistoricalDialog(selectedBlock.id) },
-                modifier = Modifier.weight(1f),
+                onClick = { viewModel.showHistoricalDialog(selectedBlock.id + historicalIdSuffix) },
+                modifier = Modifier.weight(1.2f),
                 shape = AppShapes.medium
             ) {
                 Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp))
@@ -132,8 +187,16 @@ fun AssetGenPropertyContent(
                 Text("历史/切换", style = MaterialTheme.typography.labelSmall)
             }
             OutlinedButton(
-                onClick = { viewModel.assetManager.clearSelectedImage(selectedBlock.id) },
-                modifier = Modifier.weight(0.7f),
+                onClick = { 
+                    if (isSpinButton) {
+                        val currentProps = spinProps ?: BlockProperties.SpinButtonProperties()
+                        val newProps = if (currentTab == 0) currentProps.copy(spinUri = null) else currentProps.copy(stopUri = null)
+                        viewModel.assetManager.updateBlockProperties(selectedBlock.id, newProps)
+                    } else {
+                        viewModel.assetManager.clearSelectedImage(selectedBlock.id) 
+                    }
+                },
+                modifier = Modifier.weight(0.8f),
                 shape = AppShapes.medium,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
@@ -141,7 +204,7 @@ fun AssetGenPropertyContent(
             }
         }
 
-        if (selectedBlock.currentImageUri != null) {
+        if (currentImageToDisplay != null) {
             Button(
                 onClick = { showImageEditor = true },
                 modifier = Modifier.fillMaxWidth().height(40.dp),
@@ -158,8 +221,29 @@ fun AssetGenPropertyContent(
 
         val systemLang = androidx.compose.ui.text.intl.Locale.current.language
         val effectiveLang = state.currentLang.resolve(systemLang)
-        val prompt = if (effectiveLang == PromptLanguage.ZH) selectedBlock.userPromptZh else selectedBlock.userPromptEn
-        val otherPrompt = if (effectiveLang == PromptLanguage.ZH) selectedBlock.userPromptEn else selectedBlock.userPromptZh
+
+        // 4. 对与 SpinButton 提示词也是中英文配置的，根据当前切换的 tab 状态进行更新读写内容
+        val prompt = if (isSpinButton) {
+            val p = spinProps ?: BlockProperties.SpinButtonProperties()
+            if (currentTab == 0) {
+                if (effectiveLang == PromptLanguage.ZH) p.spinPromptZh else p.spinPromptEn
+            } else {
+                if (effectiveLang == PromptLanguage.ZH) p.stopPromptZh else p.stopPromptEn
+            }
+        } else {
+            if (effectiveLang == PromptLanguage.ZH) selectedBlock.userPromptZh else selectedBlock.userPromptEn
+        }
+
+        val otherPrompt = if (isSpinButton) {
+            val p = spinProps ?: BlockProperties.SpinButtonProperties()
+            if (currentTab == 0) {
+                if (effectiveLang == PromptLanguage.ZH) p.spinPromptEn else p.spinPromptZh
+            } else {
+                if (effectiveLang == PromptLanguage.ZH) p.stopPromptEn else p.stopPromptZh
+            }
+        } else {
+            if (effectiveLang == PromptLanguage.ZH) selectedBlock.userPromptEn else selectedBlock.userPromptZh
+        }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -178,7 +262,19 @@ fun AssetGenPropertyContent(
 
             SelectAllOutlinedTextField(
                 value = prompt,
-                onValueChange = { viewModel.assetManager.updateBlockPrompt(selectedBlock.id, effectiveLang, it) },
+                onValueChange = { newValue -> 
+                    if (isSpinButton) {
+                        val currentProps = spinProps ?: BlockProperties.SpinButtonProperties()
+                        val newProps = if (currentTab == 0) {
+                            if (effectiveLang == PromptLanguage.ZH) currentProps.copy(spinPromptZh = newValue) else currentProps.copy(spinPromptEn = newValue)
+                        } else {
+                            if (effectiveLang == PromptLanguage.ZH) currentProps.copy(stopPromptZh = newValue) else currentProps.copy(stopPromptEn = newValue)
+                        }
+                        viewModel.assetManager.updateBlockProperties(selectedBlock.id, newProps)
+                    } else {
+                        viewModel.assetManager.updateBlockPrompt(selectedBlock.id, effectiveLang, newValue) 
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
                 placeholder = {
                     if (otherPrompt.isNotBlank()) {
@@ -196,7 +292,10 @@ fun AssetGenPropertyContent(
                 Text("携带历史上下文 (会话模式)", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.weight(1f))
                 IconButton(
-                    onClick = { viewModel.layoutEditor.optimizePrompt(selectedBlock.id, apiKey, effectiveLang, useChatContext) },
+                    onClick = { 
+                        // 将优化结果反馈写入对应的 blockPrompt 字段
+                        viewModel.layoutEditor.optimizePrompt(selectedBlock.id, apiKey, effectiveLang, useChatContext) 
+                    },
                     enabled = !state.isGenerating && (prompt.isNotBlank() || otherPrompt.isNotBlank())
                 ) {
                     Icon(Icons.Default.AutoFixHigh, "优化提示词", tint = MaterialTheme.colorScheme.primary)
@@ -220,7 +319,9 @@ fun AssetGenPropertyContent(
         }
 
         Button(
-            onClick = { viewModel.assetGen.onRequestGeneration(apiKey, if (prompt.isNotBlank()) prompt else otherPrompt) },
+            onClick = { 
+                viewModel.assetGen.onRequestGeneration(apiKey, if (prompt.isNotBlank()) prompt else otherPrompt) 
+            },
             modifier = Modifier.fillMaxWidth().height(48.dp),
             enabled = !state.isGenerating
         ) {

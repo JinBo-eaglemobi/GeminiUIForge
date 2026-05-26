@@ -6,12 +6,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,9 +31,6 @@ import org.jetbrains.compose.resources.stringResource
  * @param state 当前工作区状态快照。
  * @param viewModel 统一工作区 ViewModel。
  * @param apiKey AI 服务密钥。
- * @param onRefineClick 触发区域重塑的回调。
- * @param onSetReferenceAreaClick 触发参考区域设置的回调。
- * @param onShowHistory 触发历史资源选择的回调。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

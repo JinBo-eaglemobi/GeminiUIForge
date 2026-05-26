@@ -18,7 +18,9 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
 /**
@@ -39,13 +41,13 @@ fun SelectAllOutlinedTextField(
     trailingIcon: @Composable (() -> Unit)? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     shape: Shape = MaterialTheme.shapes.small,
-    textStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
+    textStyle: TextStyle = MaterialTheme.typography.bodyMedium,
     readOnly: Boolean = false,
     enabled: Boolean = true,
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
     singleLine: Boolean = maxLines == 1,
-    visualTransformation: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None
+    visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
     // 维护带光标和选择状态的 TextFieldValue
     var textFieldValue by remember { mutableStateOf(TextFieldValue(text = value)) }
@@ -85,7 +87,7 @@ fun SelectAllOutlinedTextField(
     val colors = OutlinedTextFieldDefaults.colors()
 
     // 设置 BasicTextField 的文本颜色与光标颜色
-    val mergedTextStyle = textStyle.merge(androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface))
+    val mergedTextStyle = textStyle.merge(TextStyle(color = MaterialTheme.colorScheme.onSurface))
     val cursorColor = MaterialTheme.colorScheme.primary
 
     BasicTextField(

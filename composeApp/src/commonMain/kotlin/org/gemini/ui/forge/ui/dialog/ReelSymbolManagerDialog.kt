@@ -447,7 +447,7 @@ fun ReelSymbolManagerDialog(
 
                 // 2. 触发生成逻辑，强制使用当前选中 Tab 的语言
                 val finalPromptText = if (promptTab == 0) targetItem.userPromptZh else targetItem.userPromptEn
-                val safePrompt = if (finalPromptText.isNotBlank()) finalPromptText else targetItem.fullPrompt
+                val safePrompt = finalPromptText.ifBlank { targetItem.fullPrompt }
 
                 viewModel.assetManager.selectReelItem(targetItem.id)
                 viewModel.assetGen.onRequestGeneration(apiKey, "${UIBlockType.SYMBOL.defaultPrompt}, $safePrompt")
