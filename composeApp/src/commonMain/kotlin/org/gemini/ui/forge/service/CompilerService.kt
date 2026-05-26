@@ -51,7 +51,22 @@ class CompilerService(private val fileStorage: LocalFileStorage) {
     private val json = Json { prettyPrint = true }
 
     /**
-     * 将项目状态编译并导出到指定输出目录
+     * 将项目状态编译并导出到指定输出目录。
+     *
+     * 该过程具体包含以下关键执行逻辑：
+     * 1. **断链依赖强校验**：如果传入了 [resourceConfigPath]，本方法会自动加载该资源表并分析当前所有模块中是否
+     *    存在断链/失效的键值绑定。一旦检测到任何非法绑定，将进行强拦截，打印详细的失效定位日志并返回 `false`。
+     * 2. **数据标准化转换**：将 UI 页面和树形嵌套模块（[UIBlock]）递归扁平解析为通用的 [ExportedNode]，最终序列化
+     *    为标准的 `GameConfig.json` 导出。
+     * 3. **媒体资源同步与隔离**：自动抽取出所有设计中引用的图片（包括 AI 生图结果和本地资源），重命名拷贝至目标路径
+     *    的 `assets` 目录下，并修正节点的相对引用路径。
+     *
+     * @param projectName 项目名称（导出标识）
+     * @param projectState 当前设计的全量 UI 项目页面状态
+     * @param rootDir 本地预览/运行环境的绝对根目录
+     * @param outputDir 编译产物输出的子目录名称（相对于 rootDir，例如 "bin"）
+     * @param resourceConfigPath 可选的静态资源绑定元数据 JSON 文件路径（若存在，则触发强拦截校验）
+     * @return 编译、解析和文件同步全部成功则返回 `true`；若由于非法绑定被强拦截或写入异常则返回 `false`
      */
     suspend fun compileProject(
         projectName: String,

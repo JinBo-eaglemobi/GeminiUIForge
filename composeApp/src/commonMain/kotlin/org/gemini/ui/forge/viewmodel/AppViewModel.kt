@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.manager.CloudAssetManager
@@ -130,7 +131,10 @@ class AppViewModel(
             }
 
             val compileRootDir = configManager.loadKey("COMPILE_ROOT_DIR") ?: ""
-            val compileEnvDir = configManager.loadKey("COMPILE_ENV_DIR") ?: ""
+            // 优先加载最新的 COMPILE_PLAY_DIR，降级兼容旧的 COMPILE_ENV_DIR
+            val compilePlayDir = configManager.loadKey("COMPILE_PLAY_DIR")
+                ?: configManager.loadKey("COMPILE_ENV_DIR")
+                ?: ""
             val compileScriptPath = configManager.loadKey("COMPILE_SCRIPT_PATH") ?: ""
             val compileOutputDir = configManager.loadKey("COMPILE_OUTPUT_DIR") ?: ""
 
@@ -147,9 +151,9 @@ class AppViewModel(
                         layoutMode = layoutMode,
                         compileConfig = CompileConfig(
                             rootDir = compileRootDir,
-                            envDir = compileEnvDir,
                             scriptPath = compileScriptPath,
-                            outputDir = compileOutputDir
+                            outputDir = compileOutputDir,
+                            playDir = compilePlayDir
                         )
                     )
                 )
@@ -233,4 +237,26 @@ class AppViewModel(
         _state.update {
             it.copy(globalState = it.globalState.copy(compileConfig = config))
         }
+
+    /**
+     * 运行并本地预览当前项目，在浏览器中打开生成的 index.html。
+     * @param playErrorStr 根路径与预览运行环境皆为空时的多语言提示文案
+     */
+    fun playProject(playErrorStr: String) {
+        val config = state.value.globalState.compileConfig
+        if (config.rootDir.isBlank() && config.playDir.isBlank()) {
+            Toast.show(playErrorStr, ToastType.ERROR)
+        } else {
+            // 如果配置了自定义播放目录 playDir，直接使用它寻找 index.html；否则退回默认的 rootDir/index.html
+            val url = if (config.playDir.isNotBlank()) {
+                val play = config.playDir.trim().replace("\\", "/").removeSuffix("/")
+                "$play/index.html"
+            } else {
+                val root = config.rootDir.trim().replace("\\", "/").removeSuffix("/")
+                "$root/index.html"
+            }
+            AppLogger.i("AppViewModel", "🌐 正在本地预览项目，打开浏览器: $url")
+            getPlatform().openInBrowser(url)
+        }
+    }
 }

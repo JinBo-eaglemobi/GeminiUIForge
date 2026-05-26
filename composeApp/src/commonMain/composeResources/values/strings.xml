@@ -261,7 +261,7 @@
     <string name="menu_compile">Compile</string>
     <string name="compile_config_title">Compilation Configuration</string>
     <string name="compile_env_root">Environment Root Directory</string>
-    <string name="compile_env_dir">Environment Directory</string>
+    <string name="compile_play_dir">Play/Preview Directory</string>
     <string name="compile_script_path">Compilation Script (Node.js)</string>
     <string name="compile_output_dir">Resource Output Directory</string>
     <string name="compile_output_dir_hint">Relative to Root</string>

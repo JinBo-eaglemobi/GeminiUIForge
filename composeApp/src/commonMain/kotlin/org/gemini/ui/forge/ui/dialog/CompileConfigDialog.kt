@@ -28,15 +28,15 @@ fun CompileConfigDialog(
     onConfirm: (CompileConfig) -> Unit
 ) {
     var rootDir by remember { mutableStateOf(initialConfig.rootDir) }
-    var envDir by remember { mutableStateOf(initialConfig.envDir) }
+    var playDir by remember { mutableStateOf(initialConfig.playDir) }
     var scriptPath by remember { mutableStateOf(initialConfig.scriptPath) }
     var outputDir by remember { mutableStateOf(initialConfig.outputDir) }
 
     val pickRootDir = rememberFilePicker(stringResource(Res.string.compile_pick_dir), isFolder = true) {
         if (it != null) rootDir = it
     }
-    val pickEnvDir = rememberFilePicker(stringResource(Res.string.compile_pick_dir), isFolder = true) {
-        if (it != null) envDir = it
+    val pickPlayDir = rememberFilePicker(stringResource(Res.string.compile_pick_dir), isFolder = true) {
+        if (it != null) playDir = it
     }
     val pickScript = rememberFilePicker(stringResource(Res.string.compile_pick_file), isFolder = false, extensions = listOf("js")) {
         if (it != null) scriptPath = it
@@ -64,16 +64,16 @@ fun CompileConfigDialog(
                     }
                 )
 
-                // 运行环境目录
+                // 本地预览目录
                 SelectAllOutlinedTextField(
-                    value = envDir,
-                    onValueChange = { envDir = it },
-                    label = { Text(stringResource(Res.string.compile_env_dir)) },
+                    value = playDir,
+                    onValueChange = { playDir = it },
+                    label = { Text(stringResource(Res.string.compile_play_dir)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = AppShapes.medium,
                     trailingIcon = {
                         IconButton(
-                            onClick = pickEnvDir,
+                            onClick = pickPlayDir,
                             modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
                         ) {
                             Icon(Icons.Default.FolderOpen, contentDescription = null)
@@ -112,7 +112,14 @@ fun CompileConfigDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onConfirm(CompileConfig(rootDir, scriptPath, outputDir, envDir))
+                    onConfirm(
+                        CompileConfig(
+                            rootDir = rootDir,
+                            scriptPath = scriptPath,
+                            outputDir = outputDir,
+                            playDir = playDir
+                        )
+                    )
                 },
                 shape = AppShapes.medium
             ) {

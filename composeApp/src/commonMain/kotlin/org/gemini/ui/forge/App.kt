@@ -35,6 +35,8 @@ import org.gemini.ui.forge.service.CompilerService
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.*
 import org.gemini.ui.forge.ui.dialog.AppSettingsDialog
+import org.gemini.ui.forge.ui.dialog.CloudAssetDialog
+import org.gemini.ui.forge.ui.dialog.CompileConfigDialog
 import org.gemini.ui.forge.ui.dialog.HelpDialog
 import org.gemini.ui.forge.ui.dialog.LogViewerDialog
 import org.gemini.ui.forge.ui.feature.HomeScreen
@@ -51,6 +53,7 @@ import org.gemini.ui.forge.viewmodel.AppEnvViewModel
 import org.gemini.ui.forge.viewmodel.AppSettingsViewModel
 import org.gemini.ui.forge.viewmodel.AppUpdateViewModel
 import org.gemini.ui.forge.viewmodel.AppViewModel
+import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.milliseconds
 
 private var originalSystemLanguage: String? = null
@@ -219,7 +222,7 @@ fun App(typography: Typography? = null) {
                         }
                 ) {
                     if (showCompileDialog) {
-                        org.gemini.ui.forge.ui.dialog.CompileConfigDialog(
+                        CompileConfigDialog(
                             initialConfig = globalState.compileConfig,
                             onDismiss = { showCompileDialog = false },
                             onConfirm = { config ->
@@ -282,7 +285,7 @@ fun App(typography: Typography? = null) {
                     }
 
                     if (showCloudAssetDialog) {
-                        org.gemini.ui.forge.ui.dialog.CloudAssetDialog(
+                        CloudAssetDialog(
                             cloudAssetManager = appViewModel.cloudAssetManager,
                             onDismiss = { showCloudAssetDialog = false }
                         )
@@ -311,7 +314,6 @@ fun App(typography: Typography? = null) {
                     val statusMessage by AppLogger.statusMessage.collectAsState()
                     val showLogViewer by AppLogger.showLogViewer.collectAsState()
                     val memoryLogs by AppLogger.memoryLogs.collectAsState()
-                    val playErrorStr = org.jetbrains.compose.resources.stringResource(Res.string.play_error_no_root)
 
                     if (showLogViewer) {
                         LogViewerDialog(
@@ -324,7 +326,8 @@ fun App(typography: Typography? = null) {
                         modifier = Modifier.fillMaxSize(),
                         topBar = {
                             AppTopBar(
-                                currentScreen = globalState.currentScreen,
+                                viewModel = appViewModel,
+                                globalState = globalState,
                                 onNavigateHome = {
                                     if (appState.isDirty) {
                                         showExitConfirmDialog = true
@@ -332,31 +335,13 @@ fun App(typography: Typography? = null) {
                                         appViewModel.navigateTo(AppScreen.HOME)
                                     }
                                 },
-                                onGenerateTemplateClicked = { appViewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
                                 onCloudAssetManagerClicked = { showCloudAssetDialog = true },
                                 onCompileClicked = { showCompileDialog = true },
-                                onPlayClicked = {
-                                    val config = globalState.compileConfig
-                                    if (config.rootDir.isBlank()) {
-                                        Toast.show(playErrorStr, ToastType.ERROR)
-                                    } else {
-                                        val root = config.rootDir.trim().replace("\\", "/").removeSuffix("/")
-                                        val out = config.outputDir.trim().replace("\\", "/").removePrefix("/").removeSuffix("/")
-                                        val basePath = if (out.isNotEmpty()) "$root/$out" else root
-                                        val separatorPrefix = if (basePath.startsWith("/")) "file://" else "file:///"
-                                        val url = "$root/bin/index.html"
-                                        getPlatform().openInBrowser(url)
-                                    }
-                                },
-                                onSaveClicked = {
-                                    appViewModel.dispatchSaveEvent()
-                                },
                                 onSettingsClicked = {
                                     settingsInitialCategory = SettingCategory.GENERAL
                                     showSettingsDialog = true
                                 },
-                                onHelpClicked = { showHelpDialog = true },
-                                onProjectSettingsClicked = { appViewModel.dispatchProjectSettingsEvent() }
+                                onHelpClicked = { showHelpDialog = true }
                             )
                         },
                         bottomBar = {

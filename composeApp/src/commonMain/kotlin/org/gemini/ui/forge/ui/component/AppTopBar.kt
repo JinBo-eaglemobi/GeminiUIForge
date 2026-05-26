@@ -25,35 +25,33 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import org.gemini.ui.forge.model.app.AppScreen
+import org.gemini.ui.forge.state.app.AppGlobalState
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.viewmodel.AppViewModel
 
 /**
  * 应用顶部导航栏组件。
  * 提供返回、标题显示、当前模式标识以及核心功能按钮（保存、云资产、帮助、设置）。
  *
- * @param currentScreen 当前所在的屏幕页面。
- * @param onNavigateHome 点击返回首页的回调。
- * @param onGenerateTemplateClicked 点击 AI 生成模板的回调。
- * @param onCloudAssetManagerClicked 点击云端资产管理的回调。
- * @param onCompileClicked 点击编译配置的回调。
- * @param onPlayClicked 点击本地预览的回调。
- * @param onSaveClicked 点击保存项目的回调。
- * @param onSettingsClicked 点击应用设置的回调。
- * @param onHelpClicked 点击帮助的回调。
+ * @param viewModel 全局主控视图模型
+ * @param globalState 全局主控状态机
+ * @param onNavigateHome 点击返回首页的回调
+ * @param onCloudAssetManagerClicked 点击云端资产管理的回调
+ * @param onCompileClicked 点击编译配置的回调
+ * @param onSettingsClicked 点击应用设置的回调
+ * @param onHelpClicked 点击帮助的回调
  */
 @Composable
 fun AppTopBar(
-    currentScreen: AppScreen,
+    viewModel: AppViewModel,
+    globalState: AppGlobalState,
     onNavigateHome: () -> Unit,
-    onGenerateTemplateClicked: () -> Unit = {},
     onCloudAssetManagerClicked: () -> Unit = {},
     onCompileClicked: () -> Unit = {},
-    onPlayClicked: () -> Unit = {},
-    onSaveClicked: () -> Unit = {},
     onSettingsClicked: () -> Unit = {},
-    onHelpClicked: () -> Unit = {},
-    onProjectSettingsClicked: () -> Unit = {}
+    onHelpClicked: () -> Unit = {}
 ) {
+    val currentScreen = globalState.currentScreen
     val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
 
     Surface(
@@ -126,7 +124,7 @@ fun AppTopBar(
             ) {
                 if (currentScreen == AppScreen.HOME) {
                     TextButton(
-                        onClick = onGenerateTemplateClicked,
+                        onClick = { viewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
                         contentPadding = PaddingValues(horizontal = 8.dp),
                         shape = AppShapes.medium,
                         modifier = Modifier.tip("通过 AI 分析生图并创建新模板")
@@ -148,8 +146,9 @@ fun AppTopBar(
                     }
                 } else if (currentScreen == AppScreen.TEMPLATE_EDITOR || currentScreen == AppScreen.TEMPLATE_ASSET_GEN || currentScreen == AppScreen.PROJECT_WORKSPACE) {
                     if (currentScreen == AppScreen.PROJECT_WORKSPACE) {
+                        val playErrorStr = stringResource(Res.string.play_error_no_root)
                         IconButton(
-                            onClick = onPlayClicked,
+                            onClick = { viewModel.playProject(playErrorStr) },
                             modifier = Modifier.tip(stringResource(Res.string.play_tip))
                         ) {
                             Icon(Icons.Default.PlayArrow, contentDescription = stringResource(Res.string.menu_play))
@@ -162,7 +161,7 @@ fun AppTopBar(
                         }
                     }
                     IconButton(
-                        onClick = onSaveClicked,
+                        onClick = { viewModel.dispatchSaveEvent() },
                         modifier = Modifier.tip("保存当前项目修改 (Ctrl+S)")
                     ) {
                         Icon(Icons.Default.Save, contentDescription = "Save Layout", tint = MaterialTheme.colorScheme.primary)
@@ -172,7 +171,7 @@ fun AppTopBar(
                 // 项目设置按钮 (仅在项目工作空间显示)
                 if (currentScreen == AppScreen.PROJECT_WORKSPACE) {
                     IconButton(
-                        onClick = onProjectSettingsClicked,
+                        onClick = { viewModel.dispatchProjectSettingsEvent() },
                         modifier = Modifier.tip("项目资源配置设置")
                     ) {
                         Icon(Icons.Default.Tune, contentDescription = "Project Settings", tint = MaterialTheme.colorScheme.secondary)
