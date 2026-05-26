@@ -120,6 +120,22 @@ sealed class BlockProperties {
         val showBackground: Boolean = true,
         val rollSeed: Int = 0
     ) : BlockProperties()
+
+    /**
+     * SPIN_BUTTON (旋转/抽奖按钮) 组件的属性配置。
+     *
+     * @property spinUri 旋转中状态（Spin）时的图片资源路径。
+     * @property stopUri 停止状态（Stop）时的图片资源路径。
+     * @property spinPrompt 旋转状态的生成 Prompt。
+     * @property stopPrompt 停止状态的生成 Prompt。
+     */
+    @Serializable
+    data class SpinButtonProperties(
+        val spinUri: TemplateFile? = null,
+        val stopUri: TemplateFile? = null,
+        val spinPrompt: String = "",
+        val stopPrompt: String = ""
+    ) : BlockProperties()
 }
 
 /**

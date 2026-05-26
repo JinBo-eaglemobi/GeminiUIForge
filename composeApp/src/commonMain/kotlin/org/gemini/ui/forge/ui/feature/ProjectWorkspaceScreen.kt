@@ -176,7 +176,12 @@ fun ProjectWorkspaceScreen(
             targetHeight = targetBlock?.bounds?.height ?: 0f,
             onDismiss = { viewModel.hideHistoricalDialog() },
             onImageSelected = { selectedFile -> 
-                viewModel.assetManager.onImageSelected(selectedFile)
+                val targetId = state.historicalTargetBlockId ?: targetBlock?.id
+                if (targetId != null) {
+                    viewModel.assetManager.onHistoricalImageSelected(targetId, selectedFile)
+                } else {
+                    viewModel.assetManager.onImageSelected(selectedFile)
+                }
                 viewModel.hideHistoricalDialog() 
             },
             onCropRequested = { selectedFile ->

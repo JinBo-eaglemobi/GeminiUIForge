@@ -42,6 +42,7 @@ data class ProjectWorkspaceState(
     val referenceAreaTargetId: String? = null,
     val showHistoricalDialog: Boolean = false,
     val historicalImages: List<TemplateFile> = emptyList(),
+    val historicalTargetBlockId: String? = null,
     val chatHistories: Map<String, List<org.gemini.ui.forge.model.api.ChatMessage>> = emptyMap(),
 
     /** 界面持久化配置 */

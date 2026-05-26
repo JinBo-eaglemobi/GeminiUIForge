@@ -378,6 +378,81 @@ fun BlockSpecificProperties(
                 )
             }
         }
+        UIBlockType.SPIN_BUTTON -> {
+            val props = properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
+            Text("旋转按钮属性配置", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(LocalAppSpacing.current.small))
+            Text(
+                text = "旋转按钮支持 Spin (旋转中态) 与 Stop (停止态) 两种状态图片，请从历史记录或已生成资产中进行绑定。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Spin 状态
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                    Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                        Card(
+                            modifier = Modifier.fillMaxSize(),
+                            shape = AppShapes.small,
+                            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))
+                        ) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                if (props.spinUri != null) {
+                                    AsyncImage(
+                                        model = props.spinUri.getAbsolutePath(),
+                                        contentDescription = "Spin State",
+                                        modifier = Modifier.fillMaxSize().padding(LocalAppSpacing.current.extraSmall),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                } else {
+                                    Text("暂无", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        IconButton(
+                            onClick = { viewModel.showHistoricalDialog(selectedBlock.id + "_spin") },
+                            modifier = Modifier.align(Alignment.TopEnd).size(LocalAppSpacing.current.large).padding(LocalAppSpacing.current.extraSmall)
+                        ) {
+                            Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Text("旋转中 (Spin)", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall))
+                }
+                
+                // Stop 状态
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                    Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                        Card(
+                            modifier = Modifier.fillMaxSize(),
+                            shape = AppShapes.small,
+                            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))
+                        ) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                if (props.stopUri != null) {
+                                    AsyncImage(
+                                        model = props.stopUri.getAbsolutePath(),
+                                        contentDescription = "Stop State",
+                                        modifier = Modifier.fillMaxSize().padding(LocalAppSpacing.current.extraSmall),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                } else {
+                                    Text("暂无", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        IconButton(
+                            onClick = { viewModel.showHistoricalDialog(selectedBlock.id + "_stop") },
+                            modifier = Modifier.align(Alignment.TopEnd).size(LocalAppSpacing.current.large).padding(LocalAppSpacing.current.extraSmall)
+                        ) {
+                            Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Text("停止态 (Stop)", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall))
+                }
+            }
+        }
         else -> {
             // 其他类型保持原样
         }

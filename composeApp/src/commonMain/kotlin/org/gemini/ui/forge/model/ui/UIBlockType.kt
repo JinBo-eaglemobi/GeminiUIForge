@@ -46,5 +46,11 @@ enum class UIBlockType(val defaultPrompt: String) {
     /** 滑块：用于数值调节的交互组件 */
     SLIDER("Interactive slider, adjustment knob, range selector UI element"),
     /** 输入框：用于文本输入的编辑框 */
-    INPUT("Text input field, editable text box, entry area with cursor hint")
+    INPUT("Text input field, editable text box, entry area with cursor hint");
+
+    /**
+     * 核心特性标识：该类型组件是否拥有专属的属性配置面板
+     */
+    val hasSpecificProperties: Boolean
+        get() = this in listOf(REEL, SPIN_BUTTON, BUTTON, VIEW, TEXT, INPUT)
 }

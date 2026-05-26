@@ -344,5 +344,67 @@ class AssetManagerDelegate(
         updateBlockProperties(block.id, newProps)
     }
 
+    /** 处理历史记录中带状态后缀的图片资产选择并精准绑定 */
+    fun onHistoricalImageSelected(targetId: String, imageUri: TemplateFile) {
+        val pageId = getState().selectedPageId ?: return
+        
+        if (targetId.endsWith("_pressed")) {
+            val baseId = targetId.substringBefore("_pressed")
+            saveSnapshot("绑定按钮点击态图: $baseId")
+            updateState { currentState ->
+                val updatedPages = currentState.project.pages.map { page ->
+                    if (page.id == pageId) page.copy(blocks = page.blocks.updateBlockInList(baseId) { block ->
+                        val props = block.properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
+                        block.copy(properties = props.copy(pressedUri = imageUri, isMultiState = true))
+                    }) else page
+                }
+                currentState.copy(project = currentState.project.copy(pages = updatedPages))
+            }
+            markDirty()
+        } else if (targetId.endsWith("_disabled")) {
+            val baseId = targetId.substringBefore("_disabled")
+            saveSnapshot("绑定按钮禁用态图: $baseId")
+            updateState { currentState ->
+                val updatedPages = currentState.project.pages.map { page ->
+                    if (page.id == pageId) page.copy(blocks = page.blocks.updateBlockInList(baseId) { block ->
+                        val props = block.properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
+                        block.copy(properties = props.copy(disabledUri = imageUri, isMultiState = true))
+                    }) else page
+                }
+                currentState.copy(project = currentState.project.copy(pages = updatedPages))
+            }
+            markDirty()
+        } else if (targetId.endsWith("_spin")) {
+            val baseId = targetId.substringBefore("_spin")
+            saveSnapshot("绑定旋转按钮Spin态图: $baseId")
+            updateState { currentState ->
+                val updatedPages = currentState.project.pages.map { page ->
+                    if (page.id == pageId) page.copy(blocks = page.blocks.updateBlockInList(baseId) { block ->
+                        val props = block.properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
+                        block.copy(properties = props.copy(spinUri = imageUri))
+                    }) else page
+                }
+                currentState.copy(project = currentState.project.copy(pages = updatedPages))
+            }
+            markDirty()
+        } else if (targetId.endsWith("_stop")) {
+            val baseId = targetId.substringBefore("_stop")
+            saveSnapshot("绑定旋转按钮Stop态图: $baseId")
+            updateState { currentState ->
+                val updatedPages = currentState.project.pages.map { page ->
+                    if (page.id == pageId) page.copy(blocks = page.blocks.updateBlockInList(baseId) { block ->
+                        val props = block.properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
+                        block.copy(properties = props.copy(stopUri = imageUri))
+                    }) else page
+                }
+                currentState.copy(project = currentState.project.copy(pages = updatedPages))
+            }
+            markDirty()
+        } else {
+            // 普通主图片，走默认的通用绑定逻辑
+            onImageSelected(imageUri)
+        }
+    }
+
 
 }

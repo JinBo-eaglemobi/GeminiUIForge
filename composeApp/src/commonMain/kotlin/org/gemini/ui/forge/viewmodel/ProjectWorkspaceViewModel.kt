@@ -487,13 +487,13 @@ class ProjectWorkspaceViewModel(
     fun showHistoricalDialog(blockId: String) {
         viewModelScope.launch {
             val images = assetManager.loadHistoricalImages(blockId)
-            updateState { it.copy(showHistoricalDialog = true, historicalImages = images) }
+            updateState { it.copy(showHistoricalDialog = true, historicalImages = images, historicalTargetBlockId = blockId) }
         }
     }
 
     /** 隐藏历史对话框 */
     fun hideHistoricalDialog() {
-        updateState { it.copy(showHistoricalDialog = false, historicalImages = emptyList()) }
+        updateState { it.copy(showHistoricalDialog = false, historicalImages = emptyList(), historicalTargetBlockId = null) }
     }
 
     /** 显示删除确认对话框 */

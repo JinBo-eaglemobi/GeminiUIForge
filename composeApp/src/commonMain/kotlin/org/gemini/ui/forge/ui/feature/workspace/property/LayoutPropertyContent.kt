@@ -439,7 +439,7 @@ fun LayoutPropertyContent(
                 }
             }
 
-            val hasSpecificProps = selectedBlock.type in listOf(UIBlockType.BUTTON, UIBlockType.VIEW, UIBlockType.TEXT, UIBlockType.INPUT, UIBlockType.REEL)
+            val hasSpecificProps = selectedBlock.type.hasSpecificProperties
             if (hasSpecificProps) {
                 CollapsibleSection(
                     title = "专属属性配置",
