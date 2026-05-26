@@ -15,6 +15,7 @@ import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.utils.findBlockById
 import org.gemini.ui.forge.utils.findParentBlockId
 import org.gemini.ui.forge.utils.updateBlockInList
 import org.gemini.ui.forge.model.ui.UIBlockType
@@ -370,12 +371,18 @@ class ProjectWorkspaceViewModel(
                     selectedBlockIds = emptySet()
                 )
             } else {
-                // 如果双击的是其它组，进入该组，并清除模块选中状态
-                currentState.copy(
-                    editingGroupId = blockId,
-                    selectedBlockId = null,
-                    selectedBlockIds = emptySet()
-                )
+                // 如果双击的是其它组且包含子模块，才进入该组并清除模块选中状态
+                val currentPage = currentState.currentPage
+                val block = currentPage?.blocks?.findBlockById(blockId)
+                if (block != null && block.children.isNotEmpty()) {
+                    currentState.copy(
+                        editingGroupId = blockId,
+                        selectedBlockId = null,
+                        selectedBlockIds = emptySet()
+                    )
+                } else {
+                    currentState
+                }
             }
         }
     }
