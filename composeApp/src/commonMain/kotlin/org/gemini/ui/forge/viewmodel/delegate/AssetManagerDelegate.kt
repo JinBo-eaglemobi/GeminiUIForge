@@ -234,7 +234,23 @@ class AssetManagerDelegate(
         markDirty()
     }
 
-    /** 执行物理图片固化（Bake） */
+    /**
+     * 执行物理图片固化（Bake）操作。
+     *
+     * 该方法将模块当前的 AI 生成图、临时裁剪图，结合其当前的拉伸模式和九宫格（Nine-patch）规则，
+     * 物理合成、烘焙为一张全新的物理 PNG 图片。固化完成后，新图片将保存至本地，模块属性中
+     * 的 `resizeMode` 重置为 `STRETCH`，九宫格参数全部置空，以此实现“所见即所得”的完全物理脱离。
+     *
+     * @param blockId 要执行固化的 UI 模块的唯一 ID。
+     * @param resizeMode 固化前所采用的图像缩放与裁剪模式。
+     * @param ninePatchConfig 固化前配置的九宫格坐标（上、下、左、右安全线配置）。
+     * @param targetWidth 烘焙目标图像的最终宽度。
+     * @param targetHeight 烘焙目标图像的最终高度。
+     * @param contentWidth 九宫格内容呈现的基准宽度。
+     * @param contentHeight 九宫格内容呈现的基准高度。
+     * @param imageBytes 可选参数。若提供，则直接使用传入的原始字节进行烘焙；否则加载当前模块所关联的本地原图。
+     * @param originalCropBytes 可选参数。若提供，会在烘焙时顺带将用户的原始裁剪基准图异步物理保存。
+     */
     fun bakeBlockImage(
         blockId: String,
         resizeMode: ImageResizeMode,
