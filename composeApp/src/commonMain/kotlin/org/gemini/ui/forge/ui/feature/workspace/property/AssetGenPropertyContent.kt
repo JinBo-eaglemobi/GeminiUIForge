@@ -20,6 +20,7 @@ import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.UIBlockType
+
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
@@ -79,25 +80,21 @@ fun AssetGenPropertyContent(
         AdvancedSettingsDialog(state, viewModel, onDismiss = { showAdvancedSettings = false })
     }
 
-    // 针对 SPIN_BUTTON 进行的分身状态检测
-    val isSpinButton = selectedBlock.type == UIBlockType.SPIN_BUTTON
-    val spinProps = selectedBlock.properties as? BlockProperties.SpinButtonProperties
-    
-    // Tab 栏状态：0 为 Spin (默认)，1 为 Stop (停止)
+    val assetSupport = selectedBlock
+    val states = assetSupport.assetStates
+    val isMultiState = states.isNotEmpty()
+
+    // Tab 栏状态
     var currentTab by remember(selectedBlock.id) { mutableStateOf(0) }
 
     // 动态重定向获取当前状态绑定的图片和历史 ID 后缀
-    val currentImageToDisplay = if (isSpinButton) {
-        if (currentTab == 0) spinProps?.spinUri else spinProps?.stopUri
-    } else {
-        selectedBlock.currentImageUri
+    val currentImageToDisplay = remember(selectedBlock.id, currentTab, selectedBlock) {
+        assetSupport.getCurrentImageUri(currentTab)
+    }
+    val historicalIdSuffix = remember(selectedBlock.id, currentTab) {
+        assetSupport.getHistoricalIdSuffix(currentTab)
     }
 
-    val historicalIdSuffix = if (isSpinButton) {
-        if (currentTab == 0) "_spin" else "_stop"
-    } else {
-        ""
-    }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -130,30 +127,42 @@ fun AssetGenPropertyContent(
             ModelSelector(state, viewModel, Modifier.weight(1.2f).tip("选择当前生图任务使用的 AI模型"))
         }
 
-        // 3. 当确定当前模块有特殊生图需求的时候，在预览图上面添加tab栏，默认就是当前正常的 (Spin)
-        if (isSpinButton) {
-            TabRow(
-                selectedTabIndex = currentTab,
+        // 当组件有多态资产状态时自适应渲染 Tab 栏
+        if (isMultiState) {
+            Surface(
                 modifier = Modifier.fillMaxWidth().height(40.dp),
-                containerColor = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.primary,
-                indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        Modifier.tabIndicatorOffset(tabPositions[currentTab]),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                shape = AppShapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
             ) {
-                Tab(
-                    selected = currentTab == 0,
-                    onClick = { currentTab = 0 },
-                    text = { Text("默认状态 (Spin)", style = MaterialTheme.typography.labelSmall) }
-                )
-                Tab(
-                    selected = currentTab == 1,
-                    onClick = { currentTab = 1 },
-                    text = { Text("停止状态 (Stop)", style = MaterialTheme.typography.labelSmall) }
-                )
+                TabRow(
+                    selectedTabIndex = currentTab,
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    indicator = { } // 移除传统的底部线条指示器，改用全身高亮背景
+                ) {
+                    states.forEachIndexed { index, stateInfo ->
+                        val isSelected = currentTab == index
+                        Tab(
+                            selected = isSelected,
+                            onClick = { currentTab = index },
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .clip(AppShapes.small)
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer 
+                                    else Color.Transparent
+                                ),
+                            text = { 
+                                Text(
+                                    text = stateInfo.name, 
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                ) 
+                            }
+                        )
+                    }
+                }
             }
         }
 
@@ -188,13 +197,8 @@ fun AssetGenPropertyContent(
             }
             OutlinedButton(
                 onClick = { 
-                    if (isSpinButton) {
-                        val currentProps = spinProps ?: BlockProperties.SpinButtonProperties()
-                        val newProps = if (currentTab == 0) currentProps.copy(spinUri = null) else currentProps.copy(stopUri = null)
-                        viewModel.assetManager.updateBlockProperties(selectedBlock.id, newProps)
-                    } else {
-                        viewModel.assetManager.clearSelectedImage(selectedBlock.id) 
-                    }
+                    val updatedBlock = assetSupport.clearImageUri(currentTab)
+                    viewModel.assetManager.updateBlock(updatedBlock)
                 },
                 modifier = Modifier.weight(0.8f),
                 shape = AppShapes.medium,
@@ -222,27 +226,12 @@ fun AssetGenPropertyContent(
         val systemLang = androidx.compose.ui.text.intl.Locale.current.language
         val effectiveLang = state.currentLang.resolve(systemLang)
 
-        // 4. 对与 SpinButton 提示词也是中英文配置的，根据当前切换的 tab 状态进行更新读写内容
-        val prompt = if (isSpinButton) {
-            val p = spinProps ?: BlockProperties.SpinButtonProperties()
-            if (currentTab == 0) {
-                if (effectiveLang == PromptLanguage.ZH) p.spinPromptZh else p.spinPromptEn
-            } else {
-                if (effectiveLang == PromptLanguage.ZH) p.stopPromptZh else p.stopPromptEn
-            }
-        } else {
-            if (effectiveLang == PromptLanguage.ZH) selectedBlock.userPromptZh else selectedBlock.userPromptEn
+        // 采用 remember(selectedBlock.id, currentTab, effectiveLang) 精准缓存和计算，保证重构与选择反馈
+        val prompt = remember(selectedBlock.id, currentTab, effectiveLang, selectedBlock) {
+            assetSupport.getPrompt(currentTab, effectiveLang)
         }
-
-        val otherPrompt = if (isSpinButton) {
-            val p = spinProps ?: BlockProperties.SpinButtonProperties()
-            if (currentTab == 0) {
-                if (effectiveLang == PromptLanguage.ZH) p.spinPromptEn else p.spinPromptZh
-            } else {
-                if (effectiveLang == PromptLanguage.ZH) p.stopPromptEn else p.stopPromptZh
-            }
-        } else {
-            if (effectiveLang == PromptLanguage.ZH) selectedBlock.userPromptEn else selectedBlock.userPromptZh
+        val otherPrompt = remember(selectedBlock.id, currentTab, effectiveLang, selectedBlock) {
+            assetSupport.getOtherPrompt(currentTab, effectiveLang)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -263,17 +252,8 @@ fun AssetGenPropertyContent(
             SelectAllOutlinedTextField(
                 value = prompt,
                 onValueChange = { newValue -> 
-                    if (isSpinButton) {
-                        val currentProps = spinProps ?: BlockProperties.SpinButtonProperties()
-                        val newProps = if (currentTab == 0) {
-                            if (effectiveLang == PromptLanguage.ZH) currentProps.copy(spinPromptZh = newValue) else currentProps.copy(spinPromptEn = newValue)
-                        } else {
-                            if (effectiveLang == PromptLanguage.ZH) currentProps.copy(stopPromptZh = newValue) else currentProps.copy(stopPromptEn = newValue)
-                        }
-                        viewModel.assetManager.updateBlockProperties(selectedBlock.id, newProps)
-                    } else {
-                        viewModel.assetManager.updateBlockPrompt(selectedBlock.id, effectiveLang, newValue) 
-                    }
+                    val updatedBlock = assetSupport.updatePrompt(currentTab, effectiveLang, newValue)
+                    viewModel.assetManager.updateBlock(updatedBlock)
                 },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
                 placeholder = {

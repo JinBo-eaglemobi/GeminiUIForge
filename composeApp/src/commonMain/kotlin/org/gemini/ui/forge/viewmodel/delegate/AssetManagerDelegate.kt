@@ -344,6 +344,20 @@ class AssetManagerDelegate(
         markDirty()
     }
 
+    /** 统一更新整个组件块的状态信息 */
+    fun updateBlock(block: UIBlock) {
+        saveSnapshot("更新模块状态: ${block.id}")
+        updateState { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == currentState.selectedPageId) page.copy(
+                    blocks = page.blocks.updateBlockInList(block.id) { block }
+                ) else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+        markDirty()
+    }
+
     /** 按钮特定状态资源选择 */
     fun onButtonStateImageSelected(imageUri: TemplateFile, target: AssetGenerationDelegate.ButtonGenTarget) {
         val currentState = getState()
@@ -396,8 +410,7 @@ class AssetManagerDelegate(
             updateState { currentState ->
                 val updatedPages = currentState.project.pages.map { page ->
                     if (page.id == pageId) page.copy(blocks = page.blocks.updateBlockInList(baseId) { block ->
-                        val props = block.properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
-                        block.copy(properties = props.copy(spinUri = imageUri))
+                        block.copy(currentImageUri = imageUri)
                     }) else page
                 }
                 currentState.copy(project = currentState.project.copy(pages = updatedPages))

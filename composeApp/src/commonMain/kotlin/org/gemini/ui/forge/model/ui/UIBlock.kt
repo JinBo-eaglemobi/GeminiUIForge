@@ -3,6 +3,7 @@ package org.gemini.ui.forge.model.ui
 import org.gemini.ui.forge.data.TemplateFile
 import kotlinx.serialization.Serializable
 import androidx.compose.runtime.Stable
+import org.gemini.ui.forge.model.app.PromptLanguage
 
 /**
  * 最小生成单元模型：UI 功能块 (UIBlock)
@@ -31,7 +32,7 @@ data class UIBlock(
     val isVisible: Boolean = true, // 新增：图层是否可见
     val properties: BlockProperties? = null, // 新增：不同类型模块的专属属性
     val resourceBindingPath: List<String> = emptyList() // 新增：资源绑定层级路径
-) {
+) : AssetSupport {
     /** 自动拼接基础类别描述与用户自定义描述，形成最终发给生图模型的完整 Prompt */
     val fullPrompt: String
         get() = "${type.defaultPrompt}, $userPrompt"
@@ -50,7 +51,7 @@ data class UIBlock(
             if (processedChildren.isNotEmpty()) {
                 val currentProps = properties as? BlockProperties.ReelProperties ?: BlockProperties.ReelProperties()
                 // 直接使用 processedChildren 作为新的 items
-                val updatedProps = currentProps.copy(items = currentProps.items + processedChildren.onEach { })
+                val updatedProps = currentProps.copy(items = currentProps.items + processedChildren)
                 copy(properties = updatedProps, children = emptyList())
             } else {
                 // 没有子级说明已经解析过，或者是一个空的 REEL，无需覆盖原有属性
@@ -60,4 +61,123 @@ data class UIBlock(
             copy(children = processedChildren)
         }
     }
+
+    override val assetStates: List<AssetState>
+        get() = when (type) {
+            UIBlockType.SPIN_BUTTON -> listOf(
+                AssetState("默认状态 (Spin)", "_spin"),
+                AssetState("停止状态 (Stop)", "_stop")
+            )
+            else -> emptyList()
+        }
+
+    override fun getCurrentImageUri(stateIndex: Int): TemplateFile? {
+        return if (type == UIBlockType.SPIN_BUTTON) {
+            val props = properties as? BlockProperties.SpinButtonProperties
+            if (stateIndex == 0) currentImageUri else props?.stopUri
+        } else {
+            currentImageUri
+        }
+    }
+
+    override fun getHistoricalIdSuffix(stateIndex: Int): String {
+        return if (type == UIBlockType.SPIN_BUTTON) {
+            if (stateIndex == 0) "_spin" else "_stop"
+        } else {
+            ""
+        }
+    }
+
+    override fun clearImageUri(stateIndex: Int): UIBlock {
+        return if (type == UIBlockType.SPIN_BUTTON) {
+            val props = properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
+            if (stateIndex == 0) {
+                copy(currentImageUri = null)
+            } else {
+                copy(properties = props.copy(stopUri = null))
+            }
+        } else {
+            copy(currentImageUri = null)
+        }
+    }
+
+    override fun getPrompt(stateIndex: Int, effectiveLang: PromptLanguage): String {
+        return if (type == UIBlockType.SPIN_BUTTON) {
+            val props = properties as? BlockProperties.SpinButtonProperties
+            if (stateIndex == 0) {
+                if (effectiveLang == PromptLanguage.ZH) userPromptZh else userPromptEn
+            } else {
+                if (effectiveLang == PromptLanguage.ZH) props?.stopPromptZh.orEmpty() else props?.stopPromptEn.orEmpty()
+            }
+        } else {
+            if (effectiveLang == PromptLanguage.ZH) userPromptZh else userPromptEn
+        }
+    }
+
+    override fun getOtherPrompt(stateIndex: Int, effectiveLang: PromptLanguage): String {
+        return if (type == UIBlockType.SPIN_BUTTON) {
+            val props = properties as? BlockProperties.SpinButtonProperties
+            if (stateIndex == 0) {
+                if (effectiveLang == PromptLanguage.ZH) userPromptEn else userPromptZh
+            } else {
+                if (effectiveLang == PromptLanguage.ZH) props?.stopPromptEn.orEmpty() else props?.stopPromptZh.orEmpty()
+            }
+        } else {
+            if (effectiveLang == PromptLanguage.ZH) userPromptEn else userPromptZh
+        }
+    }
+
+    override fun updatePrompt(stateIndex: Int, effectiveLang: PromptLanguage, newValue: String): UIBlock {
+        return if (type == UIBlockType.SPIN_BUTTON) {
+            val props = properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
+            if (stateIndex == 0) {
+                if (effectiveLang == PromptLanguage.ZH) copy(userPromptZh = newValue) else copy(userPromptEn = newValue)
+            } else {
+                val updatedProps = if (effectiveLang == PromptLanguage.ZH) {
+                    props.copy(stopPromptZh = newValue)
+                } else {
+                    props.copy(stopPromptEn = newValue)
+                }
+                copy(properties = updatedProps)
+            }
+        } else {
+            if (effectiveLang == PromptLanguage.ZH) copy(userPromptZh = newValue) else copy(userPromptEn = newValue)
+        }
+    }
 }
+
+/**
+ * 资产生成支持协议接口。
+ * 允许具有特殊资产状态的组件向生图控制面板提供自适应读写、解绑和提示词配置。
+ */
+interface AssetSupport {
+    /** 资产的状态列表。如果为空表示是普通单态组件 */
+    val assetStates: List<AssetState>
+
+    /** 获取当前状态绑定的图片路径 */
+    fun getCurrentImageUri(stateIndex: Int): TemplateFile?
+
+    /** 获取当前状态的历史后缀 */
+    fun getHistoricalIdSuffix(stateIndex: Int): String
+
+    /** 清除/解绑当前状态的图片，返回更新后的 UIBlock */
+    fun clearImageUri(stateIndex: Int): UIBlock
+
+    /** 获取当前状态指定语言的提示词 */
+    fun getPrompt(stateIndex: Int, effectiveLang: PromptLanguage): String
+
+    /** 获取当前状态非选中语言的提示词（作 placeholder） */
+    fun getOtherPrompt(stateIndex: Int, effectiveLang: PromptLanguage): String
+
+    /** 更新当前状态指定语言的提示词，返回更新后的 UIBlock */
+    fun updatePrompt(stateIndex: Int, effectiveLang: PromptLanguage, newValue: String): UIBlock
+}
+
+/**
+ * 资产状态配置信息数据类。
+ */
+data class AssetState(
+    val name: String,
+    val historicalIdSuffix: String
+)
+

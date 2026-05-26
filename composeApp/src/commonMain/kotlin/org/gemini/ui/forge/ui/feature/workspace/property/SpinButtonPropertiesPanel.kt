@@ -95,18 +95,18 @@ fun SpinButtonPropertiesPanel(
     }
     
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        // 默认状态 (对应 spinUri)
+        // 默认状态 (对应 selectedBlock.currentImageUri)
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
             Box(modifier = Modifier.fillMaxWidth().aspectRatio(1.2f)) {
                 Card(
-                    modifier = Modifier.fillMaxSize().clickable { if (props.spinUri != null) bigImageToShow = props.spinUri },
+                    modifier = Modifier.fillMaxSize().clickable { if (selectedBlock.currentImageUri != null) bigImageToShow = selectedBlock.currentImageUri },
                     shape = AppShapes.small,
                     colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.05f))
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        if (props.spinUri != null) {
+                        if (selectedBlock.currentImageUri != null) {
                             AsyncImage(
-                                model = props.spinUri.getAbsolutePath(),
+                                model = selectedBlock.currentImageUri.getAbsolutePath(),
                                 contentDescription = "Default State",
                                 modifier = Modifier.fillMaxSize().padding(LocalAppSpacing.current.extraSmall),
                                 contentScale = ContentScale.Fit
