@@ -4,6 +4,21 @@ import kotlinx.serialization.Serializable
 import org.gemini.ui.forge.data.TemplateFile
 
 /**
+ * 具有文本排版和渲染样式特征的组件属性接口。
+ */
+interface TextStyled {
+    val text: String
+    val textColor: String
+    val textSize: Int
+    val isBold: Boolean
+    val isItalic: Boolean
+    val horizontalAlign: String
+    val verticalAlign: String
+    val strokeColor: String
+    val strokeWidth: Float
+}
+
+/**
  * 定义不同 UI 组件特有的属性配置模型。
  * 这是一个密封类，每个子类对应一种特定类型的 UI 组件属性。
  */
@@ -65,16 +80,16 @@ sealed class BlockProperties {
      */
     @Serializable
     data class TextProperties(
-        val text: String = "",
-        val textColor: String = "#000000",
-        val textSize: Int = 14,
-        val isBold: Boolean = false,
-        val isItalic: Boolean = false,
-        val horizontalAlign: String = "CENTER",
-        val verticalAlign: String = "CENTER",
-        val strokeColor: String = "",
-        val strokeWidth: Float = 0f
-    ) : BlockProperties()
+        override val text: String = "",
+        override val textColor: String = "#000000",
+        override val textSize: Int = 14,
+        override val isBold: Boolean = false,
+        override val isItalic: Boolean = false,
+        override val horizontalAlign: String = "CENTER",
+        override val verticalAlign: String = "CENTER",
+        override val strokeColor: String = "",
+        override val strokeWidth: Float = 0f
+    ) : BlockProperties(), TextStyled
 
     /**
      * 文本输入框组件的属性配置。
@@ -93,16 +108,18 @@ sealed class BlockProperties {
     @Serializable
     data class InputProperties(
         val hintText: String = "",
-        val textColor: String = "#808080",
-        val textSize: Int = 14,
+        override val textColor: String = "#808080",
+        override val textSize: Int = 14,
         val maxLength: Int = -1,
-        val isBold: Boolean = false,
-        val isItalic: Boolean = false,
-        val horizontalAlign: String = "LEFT",
-        val verticalAlign: String = "CENTER",
-        val strokeColor: String = "",
-        val strokeWidth: Float = 0f
-    ) : BlockProperties()
+        override val isBold: Boolean = false,
+        override val isItalic: Boolean = false,
+        override val horizontalAlign: String = "LEFT",
+        override val verticalAlign: String = "CENTER",
+        override val strokeColor: String = "",
+        override val strokeWidth: Float = 0f
+    ) : BlockProperties(), TextStyled {
+        override val text: String get() = hintText
+    }
 
     /**
      * 转轴组件的属性配置。

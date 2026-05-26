@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import org.gemini.ui.forge.model.ui.BlockProperties
+import org.gemini.ui.forge.model.ui.TextStyled
 import org.gemini.ui.forge.model.ui.NinePatchConfig
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
@@ -73,26 +74,18 @@ fun parseTextAlign(horizontal: String): TextAlign {
  */
 @Composable
 fun RenderStyledText(
-    text: String,
-    textColorHex: String,
-    textSize: Int,
-    isBold: Boolean,
-    isItalic: Boolean,
-    strokeColorHex: String,
-    strokeWidth: Float,
-    horizontalAlign: String,
+    textProperties: TextStyled,
     baseScale: Float,
     alpha: Float = 1f,
     modifier: Modifier = Modifier
 ) {
-// ... (implementation remains same, just adding comments)
-    val color = parseHexColor(textColorHex).copy(alpha = alpha)
+    val color = parseHexColor(textProperties.textColor).copy(alpha = alpha)
     // 使用 with(LocalDensity.current) 将 px 精准转为 sp，但这里简单起见直接放大字号，并依赖 sp 的缩放。
     // 如果想要绝对脱离系统的字体缩放，可以考虑使用 dp 转 sp，但这里直接应用基准缩放通常足够。
-    val fontSize = (textSize * baseScale).sp
-    val fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal
-    val fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal
-    val textAlign = parseTextAlign(horizontalAlign)
+    val fontSize = (textProperties.textSize * baseScale).sp
+    val fontWeight = if (textProperties.isBold) FontWeight.Bold else FontWeight.Normal
+    val fontStyle = if (textProperties.isItalic) FontStyle.Italic else FontStyle.Normal
+    val textAlign = parseTextAlign(textProperties.horizontalAlign)
 
     // 构建统一的文本样式，设置行高对齐方式，确保在小尺寸容器中也能精准居中
     val baseStyle = TextStyle(
@@ -104,10 +97,10 @@ fun RenderStyledText(
 
     Box(modifier = modifier) {
         // 绘制描边层（在底部）
-        if (strokeColorHex.isNotEmpty() && strokeWidth > 0f) {
-            val sColor = parseHexColor(strokeColorHex).copy(alpha = alpha)
+        if (textProperties.strokeColor.isNotEmpty() && textProperties.strokeWidth > 0f) {
+            val sColor = parseHexColor(textProperties.strokeColor).copy(alpha = alpha)
             Text(
-                text = text,
+                text = textProperties.text,
                 color = sColor,
                 fontSize = fontSize,
                 fontWeight = fontWeight,
@@ -118,14 +111,14 @@ fun RenderStyledText(
                 maxLines = 1,
                 modifier = Modifier.fillMaxWidth(), // 关键：撑满 Box 宽度以便 textAlign 生效
                 style = baseStyle.copy(
-                    drawStyle = Stroke(miter = 10f, width = strokeWidth * baseScale)
+                    drawStyle = Stroke(miter = 10f, width = textProperties.strokeWidth * baseScale)
                 )
             )
         }
 
         // 绘制填充层（在顶部）
         Text(
-            text = text,
+            text = textProperties.text,
             color = color,
             fontSize = fontSize,
             fontWeight = fontWeight,
@@ -261,14 +254,7 @@ fun RenderBlock(
                     contentAlignment = parseVerticalAlignment(textProps.verticalAlign)
                 ) {
                     RenderStyledText(
-                        text = textProps.text,
-                        textColorHex = textProps.textColor,
-                        textSize = textProps.textSize,
-                        isBold = textProps.isBold,
-                        isItalic = textProps.isItalic,
-                        strokeColorHex = textProps.strokeColor,
-                        strokeWidth = textProps.strokeWidth,
-                        horizontalAlign = textProps.horizontalAlign,
+                        textProperties = textProps,
                         baseScale = baseScale
                     )
                 }
@@ -281,14 +267,7 @@ fun RenderBlock(
                     contentAlignment = parseVerticalAlignment(inputProps.verticalAlign)
                 ) {
                     RenderStyledText(
-                        text = inputProps.hintText,
-                        textColorHex = inputProps.textColor,
-                        textSize = inputProps.textSize,
-                        isBold = inputProps.isBold,
-                        isItalic = inputProps.isItalic,
-                        strokeColorHex = inputProps.strokeColor,
-                        strokeWidth = inputProps.strokeWidth,
-                        horizontalAlign = inputProps.horizontalAlign,
+                        textProperties = inputProps,
                         baseScale = baseScale,
                         alpha = 0.6f // 输入框 Hint 通常半透明
                     )

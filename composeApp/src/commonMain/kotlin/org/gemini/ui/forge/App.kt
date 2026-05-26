@@ -20,7 +20,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.repository.TemplateRepository
@@ -28,17 +27,11 @@ import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.app.AppScreen
 import org.gemini.ui.forge.model.app.SettingCategory
-import org.gemini.ui.forge.model.app.UIModule
 import org.gemini.ui.forge.model.app.UpdateStatus
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.CompilerService
-import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.*
-import org.gemini.ui.forge.ui.dialog.AppSettingsDialog
-import org.gemini.ui.forge.ui.dialog.CloudAssetDialog
-import org.gemini.ui.forge.ui.dialog.CompileConfigDialog
-import org.gemini.ui.forge.ui.dialog.HelpDialog
-import org.gemini.ui.forge.ui.dialog.LogViewerDialog
+import org.gemini.ui.forge.ui.dialog.*
 import org.gemini.ui.forge.ui.feature.HomeScreen
 import org.gemini.ui.forge.ui.feature.ProjectWorkspaceScreen
 import org.gemini.ui.forge.ui.feature.TemplateGeneratorScreen
@@ -53,7 +46,6 @@ import org.gemini.ui.forge.viewmodel.AppEnvViewModel
 import org.gemini.ui.forge.viewmodel.AppSettingsViewModel
 import org.gemini.ui.forge.viewmodel.AppUpdateViewModel
 import org.gemini.ui.forge.viewmodel.AppViewModel
-import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.milliseconds
 
 private var originalSystemLanguage: String? = null
@@ -299,7 +291,6 @@ fun App(typography: Typography? = null) {
 
                     val statusMessage by AppLogger.statusMessage.collectAsState()
                     val showLogViewer by AppLogger.showLogViewer.collectAsState()
-                    val memoryLogs by AppLogger.memoryLogs.collectAsState()
 
                     if (showLogViewer) {
                         LogViewerDialog(

@@ -1,12 +1,11 @@
 package org.gemini.ui.forge.utils
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.gemini.ui.forge.event.LogEvent
@@ -25,9 +24,6 @@ object AppLogger {
     private val loggerScope = CoroutineScope(Dispatchers.Default)
     private var justStarted = true
     
-    private val _memoryLogs = MutableStateFlow<List<LogEvent>>(emptyList())
-    val memoryLogs = _memoryLogs.asStateFlow()
-
     private val _statusMessage = MutableStateFlow("就绪")
     val statusMessage = _statusMessage.asStateFlow()
     
