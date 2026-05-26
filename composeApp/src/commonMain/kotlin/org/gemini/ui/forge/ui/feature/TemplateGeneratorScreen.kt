@@ -28,15 +28,14 @@ import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.rememberFilePicker
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.manager.*
+import org.gemini.ui.forge.viewmodel.AppViewModel
+import org.gemini.ui.forge.model.app.AppScreen
 
 @Composable
 fun TemplateGeneratorScreen(
-    onTemplateSaved: (String, ProjectState) -> Unit,
+    appViewModel: AppViewModel,
     globalState: AppGlobalState,
-    cloudAssetManager: CloudAssetManager,
-    configManager: ConfigManager,
-    templateRepo: TemplateRepository,
-    aiService: AIGenerationService
+    templateRepo: TemplateRepository
 ) {
     val coroutineScope = rememberCoroutineScope()
     
@@ -85,7 +84,8 @@ fun TemplateGeneratorScreen(
                 )
                 
                 templateRepo.saveTemplate(finalTemplateName, stateToSave)
-                onTemplateSaved(finalTemplateName, stateToSave)
+                appViewModel.loadProject(finalTemplateName, stateToSave)
+                appViewModel.navigateTo(AppScreen.PROJECT_WORKSPACE)
             } catch (e: Exception) {
                 currentTask?.log("❌ 保存失败: ${e.message}")
             }
@@ -94,7 +94,7 @@ fun TemplateGeneratorScreen(
 
     if (showAssetManager) {
         CloudAssetDialog(
-            cloudAssetManager = cloudAssetManager,
+            cloudAssetManager = appViewModel.cloudAssetManager,
             onDismiss = { showAssetManager = false }
         )
     }
@@ -183,7 +183,7 @@ fun TemplateGeneratorScreen(
 
             Button(
                 onClick = {
-                    val task = aiService.createTask<ProjectState>("UI 模板分析", coroutineScope)
+                    val task = appViewModel.aiService.createTask<ProjectState>("UI 模板分析", coroutineScope)
                     currentTask = task
                     streamedJson = ""
                     
@@ -192,7 +192,7 @@ fun TemplateGeneratorScreen(
                         log("🔍 正在预验证图片资源有效性...")
                         
                         val allImageUris = inputUris.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
-                        val validationError = aiService.validateImageUris(allImageUris)
+                        val validationError = appViewModel.aiService.validateImageUris(allImageUris)
                         if (validationError != null) {
                             throw Exception("验证失败: $validationError")
                         }
@@ -202,7 +202,7 @@ fun TemplateGeneratorScreen(
 
                         // 执行 AI 分析
                         var totalChars = 0
-                        val result = aiService.analyzeImagesForTemplate(
+                        val result = appViewModel.aiService.analyzeImagesForTemplate(
                             imageUris = allImageUris,
                             apiKey = globalState.effectiveApiKey,
                             maxRetries = globalState.maxRetries,

@@ -379,20 +379,11 @@ fun App(typography: Typography? = null) {
 
                                 AppScreen.TEMPLATE_GENERATOR -> {
                                     TemplateGeneratorScreen(
-                                        onTemplateSaved = { name, ps ->
-                                            appViewModel.loadProject(name, ps)
-                                            appViewModel.navigateTo(
-                                                AppScreen.PROJECT_WORKSPACE
-                                            )
-                                        },
+                                        appViewModel = appViewModel,
                                         globalState = globalState,
-                                        cloudAssetManager = appViewModel.cloudAssetManager,
-                                        configManager = configManager,
-                                        templateRepo = templateRepo,
-                                        aiService = appViewModel.aiService
+                                        templateRepo = templateRepo
                                     )
                                 }
-                                else -> {}
                             }
                         }
                     }
