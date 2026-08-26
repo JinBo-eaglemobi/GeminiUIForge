@@ -150,14 +150,16 @@ fun ProjectWorkspaceScreen(
                     viewModel.assetGen.cancelGeneration() 
                 } else {
                     viewModel.updateState { it.copy(showAITaskDialog = false) }
-                    state.selectedBlock?.id?.let { blockId ->
+                    val targetId = state.historicalTargetBlockId ?: state.selectedBlock?.id
+                    targetId?.let { blockId ->
                         viewModel.showHistoricalDialog(blockId)
                     }
                 }
             },
             onDismiss = { 
                 viewModel.updateState { it.copy(showAITaskDialog = false) }
-                state.selectedBlock?.id?.let { blockId ->
+                val targetId = state.historicalTargetBlockId ?: state.selectedBlock?.id
+                targetId?.let { blockId ->
                     viewModel.showHistoricalDialog(blockId)
                 }
             }

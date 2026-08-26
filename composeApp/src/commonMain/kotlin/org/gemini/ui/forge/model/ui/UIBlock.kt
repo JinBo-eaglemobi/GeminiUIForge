@@ -65,83 +65,147 @@ data class UIBlock(
     override val assetStates: List<AssetState>
         get() = when (type) {
             UIBlockType.SPIN_BUTTON -> listOf(
-                AssetState("默认状态 (Spin)", "_spin"),
-                AssetState("停止状态 (Stop)", "_stop")
+                AssetState("默认状态 (Spin)", ""),
+                AssetState("停止状态 (Stop)", "/_stop")
+            )
+            UIBlockType.BUTTON -> listOf(
+                AssetState("默认状态 (Normal)", ""),
+                AssetState("点击状态 (Pressed)", "/_pressed"),
+                AssetState("禁用状态 (Disabled)", "/_disabled")
             )
             else -> emptyList()
         }
 
     override fun getCurrentImageUri(stateIndex: Int): TemplateFile? {
-        return if (type == UIBlockType.SPIN_BUTTON) {
-            val props = properties as? BlockProperties.SpinButtonProperties
-            if (stateIndex == 0) currentImageUri else props?.stopUri
-        } else {
-            currentImageUri
+        return when (type) {
+            UIBlockType.SPIN_BUTTON -> {
+                val props = properties as? BlockProperties.SpinButtonProperties
+                if (stateIndex == 0) currentImageUri else props?.stopUri
+            }
+            UIBlockType.BUTTON -> {
+                val props = properties as? BlockProperties.ButtonProperties
+                when (stateIndex) {
+                    0 -> currentImageUri
+                    1 -> props?.pressedUri
+                    2 -> props?.disabledUri
+                    else -> currentImageUri
+                }
+            }
+            else -> currentImageUri
         }
     }
 
     override fun getHistoricalIdSuffix(stateIndex: Int): String {
-        return if (type == UIBlockType.SPIN_BUTTON) {
-            if (stateIndex == 0) "_spin" else "_stop"
-        } else {
-            ""
+        return when (type) {
+            UIBlockType.SPIN_BUTTON -> {
+                if (stateIndex == 0) "" else "/_stop"
+            }
+            UIBlockType.BUTTON -> {
+                when (stateIndex) {
+                    0 -> ""
+                    1 -> "/_pressed"
+                    2 -> "/_disabled"
+                    else -> ""
+                }
+            }
+            else -> ""
         }
     }
 
     override fun clearImageUri(stateIndex: Int): UIBlock {
-        return if (type == UIBlockType.SPIN_BUTTON) {
-            val props = properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
-            if (stateIndex == 0) {
-                copy(currentImageUri = null)
-            } else {
-                copy(properties = props.copy(stopUri = null))
+        return when (type) {
+            UIBlockType.SPIN_BUTTON -> {
+                val props = properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
+                if (stateIndex == 0) {
+                    copy(currentImageUri = null)
+                } else {
+                    copy(properties = props.copy(stopUri = null))
+                }
             }
-        } else {
-            copy(currentImageUri = null)
+            UIBlockType.BUTTON -> {
+                val props = properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
+                when (stateIndex) {
+                    0 -> copy(currentImageUri = null)
+                    1 -> copy(properties = props.copy(pressedUri = null))
+                    2 -> copy(properties = props.copy(disabledUri = null))
+                    else -> copy(currentImageUri = null)
+                }
+            }
+            else -> copy(currentImageUri = null)
         }
     }
 
     override fun getPrompt(stateIndex: Int, effectiveLang: PromptLanguage): String {
-        return if (type == UIBlockType.SPIN_BUTTON) {
-            val props = properties as? BlockProperties.SpinButtonProperties
-            if (stateIndex == 0) {
-                if (effectiveLang == PromptLanguage.ZH) userPromptZh else userPromptEn
-            } else {
-                if (effectiveLang == PromptLanguage.ZH) props?.stopPromptZh.orEmpty() else props?.stopPromptEn.orEmpty()
+        return when (type) {
+            UIBlockType.SPIN_BUTTON -> {
+                val props = properties as? BlockProperties.SpinButtonProperties
+                if (stateIndex == 0) {
+                    if (effectiveLang == PromptLanguage.ZH) userPromptZh else userPromptEn
+                } else {
+                    if (effectiveLang == PromptLanguage.ZH) props?.stopPromptZh.orEmpty() else props?.stopPromptEn.orEmpty()
+                }
             }
-        } else {
-            if (effectiveLang == PromptLanguage.ZH) userPromptZh else userPromptEn
+            UIBlockType.BUTTON -> {
+                val props = properties as? BlockProperties.ButtonProperties
+                when (stateIndex) {
+                    0 -> if (effectiveLang == PromptLanguage.ZH) userPromptZh else userPromptEn
+                    1 -> props?.pressedPrompt.orEmpty()
+                    2 -> props?.disabledPrompt.orEmpty()
+                    else -> if (effectiveLang == PromptLanguage.ZH) userPromptZh else userPromptEn
+                }
+            }
+            else -> if (effectiveLang == PromptLanguage.ZH) userPromptZh else userPromptEn
         }
     }
 
     override fun getOtherPrompt(stateIndex: Int, effectiveLang: PromptLanguage): String {
-        return if (type == UIBlockType.SPIN_BUTTON) {
-            val props = properties as? BlockProperties.SpinButtonProperties
-            if (stateIndex == 0) {
-                if (effectiveLang == PromptLanguage.ZH) userPromptEn else userPromptZh
-            } else {
-                if (effectiveLang == PromptLanguage.ZH) props?.stopPromptEn.orEmpty() else props?.stopPromptZh.orEmpty()
+        return when (type) {
+            UIBlockType.SPIN_BUTTON -> {
+                val props = properties as? BlockProperties.SpinButtonProperties
+                if (stateIndex == 0) {
+                    if (effectiveLang == PromptLanguage.ZH) userPromptEn else userPromptZh
+                } else {
+                    if (effectiveLang == PromptLanguage.ZH) props?.stopPromptEn.orEmpty() else props?.stopPromptZh.orEmpty()
+                }
             }
-        } else {
-            if (effectiveLang == PromptLanguage.ZH) userPromptEn else userPromptZh
+            UIBlockType.BUTTON -> {
+                val props = properties as? BlockProperties.ButtonProperties
+                when (stateIndex) {
+                    0 -> if (effectiveLang == PromptLanguage.ZH) userPromptEn else userPromptZh
+                    1 -> ""
+                    2 -> ""
+                    else -> if (effectiveLang == PromptLanguage.ZH) userPromptEn else userPromptZh
+                }
+            }
+            else -> if (effectiveLang == PromptLanguage.ZH) userPromptEn else userPromptZh
         }
     }
 
     override fun updatePrompt(stateIndex: Int, effectiveLang: PromptLanguage, newValue: String): UIBlock {
-        return if (type == UIBlockType.SPIN_BUTTON) {
-            val props = properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
-            if (stateIndex == 0) {
-                if (effectiveLang == PromptLanguage.ZH) copy(userPromptZh = newValue) else copy(userPromptEn = newValue)
-            } else {
-                val updatedProps = if (effectiveLang == PromptLanguage.ZH) {
-                    props.copy(stopPromptZh = newValue)
+        return when (type) {
+            UIBlockType.SPIN_BUTTON -> {
+                val props = properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
+                if (stateIndex == 0) {
+                    if (effectiveLang == PromptLanguage.ZH) copy(userPromptZh = newValue) else copy(userPromptEn = newValue)
                 } else {
-                    props.copy(stopPromptEn = newValue)
+                    val updatedProps = if (effectiveLang == PromptLanguage.ZH) {
+                        props.copy(stopPromptZh = newValue)
+                    } else {
+                        props.copy(stopPromptEn = newValue)
+                    }
+                    copy(properties = updatedProps)
                 }
-                copy(properties = updatedProps)
             }
-        } else {
-            if (effectiveLang == PromptLanguage.ZH) copy(userPromptZh = newValue) else copy(userPromptEn = newValue)
+            UIBlockType.BUTTON -> {
+                val props = properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
+                when (stateIndex) {
+                    0 -> if (effectiveLang == PromptLanguage.ZH) copy(userPromptZh = newValue) else copy(userPromptEn = newValue)
+                    1 -> copy(properties = props.copy(pressedPrompt = newValue))
+                    2 -> copy(properties = props.copy(disabledPrompt = newValue))
+                    else -> if (effectiveLang == PromptLanguage.ZH) copy(userPromptZh = newValue) else copy(userPromptEn = newValue)
+                }
+            }
+            else -> if (effectiveLang == PromptLanguage.ZH) copy(userPromptZh = newValue) else copy(userPromptEn = newValue)
         }
     }
 }

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,8 +17,6 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.PromptLanguage
-import org.gemini.ui.forge.model.ui.BlockProperties
-import org.gemini.ui.forge.model.ui.UIBlockType
 
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
@@ -80,8 +77,7 @@ fun AssetGenPropertyContent(
         AdvancedSettingsDialog(state, viewModel, onDismiss = { showAdvancedSettings = false })
     }
 
-    val assetSupport = selectedBlock
-    val states = assetSupport.assetStates
+    val states = selectedBlock.assetStates
     val isMultiState = states.isNotEmpty()
 
     // Tab 栏状态
@@ -89,12 +85,15 @@ fun AssetGenPropertyContent(
 
     // 动态重定向获取当前状态绑定的图片和历史 ID 后缀
     val currentImageToDisplay = remember(selectedBlock.id, currentTab, selectedBlock) {
-        assetSupport.getCurrentImageUri(currentTab)
+        selectedBlock.getCurrentImageUri(currentTab)
     }
     val historicalIdSuffix = remember(selectedBlock.id, currentTab) {
-        assetSupport.getHistoricalIdSuffix(currentTab)
+        selectedBlock.getHistoricalIdSuffix(currentTab)
     }
 
+
+    val baseImageGenerated = selectedBlock.getCurrentImageUri(0) != null
+    val canGenerate = currentTab == 0 || baseImageGenerated
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -171,7 +170,9 @@ fun AssetGenPropertyContent(
                                 Text(
                                     text = stateInfo.name,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         )
@@ -186,10 +187,25 @@ fun AssetGenPropertyContent(
                 .clip(AppShapes.medium)
                 .background(Color.Black.copy(alpha = 0.05f))
                 .clickable {
-                    if (currentImageToDisplay != null) showImageEditor = true
+                    if (currentImageToDisplay != null && canGenerate) showImageEditor = true
                 }
         ) {
-            if (currentImageToDisplay != null) {
+            if (!canGenerate) {
+                Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.Lock,
+                        null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.outline
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "请先生成默认/正常状态的图片",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            } else if (currentImageToDisplay != null) {
                 AsyncImage(
                     model = currentImageToDisplay.getAbsolutePath(),
                     contentDescription = null,
@@ -217,7 +233,8 @@ fun AssetGenPropertyContent(
             OutlinedButton(
                 onClick = { viewModel.showHistoricalDialog(selectedBlock.id + historicalIdSuffix) },
                 modifier = Modifier.weight(1.2f),
-                shape = AppShapes.medium
+                shape = AppShapes.medium,
+                enabled = canGenerate
             ) {
                 Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
@@ -225,18 +242,19 @@ fun AssetGenPropertyContent(
             }
             OutlinedButton(
                 onClick = {
-                    val updatedBlock = assetSupport.clearImageUri(currentTab)
+                    val updatedBlock = selectedBlock.clearImageUri(currentTab)
                     viewModel.assetManager.updateBlock(updatedBlock)
                 },
                 modifier = Modifier.weight(0.8f),
                 shape = AppShapes.medium,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                enabled = canGenerate
             ) {
                 Text("解绑", style = MaterialTheme.typography.labelSmall)
             }
         }
 
-        if (currentImageToDisplay != null) {
+        if (currentImageToDisplay != null && canGenerate) {
             Button(
                 onClick = { showImageEditor = true },
                 modifier = Modifier.fillMaxWidth().height(40.dp),
@@ -259,10 +277,10 @@ fun AssetGenPropertyContent(
 
         // 采用 remember(selectedBlock.id, currentTab, effectiveLang) 精准缓存和计算，保证重构与选择反馈
         val prompt = remember(selectedBlock.id, currentTab, effectiveLang, selectedBlock) {
-            assetSupport.getPrompt(currentTab, effectiveLang)
+            selectedBlock.getPrompt(currentTab, effectiveLang)
         }
         val otherPrompt = remember(selectedBlock.id, currentTab, effectiveLang, selectedBlock) {
-            assetSupport.getOtherPrompt(currentTab, effectiveLang)
+            selectedBlock.getOtherPrompt(currentTab, effectiveLang)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -287,7 +305,7 @@ fun AssetGenPropertyContent(
             SelectAllOutlinedTextField(
                 value = prompt,
                 onValueChange = { newValue ->
-                    val updatedBlock = assetSupport.updatePrompt(currentTab, effectiveLang, newValue)
+                    val updatedBlock = selectedBlock.updatePrompt(currentTab, effectiveLang, newValue)
                     viewModel.assetManager.updateBlock(updatedBlock)
                 },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
@@ -303,11 +321,11 @@ fun AssetGenPropertyContent(
                     }
                 },
                 maxLines = 8,
-                enabled = !state.isGenerating
+                enabled = !state.isGenerating && canGenerate
             )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = useChatContext, onCheckedChange = { useChatContext = it })
+                Checkbox(checked = useChatContext, onCheckedChange = { useChatContext = it }, enabled = canGenerate)
                 Text("携带历史上下文 (会话模式)", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.weight(1f))
                 IconButton(
@@ -315,7 +333,7 @@ fun AssetGenPropertyContent(
                         // 将优化结果反馈写入对应的 blockPrompt 字段
                         viewModel.layoutEditor.optimizePrompt(selectedBlock.id, apiKey, effectiveLang, useChatContext)
                     },
-                    enabled = !state.isGenerating && (prompt.isNotBlank() || otherPrompt.isNotBlank())
+                    enabled = !state.isGenerating && canGenerate && (prompt.isNotBlank() || otherPrompt.isNotBlank())
                 ) {
                     Icon(Icons.Default.AutoFixHigh, "优化提示词", tint = MaterialTheme.colorScheme.primary)
                 }
@@ -331,14 +349,18 @@ fun AssetGenPropertyContent(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = state.isGenerateTransparent,
-                        onCheckedChange = { checked -> viewModel.updateState { it.copy(isGenerateTransparent = checked) } })
+                        onCheckedChange = { checked -> viewModel.updateState { it.copy(isGenerateTransparent = checked) } },
+                        enabled = canGenerate
+                    )
                     Text("生成透明背景 (PNG)", style = MaterialTheme.typography.bodySmall)
                 }
                 if (state.isGenerateTransparent) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 24.dp)) {
                         Checkbox(
                             checked = state.isPrioritizeCloudRemoval,
-                            onCheckedChange = { checked -> viewModel.updateState { it.copy(isPrioritizeCloudRemoval = checked) } })
+                            onCheckedChange = { checked -> viewModel.updateState { it.copy(isPrioritizeCloudRemoval = checked) } },
+                            enabled = canGenerate
+                        )
                         Text("优先云端抠图", style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -347,10 +369,10 @@ fun AssetGenPropertyContent(
 
         Button(
             onClick = {
-                viewModel.assetGen.onRequestGeneration(apiKey, if (prompt.isNotBlank()) prompt else otherPrompt)
+                viewModel.assetGen.onRequestGeneration(apiKey, if (prompt.isNotBlank()) prompt else otherPrompt, currentTab)
             },
             modifier = Modifier.fillMaxWidth().height(48.dp),
-            enabled = !state.isGenerating
+            enabled = !state.isGenerating && canGenerate
         ) {
             if (state.isGenerating) CircularProgressIndicator(
                 modifier = Modifier.size(20.dp),
@@ -360,7 +382,7 @@ fun AssetGenPropertyContent(
             else {
                 Icon(Icons.Default.Bolt, null)
                 Spacer(Modifier.width(8.dp))
-                Text("立即生成资源")
+                Text(if (canGenerate) "立即生成资源" else "请先生成默认/正常状态的图片")
             }
         }
     }

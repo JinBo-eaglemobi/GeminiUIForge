@@ -149,7 +149,9 @@ sealed class BlockProperties {
     data class SpinButtonProperties(
         val stopUri: TemplateFile? = null,
         val stopPromptZh: String = "",
-        val stopPromptEn: String = ""
+        val stopPromptEn: String = "",
+        val spinResourceBindingPath: List<String> = emptyList(),
+        val stopResourceBindingPath: List<String> = emptyList()
     ) : BlockProperties()
 }
 

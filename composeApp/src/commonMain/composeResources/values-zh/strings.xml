@@ -150,7 +150,7 @@
     <string name="label_height">高度</string>
     <string name="action_add">添加</string>
     <string name="action_confirm">确认</string>
-    <string name="editor_gen_settings">生成设置</string>
+    <string name="editor_gen_settings">生成面板</string>
     <string name="editor_prompt_lang">生成提示词语言</string>
     <string name="editor_generating">正在生成...</string>
     <string name="editor_start_gen">开始生成图片资源</string>

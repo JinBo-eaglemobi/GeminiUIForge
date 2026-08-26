@@ -125,6 +125,8 @@ data class ProjectWorkspaceState(
     val resourceConfigPath: String? = null,
     /** 临时状态：用来触发监听并重载本地文件资源的随机刷新时间戳 */
     val resourceConfigRefreshTrigger: Long = 0L,
+    /** 临时状态：右侧属性栏当前激活的 Tab 索引 (0: 属性编辑, 1: AI 资产生成) */
+    val activePropertyTab: Int = 0,
 
     /** 历史记录快照 (Undo)：撤销操作栈 */
     val undoStack: List<org.gemini.ui.forge.model.history.HistoryEntry> = emptyList(),

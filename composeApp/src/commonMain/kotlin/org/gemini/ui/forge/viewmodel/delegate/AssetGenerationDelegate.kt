@@ -73,7 +73,7 @@ class AssetGenerationDelegate(
     }
 
     @OptIn(ExperimentalEncodingApi::class, ExperimentalUuidApi::class)
-    fun onRequestGeneration(apiKey: String, customPrompt: String) {
+    fun onRequestGeneration(apiKey: String, customPrompt: String, stateIndex: Int = 0) {
         val currentState = getState()
         val block = currentState.selectedBlock ?: return
         val projectName = currentState.projectName
@@ -83,6 +83,22 @@ class AssetGenerationDelegate(
         val refUri = currentState.referenceImageUri
         val selectedModel = currentState.selectedModel
 
+        // 依据次序与强一致性设计，衍生状态强制以正常状态（index 0）生成的图片作为参考
+        val baseImageUri = block.getCurrentImageUri(0)
+        if (stateIndex > 0 && baseImageUri == null) {
+            updateState { it.copy(
+                isGenerating = false,
+                showAITaskDialog = true,
+                currentTaskStatus = "生成失败：请先生成默认/正常状态的图片"
+            ) }
+            addLog("❌ [强一致性拦截] 正常状态图片尚未生成，拒绝生成后续衍生状态图片！")
+            return
+        }
+        val refUriToUse = if (stateIndex > 0) baseImageUri else (block.referenceImage ?: refUri)
+
+        val historicalIdSuffix = block.getHistoricalIdSuffix(stateIndex)
+        val targetBlockId = if (stateIndex > 0) "${block.id}$historicalIdSuffix" else block.id
+
         generationJob?.cancel()
         generationJob = scope.launch {
             updateState { it.copy(
@@ -90,10 +106,11 @@ class AssetGenerationDelegate(
                 generationLogs = emptyList(), 
                 showAITaskDialog = true,
                 batchProgress = null,
-                currentTaskStatus = "准备环境..."
+                currentTaskStatus = "准备环境...",
+                historicalTargetBlockId = targetBlockId
             ) }
             
-            addLog(">>> [任务开始] 为模块 [${block.id}] 生成资源 <<<")
+            addLog(">>> [任务开始] 为模块 [${targetBlockId}] 生成资源 <<<")
             
             try {
                 coroutineScope {
@@ -107,7 +124,7 @@ class AssetGenerationDelegate(
                         targetHeight = block.bounds.height,
                         isPng = isTransparent,
                         style = globalStyle,
-                        referenceImageUri = block.referenceImage?.getAbsolutePath() ?: refUri?.getAbsolutePath(),
+                        referenceImageUri = refUriToUse?.getAbsolutePath(),
                         onLog = { 
                             addLog("[AI-SDK] $it")
                             updateStatus("AI 交互中: $it")
@@ -124,7 +141,7 @@ class AssetGenerationDelegate(
                                 addLog("[IO] 收到原始图像数据 ($sizeStr)，正在保存...")
                                 
                                 val shortUuid = Uuid.random().toString().substringBefore('-')
-                                val originalTFile = templateRepo.saveBlockResource(projectName, block.id, "gen_${idx}_${timestamp}_$shortUuid", bytes, isPng = false)
+                                val originalTFile = templateRepo.saveBlockResource(projectName, targetBlockId, "gen_${idx}_${timestamp}_$shortUuid", bytes, isPng = false)
                                 
                                 var displayFile = originalTFile
 
@@ -143,7 +160,7 @@ class AssetGenerationDelegate(
                                         } catch (e: Exception) { addLog("❌ [Local] 异常") }
                                     }
                                     if (processedBytes != null) {
-                                        displayFile = templateRepo.saveBlockResource(projectName, block.id, "processed_${idx}_$timestamp", processedBytes, isPng = true)
+                                        displayFile = templateRepo.saveBlockResource(projectName, targetBlockId, "processed_${idx}_$timestamp", processedBytes, isPng = true)
                                     }
                                 }
 

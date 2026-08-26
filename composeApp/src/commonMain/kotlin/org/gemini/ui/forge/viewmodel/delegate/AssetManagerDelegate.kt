@@ -378,8 +378,14 @@ class AssetManagerDelegate(
     fun onHistoricalImageSelected(targetId: String, imageUri: TemplateFile) {
         val pageId = getState().selectedPageId ?: return
         
-        if (targetId.endsWith("_pressed")) {
-            val baseId = targetId.substringBefore("_pressed")
+        // 兼容并规范化以子目录隔离存放的 targetId（如 "spin_btn/_stop" -> "spin_btn_stop"）
+        val normalizedTargetId = if (targetId.contains("/")) {
+            val parts = targetId.split("/")
+            parts[0] + parts[1]
+        } else targetId
+        
+        if (normalizedTargetId.endsWith("_pressed")) {
+            val baseId = normalizedTargetId.substringBefore("_pressed")
             saveSnapshot("绑定按钮点击态图: $baseId")
             updateState { currentState ->
                 val updatedPages = currentState.project.pages.map { page ->
@@ -391,8 +397,8 @@ class AssetManagerDelegate(
                 currentState.copy(project = currentState.project.copy(pages = updatedPages))
             }
             markDirty()
-        } else if (targetId.endsWith("_disabled")) {
-            val baseId = targetId.substringBefore("_disabled")
+        } else if (normalizedTargetId.endsWith("_disabled")) {
+            val baseId = normalizedTargetId.substringBefore("_disabled")
             saveSnapshot("绑定按钮禁用态图: $baseId")
             updateState { currentState ->
                 val updatedPages = currentState.project.pages.map { page ->
@@ -404,8 +410,8 @@ class AssetManagerDelegate(
                 currentState.copy(project = currentState.project.copy(pages = updatedPages))
             }
             markDirty()
-        } else if (targetId.endsWith("_spin")) {
-            val baseId = targetId.substringBefore("_spin")
+        } else if (normalizedTargetId.endsWith("_spin")) {
+            val baseId = normalizedTargetId.substringBefore("_spin")
             saveSnapshot("绑定旋转按钮Spin态图: $baseId")
             updateState { currentState ->
                 val updatedPages = currentState.project.pages.map { page ->
@@ -416,8 +422,8 @@ class AssetManagerDelegate(
                 currentState.copy(project = currentState.project.copy(pages = updatedPages))
             }
             markDirty()
-        } else if (targetId.endsWith("_stop")) {
-            val baseId = targetId.substringBefore("_stop")
+        } else if (normalizedTargetId.endsWith("_stop")) {
+            val baseId = normalizedTargetId.substringBefore("_stop")
             saveSnapshot("绑定旋转按钮Stop态图: $baseId")
             updateState { currentState ->
                 val updatedPages = currentState.project.pages.map { page ->

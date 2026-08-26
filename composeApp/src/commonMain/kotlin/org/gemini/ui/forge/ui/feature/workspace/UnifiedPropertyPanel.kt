@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.feature.workspace
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.*
@@ -53,7 +55,7 @@ fun UnifiedPropertyPanel(
                 colors = CardDefaults.outlinedCardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                 ),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -72,7 +74,7 @@ fun UnifiedPropertyPanel(
                         Text(
                             text = stringResource(Res.string.multiselect_title),
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -88,7 +90,7 @@ fun UnifiedPropertyPanel(
                     Text(
                         text = stringResource(Res.string.multiselect_tips_title),
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
 
@@ -124,7 +126,7 @@ fun UnifiedPropertyPanel(
             }
         }
     } else {
-        var selectedTab by remember { mutableStateOf(0) }
+        val selectedTab = state.activePropertyTab
 
         Column(modifier = modifier.fillMaxSize()) {
             // 顶部导航选项卡
@@ -133,12 +135,12 @@ fun UnifiedPropertyPanel(
                 containerColor = Color.Transparent,
                 divider = {}
             ) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }) {
+                Tab(selected = selectedTab == 0, onClick = { viewModel.updateState { it.copy(activePropertyTab = 0) } }) {
                     Box(Modifier.padding(vertical = 12.dp)) {
                         Text(stringResource(Res.string.editor_properties), style = MaterialTheme.typography.labelLarge)
                     }
                 }
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }) {
+                Tab(selected = selectedTab == 1, onClick = { viewModel.updateState { it.copy(activePropertyTab = 1) } }) {
                     Box(Modifier.padding(vertical = 12.dp)) {
                         Text(stringResource(Res.string.editor_gen_settings), style = MaterialTheme.typography.labelLarge)
                     }
@@ -199,7 +201,7 @@ fun CollapsibleSection(
             Spacer(Modifier.width(8.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary
             )
             Spacer(Modifier.width(16.dp))
