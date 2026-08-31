@@ -1,7 +1,6 @@
 package org.gemini.ui.forge.ui.dialog.settings
 
 
-import androidx.compose.foundation.layout.PaddingValues
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -32,8 +31,6 @@ fun AISettings(
     appViewModel: org.gemini.ui.forge.viewmodel.AppViewModel,
     settingsViewModel: org.gemini.ui.forge.viewmodel.AppSettingsViewModel
 ) {
-    val isCompact = LocalMinimumInteractiveComponentSize.current == 0.dp
-
     SettingSectionTitle(stringResource(Res.string.settings_category_ai))
 
     var keyInput by remember(globalState.apiKey) { mutableStateOf(globalState.apiKey) }
@@ -125,7 +122,7 @@ fun AISettings(
                         appViewModel.setPromptLanguagePref(lang)
                         promptLangExpanded = false
                     }
-                , contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else MenuDefaults.DropdownMenuItemContentPadding, modifier = if (isCompact) Modifier.height(32.dp) else Modifier)
+                )
             }
         }
     }

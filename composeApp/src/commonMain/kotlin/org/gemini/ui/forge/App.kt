@@ -35,6 +35,8 @@ import org.gemini.ui.forge.ui.dialog.*
 import org.gemini.ui.forge.ui.feature.HomeScreen
 import org.gemini.ui.forge.ui.feature.ProjectWorkspaceScreen
 import org.gemini.ui.forge.ui.feature.TemplateGeneratorScreen
+import org.gemini.ui.forge.ui.feature.gameproject.GameProjectCreateScreen
+import org.gemini.ui.forge.ui.feature.gameproject.GameProjectWorkspaceScreen
 import org.gemini.ui.forge.ui.theme.AppSpacing
 import org.gemini.ui.forge.ui.theme.AppTheme
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -46,6 +48,7 @@ import org.gemini.ui.forge.viewmodel.AppEnvViewModel
 import org.gemini.ui.forge.viewmodel.AppSettingsViewModel
 import org.gemini.ui.forge.viewmodel.AppUpdateViewModel
 import org.gemini.ui.forge.viewmodel.AppViewModel
+import org.gemini.ui.forge.viewmodel.GameProjectViewModel
 import kotlin.time.Duration.Companion.milliseconds
 
 private var originalSystemLanguage: String? = null
@@ -85,6 +88,10 @@ fun App(typography: Typography? = null) {
             }
             val updateViewModel: AppUpdateViewModel = viewModel { AppUpdateViewModel(templateRepo = templateRepo) }
             val envViewModel: AppEnvViewModel = viewModel { AppEnvViewModel() }
+            // 游戏项目管理模块 ViewModel
+            val gameProjectViewModel: GameProjectViewModel = viewModel {
+                GameProjectViewModel(storage = storage, configManager = configManager)
+            }
 
             val appState by appViewModel.state.collectAsState()
             val updateStatus by updateViewModel.status.collectAsState()
@@ -363,7 +370,8 @@ fun App(typography: Typography? = null) {
                                 AppScreen.HOME -> {
                                     HomeScreen(
                                         appViewModel = appViewModel,
-                                        templateRepo = templateRepo
+                                        templateRepo = templateRepo,
+                                        gameProjectViewModel = gameProjectViewModel
                                     )
                                 }
 
@@ -383,6 +391,17 @@ fun App(typography: Typography? = null) {
                                         globalState = globalState,
                                         templateRepo = templateRepo
                                     )
+                                }
+
+                                AppScreen.GAME_PROJECT_MANAGER -> {
+                                    GameProjectCreateScreen(
+                                        viewModel = gameProjectViewModel,
+                                        appViewModel = appViewModel
+                                    )
+                                }
+
+                                AppScreen.GAME_PROJECT_WORKSPACE -> {
+                                    GameProjectWorkspaceScreen(viewModel = gameProjectViewModel)
                                 }
                             }
                         }

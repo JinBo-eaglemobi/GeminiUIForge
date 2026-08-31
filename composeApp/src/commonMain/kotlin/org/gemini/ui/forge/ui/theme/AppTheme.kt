@@ -5,10 +5,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.model.app.ThemeMode
 import org.gemini.ui.forge.model.app.LayoutMode
+import org.gemini.ui.forge.utils.RetryingClipboard
+
+/**
+ * 全局平台物理真实密度备份。
+ * 用于在嵌入 AWT/Swing 原生组件（如 JCEF 浏览器）时恢复 100% 的物理坐标系，
+ * 避免因全局紧凑密度（0.7）导致 SwingPanel 计算 Px 位置发生偏离与越界。
+ */
+val LocalPlatformDensity = staticCompositionLocalOf { Density(1f) }
 
 val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(2.dp),
@@ -38,6 +50,13 @@ private val CompactTypography = Typography(
     labelMedium = DefaultTypography.labelMedium.copy(fontSize = 11.sp, lineHeight = 14.sp),
     labelSmall = DefaultTypography.labelSmall.copy(fontSize = 10.sp, lineHeight = 14.sp)
 )
+
+/**
+ * 紧凑模式全局缩放系数：所有以 dp 定义尺寸的组件（菜单项、输入框、按钮及各类内边距）的视觉缩放比例。
+ * 取值 0.7 由项目此前手动适配的经验值反推而来（菜单项 48dp→32dp、输入框 56dp→36dp）。
+ * 如需调整整体紧凑程度，仅需修改此一处常量即可全局生效。
+ */
+private const val COMPACT_DENSITY_SCALE = 0.7f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,9 +89,31 @@ fun AppTheme(
     val isCompact = actualLayoutMode == LayoutMode.COMPACT
     val currentSpacing = if (isCompact) CompactSpacing else DefaultSpacing
 
+    // ===== 全局紧凑样式定型点（唯一配置处，业务层无需再做任何布局模式判断） =====
+    // 通过重映射 LocalDensity 实现"启动时一次配置，全局生效"：
+    // 1. density × COMPACT_DENSITY_SCALE：所有以 dp 定义尺寸的 M3 组件（菜单项、输入框、
+    //    按钮及各类内边距/间距）视觉上整体等比缩小，无需逐组件手动设值；
+    // 2. fontScale ÷ COMPACT_DENSITY_SCALE：精确补偿文字的 sp 像素换算，保证文字视觉大小
+    //    不变，字号层级仍完全由上方 currentTypography（CompactTypography）独立管理；
+    // 3. 位图资源按固有像素显示、不走 dp，不受此配置影响（画布等场景如需精确控制请单独处理）。
+    val baseDensity = LocalDensity.current
+    val uiDensity = if (isCompact) {
+        Density(
+            density = baseDensity.density * COMPACT_DENSITY_SCALE,
+            fontScale = baseDensity.fontScale / COMPACT_DENSITY_SCALE
+        )
+    } else {
+        baseDensity
+    }
+
     CompositionLocalProvider(
+        LocalDensity provides uiDensity,
+        LocalPlatformDensity provides baseDensity, // ★ 备份系统的物理真实密度，供 SwingPanel 等原生嵌入组件隔离使用
         LocalMinimumInteractiveComponentSize provides if (isCompact) 0.dp else 48.dp,
-        LocalAppSpacing provides currentSpacing
+        LocalAppSpacing provides currentSpacing,
+        // 带重试兜底的剪贴板：统一容忍 Windows 剪贴板瞬锁异常，
+        // 覆盖所有粘贴入口（键盘 Ctrl+V / 右键菜单 / 系统剪贴板历史）的读取路径
+        LocalClipboard provides RetryingClipboard(LocalClipboard.current)
     ) {
         MaterialTheme(
             colorScheme = colors,

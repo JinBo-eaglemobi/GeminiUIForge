@@ -23,6 +23,11 @@ class IOSPlatform: Platform {
         println("Open path not fully supported on iOS: $path")
     }
 
+    override fun openCredentialStore() {
+        // iOS 平台暂无对应的凭据库管理入口，空实现
+        println("Open credential store not supported on iOS")
+    }
+
     override fun applyUpdateAndRestart(tempFilePath: String) {
         // iOS 平台不支持静默自更新，通常由 App Store 处理
         println("Update not supported on iOS platform: $tempFilePath")

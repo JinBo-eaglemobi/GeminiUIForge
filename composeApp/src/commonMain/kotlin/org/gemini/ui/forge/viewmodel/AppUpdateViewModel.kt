@@ -63,7 +63,7 @@ class AppUpdateViewModel(
             AppLogger.i("AppUpdateViewModel", "🚀 用户确认更新，开始处理版本: v${info.version}")
             // 立即更新状态为下载中，避免 UI 停留在 Available 导致用户重复点击或认为无响应
             _status.update {
-                UpdateStatus.Downloading(0f)
+                UpdateStatus.Downloading(null)
             }
             try {
                 // 1. 获取临时存放目录
@@ -75,7 +75,6 @@ class AppUpdateViewModel(
                 updateService.downloadUpdate(info.downloadUrl, tempPath).collect { progress ->
                     _status.update { UpdateStatus.Downloading(progress) }
                 }
-
                 // 3. 准备就绪
                 AppLogger.i("AppUpdateViewModel", "💾 更新包下载已校验，准备交由平台接力脚本执行替换重启...")
                 _status.update {

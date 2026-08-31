@@ -12,6 +12,11 @@ class JsPlatform : Platform {
         println("Open in file explorer not supported in JS: $path")
     }
 
+    override fun openCredentialStore() {
+        // 浏览器环境无系统凭据库概念，空实现
+        println("Open credential store not supported in JS")
+    }
+
     override fun applyUpdateAndRestart(tempFilePath: String) {
         // JS 平台不支持本地静默更新
         println("Update not supported on JS platform: $tempFilePath")

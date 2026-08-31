@@ -66,6 +66,20 @@ class JVMPlatform : Platform {
         }
     }
 
+    override fun openCredentialStore() {
+        try {
+            when {
+                // Windows：唤起控制面板的凭据管理器页
+                hostOs.isWindows -> ProcessBuilder("control.exe", "/name", "Microsoft.CredentialManager").start()
+                // macOS：打开钥匙串访问应用
+                hostOs.isMacOS -> ProcessBuilder("open", "-a", "Keychain Access").start()
+                else -> Unit
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override fun applyUpdateAndRestart(tempFilePath: String) {
         try {
             // 1. 获取当前程序路径

@@ -2,6 +2,7 @@ package org.gemini.ui.forge.ui.dialog
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.model.ui.ResourceItem
@@ -107,6 +109,8 @@ fun ResourceBindingDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        // 解除平台默认宽度限制：级联层级较深时内容可自然展宽，紧凑模式下不再被压成窄条
+        properties = DialogProperties(usePlatformDefaultWidth = false),
         title = {
             Text(
                 text = stringResource(Res.string.res_binding_title),
@@ -117,7 +121,7 @@ fun ResourceBindingDialog(
         text = {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .widthIn(min = 520.dp)
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -297,12 +301,15 @@ fun ResourceBindingDialog(
                                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), AppShapes.small)
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Text(
-                                    text = levelDesc,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    lineHeight = 16.sp
-                                )
+                                // 层级描述支持选择复制
+                                SelectionContainer {
+                                    Text(
+                                        text = levelDesc,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        lineHeight = 16.sp
+                                    )
+                                }
                             }
                         }
 
@@ -336,12 +343,15 @@ fun ResourceBindingDialog(
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(
-                            text = leafDescription,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 18.sp
-                        )
+                        // 资源说明支持选择复制（绑定决策时可直接复制描述文本）
+                        SelectionContainer {
+                            Text(
+                                text = leafDescription,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 18.sp
+                            )
+                        }
                     }
                 }
             }

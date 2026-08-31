@@ -134,6 +134,8 @@ kotlin {
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(libs.ktor.client.cio)
             implementation(libs.slf4j.api)
+            // JVM 桌面端 CEF（Chromium）嵌入式浏览器，用于游戏项目 HTML 预览
+            implementation(libs.jcefmaven)
         }
     }
 

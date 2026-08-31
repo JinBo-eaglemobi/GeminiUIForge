@@ -21,8 +21,18 @@ import org.gemini.ui.forge.ProjectConfig
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.utils.ChunkStatus
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.LinearProgressIndicator
+
+
+/** 字节数人性化格式（B/KB/MB/GB，语言无关单位），供下载统计行展示 */
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1L shl 30 -> "%.1f GB".format(bytes / 1073741824.0)
+    bytes >= 1L shl 20 -> "%.1f MB".format(bytes / 1048576.0)
+    bytes >= 1L shl 10 -> "%.1f KB".format(bytes / 1024.0)
+    else -> "$bytes B"
+}
 
 
 /**
@@ -122,6 +132,7 @@ fun AboutSection(
                     }
 
                     is UpdateStatus.Downloading -> {
+                        // 总进度条
                         LinearProgressIndicator(
                             progress = { status.progress },
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
@@ -132,6 +143,46 @@ fun AboutSection(
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(top = LocalAppSpacing.current.small)
                         )
+                        // IDM 式下载明细：统计行（字节/速度/活跃连接） + 分块网格
+                        val snapshot = status.snapshot
+                        if (snapshot != null && snapshot.totalBytes > 0) {
+                            Text(
+                                text = stringResource(
+                                    Res.string.update_dl_stats,
+                                    formatBytes(snapshot.downloadedBytes),
+                                    formatBytes(snapshot.totalBytes),
+                                    formatBytes(snapshot.speedBps),
+                                    snapshot.activeConnections,
+                                    snapshot.chunks.size
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall)
+                            )
+                            // 分块网格：每块一条迷你进度条，颜色标识状态
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(top = LocalAppSpacing.current.extraSmall),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                snapshot.chunks.forEach { chunk ->
+                                    val chunkProgress = if (chunk.totalBytes > 0) {
+                                        (chunk.downloadedBytes.toFloat() / chunk.totalBytes).coerceIn(0f, 1f)
+                                    } else 0f
+                                    val barColor = when (chunk.status) {
+                                        ChunkStatus.ACTIVE -> MaterialTheme.colorScheme.primary
+                                        ChunkStatus.DONE -> Color(0xFF4CAF50)
+                                        ChunkStatus.SKIPPED -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                                        ChunkStatus.PENDING -> MaterialTheme.colorScheme.outlineVariant
+                                    }
+                                    LinearProgressIndicator(
+                                        progress = { chunkProgress },
+                                        modifier = Modifier.fillMaxWidth().height(4.dp),
+                                        color = barColor,
+                                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     is UpdateStatus.ReadyToInstall -> {

@@ -16,6 +16,8 @@ interface Platform {
     fun openInBrowser(url: String)
     /** 在系统文件管理器中打开指定路径 */
     fun openInFileExplorer(path: String)
+    /** 打开系统的凭据存储管理界面（如 Windows 凭据管理器 / macOS 钥匙串访问）；平台不支持时为空操作 */
+    fun openCredentialStore()
     /** 执行软件更新替换并自动重启：传入下载好的临时文件路径 */
     fun applyUpdateAndRestart(tempFilePath: String)
 }

@@ -99,6 +99,8 @@ fun AppTopBar(
                     AppScreen.HOME -> Res.string.screen_home
                     AppScreen.TEMPLATE_GENERATOR -> Res.string.screen_template_generator
                     AppScreen.PROJECT_WORKSPACE -> Res.string.screen_project_workspace
+                    AppScreen.GAME_PROJECT_MANAGER -> Res.string.screen_game_project_manager
+                    AppScreen.GAME_PROJECT_WORKSPACE -> Res.string.screen_game_project_workspace
                     else -> Res.string.screen_home
                 }
                 

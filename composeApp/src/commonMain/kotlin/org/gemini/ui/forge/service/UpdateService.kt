@@ -11,13 +11,16 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.model.app.UpdateInfo
 import org.gemini.ui.forge.model.api.*
 import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.DownloadProgress
+import org.gemini.ui.forge.utils.DownloadResult
+import org.gemini.ui.forge.utils.FileDownloader
 import io.ktor.client.plugins.logging.*
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -108,49 +111,28 @@ class UpdateService(private val currentVersion: String) {
         }
     }
 
-    /** 下载更新包并报告进度 (使用 kotlinx-io 跨平台写入，确保异步) */
-    fun downloadUpdate(url: String, targetPath: Path): Flow<Float> = flow {
+    /**
+     * 下载更新包并报告完整下载进度。
+     * 内部委托通用 [FileDownloader]（多连接并行分块 + 分块级断点续传），
+     * 对外输出 [DownloadProgress]（总量/速度/活跃连接数/分块明细，IDM 式视图数据源）。
+     */
+    fun downloadUpdate(url: String, targetPath: Path): Flow<DownloadProgress> = channelFlow {
         AppLogger.i("UpdateService", "📥 开始下载更新包: $url -> $targetPath")
-        try {
-            val response = client.prepareGet(url) {
-                timeout {
-                    requestTimeoutMillis = 1000000L
-
-                }
-            }.execute()
-            AppLogger.i("UpdateService", "📡 下载请求响应状态: ${response.status}")
-            val contentLength = response.contentLength() ?: -1L
-            AppLogger.i("UpdateService", "📦 预估下载大小: ${if (contentLength > 0) "${contentLength / 1024} KB" else "未知"}")
-            
-            val channel = response.bodyAsChannel()
-            
-            val sink = SystemFileSystem.sink(targetPath).buffered()
-            
-            var bytesRead = 0L
-            val buffer = ByteArray(16384)
-            var lastReportedProgress = 0
-            
-            while (!channel.isClosedForRead) {
-                val read = channel.readAvailable(buffer)
-                if (read == -1) break
-                sink.write(buffer, 0, read)
-                bytesRead += read
-                
-                val progress = (bytesRead.toFloat() / contentLength)
-                emit(progress)
-
-                val currentProgressPct = (progress * 100).toInt()
-                if (currentProgressPct >= lastReportedProgress + 10) {
-                    AppLogger.i("UpdateService", "🚀 下载进度: $currentProgressPct% (${bytesRead / 1024} KB)")
-                    lastReportedProgress = (currentProgressPct / 10) * 10
-                }
+        val downloader = FileDownloader()
+        val targetDir = targetPath.parent?.toString() ?: "."
+        val targetName = targetPath.name
+        when (val result = downloader.download(url, targetDir, targetName) { p ->
+            // 进度回调运行在 IO 线程，经 channelFlow 的非阻塞 trySend 转发完整快照
+            trySend(p)
+        }) {
+            is DownloadResult.Success -> {
+                AppLogger.i("UpdateService", "✅ 下载完成，文件已保存至本地。")
+                close()
             }
-            sink.flush()
-            sink.close()
-            AppLogger.i("UpdateService", "✅ 下载完成，文件已保存至本地。")
-        } catch (e: Exception) {
-            AppLogger.e("UpdateService", "❌ 下载更新失败: ${e.message}", e)
-            throw e
+            is DownloadResult.Failed -> {
+                AppLogger.e("UpdateService", "❌ 下载更新失败: ${result.message}")
+                close(IllegalStateException(result.message))
+            }
         }
     }.flowOn(Dispatchers.Default)
 

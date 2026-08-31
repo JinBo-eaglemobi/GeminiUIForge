@@ -91,8 +91,20 @@ actual class LocalFileStorage {
 
     actual suspend fun getDataDir(): String = withContext(Dispatchers.IO) { dataDir.absolutePath }
 
+    /**
+     * 解析存储条目的真实路径。
+     * 入参为绝对路径时直接使用（例如项目注册表中的项目目录、用户自定义保存地址），
+     * 否则视为数据目录下的相对名进行拼接。
+     * 注意：java.io.File(parent, child) 的两参构造不会识别绝对路径的 child，
+     * 会直接字符串拼接出非法路径（如 `C:\data\C:\Games\x`），所有条目定位必须经由此方法归一。
+     */
+    private fun resolveEntryPath(fileName: String): File {
+        val candidate = File(fileName)
+        return if (candidate.isAbsolute) candidate else File(dataDir, fileName)
+    }
+
     actual suspend fun saveToFile(fileName: String, content: String): String = withContext(Dispatchers.IO) {
-        val target = File(dataDir, fileName)
+        val target = resolveEntryPath(fileName)
         target.parentFile.mkdirs()
         target.writeText(content)
         AppLogger.d("LocalFileStorage", "📝 文本已保存: $fileName (${content.length} chars)")
@@ -100,7 +112,7 @@ actual class LocalFileStorage {
     }
 
     actual suspend fun saveBytesToFile(fileName: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
-        val target = File(dataDir, fileName)
+        val target = resolveEntryPath(fileName)
         target.parentFile.mkdirs()
         target.writeBytes(bytes)
         AppLogger.d("LocalFileStorage", "🎨 资源已保存: $fileName (${bytes.size / 1024} KB)")
@@ -108,14 +120,14 @@ actual class LocalFileStorage {
     }
 
     actual suspend fun readFromFile(fileName: String): String? = withContext(Dispatchers.IO) {
-        val file = File(dataDir, fileName)
+        val file = resolveEntryPath(fileName)
         val exists = file.exists()
         if (!exists) AppLogger.d("LocalFileStorage", "🔍 读取文件不存在: $fileName")
         return@withContext if (exists) file.readText() else null
     }
 
     actual suspend fun readBytesFromFile(fileName: String): ByteArray? = withContext(Dispatchers.IO) {
-        val file = File(dataDir, fileName)
+        val file = resolveEntryPath(fileName)
         return@withContext if (file.exists()) file.readBytes() else null
     }
 
@@ -124,29 +136,34 @@ actual class LocalFileStorage {
     }
 
     actual suspend fun listDirectories(parentDir: String?): List<String> = withContext(Dispatchers.IO) {
-        val base = if (parentDir != null) File(dataDir, parentDir) else dataDir
+        val base = if (parentDir != null) resolveEntryPath(parentDir) else dataDir
         return@withContext base.listFiles()?.filter { it.isDirectory }?.map { it.name } ?: emptyList()
     }
 
     actual suspend fun deleteFile(fileName: String): Boolean = withContext(Dispatchers.IO) {
-        val file = File(dataDir, fileName)
+        val file = resolveEntryPath(fileName)
         val success = if (file.exists()) file.delete() else false
         if (success) AppLogger.d("LocalFileStorage", "🗑️ 文件已删除: $fileName")
         return@withContext success
     }
 
     actual suspend fun deleteDirectory(dirName: String): Boolean = withContext(Dispatchers.IO) {
-        val dir = File(dataDir, dirName)
+        val dir = resolveEntryPath(dirName)
         val success = dir.deleteRecursively()
-        if (success) AppLogger.i("LocalFileStorage", "🗑️ 目录已递归删除: $dirName")
+        // 失败时必须留下日志：静默失败会导致"注册已删除但磁盘文件仍在"的假删除
+        if (success) {
+            AppLogger.i("LocalFileStorage", "🗑️ 目录已递归删除: ${dir.absolutePath}")
+        } else {
+            AppLogger.w("LocalFileStorage", "⚠️ 目录删除失败（不存在或被占用）: ${dir.absolutePath}")
+        }
         return@withContext success
     }
 
     actual suspend fun exists(fileName: String): Boolean = withContext(Dispatchers.IO) {
-        return@withContext File(dataDir, fileName).exists()
+        return@withContext resolveEntryPath(fileName).exists()
     }
 
     actual suspend fun getFilePath(fileName: String): String = withContext(Dispatchers.IO) {
-        return@withContext File(dataDir, fileName).absolutePath
+        return@withContext resolveEntryPath(fileName).absolutePath
     }
 }

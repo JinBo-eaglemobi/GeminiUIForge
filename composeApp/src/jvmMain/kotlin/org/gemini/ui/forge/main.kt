@@ -29,7 +29,7 @@ fun main(args: Array<String>) {
                 val isG = targetValueStr.endsWith("G", ignoreCase = true)
                 val isM = targetValueStr.endsWith("M", ignoreCase = true)
                 val num = targetValueStr.dropLast(1).toLongOrNull() ?: 2L
-                
+
                 val targetBytes = when {
                     isG -> num * 1024 * 1024 * 1024
                     isM -> num * 1024 * 1024
@@ -37,14 +37,14 @@ fun main(args: Array<String>) {
                 }
 
                 val currentMaxBytes = Runtime.getRuntime().maxMemory()
-                
+
                 // 允许 10% 的误差，因为底层分配可能略微不一致
                 val diffRatio = abs(currentMaxBytes - targetBytes).toDouble() / targetBytes
-                
+
                 // 如果当前进程的最大内存与配置的目标内存差异较大 (> 10%)，且没有设置特殊的防循环标记
                 if (diffRatio > 0.1 && System.getenv("GEMINI_FORGE_TRAMPOLINE") != "1") {
                     // 获取当前运行的执行文件路径（jpackage 打包的 .exe 或 .jar）
-                    val appPath = System.getProperty("jpackage.app-path") 
+                    val appPath = System.getProperty("jpackage.app-path")
                         ?: System.getProperty("java.class.path")
 
                     if (appPath != null) {
@@ -69,7 +69,7 @@ fun main(args: Array<String>) {
                         env["JDK_JAVA_OPTIONS"] = lines.joinToString(" ")
                         // 设置防无限循环标记
                         env["GEMINI_FORGE_TRAMPOLINE"] = "1"
-                        
+
                         pb.start()
                         kotlin.system.exitProcess(0)
                     }
@@ -86,7 +86,7 @@ fun main(args: Array<String>) {
     val savedWidth = runBlocking { configManager.loadKey("WINDOW_WIDTH") }?.toFloatOrNull() ?: 1280f
     val savedHeight = runBlocking { configManager.loadKey("WINDOW_HEIGHT") }?.toFloatOrNull() ?: 800f
     val isMaximized = runBlocking { configManager.loadKey("WINDOW_MAXIMIZED") } == "true"
-    
+
     application {
         val windowState = rememberWindowState(
             placement = if (isMaximized) WindowPlacement.Maximized else WindowPlacement.Floating,

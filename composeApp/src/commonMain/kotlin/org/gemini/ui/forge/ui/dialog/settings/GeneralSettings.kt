@@ -1,9 +1,7 @@
 package org.gemini.ui.forge.ui.dialog.settings
 
 
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
@@ -47,7 +45,6 @@ fun GeneralSettings(
     settingsViewModel: org.gemini.ui.forge.viewmodel.AppSettingsViewModel,
     onLanguageChanged: () -> Unit
 ) {
-    val isCompact = LocalMinimumInteractiveComponentSize.current == 0.dp
     val coroutineScope = rememberCoroutineScope()
 
     SettingSectionTitle(stringResource(Res.string.settings_category_general))
@@ -105,8 +102,6 @@ fun GeneralSettings(
                             }
                             memoryExpanded = false
                         },
-                        contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else MenuDefaults.DropdownMenuItemContentPadding,
-                        modifier = if (isCompact) Modifier.height(32.dp) else Modifier
                     )
                 }
             }
@@ -136,7 +131,7 @@ fun GeneralSettings(
                 DropdownMenuItem(
                     text = { Text(label) },
                     onClick = { appViewModel.setThemeMode(mode); themeExpanded = false }
-                , contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else MenuDefaults.DropdownMenuItemContentPadding, modifier = if (isCompact) Modifier.height(32.dp) else Modifier)
+                )
             }
         }
     }
@@ -168,7 +163,7 @@ fun GeneralSettings(
                         appViewModel.setLayoutMode(mode)
                         layoutExpanded = false
                     }
-                , contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else MenuDefaults.DropdownMenuItemContentPadding, modifier = if (isCompact) Modifier.height(32.dp) else Modifier)
+                )
             }
         }
     }
@@ -201,7 +196,7 @@ fun GeneralSettings(
                         onLanguageChanged()
                         langExpanded = false
                     }
-                , contentPadding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 0.dp) else MenuDefaults.DropdownMenuItemContentPadding, modifier = if (isCompact) Modifier.height(32.dp) else Modifier)
+                )
             }
         }
     }

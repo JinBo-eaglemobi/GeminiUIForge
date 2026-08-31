@@ -29,6 +29,10 @@ class AndroidPlatform : Platform {
         AppLogger.d("AndroidPlatform", "Attempting to open path: $path")
     }
 
+    override fun openCredentialStore() {
+        // Android 平台无系统凭据库概念，空实现
+    }
+
     override fun applyUpdateAndRestart(tempFilePath: String) {
         val file = File(tempFilePath)
         if (file.exists()) {

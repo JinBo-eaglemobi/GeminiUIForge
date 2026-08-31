@@ -7,6 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
@@ -62,6 +63,8 @@ fun ProjectSettingsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        // 解除平台默认宽度限制：路径与校验错误内容较长时可自然展宽
+        properties = DialogProperties(usePlatformDefaultWidth = false),
         title = {
             Text(
                 text = titleText,
@@ -81,7 +84,7 @@ fun ProjectSettingsDialog(
             }
 
             Column(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                modifier = Modifier.widthIn(min = 480.dp).padding(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(

@@ -2,7 +2,6 @@ package org.gemini.ui.forge.ui.dialog.settings
 
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -33,8 +32,6 @@ fun ShortcutSettings(
     appViewModel: org.gemini.ui.forge.viewmodel.AppViewModel,
     settingsViewModel: org.gemini.ui.forge.viewmodel.AppSettingsViewModel
 ) {
-    val isCompact = LocalMinimumInteractiveComponentSize.current == 0.dp
-
     SettingSectionTitle(stringResource(Res.string.settings_shortcuts_title))
 
     globalState.shortcuts.filterKeys { action ->

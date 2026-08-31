@@ -52,7 +52,6 @@ fun EnvironmentSettings(
     val topMarketPackages by envViewModel.topMarketPackages.collectAsState()
     val isMarketLoading by envViewModel.isMarketLoading.collectAsState()
     val marketPage by envViewModel.marketPage.collectAsState()
-    val isCompact = LocalMinimumInteractiveComponentSize.current == 0.dp
 
     var envTab by remember { mutableStateOf(0) }
 
