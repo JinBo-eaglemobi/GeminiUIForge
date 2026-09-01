@@ -20,6 +20,11 @@ actual fun GameHtmlPreview(
     debugMode: Boolean,
     inspectTarget: String?,
     onDebugMessage: (String) -> Unit,
+    reloadTrigger: Int,
+    isDemoSelected: Boolean,
+    isDebugSelected: Boolean,
+    selectedGame: String,
+    onUrlComputed: (String) -> Unit,
     modifier: Modifier
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

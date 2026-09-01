@@ -586,6 +586,11 @@ class GameProjectViewModel(
             "tree" -> debugTree = message.tree
             "props" -> debugProps = message.props
             "log" -> appendDebugLog(message.text)
+            "close" -> {
+                selectedHtml = null
+                debugTree = null
+                debugProps = emptyList()
+            }
             else -> Unit
         }
     }

@@ -466,4 +466,6 @@
     <string name="gp_ws_console">控制台</string>
     <string name="gp_ws_console_toggle">展开/收起控制台</string>
     <string name="gp_ws_console_clear">清空控制台</string>
+    <string name="gp_ws_demo_param">Demo 模式</string>
+    <string name="gp_ws_debug_param">Debug 模式</string>
 </resources>

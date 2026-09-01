@@ -21,10 +21,18 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -87,6 +95,8 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import geminiuiforge.composeapp.generated.resources.gp_ws_console
 import geminiuiforge.composeapp.generated.resources.gp_ws_console_toggle
 import geminiuiforge.composeapp.generated.resources.gp_ws_console_clear
+import geminiuiforge.composeapp.generated.resources.gp_ws_demo_param
+import geminiuiforge.composeapp.generated.resources.gp_ws_debug_param
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -122,8 +132,12 @@ fun GameProjectWorkspaceScreen(viewModel: GameProjectViewModel) {
     var leftCollapsed by remember { mutableStateOf(false) }
     var rightCollapsed by remember { mutableStateOf(false) }
     var fullscreenPreview by remember { mutableStateOf(false) }
-    var consoleCollapsed by remember { mutableStateOf(true) }
+    var consoleCollapsed by remember { mutableStateOf(false) }
     var consoleHeight by remember { mutableStateOf(160.dp) }
+    var reloadTrigger by remember { mutableStateOf(0) }
+    var isDemoSelected by remember { mutableStateOf(true) }
+    var isDebugSelected by remember { mutableStateOf(true) }
+    var currentUrl by remember { mutableStateOf<String?>(null) }
     val density = LocalDensity.current
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -157,6 +171,14 @@ fun GameProjectWorkspaceScreen(viewModel: GameProjectViewModel) {
                 onToggleConsole = { consoleCollapsed = !consoleCollapsed },
                 consoleHeight = consoleHeight,
                 onConsoleHeightChange = { consoleHeight = it },
+                reloadTrigger = reloadTrigger,
+                onReload = { reloadTrigger++ },
+                isDemoSelected = isDemoSelected,
+                onToggleDemo = { isDemoSelected = !isDemoSelected },
+                isDebugSelected = isDebugSelected,
+                onToggleDebug = { isDebugSelected = !isDebugSelected },
+                currentUrl = currentUrl,
+                onUrlComputed = { currentUrl = it },
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
 
@@ -358,7 +380,7 @@ private fun PanelHeader(
 }
 
 /**
- * 树节点行（私有组件）：缩进 + 图标 + 名称；文件夹点击展开/收起，HTML 文件点击切换预览。
+ * 树节点行（私有组件）：缩进 + 展开箭头 + 文件夹/文件图标 + 名称；文件夹点击展开/收起，HTML 文件点击切换预览。
  */
 @Composable
 private fun TreeRow(
@@ -374,11 +396,27 @@ private fun TreeRow(
             .fillMaxWidth()
             .height(26.dp)
             .clickable { if (node.isDirectory) onToggle() else if (isHtml) onSelectHtml() }
-            .padding(start = (8 + depth * 14).dp),
+            .padding(start = (4 + depth * 12).dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // 展开/收起指示器：仅目录项显示箭头，文件项以 Spacer 占位保持物理对齐（坚决不硬编码字符）
+        if (node.isDirectory) {
+            Icon(
+                imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+        } else {
+            Spacer(Modifier.size(16.dp))
+        }
+        Spacer(Modifier.width(2.dp))
         Icon(
-            imageVector = if (node.isDirectory) Icons.Default.Folder else Icons.Default.InsertDriveFile,
+            imageVector = if (node.isDirectory) {
+                if (expanded) Icons.Default.FolderOpen else Icons.Default.Folder
+            } else {
+                Icons.Default.InsertDriveFile
+            },
             contentDescription = null,
             modifier = Modifier.size(15.dp),
             tint = if (node.isDirectory) {
@@ -415,15 +453,26 @@ private fun CenterPreviewPanel(
     onToggleConsole: () -> Unit,
     consoleHeight: androidx.compose.ui.unit.Dp,
     onConsoleHeightChange: (androidx.compose.ui.unit.Dp) -> Unit,
+    reloadTrigger: Int,
+    onReload: () -> Unit,
+    isDemoSelected: Boolean,
+    onToggleDemo: () -> Unit,
+    isDebugSelected: Boolean,
+    onToggleDebug: () -> Unit,
+    currentUrl: String?,
+    onUrlComputed: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val project = GameProjectSession.currentProject
+    val clipboard = LocalClipboardManager.current
+
     Surface(
         modifier = modifier.padding(4.dp),
         shape = AppShapes.medium,
         color = MaterialTheme.colorScheme.surface
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // 页签栏：HTML 文件切换 + 全屏按钮 + 控制台开关
+            // 页签栏：HTML 文件切换 + 全屏按钮 + 控制台开关 + 刷新
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -453,6 +502,29 @@ private fun CenterPreviewPanel(
                         }
                     )
                 }
+                // Demo / Debug URL 参数开关页签 (矢量 M3 FilterChip，默认均选中)
+                FilterChip(
+                    selected = isDemoSelected,
+                    onClick = onToggleDemo,
+                    label = { Text(stringResource(Res.string.gp_ws_demo_param), style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.height(26.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                FilterChip(
+                    selected = isDebugSelected,
+                    onClick = onToggleDebug,
+                    label = { Text(stringResource(Res.string.gp_ws_debug_param), style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.height(26.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                // 刷新页面按钮 (M3 内置 Refresh 图标)
+                IconButton(onClick = onReload) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh Page",
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
                 // 控制台展开开关按钮（全屏时自动隐藏）
                 if (!fullscreen) {
                     IconButton(onClick = onToggleConsole) {
@@ -478,6 +550,53 @@ private fun CenterPreviewPanel(
                     )
                 }
             }
+
+            // 拟真浏览器地址栏：展示当前运行的本地 Web 服务 URL 链接，支持一键复制，让开发流程完全透明
+            if (currentUrl != null && !fullscreen) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    shape = AppShapes.small,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Language,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        SelectionContainer {
+                            Text(
+                                text = currentUrl,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                clipboard.setText(AnnotatedString(currentUrl))
+                            },
+                            modifier = Modifier.size(20.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy URL",
+                                modifier = Modifier.size(13.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+            }
+
             // 渲染区
             Box(
                 modifier = Modifier.weight(1f).fillMaxWidth().background(MaterialTheme.colorScheme.surface),
@@ -495,6 +614,11 @@ private fun CenterPreviewPanel(
                         debugMode = viewModel.debugMode,
                         inspectTarget = viewModel.inspectTarget,
                         onDebugMessage = viewModel::onDebugBridgeMessage,
+                        reloadTrigger = reloadTrigger,
+                        isDemoSelected = isDemoSelected,
+                        isDebugSelected = isDebugSelected,
+                        selectedGame = project?.selectedGame ?: "",
+                        onUrlComputed = onUrlComputed,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -519,9 +643,10 @@ private fun CenterPreviewPanel(
 
 /**
  * 底部控制台面板（私有组件）：
- * 包含控制栏（图标 + 标题 + 一键清空 + 关闭）；
- * 日志输出区（LazyColumn + Monospace 字体 + 支持长按选择复制）。
+ * 包含控制栏（图标 + 标题 + 日志等级 FilterChips + 一键清空 + 关闭）；
+ * 日志输出区（LazyColumn + Monospace 字体 + 支持长按选择复制 + 支持日志级别筛选）。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BottomConsolePanel(
     viewModel: GameProjectViewModel,
@@ -529,9 +654,23 @@ private fun BottomConsolePanel(
     onClose: () -> Unit
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(viewModel.debugLogs.size) {
-        if (viewModel.debugLogs.isNotEmpty()) {
-            listState.animateScrollToItem(viewModel.debugLogs.size - 1)
+    var selectedLogLevel by remember { mutableStateOf("ALL") }
+
+    // 响应式筛选日志：依据等级前缀判定（[VERBOSE]、[INFO]、[WARN]、[ERROR]、[FATAL]）
+    val filteredLogs = remember(viewModel.debugLogs, selectedLogLevel) {
+        viewModel.debugLogs.filter { line ->
+            when (selectedLogLevel) {
+                "INFO" -> line.startsWith("[INFO]") || line.startsWith("[WARN]") || line.startsWith("[ERROR]") || line.startsWith("[FATAL]")
+                "WARN" -> line.startsWith("[WARN]") || line.startsWith("[ERROR]") || line.startsWith("[FATAL]")
+                "ERROR" -> line.startsWith("[ERROR]") || line.startsWith("[FATAL]")
+                else -> true // ALL
+            }
+        }
+    }
+
+    LaunchedEffect(filteredLogs.size) {
+        if (filteredLogs.isNotEmpty()) {
+            listState.animateScrollToItem(filteredLogs.size - 1)
         }
     }
 
@@ -541,7 +680,7 @@ private fun BottomConsolePanel(
         tonalElevation = 1.dp
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // 控制栏：标题 + 动作 + 关闭
+            // 控制栏：标题 + 筛选器 + 动作 + 关闭
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -563,7 +702,24 @@ private fun BottomConsolePanel(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.width(16.dp))
+
+                    // Chrome 式日志等级筛选器：ALL、INFO、WARN、ERROR（呼吸色强调，M3 FilterChip 风格）
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        listOf("ALL", "INFO", "WARN", "ERROR").forEach { level ->
+                            FilterChip(
+                                selected = selectedLogLevel == level,
+                                onClick = { selectedLogLevel = level },
+                                label = { Text(level, style = MaterialTheme.typography.labelSmall) },
+                                modifier = Modifier.height(24.dp)
+                            )
+                        }
+                    }
+
                     // 一键清空
                     IconButton(
                         onClick = { viewModel.clearDebugLogs() },
@@ -601,10 +757,10 @@ private fun BottomConsolePanel(
                         .background(MaterialTheme.colorScheme.surfaceContainerLowest)
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    if (viewModel.debugLogs.isEmpty()) {
+                    if (filteredLogs.isEmpty()) {
                         item {
                             Text(
-                                text = "No logs yet. Run pages in Debug Mode (bug icon) to stream web logs here.",
+                                text = "No logs match the selected filter ($selectedLogLevel). stream web logs here.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                 fontFamily = FontFamily.Monospace,
@@ -612,7 +768,7 @@ private fun BottomConsolePanel(
                             )
                         }
                     } else {
-                        items(viewModel.debugLogs) { line ->
+                        items(filteredLogs) { line ->
                             Text(
                                 text = line,
                                 style = MaterialTheme.typography.labelSmall,

@@ -67,6 +67,10 @@ import org.gemini.ui.forge.utils.DownloadProgress
 import org.gemini.ui.forge.utils.DownloadResult
 import org.gemini.ui.forge.utils.FileDownloader
 import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.utils.AppLogger
+import com.sun.net.httpserver.HttpServer
+import java.net.InetSocketAddress
+import java.nio.file.Files
 import org.jetbrains.compose.resources.stringResource
 import java.awt.BorderLayout
 import java.io.File
@@ -243,6 +247,11 @@ actual fun GameHtmlPreview(
     debugMode: Boolean,
     inspectTarget: String?,
     onDebugMessage: (String) -> Unit,
+    reloadTrigger: Int,
+    isDemoSelected: Boolean,
+    isDebugSelected: Boolean,
+    selectedGame: String,
+    onUrlComputed: (String) -> Unit,
     modifier: Modifier
 ) {
     var state by remember { mutableStateOf(CefPanelState.CHECKING) }
@@ -254,8 +263,126 @@ actual fun GameHtmlPreview(
     var failureMessage by remember { mutableStateOf<String?>(null) }
     var browserRef by remember { mutableStateOf<CefBrowser?>(null) }
     var clientRef by remember { mutableStateOf<CefClient?>(null) }
-    // 记录最近一次加载的地址，避免 update 回调重复触发 loadURL
+    // 记录最近一次加载 of URL，避免 update 回调重复触发 loadURL
     var lastLoadedUrl by remember { mutableStateOf<String?>(null) }
+
+    // 本地 HTTP 服务器状态，避免本地 HTML 在 file:/// 协议下遇到的各类跨源限制
+    var localServer by remember { mutableStateOf<HttpServer?>(null) }
+    var serverPort by remember { mutableStateOf<Int?>(null) }
+    var currentRootDirPath by remember { mutableStateOf<String?>(null) }
+    var serverUrl by remember { mutableStateOf<String?>(null) }
+
+    // 动态管理本地预览服务器的生命周期（只有目录变化时才重启服务器，保持物理端口相对稳定）
+    LaunchedEffect(htmlPath) {
+        val path = htmlPath
+        if (path == null) {
+            localServer?.stop(0)
+            localServer = null
+            serverPort = null
+            serverUrl = null
+            currentRootDirPath = null
+            return@LaunchedEffect
+        }
+
+        val htmlFile = File(path)
+        val rootDir = htmlFile.parentFile ?: return@LaunchedEffect
+
+        val currentServer = localServer
+        if (currentServer != null && rootDir.absolutePath == currentRootDirPath) {
+            // 同一工作目录，直接重用当前 Server，不关闭，避免重新分配端口
+            AppLogger.d("GameHtmlPreview", "重用当前本地服务，目录: ${rootDir.absolutePath}")
+        } else {
+            // 目录改变，重启本地预览服务
+            currentServer?.stop(0)
+            localServer = null
+            serverPort = null
+            try {
+                // 使用随机空闲端口启动 JDK 轻量 HttpServer，默认绑定 localhost
+                val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+                server.createContext("/") { exchange ->
+                    val uriPath = exchange.requestURI.path
+                    // 防止路径遍历安全问题，简单过滤
+                    val normalizedPath = uriPath.removePrefix("/").replace("..", "")
+                    val targetFile = File(rootDir, normalizedPath)
+                    if (targetFile.exists() && targetFile.isFile) {
+                        val bytes = targetFile.readBytes()
+                        val contentType = when (targetFile.extension.lowercase()) {
+                            "html" -> "text/html; charset=utf-8"
+                            "js" -> "application/javascript; charset=utf-8"
+                            "css" -> "text/css; charset=utf-8"
+                            "png" -> "image/png"
+                            "jpg", "jpeg" -> "image/jpeg"
+                            "xml" -> "text/xml; charset=utf-8"
+                            "json" -> "application/json; charset=utf-8"
+                            "wasm" -> "application/wasm"
+                            else -> Files.probeContentType(targetFile.toPath()) ?: "application/octet-stream"
+                        }
+                        exchange.responseHeaders.set("Content-Type", contentType)
+                        // 开启全跨域 CORS，让任何 AJAX 行为顺滑通畅
+                        exchange.responseHeaders.set("Access-Control-Allow-Origin", "*")
+                        exchange.sendResponseHeaders(200, bytes.size.toLong())
+                        exchange.responseBody.use { it.write(bytes) }
+                    } else {
+                        val resp = "404 Not Found"
+                        exchange.sendResponseHeaders(404, resp.length.toLong())
+                        exchange.responseBody.use { it.write(resp.toByteArray()) }
+                    }
+                }
+                server.executor = null
+                server.start()
+                localServer = server
+                serverPort = server.address.port
+                currentRootDirPath = rootDir.absolutePath
+                AppLogger.i("GameHtmlPreview", "🚀 游戏预览本地服务器启动成功，分配端口: ${server.address.port}")
+            } catch (e: Exception) {
+                AppLogger.e("GameHtmlPreview", "❌ 启动本地服务失败: ${e.message}", e)
+            }
+        }
+    }
+
+    // 反应式拼接并热交换 URL（参数 gameId/demo/debug 变化时毫秒级重算，不重启服务器）
+    LaunchedEffect(htmlPath, serverPort, isDemoSelected, isDebugSelected) {
+        val path = htmlPath ?: return@LaunchedEffect
+        val port = serverPort ?: return@LaunchedEffect
+        val htmlFile = File(path)
+        val rootDir = htmlFile.parentFile ?: return@LaunchedEffect
+
+        // 1. 从 build/assets/configs/gameConfig.js 中提取真实的 gameId
+        val gameConfigJsFile = File(rootDir, "assets/configs/gameConfig.js")
+        var gameId = ""
+        if (gameConfigJsFile.exists()) {
+            try {
+                val text = gameConfigJsFile.readText()
+                val match = """gameId\s*[:=]\s*["']([^"']+)["']""".toRegex(RegexOption.IGNORE_CASE).find(text)
+                if (match != null) {
+                    gameId = match.groupValues[1]
+                }
+            } catch (e: Exception) {
+                AppLogger.w("GameHtmlPreview", "读取 gameConfig.js 失败: ${e.message}")
+            }
+        }
+
+        // 1.2 强力兜底机制：若未获取到 gameId，自动以当前选中的游戏名（selectedGame）作为 gameId 填充，
+        // 同时在 URL 中增加 gameName=游戏名 以提供完备的 JS 兼容保障！
+        val resolvedGameId = gameId.ifBlank { selectedGame }
+
+        // 2. 依据 UI 状态计算 0/1 参数值
+        val demoVal = if (isDemoSelected) 1 else 0
+        val debugVal = if (isDebugSelected) 1 else 0
+
+        // 3. 构建含有参数的完整 URL，热提供给 JCEF
+        val finalUrl = "http://127.0.0.1:$port/${htmlFile.name}?gameId=$resolvedGameId&gameName=$selectedGame&demo=$demoVal&debug=$debugVal"
+        serverUrl = finalUrl
+        onUrlComputed(finalUrl) // ★ 回传给上层工作台，以供拟真地址栏展示与一键复制！
+        AppLogger.i("GameHtmlPreview", "🔗 游戏预览参数已重组: $serverUrl")
+    }
+
+    // 监听刷新触发信号
+    LaunchedEffect(reloadTrigger) {
+        if (reloadTrigger > 0) {
+            browserRef?.reload()
+        }
+    }
     // 供 LoadHandler 闭包读取的最新调试开关（handler 在 factory 中创建一次）
     val currentDebugMode = remember { mutableStateOf(debugMode) }
     currentDebugMode.value = debugMode
@@ -363,11 +490,12 @@ actual fun GameHtmlPreview(
         }
     }
 
-    // 面板销毁时释放浏览器资源
+    // 面板销毁时释放浏览器资源与本地服务器
     DisposableEffect(Unit) {
         onDispose {
             runCatching { browserRef?.close(true) }
             runCatching { clientRef?.dispose() }
+            runCatching { localServer?.stop(0) }
         }
     }
 
@@ -403,6 +531,32 @@ actual fun GameHtmlPreview(
                             }
                         }, true)
                         client.addMessageRouter(router)
+
+                        // 拦截 Chrome 浏览器控制台原生日志事件 (console.log / warn / error / asset load fail 等)
+                        client.addDisplayHandler(object : org.cef.handler.CefDisplayHandlerAdapter() {
+                            override fun onConsoleMessage(
+                                browser: org.cef.browser.CefBrowser,
+                                level: org.cef.CefSettings.LogSeverity,
+                                message: String,
+                                source: String,
+                                line: Int
+                            ): Boolean {
+                                val tag = when (level) {
+                                    org.cef.CefSettings.LogSeverity.LOGSEVERITY_VERBOSE -> "[VERBOSE]"
+                                    org.cef.CefSettings.LogSeverity.LOGSEVERITY_INFO -> "[INFO]"
+                                    org.cef.CefSettings.LogSeverity.LOGSEVERITY_WARNING -> "[WARN]"
+                                    org.cef.CefSettings.LogSeverity.LOGSEVERITY_ERROR -> "[ERROR]"
+                                    org.cef.CefSettings.LogSeverity.LOGSEVERITY_FATAL -> "[FATAL]"
+                                    else -> "[INFO]"
+                                }
+                                val escapedMsg = message.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ")
+                                val escapedSrc = source.substringAfterLast('/').replace("\\", "\\\\").replace("\"", "\\\"")
+                                val formatted = "$tag ($escapedSrc:$line) $escapedMsg"
+                                onDebugMessage("{\"type\":\"log\",\"text\":\"$formatted\"}")
+                                return false
+                            }
+                        })
+
                         // 页面主文档加载结束时按需注入调试桥
                         client.addLoadHandler(object : CefLoadHandlerAdapter() {
                             override fun onLoadEnd(
@@ -419,6 +573,16 @@ actual fun GameHtmlPreview(
                                 }
                             }
                         })
+
+                        // 注册 LifeSpanHandler 拦截关闭事件，防止 JS window.close() 关闭整个桌面应用程序
+                        client.addLifeSpanHandler(object : org.cef.handler.CefLifeSpanHandlerAdapter() {
+                            override fun doClose(browser: CefBrowser): Boolean {
+                                AppLogger.i("GameHtmlPreview", "🛑 拦截到网页 JS window.close() 调用，已安全阻止并通知 UI 清理页面")
+                                onDebugMessage("{\"type\":\"close\"}")
+                                return true
+                            }
+                        })
+
                         clientRef = client
                         browserRef = browser
                         val wrapper = JPanel(BorderLayout())
@@ -426,9 +590,8 @@ actual fun GameHtmlPreview(
                         wrapper
                     },
                     update = {
-                        val path = htmlPath ?: return@SwingPanel
-                        val url = File(path).toURI().toString()
-                        if (url != lastLoadedUrl) {
+                        val url = serverUrl
+                        if (url != null && url != lastLoadedUrl) {
                             lastLoadedUrl = url
                             browserRef?.loadURL(url)
                         }

@@ -20,5 +20,10 @@ expect fun GameHtmlPreview(
     debugMode: Boolean = false,
     inspectTarget: String? = null,
     onDebugMessage: (String) -> Unit = {},
+    reloadTrigger: Int = 0,
+    isDemoSelected: Boolean = true,
+    isDebugSelected: Boolean = true,
+    selectedGame: String = "",
+    onUrlComputed: (String) -> Unit = {},
     modifier: Modifier = Modifier
 )

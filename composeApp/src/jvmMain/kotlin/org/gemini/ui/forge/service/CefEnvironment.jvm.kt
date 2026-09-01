@@ -169,10 +169,13 @@ object CefEnvironment {
         cachedApp?.let { return it }
         ensureInstallDir()
         val builder = CefAppBuilder()
+        // 允许跨域加载本地 file:/// 资源 (解决 XMLHttpRequest CORS block)
+        builder.jcefArgs.add("--allow-file-access-from-files")
+        builder.jcefArgs.add("--disable-web-security")
         // 指定安装目录：已预置 natives 时不会重复下载
         builder.setInstallDir(installDirFile)
         // 使用屏幕内渲染模式（配合 Swing 嵌入，避免 OSR 模式的 JOGL 依赖与 JVM 参数）
-        builder.getCefSettings().windowless_rendering_enabled = false
+        builder.cefSettings.windowless_rendering_enabled = false
         // 进度透出：EXTRACTING / DOWNLOADING 阶段回传归一化进度 [0,1]；-1（不可预估）原值透传
         builder.setProgressHandler { state, percent ->
             onProgress(if (percent < 0f) -1f else percent / 100f)

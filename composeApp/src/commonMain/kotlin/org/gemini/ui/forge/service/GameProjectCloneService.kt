@@ -310,9 +310,24 @@ class GameProjectCloneService(private val gitService: GitService) {
         addDir("res/$game") // 可能不存在，缺失即忽略
 
         // ---- 公共资源 ----
-        // 仓库根级散文件全部拉取（package.json / pnpm-workspace.yaml / tsconfig 等配置），
-        // 即需求"首先拉取根文件，文件夹不动"：只取根下文件条目（ls-tree 中不含 / 的路径），目录不拉取
-        treePaths.filter { !it.contains('/') }.forEach { patterns.add(it) }
+        // 提取其它游戏名称集合，用于在根级配置文件中剔除其它游戏的专属配置（如 tsconfig.other_game.json 等）
+        val otherGames = treePaths
+            .filter { it.startsWith("game/src/") }
+            .map { it.removePrefix("game/src/").substringBefore('/') }
+            .filter { it.isNotEmpty() && !it.equals("main", ignoreCase = true) && !it.equals(selectedGame, ignoreCase = true) }
+            .toSet()
+
+        // 仓库根级散文件拉取（如 package.json / pnpm-workspace.yaml / 通用 tsconfig.json 等），
+        // 但过滤并剔除属于其它游戏专属的配置文件（如含有其它游戏名称的 tsconfig.<其它游戏>.json）
+        treePaths.filter { !it.contains('/') }
+            .filter { rootFile ->
+                val lowerFile = rootFile.lowercase()
+                val belongsToOtherGame = otherGames.any { other ->
+                    lowerFile.contains(other.lowercase()) && !lowerFile.contains(selectedGame.lowercase())
+                }
+                !belongsToOtherGame
+            }
+            .forEach { patterns.add(it) }
         addDir("game/src/main")
         addDir("game/libs")
         // build/ 根目录内的所有文件（不含子文件夹内容）

@@ -456,4 +456,6 @@
     <string name="gp_ws_console">Console</string>
     <string name="gp_ws_console_toggle">Toggle Console</string>
     <string name="gp_ws_console_clear">Clear Console</string>
+    <string name="gp_ws_demo_param">Demo Mode</string>
+    <string name="gp_ws_debug_param">Debug Mode</string>
 </resources>

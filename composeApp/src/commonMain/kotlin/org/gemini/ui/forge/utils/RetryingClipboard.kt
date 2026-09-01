@@ -4,6 +4,7 @@ import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.NativeClipboard
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 带重试兜底的剪贴板包装实现。
@@ -34,7 +35,7 @@ class RetryingClipboard(
                 // 最后一次仍失败则不再重试，返回 null 走静默失败路径
                 if (attempt == READ_RETRY_COUNT - 1) return null
                 // 等待瞬锁释放后重试（总耗时约 75ms，用户几乎无感）
-                delay(READ_RETRY_INTERVAL_MS)
+                delay(READ_RETRY_INTERVAL_MS.milliseconds)
             }
         }
         // 理论上不可达（循环内要么返回要么提前退出），兜底以满足编译器
