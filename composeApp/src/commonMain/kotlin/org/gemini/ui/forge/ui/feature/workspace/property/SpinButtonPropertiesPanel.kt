@@ -20,7 +20,7 @@ import org.gemini.ui.forge.data.readBytesInternal
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.ResourceItem
-import org.gemini.ui.forge.ui.dialog.ResourceBindingDialog
+import org.gemini.ui.forge.ui.dialog.asset.ResourceBindingDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel

@@ -21,6 +21,7 @@ actual fun GameHtmlPreview(
     inspectTarget: String?,
     onDebugMessage: (String) -> Unit,
     reloadTrigger: Int,
+    devToolsTrigger: Int,
     isDemoSelected: Boolean,
     isDebugSelected: Boolean,
     selectedGame: String,

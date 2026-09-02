@@ -248,6 +248,7 @@ actual fun GameHtmlPreview(
     inspectTarget: String?,
     onDebugMessage: (String) -> Unit,
     reloadTrigger: Int,
+    devToolsTrigger: Int,
     isDemoSelected: Boolean,
     isDebugSelected: Boolean,
     selectedGame: String,
@@ -347,22 +348,38 @@ actual fun GameHtmlPreview(
         val htmlFile = File(path)
         val rootDir = htmlFile.parentFile ?: return@LaunchedEffect
 
-        // 1. 从 build/assets/configs/gameConfig.js 中提取真实的 gameId
+        // 1. 从 build/assets/configs/gameConfig.js 的 gameIdConfig 映射中匹配获取属于当前游戏文件夹名的数字 ID (如 3032)
         val gameConfigJsFile = File(rootDir, "assets/configs/gameConfig.js")
         var gameId = ""
         if (gameConfigJsFile.exists()) {
             try {
                 val text = gameConfigJsFile.readText()
-                val match = """gameId\s*[:=]\s*["']([^"']+)["']""".toRegex(RegexOption.IGNORE_CASE).find(text)
-                if (match != null) {
-                    gameId = match.groupValues[1]
+                // 正则匹配 gameIdConfig = { ... } 内部的大括号定义
+                val blockMatch = """gameIdConfig\s*=\s*\{([^}]+)}""".toRegex(RegexOption.IGNORE_CASE).find(text)
+                if (blockMatch != null) {
+                    val block = blockMatch.groupValues[1]
+                    // 匹配其中的每一行，如 3032: "Premier League Star",
+                    val lineRegex = """(\d+)\s*:\s*["']([^"']+)["']""".toRegex()
+                    // 归一化选中的游戏目录名，移除非必要符号和大小写（如 premierLeagueStar -> premierleaguestar）
+                    val normalizedSelected = selectedGame.lowercase().replace(" ", "").replace("_", "").replace("-", "")
+
+                    for (lineMatch in lineRegex.findAll(block)) {
+                        val id = lineMatch.groupValues[1]
+                        val name = lineMatch.groupValues[2]
+                        // 归一化配置里的游戏英文名，以进行大小写/空格不敏感的安全匹配
+                        val normalizedName = name.lowercase().replace(" ", "").replace("_", "").replace("-", "")
+                        if (normalizedSelected == normalizedName) {
+                            gameId = id
+                            break
+                        }
+                    }
                 }
             } catch (e: Exception) {
-                AppLogger.w("GameHtmlPreview", "读取 gameConfig.js 失败: ${e.message}")
+                AppLogger.w("GameHtmlPreview", "解析 gameConfig.js 中的 gameIdConfig 失败: ${e.message}")
             }
         }
 
-        // 1.2 强力兜底机制：若未获取到 gameId，自动以当前选中的游戏名（selectedGame）作为 gameId 填充，
+        // 1.2 强力双向兜底机制：若未从 gameConfig.js 中匹配到对应的数字 ID，自动以当前选中的游戏名（selectedGame）作为 gameId 填充，
         // 同时在 URL 中增加 gameName=游戏名 以提供完备的 JS 兼容保障！
         val resolvedGameId = gameId.ifBlank { selectedGame }
 
@@ -381,6 +398,14 @@ actual fun GameHtmlPreview(
     LaunchedEffect(reloadTrigger) {
         if (reloadTrigger > 0) {
             browserRef?.reload()
+        }
+    }
+
+    // 监听打开 DevTools 触发信号
+    LaunchedEffect(devToolsTrigger) {
+        if (devToolsTrigger > 0) {
+            // openDevTools 需要传入 java.awt.Point(0,0) 或 null
+            browserRef?.openDevTools(null)
         }
     }
     // 供 LoadHandler 闭包读取的最新调试开关（handler 在 factory 中创建一次）

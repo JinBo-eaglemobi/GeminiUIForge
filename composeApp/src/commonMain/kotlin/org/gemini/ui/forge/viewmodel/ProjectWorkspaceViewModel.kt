@@ -130,6 +130,10 @@ class ProjectWorkspaceViewModel(
             val updateInstruction = aiService.promptManager.getPrompt("refine_instruction_update")
             val newInstruction = aiService.promptManager.getPrompt("refine_instruction_new")
             val wsConfig = templateRepo.loadWorkspaceConfig(initialProjectName)
+            val currentProject = _state.value.project
+            val initialRefUri = currentProject.styleReferenceUri
+                ?: currentProject.referenceImages.firstOrNull()
+                ?: currentProject.pages.firstOrNull()?.sourceImageUri
 
             _state.update {
                 it.copy(
@@ -138,8 +142,9 @@ class ProjectWorkspaceViewModel(
                     collapsedSections = wsConfig?.collapsedSections ?: emptyMap(),
                     isVisualMode = wsConfig?.isVisualMode ?: false,
                     isHideOutlines = wsConfig?.isHideOutlines ?: false,
-                    referenceMode = wsConfig?.referenceMode ?: org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN,
+                    referenceMode = wsConfig?.referenceMode ?: if (initialRefUri != null) org.gemini.ui.forge.model.app.ReferenceDisplayMode.OVERLAY else org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN,
                     referenceOpacity = wsConfig?.referenceOpacity ?: 0.4f,
+                    referenceImageUri = initialRefUri,
                     resourceConfigPath = wsConfig?.resourceConfigPath
                 )
             }
@@ -148,36 +153,28 @@ class ProjectWorkspaceViewModel(
 
     /** 重新加载项目数据 */
     fun reload(newProject: ProjectState) {
-        if (_state.value.project == newProject) return
-        
-        // 如果物理层级结构（页面、模块）完全一致，仅非物理的配置或元数据路径发生变化，
-        // 则执行静默内存更新，保留用户的撤销/重做历史和当前选中状态。
-        if (_state.value.project.pages == newProject.pages &&
-            _state.value.project.globalStyle == newProject.globalStyle &&
-            _state.value.project.styleReferenceUri == newProject.styleReferenceUri
-        ) {
-            _state.update { it.copy(project = newProject) }
-            return
-        }
+        val effectiveRefUri = newProject.styleReferenceUri
+            ?: newProject.referenceImages.firstOrNull()
+            ?: newProject.pages.firstOrNull()?.sourceImageUri
 
         viewModelScope.launch {
             val wsConfig = templateRepo.loadWorkspaceConfig(_state.value.projectName)
-            _state.update {
-                it.copy(
+            _state.update { current ->
+                val targetPageId = newProject.pages.find { it.id == current.selectedPageId }?.id
+                    ?: newProject.pages.firstOrNull()?.id
+                current.copy(
                     project = newProject,
-                    selectedPageId = newProject.pages.firstOrNull()?.id,
-                    selectedBlockId = null,
+                    selectedPageId = targetPageId,
+                    selectedBlockId = if (newProject.pages.any { p -> p.blocks.any { b -> b.id == current.selectedBlockId } }) current.selectedBlockId else null,
                     editingGroupId = null,
                     globalStyle = newProject.globalStyle,
-                    referenceImageUri = newProject.styleReferenceUri,
-                    undoStack = emptyList(), 
-                    redoStack = emptyList(),
-                    collapsedSections = wsConfig?.collapsedSections ?: emptyMap(),
-                    isVisualMode = wsConfig?.isVisualMode ?: false,
-                    isHideOutlines = wsConfig?.isHideOutlines ?: false,
-                    referenceMode = wsConfig?.referenceMode ?: org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN,
-                    referenceOpacity = wsConfig?.referenceOpacity ?: 0.4f,
-                    resourceConfigPath = wsConfig?.resourceConfigPath
+                    referenceImageUri = effectiveRefUri,
+                    collapsedSections = wsConfig?.collapsedSections ?: current.collapsedSections,
+                    isVisualMode = wsConfig?.isVisualMode ?: current.isVisualMode,
+                    isHideOutlines = wsConfig?.isHideOutlines ?: current.isHideOutlines,
+                    referenceMode = wsConfig?.referenceMode ?: if (effectiveRefUri != null) org.gemini.ui.forge.model.app.ReferenceDisplayMode.OVERLAY else org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN,
+                    referenceOpacity = wsConfig?.referenceOpacity ?: current.referenceOpacity,
+                    resourceConfigPath = wsConfig?.resourceConfigPath ?: current.resourceConfigPath
                 )
             }
         }

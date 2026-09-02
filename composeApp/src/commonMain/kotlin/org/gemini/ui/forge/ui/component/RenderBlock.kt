@@ -44,6 +44,8 @@ import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.utils.decodeToBitmap
 import org.gemini.ui.forge.utils.shouldDim
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * 将垂直方向轴映射为 Compose Alignment
@@ -80,14 +82,11 @@ fun RenderStyledText(
     modifier: Modifier = Modifier
 ) {
     val color = parseHexColor(textProperties.textColor).copy(alpha = alpha)
-    // 使用 with(LocalDensity.current) 将 px 精准转为 sp，但这里简单起见直接放大字号，并依赖 sp 的缩放。
-    // 如果想要绝对脱离系统的字体缩放，可以考虑使用 dp 转 sp，但这里直接应用基准缩放通常足够。
     val fontSize = (textProperties.textSize * baseScale).sp
     val fontWeight = if (textProperties.isBold) FontWeight.Bold else FontWeight.Normal
     val fontStyle = if (textProperties.isItalic) FontStyle.Italic else FontStyle.Normal
     val textAlign = parseTextAlign(textProperties.horizontalAlign)
 
-    // 构建统一的文本样式，设置行高对齐方式，确保在小尺寸容器中也能精准居中
     val baseStyle = TextStyle(
         lineHeightStyle = LineHeightStyle(
             alignment = LineHeightStyle.Alignment.Center,
@@ -96,7 +95,6 @@ fun RenderStyledText(
     )
 
     Box(modifier = modifier) {
-        // 绘制描边层（在底部）
         if (textProperties.strokeColor.isNotEmpty() && textProperties.strokeWidth > 0f) {
             val sColor = parseHexColor(textProperties.strokeColor).copy(alpha = alpha)
             Text(
@@ -109,14 +107,13 @@ fun RenderStyledText(
                 lineHeight = fontSize,
                 softWrap = false,
                 maxLines = 1,
-                modifier = Modifier.fillMaxWidth(), // 关键：撑满 Box 宽度以便 textAlign 生效
+                modifier = Modifier.fillMaxWidth(),
                 style = baseStyle.copy(
                     drawStyle = Stroke(miter = 10f, width = textProperties.strokeWidth * baseScale)
                 )
             )
         }
 
-        // 绘制填充层（在顶部）
         Text(
             text = textProperties.text,
             color = color,
@@ -128,32 +125,42 @@ fun RenderStyledText(
             softWrap = false,
             maxLines = 1,
             style = baseStyle,
-            modifier = Modifier.fillMaxWidth() // 关键：撑满 Box 宽度以便 textAlign 生效
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
 
 /**
- * 递归渲染 UI 模块组件
+ * 递归渲染 UI 模块组件（双轨独立坐标系：屏幕渲染位移 vs 逻辑画板绝对坐标）。
  *
  * @param block 当前要渲染的 UI 模块数据对象
- * @param parentX 父容器的绝对 X 坐标
- * @param parentY 父容器的绝对 Y 坐标
+ * @param parentRenderX 父容器在屏幕视口物理坐标系下的绝对 X 偏移（包含 offsetX 居中偏移和 baseScale 缩放）
+ * @param parentRenderY 父容器在屏幕视口物理坐标系下的绝对 Y 偏移（包含 offsetY 居中偏移和 baseScale 缩放）
+ * @param parentLogicX 父容器在逻辑画板上的绝对 X 坐标（完全脱钩于屏幕视口居中偏移量，顶层为 0f）
+ * @param parentLogicY 父容器在逻辑画板上的绝对 Y 坐标（完全脱钩于屏幕视口居中偏移量，顶层为 0f）
  * @param baseScale 画布的基础缩放比例（适配不同屏幕尺寸）
  * @param zoom 用户的实时缩放倍数
+ * @param state 项目工作区状态
+ * @param refBitmap 预解码的全局参考图 Bitmap，用于无图时无缝满格渲染切片
+ * @param pageWidth 画布页面逻辑总宽
+ * @param pageHeight 画布页面逻辑总高
  */
 @Composable
 fun RenderBlock(
     block: UIBlock,
-    parentX: Float,
-    parentY: Float,
+    parentRenderX: Float,
+    parentRenderY: Float,
+    parentLogicX: Float = 0f,
+    parentLogicY: Float = 0f,
     baseScale: Float,
     zoom: Float,
-    state: ProjectWorkspaceState
+    state: ProjectWorkspaceState,
+    refBitmap: ImageBitmap? = null,
+    pageWidth: Float = 1080f,
+    pageHeight: Float = 1920f
 ) {
     if (!block.isVisible) return
 
-    val density = androidx.compose.ui.platform.LocalDensity.current
     val editingGroupId = state.editingGroupId
     val isVisualMode = state.isVisualMode
     val isHideOutlines = state.isHideOutlines
@@ -163,19 +170,27 @@ fun RenderBlock(
     val isSelected = block.id == selectedBlockId || selectedBlockIds.contains(block.id)
     val isDimmed = block.shouldDim(editingGroupId)
 
-    // 1. 异步加载图片位图：根据模块关联的 URI 加载图片
+    // 1. 异步加载已生成的专属 AI 图像成品
     val imageBitmapState =
         produceState<ImageBitmap?>(null, block.currentImageUri) { value = block.currentImageUri?.decodeToBitmap() }
     val imageBitmap = imageBitmapState.value
 
-    // 2. 计算当前模块在画布上的物理坐标：父坐标 + 模块相对偏移 * 基础缩放
-    val currentX = parentX + block.bounds.left * baseScale
-    val currentY = parentY + block.bounds.top * baseScale
+    // 2. 屏幕物理渲染坐标（供 Modifier.offset 使用）
+    val currentRenderX = parentRenderX + block.bounds.left * baseScale
+    val currentRenderY = parentRenderY + block.bounds.top * baseScale
 
-    // 3. 视觉状态判断：视觉模式且有图片时隐藏占位线框
-    val hidePlaceholder = isVisualMode && imageBitmap != null
+    // 3. 逻辑绝对物理坐标（供底图切片裁剪使用，100% 纯净准确）
+    val absLeft = parentLogicX + block.bounds.left
+    val absTop = parentLogicY + block.bounds.top
+    val absWidth = block.bounds.width
+    val absHeight = block.bounds.height
 
-    val selectionColor = Color(0xFF18A0FB) // Figma 风格的专业选中蓝
+    // 4. 是否有可用参考图切片
+    val hasRefSlice = imageBitmap == null && block.currentImageUri == null && refBitmap != null && block.type != UIBlockType.TEXT
+
+    // 5. 视觉状态判断
+    val hidePlaceholder = isVisualMode && (imageBitmap != null || hasRefSlice)
+    val selectionColor = Color(0xFF18A0FB)
 
     // 解析 VIEW 类型的自定义背景色
     val viewBgColor = if (block.type == UIBlockType.VIEW) {
@@ -184,53 +199,71 @@ fun RenderBlock(
     } else null
 
     val actualBgColor = when {
-        // 如果是隐藏描边模式且未选中，则强制背景透明
         isHideOutlines && !isSelected -> Color.Transparent
         viewBgColor != null -> viewBgColor
         hidePlaceholder -> Color.Transparent
+        hasRefSlice -> Color.Transparent // 切片存在时透明背景，满格渲染
         isSelected -> selectionColor.copy(alpha = 0.15f)
         isDimmed -> Color.Black.copy(alpha = 0.4f)
         else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
     }
 
-    // 4. 渲染模块容器：处理位移、大小、背景和边框
+    // 6. 渲染模块容器：处理位移、大小、背景和边框
     Box(
         modifier = Modifier
-            .offset(x = currentX.dp, y = currentY.dp)
+            .offset(x = currentRenderX.dp, y = currentRenderY.dp)
             .size(width = (block.bounds.width * baseScale).dp, height = (block.bounds.height * baseScale).dp)
             .clip(RoundedCornerShape(2.dp))
             .background(actualBgColor)
             .then(
-                // 如果是隐藏描边模式且未被选中，或者是在有图的视觉模式/有背景色的 View 模式下且未选中，则不显示边框
-                if (((isHideOutlines || hidePlaceholder || viewBgColor != null) && !isSelected)) Modifier
+                if ((isHideOutlines || hidePlaceholder || viewBgColor != null) && !isSelected) Modifier
                 else Modifier.border(
-                    width = (1.dp / zoom), // 关键：边框粗细除以缩放比例，确保在任何缩放级别下线条视觉宽度一致
+                    width = (1.dp / zoom),
                     color = if (isSelected) selectionColor
                     else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                 )
             ),
         contentAlignment = Alignment.Center
     ) {
-// ... (rest of methods)
         val reelProps = if (block.type == UIBlockType.REEL) block.properties as? BlockProperties.ReelProperties else null
         val showReelBg = reelProps?.showBackground != false
 
         if (imageBitmap != null && showReelBg) {
-            // 渲染已固化好的 AI 图像成品。
-            // 由于图片已经在编辑器中按照 bounds 进行了拉伸、补白或九宫格固化，
-            // 这里的渲染逻辑应保持最简。
+            // 优先渲染已生成的 AI 图像成品
             Image(
                 bitmap = imageBitmap,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.FillBounds
             )
+        } else if (hasRefSlice && showReelBg && refBitmap != null) {
+            // 未生图时：依据绝对逻辑坐标从参考底图中精准裁剪并满格无缝贴合模块
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val imgW = refBitmap.width.toFloat()
+                val imgH = refBitmap.height.toFloat()
+
+                val normL = (absLeft / pageWidth).coerceIn(0f, 1f)
+                val normT = (absTop / pageHeight).coerceIn(0f, 1f)
+                val normW = (absWidth / pageWidth).coerceIn(0f, 1f - normL)
+                val normH = (absHeight / pageHeight).coerceIn(0f, 1f - normT)
+
+                val srcX = (normL * imgW).toInt()
+                val srcY = (normT * imgH).toInt()
+                val srcW = max(1, (normW * imgW).toInt())
+                val srcH = max(1, (normH * imgH).toInt())
+
+                // 模块容器比例与切片比例天然完全对齐，直接满格绘制，彻底消灭黑边
+                drawImage(
+                    image = refBitmap,
+                    srcOffset = IntOffset(srcX, srcY),
+                    srcSize = IntSize(srcW, srcH),
+                    dstOffset = IntOffset.Zero,
+                    dstSize = IntSize(size.width.toInt(), size.height.toInt())
+                )
+            }
         } else if (block.currentImageUri != null && showReelBg) {
-            // 图片加载中的反馈
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.dp)
         } else if (block.type == UIBlockType.SYMBOL) {
-            // SYMBOL 类型渲染：图标 + 空白文案Text
-            // 这里无图时显示占位文案，宽度填满，高度自适应，文本居中
             val fallbackText = block.userPromptZh.ifBlank { block.userPromptEn }.ifBlank { "Symbol" }
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -269,21 +302,20 @@ fun RenderBlock(
                     RenderStyledText(
                         textProperties = inputProps,
                         baseScale = baseScale,
-                        alpha = 0.6f // 输入框 Hint 通常半透明
+                        alpha = 0.6f
                     )
                 }
             }
         } else if (block.type == UIBlockType.REEL) {
-            val reelProps = block.properties as? BlockProperties.ReelProperties
-            if (reelProps != null) {
-                val rows = reelProps.rows.coerceAtLeast(1)
-                val cols = reelProps.columns.coerceAtLeast(1)
+            val reelProperties = block.properties as? BlockProperties.ReelProperties
+            if (reelProperties != null) {
+                val rows = reelProperties.rows.coerceAtLeast(1)
+                val cols = reelProperties.columns.coerceAtLeast(1)
 
-                if (reelProps.items.isNotEmpty()) {
-                    // 使用固定的随机种子加上 rollSeed 保证重组时不疯狂闪烁，但可通过 rollSeed 强制刷新
-                    val randomItems = androidx.compose.runtime.remember(block.id, rows, cols, reelProps.items, reelProps.rollSeed) {
-                        val rnd = kotlin.random.Random(block.id.hashCode() + reelProps.rollSeed)
-                        List(rows * cols) { reelProps.items.random(rnd) }
+                if (reelProperties.items.isNotEmpty()) {
+                    val randomItems = androidx.compose.runtime.remember(block.id, rows, cols, reelProperties.items, reelProperties.rollSeed) {
+                        val rnd = kotlin.random.Random(block.id.hashCode() + reelProperties.rollSeed)
+                        List(rows * cols) { reelProperties.items.random(rnd) }
                     }
 
                     androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
@@ -324,8 +356,6 @@ fun RenderBlock(
                     val gridColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                     Canvas(Modifier.fillMaxSize()) {
                         val sw = (1.dp).toPx() / zoom
-
-                        // 绘制垂直分割线
                         for (i in 1 until cols) {
                             val x = size.width * i / cols
                             drawLine(
@@ -335,7 +365,6 @@ fun RenderBlock(
                                 strokeWidth = sw
                             )
                         }
-                        // 绘制水平分割线
                         for (i in 1 until rows) {
                             val y = size.height * i / rows
                             drawLine(
@@ -350,12 +379,11 @@ fun RenderBlock(
             }
         }
 
-        // 5. 显示模块占位文本：仅在未隐藏且无图片时显示模块类型 (对于 TEXT 和 VIEW 如果已经有了内容，也应当考虑隐藏占位)
+        // 7. 显示模块占位文本：仅在无切片、无生成图且未自定义内容时显示
         val hasCustomContent = (block.type == UIBlockType.TEXT && (block.properties as? BlockProperties.TextProperties)?.text?.isNotEmpty() == true) ||
                 (block.type == UIBlockType.VIEW && viewBgColor != null) ||
-                (block.type == UIBlockType.REEL)
+                (block.type == UIBlockType.REEL) || hasRefSlice
 
-                               
         if (!hidePlaceholder && imageBitmap == null && block.currentImageUri == null && !hasCustomContent) {
             Text(
                 text = stringResource(block.type.getDisplayNameRes()),
@@ -366,70 +394,20 @@ fun RenderBlock(
         }
     }
 
-    // 6. 递归渲染子模块：保持层级关系并将当前模块坐标作为父坐标传递
+    // 8. 递归渲染子模块（正确传递累加的屏幕渲染坐标与逻辑绝对坐标）
     block.children.forEach { child ->
         RenderBlock(
             block = child,
-            parentX = currentX,
-            parentY = currentY,
+            parentRenderX = currentRenderX,
+            parentRenderY = currentRenderY,
+            parentLogicX = absLeft,
+            parentLogicY = absTop,
             baseScale = baseScale,
             zoom = zoom,
-            state = state
+            state = state,
+            refBitmap = refBitmap,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight
         )
     }
-}
-
-/**
- * 手动绘制九宫格图片
- */
-private fun DrawScope.drawNinePatch(image: ImageBitmap, config: NinePatchConfig) {
-    val srcW = image.width
-    val srcH = image.height
-    val dstW = size.width.toInt()
-    val dstH = size.height.toInt()
-
-    val l = config.left
-    val t = config.top
-    val r = config.right
-    val b = config.bottom
-
-    // 这里的逻辑需要处理目标尺寸小于边距的情况，简单起见直接按比例缩减或截断
-    // 1. Top-Left
-    drawImage(image, 
-        srcOffset = IntOffset(0, 0), srcSize = IntSize(l, t),
-        dstOffset = IntOffset(0, 0), dstSize = IntSize(l, t))
-    // 2. Top-Center
-    drawImage(image,
-        srcOffset = IntOffset(l, 0), srcSize = IntSize(srcW - l - r, t),
-        dstOffset = IntOffset(l, 0), dstSize = IntSize(dstW - l - r, t))
-    // 3. Top-Right
-    drawImage(image,
-        srcOffset = IntOffset(srcW - r, 0), srcSize = IntSize(r, t),
-        dstOffset = IntOffset(dstW - r, 0), dstSize = IntSize(r, t))
-    
-    // 4. Middle-Left
-    drawImage(image,
-        srcOffset = IntOffset(0, t), srcSize = IntSize(l, srcH - t - b),
-        dstOffset = IntOffset(0, t), dstSize = IntSize(l, dstH - t - b))
-    // 5. Middle-Center
-    drawImage(image,
-        srcOffset = IntOffset(l, t), srcSize = IntSize(srcW - l - r, srcH - t - b),
-        dstOffset = IntOffset(l, t), dstSize = IntSize(dstW - l - r, dstH - t - b))
-    // 6. Middle-Right
-    drawImage(image,
-        srcOffset = IntOffset(srcW - r, t), srcSize = IntSize(r, srcH - t - b),
-        dstOffset = IntOffset(dstW - r, t), dstSize = IntSize(r, dstH - t - b))
-
-    // 7. Bottom-Left
-    drawImage(image,
-        srcOffset = IntOffset(0, srcH - b), srcSize = IntSize(l, b),
-        dstOffset = IntOffset(0, dstH - b), dstSize = IntSize(l, b))
-    // 8. Bottom-Center
-    drawImage(image,
-        srcOffset = IntOffset(l, srcH - b), srcSize = IntSize(srcW - l - r, b),
-        dstOffset = IntOffset(l, dstH - b), dstSize = IntSize(dstW - l - r, b))
-    // 9. Bottom-Right
-    drawImage(image,
-        srcOffset = IntOffset(srcW - r, srcH - b), srcSize = IntSize(r, b),
-        dstOffset = IntOffset(dstW - r, dstH - b), dstSize = IntSize(r, b))
 }

@@ -82,6 +82,32 @@ fun List<UIBlock>.calculateBlockAbsolutePosition(id: String, currentX: Float = 0
 }
 
 /**
+ * 递归计算指定模块在当前画布上的全局绝对逻辑矩形 (SerialRect)。
+ *
+ * @param id 目标模块唯一标识符
+ * @return 目标模块的绝对矩形。如果未找到该模块则返回 null
+ */
+fun List<UIBlock>.calculateBlockAbsoluteBounds(id: String): org.gemini.ui.forge.model.ui.SerialRect? {
+    val block = this.findBlockById(id) ?: return null
+    val absPos = this.calculateBlockAbsolutePosition(id) ?: Offset.Zero
+    val w = kotlin.math.abs(block.bounds.width)
+    val h = kotlin.math.abs(block.bounds.height)
+    return org.gemini.ui.forge.model.ui.SerialRect(absPos.x, absPos.y, absPos.x + w, absPos.y + h)
+}
+
+/**
+ * 递归计算指定模块的父级容器在当前画布上的全局绝对逻辑偏移量 (Offset)。
+ * 若模块为顶层根模块，则返回 Offset.Zero。
+ *
+ * @param id 目标模块唯一标识符
+ * @return 父级累计绝对逻辑偏移量 Offset
+ */
+fun List<UIBlock>.calculateBlockParentOffset(id: String): Offset {
+    val parentId = this.findParentBlockId(id) ?: return Offset.Zero
+    return this.calculateBlockAbsolutePosition(parentId) ?: Offset.Zero
+}
+
+/**
  * 精确查找手势点击位置（逻辑坐标）所命中的最上层 UIBlock（支持多层嵌套检测）。
  * 当处于隔离编辑组（editingGroupId 激活）时，会优先且仅限制于在该隔离组的子模块内部进行碰撞命中检测。
  *

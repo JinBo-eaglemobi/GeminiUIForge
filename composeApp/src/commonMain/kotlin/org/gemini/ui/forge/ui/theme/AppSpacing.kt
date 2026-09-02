@@ -21,7 +21,18 @@ data class AppSpacing(
     val small: Dp = 8.dp,
     val medium: Dp = 16.dp,
     val large: Dp = 24.dp,
-    val extraLarge: Dp = 32.dp
+    val extraLarge: Dp = 32.dp,
+    
+    /**
+     * 弹窗标准宽度 Tokens。
+     * [dialogConfirmWidth] 用于通用操作二次确认、简单提醒、重命名等微型弹窗（默认 440.dp）。
+     */
+    val dialogConfirmWidth: Dp = 440.dp,
+    
+    /**
+     * [dialogConfigWidth] 用于添加图层、编译环境、退出提示（多按钮）等复杂表单配置弹窗（默认 480.dp）。
+     */
+    val dialogConfigWidth: Dp = 480.dp
 )
 
 /**

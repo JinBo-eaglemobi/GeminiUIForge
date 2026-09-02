@@ -26,7 +26,7 @@ import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.component.tip
-import org.gemini.ui.forge.ui.dialog.ReelSymbolManagerDialog
+import org.gemini.ui.forge.ui.dialog.asset.ReelSymbolManagerDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel

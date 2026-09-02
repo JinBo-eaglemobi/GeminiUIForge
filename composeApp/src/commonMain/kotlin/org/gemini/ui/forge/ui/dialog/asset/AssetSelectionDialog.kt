@@ -1,0 +1,482 @@
+package org.gemini.ui.forge.ui.dialog.asset
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import org.gemini.ui.forge.data.TemplateFile
+import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.utils.decodeToBitmap
+import org.gemini.ui.forge.utils.getImageSize
+import androidx.compose.foundation.combinedClickable
+import kotlin.math.abs
+
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isShiftPressed
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.action_open_in_explorer
+import org.gemini.ui.forge.getPlatform
+import org.jetbrains.compose.resources.stringResource
+
+/**
+ * 资源选择与管理弹窗 (弹窗 A)。
+ *
+ * 提供资源列表浏览、多选批量管理、裁剪适配请求以及本地自动去背景功能。
+ *
+ * @param title 弹窗标题。
+ * @param candidates 供选择或管理的本地资源列表。
+ * @param initialSelectedUri 初始被选中的资源（单选模式下）。
+ * @param targetWidth 预期适配的宽度（用于提示和比例校验）。
+ * @param targetHeight 预期适配的高度（用于提示和比例校验）。
+ * @param isProcessing 指示当前是否正在执行耗时处理（如批量去背景）。
+ * @param onImageSelected 确认选中某张图片并应用时的回调。
+ * @param onCropRequested 当图片比例不符，用户请求裁剪处理时的回调。
+ * @param onDeleteImages 请求删除选中的一张或多张图片时的回调。
+ * @param onClearAll 请求清除当前所有候选资源时的回调。
+ * @param onBatchRemoveBg 请求对选中的图片执行本地自动去背景操作的回调。
+ * @param onDismiss 请求关闭弹窗时的回调。
+ */
+@Composable
+fun AssetSelectionDialog(
+    title: String,
+    candidates: List<TemplateFile>,
+    initialSelectedUri: TemplateFile? = null,
+    targetWidth: Float = 0f,
+    targetHeight: Float = 0f,
+    isProcessing: Boolean = false, // 新增：正在处理的指示
+    baseDirectoryPath: String? = null, // 新增：显式传入的基础目录
+    onImageSelected: (TemplateFile) -> Unit,
+    onCropRequested: (TemplateFile) -> Unit = {}, // 新增：请求裁剪
+    onDeleteImages: (List<TemplateFile>) -> Unit,
+    onClearAll: () -> Unit,
+    onBatchRemoveBg: (List<TemplateFile>) -> Unit = {}, // 新增：批量抠图
+    onDismiss: () -> Unit
+) {
+    // 基础状态
+    var tempSelectedUri by remember(initialSelectedUri) { mutableStateOf(initialSelectedUri) }
+    
+    // 目标比例
+    val targetRatio = if (targetHeight > 0) targetWidth / targetHeight else 1f
+
+    // 辅助：获取带尺寸信息的候选列表并排序
+    var sortedCandidates by remember { mutableStateOf<List<Pair<TemplateFile, Pair<Int, Int>?>>>(emptyList()) }
+    LaunchedEffect(candidates) {
+        val withSize = candidates.map { it to it.getImageSize() }
+        sortedCandidates = withSize.sortedBy { (_, size) ->
+            if (size == null) 2f else {
+                val ratio = size.first.toFloat() / size.second
+                abs(ratio - targetRatio)
+            }
+        }
+    }
+
+    // 多选管理状态
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+    val multiSelectedUris = remember { mutableStateListOf<TemplateFile>() }
+    
+    // Shift 按键状态跟踪
+    var isShiftPressed by remember { mutableStateOf(false) }
+
+    // 辅助函数：执行删除
+    fun executeDeletion(uris: List<TemplateFile>) {
+        onDeleteImages(uris)
+        if (tempSelectedUri in uris) {
+            tempSelectedUri = null
+        }
+        multiSelectedUris.removeAll(uris)
+        if (multiSelectedUris.isEmpty()) isMultiSelectMode = false
+    }
+
+    // 判断是否全为 JPG
+    val isAllSelectedJpg = remember(multiSelectedUris.size) {
+        multiSelectedUris.isNotEmpty() && multiSelectedUris.all { 
+            it.relativePath.contains(".jpg", ignoreCase = true) || it.relativePath.contains(".jpeg", ignoreCase = true)
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.85f)
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            isShiftPressed = event.keyboardModifiers.isShiftPressed
+                        }
+                    }
+                },
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                // 顶栏
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (isMultiSelectMode) "批量管理 (${multiSelectedUris.size})" else title,
+                                style = MaterialTheme.typography.headlineSmall
+                            )
+                            if (!isMultiSelectMode) {
+                                Spacer(Modifier.width(8.dp))
+                                // 顶栏按钮：打开基础目录 (模块目录)
+                                val dirToOpen = baseDirectoryPath ?: candidates.firstOrNull()?.getAbsolutePath()?.substringBeforeLast("/")
+                                if (dirToOpen != null) {
+                                    IconButton(
+                                        onClick = { getPlatform().openInFileExplorer(dirToOpen) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.FolderOpen,
+                                            contentDescription = stringResource(Res.string.action_open_in_explorer),
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (!isMultiSelectMode && targetWidth > 0) {
+                            Text(
+                                "目标尺寸: ${targetWidth.toInt()}x${targetHeight.toInt()} (比例: ${((targetRatio * 100).toInt() / 100f)})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    if (isMultiSelectMode) {
+                        IconButton(onClick = { 
+                            multiSelectedUris.clear()
+                            multiSelectedUris.addAll(candidates) 
+                        }) {
+                            Icon(Icons.Default.SelectAll, "全选")
+                        }
+                        IconButton(onClick = { multiSelectedUris.clear() }) {
+                            Icon(Icons.Default.Deselect, "全不选")
+                        }
+                        VerticalDivider(Modifier.height(24.dp).padding(horizontal = 8.dp))
+                        IconButton(
+                            onClick = { isMultiSelectMode = false; multiSelectedUris.clear() }
+                        ) {
+                            Icon(Icons.Default.Close, "退出多选")
+                        }
+                    } else {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, "关闭")
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 内容网格
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (candidates.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("暂无可用资源", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 160.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(sortedCandidates, key = { it.first.relativePath }) { (tFile, size) ->
+                                val isChosenInMulti = multiSelectedUris.contains(tFile)
+                                val isSelectedInSingle = !isMultiSelectMode && tempSelectedUri == tFile
+                                
+                                val imageBitmapState = produceState<ImageBitmap?>(null, tFile) {
+                                    value = tFile.decodeToBitmap()
+                                }
+                                val bitmap = imageBitmapState.value
+
+                                // 比例匹配检查
+                                val isAdapted = if (size == null) false else {
+                                    val ratio = size.first.toFloat() / size.second
+                                    abs(ratio - targetRatio) < 0.05
+                                }
+
+                                Card(
+                                    modifier = Modifier
+                                        .aspectRatio(1f)
+                                        .combinedClickable(
+                                            onClick = {
+                                                if (isShiftPressed && !isMultiSelectMode) {
+                                                    isMultiSelectMode = true
+                                                    multiSelectedUris.add(tFile)
+                                                } else if (isMultiSelectMode) {
+                                                    if (isChosenInMulti) multiSelectedUris.remove(tFile) else multiSelectedUris.add(tFile)
+                                                } else {
+                                                    tempSelectedUri = if (isSelectedInSingle) null else tFile
+                                                }
+                                            },
+                                            onDoubleClick = {
+                                                if (!isMultiSelectMode) {
+                                                    tempSelectedUri = tFile
+                                                    val isAdapted = if (size == null) false else {
+                                                        val ratio = size.first.toFloat() / size.second
+                                                        abs(ratio - targetRatio) < 0.05
+                                                    }
+
+                                                    if (isAdapted && size?.first == targetWidth.toInt() && size.second == targetHeight.toInt()) {
+                                                        onImageSelected(tFile)
+                                                        onDismiss()
+                                                    } else {
+                                                        onCropRequested(tFile)
+                                                    }
+                                                }
+                                            },
+                                            onLongClick = {
+                                                if (!isMultiSelectMode) {
+                                                    isMultiSelectMode = true
+                                                    multiSelectedUris.add(tFile)
+                                                }
+                                            }
+                                        )
+                                        .border(
+                                            width = if (isChosenInMulti || isSelectedInSingle) 3.dp else if (isSelectedInSingle) 1.dp else 0.dp,
+                                            color = when {
+                                                isChosenInMulti -> MaterialTheme.colorScheme.error
+                                                isSelectedInSingle -> MaterialTheme.colorScheme.primary
+                                                else -> Color.Transparent
+                                            },
+                                            shape = AppShapes.medium
+                                        ),
+                                    shape = AppShapes.medium,
+                                    elevation = CardDefaults.cardElevation(defaultElevation = if (isChosenInMulti || isSelectedInSingle) 8.dp else 2.dp)
+                                ) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        if (bitmap != null) {
+                                            Image(
+                                                bitmap = bitmap,
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Fit,
+                                                alpha = if (isChosenInMulti || isSelectedInSingle || !isMultiSelectMode) 1.0f else 0.5f
+                                            )
+                                            
+                                            // 右下角尺寸信息叠加
+                                            Surface(
+                                                color = Color.Black.copy(alpha = 0.6f),
+                                                modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
+                                                shape = RoundedCornerShape(2.dp)
+                                            ) {
+                                                val isExactMatch = size != null && size.first == targetWidth.toInt() && size.second == targetHeight.toInt()
+                                                val format = if (tFile.relativePath.contains(".png", ignoreCase = true)) "PNG" else "JPG"
+                                                Text(
+                                                    text = if (size != null) "${size.first}x${size.second} ($format)" else "未知尺寸",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                                    color = if (isExactMatch) Color.Green else Color.White
+                                                )
+                                            }
+
+                                            if (tFile == initialSelectedUri) {
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+                                                    shape = RoundedCornerShape(4.dp)
+                                                ) {
+                                                    Text("使用中", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp), color = Color.White)
+                                                }
+                                            }
+
+                                            if (isChosenInMulti || isSelectedInSingle) {
+                                                Icon(
+                                                    imageVector = if (isMultiSelectMode) Icons.Default.DeleteSweep else Icons.Default.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = if (isMultiSelectMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(24.dp)
+                                                )
+                                            }
+                                        } else {
+                                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // 底栏
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (isMultiSelectMode) {
+                        Button(
+                            onClick = { executeDeletion(multiSelectedUris.toList()) },
+                            enabled = multiSelectedUris.isNotEmpty() && !isProcessing,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            shape = AppShapes.medium
+                        ) {
+                            Icon(Icons.Default.Delete, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("删除选中 (${multiSelectedUris.size})")
+                        }
+                        
+                        if (isAllSelectedJpg) {
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    val urisToProcess = multiSelectedUris.toList()
+                                    isMultiSelectMode = false
+                                    multiSelectedUris.clear()
+                                    // 不关闭弹窗，等待进度完成
+                                    onBatchRemoveBg(urisToProcess)
+                                },
+                                enabled = !isProcessing,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                shape = AppShapes.medium
+                            ) {
+                                if (isProcessing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onSecondary, strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.AutoFixHigh, null, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Text(if (isProcessing) "处理中..." else "本地去背景")
+                            }
+                        }
+
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { isMultiSelectMode = false; multiSelectedUris.clear() }, enabled = !isProcessing, shape = AppShapes.medium) {
+                            Text("退出管理")
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (tempSelectedUri != null) {
+                                TextButton(
+                                    onClick = { tempSelectedUri = null },
+                                    enabled = !isProcessing,
+                                    shape = AppShapes.medium
+                                ) {
+                                    Text("取消选中")
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Button(
+                                    onClick = { executeDeletion(listOf(tempSelectedUri!!)) },
+                                    enabled = !isProcessing,
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer),
+                                    shape = AppShapes.medium,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.DeleteForever, null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("立即删除", style = MaterialTheme.typography.labelLarge)
+                                }
+                                
+                                val isJpg = tempSelectedUri?.let { it.relativePath.contains(".jpg", ignoreCase = true) || it.relativePath.contains(".jpeg", ignoreCase = true) } == true
+                                if (isJpg) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = {
+                                            val uriToProcess = tempSelectedUri!!
+                                            // 不关闭弹窗，等待进度完成
+                                            onBatchRemoveBg(listOf(uriToProcess))
+                                        },
+                                        enabled = !isProcessing,
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                        shape = AppShapes.medium,
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                    ) {
+                                        if (isProcessing) {
+                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onSecondary, strokeWidth = 2.dp)
+                                        } else {
+                                            Icon(Icons.Default.AutoFixHigh, null, modifier = Modifier.size(18.dp))
+                                        }
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(if (isProcessing) "处理中..." else "本地去背景", style = MaterialTheme.typography.labelLarge)
+                                    }
+                                }
+
+                                // 任务：在文件夹中显示 (高亮选中)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                OutlinedButton(
+                                    onClick = { getPlatform().openInFileExplorer(tempSelectedUri!!.getAbsolutePath()) },
+                                    enabled = !isProcessing,
+                                    shape = AppShapes.medium,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.TravelExplore, null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("在文件夹中显示", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        TextButton(
+                            onClick = {
+                                onClearAll()
+                                onDismiss()
+                            },
+                            enabled = !isProcessing,
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            shape = AppShapes.medium
+                        ) {
+                            Text("清理全部候选")
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        TextButton(onClick = onDismiss, enabled = !isProcessing, shape = AppShapes.medium) {
+                            Text("取消")
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Button(
+                            onClick = {
+                                val uri = tempSelectedUri ?: return@Button
+                                val size = sortedCandidates.find { it.first == uri }?.second
+                                val isAdapted = if (size == null) false else {
+                                    val ratio = size.first.toFloat() / size.second
+                                    abs(ratio - targetRatio) < 0.05
+                                }
+
+                                if (isAdapted && size?.first == targetWidth.toInt() && size.second == targetHeight.toInt()) {
+                                    onImageSelected(uri)
+                                    onDismiss()
+                                } else {
+                                    // 需要裁剪适配
+                                    onCropRequested(uri)
+                                }
+                            },
+                            enabled = tempSelectedUri != null && !isProcessing,
+                            shape = AppShapes.medium
+                        ) {
+                            Text("应用选择")
+                        }
+                    }
+                }            }
+        }
+    }
+}

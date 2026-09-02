@@ -83,8 +83,10 @@ data class ProjectWorkspaceState(
     val selectedModel: GeminiModel = GeminiModel.GEMINI_3_PRO_IMAGE_PREVIEW,
     /** 视觉呈现：整个页面的全局画面提示词风格约束（Style Preset） */
     val globalStyle: String = project.globalStyle,
-    /** 视觉呈现：全局风格参考底图的 Uri 资源 */
-    val referenceImageUri: TemplateFile? = project.styleReferenceUri,
+    /** 视觉呈现：全局风格参考底图的 Uri 资源（三重回溯智能兜底，兼容所有新老模板） */
+    val referenceImageUri: TemplateFile? = project.styleReferenceUri
+        ?: project.referenceImages.firstOrNull()
+        ?: project.pages.firstOrNull()?.sourceImageUri,
 
     /** 批量一键生成：是否展示批量资产生成和确认进度弹窗 */
     val showBatchGenDialog: Boolean = false,
@@ -133,7 +135,7 @@ data class ProjectWorkspaceState(
     /** 历史记录快照 (Redo)：重做操作栈 */
     val redoStack: List<org.gemini.ui.forge.model.history.HistoryEntry> = emptyList()
 ) {
-    val currentPage get() = project.pages.find { it.id == selectedPageId }
+    val currentPage get() = project.pages.find { it.id == selectedPageId } ?: project.pages.firstOrNull()
     val selectedBlock: UIBlock?
         get() = currentPage?.blocks?.findBlockById(selectedBlockId ?: editingGroupId ?: "")
 }

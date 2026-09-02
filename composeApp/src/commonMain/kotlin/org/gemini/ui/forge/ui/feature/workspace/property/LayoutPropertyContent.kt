@@ -18,7 +18,11 @@ import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.*
-import org.gemini.ui.forge.ui.dialog.ResourceBindingDialog
+import org.gemini.ui.forge.ui.dialog.asset.ResourceBindingDialog
+import org.gemini.ui.forge.ui.dialog.ai.BlockRefinementDialog
+import org.gemini.ui.forge.utils.calculateBlockParentOffset
+import org.gemini.ui.forge.model.app.PromptLanguage
+import androidx.compose.ui.geometry.Offset
 import org.gemini.ui.forge.ui.feature.workspace.BlockSpecificProperties
 import org.gemini.ui.forge.ui.feature.workspace.CollapsibleSection
 import org.gemini.ui.forge.ui.theme.AppShapes
@@ -341,6 +345,45 @@ fun LayoutPropertyContent(
                     }
                 }
 
+
+                // 细化编辑按钮：调起全项目公用的 BlockRefinementDialog 弹窗进行原图聚焦微调与文案修改
+                var showRefineDialog by remember(selectedBlock.id) { mutableStateOf(false) }
+
+                OutlinedButton(
+                    onClick = { showRefineDialog = true },
+                    modifier = Modifier.fillMaxWidth().tip("在原参考图上聚焦放大、微调选区坐标与提示词文案"),
+                    shape = AppShapes.medium
+                ) {
+                    Icon(Icons.Default.Tune, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("细化编辑模块 (聚焦微调)", style = MaterialTheme.typography.labelLarge)
+                }
+
+                if (showRefineDialog) {
+                    val parentOffset = remember(selectedBlock, state.currentPage?.blocks) {
+                        state.currentPage?.blocks?.calculateBlockParentOffset(selectedBlock.id) ?: Offset.Zero
+                    }
+                    BlockRefinementDialog(
+                        block = selectedBlock,
+                        parentOffset = parentOffset,
+                        imageUri = state.referenceImageUri,
+                        pageWidth = state.currentPage?.width ?: 1080f,
+                        pageHeight = state.currentPage?.height ?: 1920f,
+                        onDismiss = { showRefineDialog = false },
+                        onConfirm = { updatedBlock ->
+                            viewModel.assetManager.updateBlockPrompt(updatedBlock.id, PromptLanguage.ZH, updatedBlock.userPromptZh)
+                            viewModel.assetManager.updateBlockPrompt(updatedBlock.id, PromptLanguage.EN, updatedBlock.userPromptEn)
+                            viewModel.updateBlockBounds(
+                                updatedBlock.id,
+                                updatedBlock.bounds.left,
+                                updatedBlock.bounds.top,
+                                updatedBlock.bounds.right,
+                                updatedBlock.bounds.bottom
+                            )
+                            showRefineDialog = false
+                        }
+                    )
+                }
 
                 // 物理坐标与尺寸实时输入
                 Surface(

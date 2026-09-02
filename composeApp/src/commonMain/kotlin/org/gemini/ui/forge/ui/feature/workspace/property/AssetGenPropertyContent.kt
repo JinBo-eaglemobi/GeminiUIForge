@@ -22,10 +22,13 @@ import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.ui.component.tip
-import org.gemini.ui.forge.ui.dialog.AdvancedSettingsDialog
-import org.gemini.ui.forge.ui.dialog.ButtonStateGenDialog
-import org.gemini.ui.forge.ui.dialog.ImageEditorDialog
+import org.gemini.ui.forge.ui.dialog.system.AdvancedSettingsDialog
+import org.gemini.ui.forge.ui.dialog.ai.ButtonStateGenDialog
+import org.gemini.ui.forge.ui.dialog.asset.ImageEditorDialog
+import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
+import org.gemini.ui.forge.ui.dialog.ai.ImageToImageGenDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
@@ -48,7 +51,10 @@ fun AssetGenPropertyContent(
     val selectedBlock = state.selectedBlock ?: return
     var showImageEditor by remember { mutableStateOf(false) }
     var showAdvancedSettings by remember { mutableStateOf(false) }
+    var showImg2ImgDialog by remember { mutableStateOf(false) }
+    var showNoRefDialog by remember { mutableStateOf(false) }
     var useChatContext by remember { mutableStateOf(false) }
+    val spacing = LocalAppSpacing.current
 
     ButtonStateGenDialog(state, viewModel, apiKey)
 
@@ -371,7 +377,8 @@ fun AssetGenPropertyContent(
             onClick = {
                 viewModel.assetGen.onRequestGeneration(apiKey, if (prompt.isNotBlank()) prompt else otherPrompt, currentTab)
             },
-            modifier = Modifier.fillMaxWidth().height(48.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp).tip("根据提示词直接生成全新 AI 资源图"),
+            shape = AppShapes.medium,
             enabled = !state.isGenerating && canGenerate
         ) {
             if (state.isGenerating) CircularProgressIndicator(
@@ -381,9 +388,65 @@ fun AssetGenPropertyContent(
             )
             else {
                 Icon(Icons.Default.Bolt, null)
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(spacing.small))
                 Text(if (canGenerate) "立即生成资源" else "请先生成默认/正常状态的图片")
             }
+        }
+
+        // 以图生图（参考图局部修改/抠图）操作入口按钮
+        OutlinedButton(
+            onClick = {
+                if (selectedBlock.referenceImage != null) {
+                    showImg2ImgDialog = true
+                } else {
+                    showNoRefDialog = true
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(44.dp).tip(stringResource(Res.string.btn_img2img_tip)),
+            shape = AppShapes.medium,
+            enabled = !state.isGenerating && canGenerate
+        ) {
+            Icon(Icons.Default.AutoFixHigh, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(spacing.small))
+            Text(stringResource(Res.string.btn_img2img_label), style = MaterialTheme.typography.labelLarge)
+        }
+
+        // 1. 未设置参考区域时的拦截提示对话框
+        if (showNoRefDialog) {
+            AppConfirmDialog(
+                title = stringResource(Res.string.img2img_no_ref_title),
+                message = stringResource(Res.string.img2img_no_ref_desc),
+                confirmText = stringResource(Res.string.img2img_btn_set_now),
+                onConfirm = {
+                    showNoRefDialog = false
+                    viewModel.showReferenceArea(selectedBlock.id)
+                },
+                onDismiss = { showNoRefDialog = false }
+            )
+        }
+
+        // 2. 已设置参考区域时的以图生图生成资源对话框（以临时输入的 Prompt 为准）
+        if (showImg2ImgDialog && selectedBlock.referenceImage != null) {
+            ImageToImageGenDialog(
+                block = selectedBlock,
+                referenceImage = selectedBlock.referenceImage,
+                initialTransparent = state.isGenerateTransparent,
+                initialCloudRemoval = state.isPrioritizeCloudRemoval,
+                isGenerating = state.isGenerating,
+                onDismiss = { showImg2ImgDialog = false },
+                onStartGen = { pZh, pEn, isTrans, isCloud ->
+                    val effectivePrompt = if (effectiveLang == PromptLanguage.ZH) {
+                        pZh.ifBlank { pEn }
+                    } else {
+                        pEn.ifBlank { pZh }
+                    }
+                    // 更新透明背景与云端抠图配置
+                    viewModel.updateState { it.copy(isGenerateTransparent = isTrans, isPrioritizeCloudRemoval = isCloud) }
+                    // 传入输入框中的最新临时 Prompt 执行以图生图
+                    viewModel.assetGen.onRequestGeneration(apiKey, effectivePrompt, currentTab)
+                    showImg2ImgDialog = false
+                }
+            )
         }
     }
 }

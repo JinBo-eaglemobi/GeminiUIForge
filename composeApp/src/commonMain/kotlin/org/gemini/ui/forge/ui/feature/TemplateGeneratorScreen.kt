@@ -22,8 +22,8 @@ import org.gemini.ui.forge.state.app.AppGlobalState
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.service.*
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
-import org.gemini.ui.forge.ui.dialog.AITaskProgressDialog
-import org.gemini.ui.forge.ui.dialog.CloudAssetDialog
+import org.gemini.ui.forge.ui.dialog.ai.AITaskProgressDialog
+import org.gemini.ui.forge.ui.dialog.asset.CloudAssetDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.rememberFilePicker
 import org.jetbrains.compose.resources.stringResource
@@ -77,6 +77,7 @@ fun TemplateGeneratorScreen(
                 // 更新 ProjectState 中的参考图和页面关联图
                 val stateToSave = resultState.copy(
                     createdAt = getCurrentTimeMillis(),
+                    styleReferenceUri = archivedFiles.firstOrNull(),
                     referenceImages = archivedFiles,
                     pages = resultState.pages.mapIndexed { index, page ->
                         page.copy(sourceImageUri = archivedFiles.getOrNull(index) ?: archivedFiles.firstOrNull())

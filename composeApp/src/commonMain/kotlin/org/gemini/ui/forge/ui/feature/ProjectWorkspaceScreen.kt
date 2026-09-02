@@ -31,9 +31,11 @@ import org.gemini.ui.forge.state.app.AppState
 import org.gemini.ui.forge.state.app.AppGlobalState
 import org.gemini.ui.forge.ui.component.HierarchySidebar
 import org.gemini.ui.forge.ui.component.ToastType
-import org.gemini.ui.forge.ui.dialog.AppConfirmDialog
 import org.gemini.ui.forge.ui.component.VerticalSplitter
-import org.gemini.ui.forge.ui.dialog.*
+import org.gemini.ui.forge.ui.dialog.system.*
+import org.gemini.ui.forge.ui.dialog.asset.*
+import org.gemini.ui.forge.ui.dialog.ai.*
+import org.gemini.ui.forge.ui.dialog.layer.*
 import org.gemini.ui.forge.ui.feature.workspace.UnifiedPropertyPanel
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.Toast
@@ -76,6 +78,9 @@ fun ProjectWorkspaceScreen(
     var isCtrlPressed by remember { mutableStateOf(false) }
 
     // 生命周期与全局事件监听
+    LaunchedEffect(appState.project, appState.projectName) {
+        viewModel.reload(appState.project)
+    }
     LaunchedEffect(appViewModel.saveEvent) {
         appViewModel.saveEvent.collect {
             appViewModel.saveProject(appState.projectName, state.project)
@@ -222,8 +227,20 @@ fun ProjectWorkspaceScreen(
         }
         BatchAssetGenDialog(
             blocks = findAllMissing(state.currentPage?.blocks ?: emptyList()),
+            imageUri = state.referenceImageUri,
+            pageWidth = state.currentPage?.width ?: 1080f,
+            pageHeight = state.currentPage?.height ?: 1920f,
             onCancel = { viewModel.updateState { it.copy(showBatchGenDialog = false) } },
-            onStartGen = { viewModel.assetGen.startBatchGeneration(globalState.effectiveApiKey, it) }
+            onStartGen = { viewModel.assetGen.startBatchGeneration(globalState.effectiveApiKey, it) },
+            onUpdateBlock = { updated ->
+                viewModel.updateBlockBounds(
+                    updated.id,
+                    updated.bounds.left,
+                    updated.bounds.top,
+                    updated.bounds.right,
+                    updated.bounds.bottom
+                )
+            }
         )
     }
 

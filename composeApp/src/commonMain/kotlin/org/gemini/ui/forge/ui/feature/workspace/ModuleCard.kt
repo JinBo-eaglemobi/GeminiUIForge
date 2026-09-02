@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.feature.workspace
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -8,6 +9,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -17,20 +20,20 @@ import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.FolderOpen
 import org.gemini.ui.forge.formatTimestamp
 import org.gemini.ui.forge.model.app.UIModule
-import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.getPlatform
+import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
  * 首页展示的模块卡片组件。
- * 展示项目封面、名称、创建时间，并提供进入工作区和删除项目的入口。
+ * 展示项目封面、名称、创建时间，点击卡片直接进入工作区，右下角提供打开目录与删除入口。
  *
- * @param module 模块元数据。
- * @param onOpenWorkspace 点击“打开工作区”的回调。
- * @param onDelete 点击删除图标的回调。
+ * @param module 模块元数据
+ * @param onOpenWorkspace 点击打开工作区的回调
+ * @param onOpenFileDir 点击打开本地目录的回调
+ * @param onDelete 点击删除图标的回调
  */
 @Composable
 fun ModuleCard(
@@ -39,12 +42,18 @@ fun ModuleCard(
     onOpenFileDir: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val spacing = LocalAppSpacing.current
+
     Card(
-        modifier = Modifier.size(280.dp, 400.dp),
+        modifier = Modifier
+            .size(280.dp, 400.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .clickable { onOpenWorkspace() }
+            .pointerHoverIcon(PointerIcon.Hand),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(spacing.medium),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             val title = if (module.nameRes != null) stringResource(module.nameRes) else module.nameStr ?: "Unknown"
@@ -74,7 +83,8 @@ fun ModuleCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(spacing.small))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -106,7 +116,9 @@ fun ModuleCard(
                 Row {
                     IconButton(
                         onClick = onOpenFileDir,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier
+                            .size(36.dp)
+                            .tip("打开项目目录")
                     ) {
                         Icon(
                             imageVector = Icons.Default.FolderOpen,
@@ -116,7 +128,9 @@ fun ModuleCard(
                     }
                     IconButton(
                         onClick = onDelete,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier
+                            .size(36.dp)
+                            .tip("删除项目")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
@@ -125,18 +139,6 @@ fun ModuleCard(
                         )
                     }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = onOpenWorkspace,
-                modifier = Modifier.fillMaxWidth(),
-                shape = AppShapes.medium
-            ) {
-                Icon(Icons.Default.AutoAwesome, null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(Res.string.action_open_workspace), style = MaterialTheme.typography.labelLarge)
             }
         }
     }

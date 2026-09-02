@@ -31,7 +31,11 @@ import org.gemini.ui.forge.model.app.UpdateStatus
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.CompilerService
 import org.gemini.ui.forge.ui.component.*
-import org.gemini.ui.forge.ui.dialog.*
+import org.gemini.ui.forge.ui.dialog.system.*
+import org.gemini.ui.forge.ui.dialog.system.settings.*
+import org.gemini.ui.forge.ui.dialog.asset.*
+import org.gemini.ui.forge.ui.dialog.ai.*
+import org.gemini.ui.forge.ui.dialog.layer.*
 import org.gemini.ui.forge.ui.feature.HomeScreen
 import org.gemini.ui.forge.ui.feature.ProjectWorkspaceScreen
 import org.gemini.ui.forge.ui.feature.TemplateGeneratorScreen
@@ -250,6 +254,8 @@ fun App(typography: Typography? = null) {
                     if (showExitConfirmDialog) {
                         AlertDialog(
                             onDismissRequest = { showExitConfirmDialog = false },
+                            // 引入标准弹窗黄金宽度 Design Token（480.dp），横向托平，杜绝硬编码数值
+                            modifier = Modifier.width(LocalAppSpacing.current.dialogConfigWidth),
                             title = { Text("提醒") },
                             text = { Text("项目有未保存的修改，是否保存后退出？") },
                             confirmButton = {

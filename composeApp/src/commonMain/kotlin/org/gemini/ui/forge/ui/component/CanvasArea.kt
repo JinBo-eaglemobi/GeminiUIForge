@@ -18,11 +18,15 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -68,7 +72,13 @@ fun CanvasArea(
 
     var zoom by remember { mutableStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
+    var isSpacePressed by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
     val density = LocalDensity.current
+
+    LaunchedEffect(Unit) {
+        runCatching { focusRequester.requestFocus() }
+    }
 
     val stageColor = remember(stageBackgroundColor) {
         try {
@@ -104,7 +114,30 @@ fun CanvasArea(
     val refBitmap = refBitmapState.value
     var splitWeight by remember { mutableStateOf(0.5f) }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onKeyEvent { keyEvent ->
+                if (keyEvent.key == Key.Spacebar) {
+                    when (keyEvent.type) {
+                        KeyEventType.KeyDown -> {
+                            isSpacePressed = true
+                            true
+                        }
+                        KeyEventType.KeyUp -> {
+                            isSpacePressed = false
+                            true
+                        }
+                        else -> false
+                    }
+                } else {
+                    false
+                }
+            }
+    ) {
         val totalHeightPx = with(density) { maxHeight.toPx() }
         val containerWidthPx = with(density) { maxWidth.toPx() }
         val containerHeightPx = with(density) { maxHeight.toPx() }
@@ -208,6 +241,7 @@ fun CanvasArea(
 
                         Box(
                             modifier = Modifier.fillMaxSize()
+                                .pointerHoverIcon(if (isSpacePressed) PointerIcon.Hand else PointerIcon.Default)
                                 .pointerInput(Unit) {
                                     awaitPointerEventScope {
                                         while (true) {
@@ -218,9 +252,10 @@ fun CanvasArea(
                                         }
                                     }
                                 }
-                                .pointerInput(blocks, editingGroupId, offsetX, offsetY, baseScale) {
+                                .pointerInput(blocks, editingGroupId, offsetX, offsetY, baseScale, isSpacePressed) {
                                     detectTapGestures(
                                         onDoubleTap = { offset ->
+                                            if (isSpacePressed) return@detectTapGestures
                                             val lx = (offset.x / density.density - offsetX) / baseScale
                                             val ly = (offset.y / density.density - offsetY) / baseScale
                                             val hitBlock =
@@ -231,6 +266,7 @@ fun CanvasArea(
                                             )
                                         },
                                         onTap = { offset ->
+                                            if (isSpacePressed) return@detectTapGestures
                                             val lx = (offset.x / density.density - offsetX) / baseScale
                                             val ly = (offset.y / density.density - offsetY) / baseScale
                                             val hitBlock =
@@ -239,29 +275,36 @@ fun CanvasArea(
                                         }
                                     )
                                 }
-                                .pointerInput(blocks, editingGroupId, offsetX, offsetY, baseScale, isReadOnly) {
+                                .pointerInput(blocks, editingGroupId, offsetX, offsetY, baseScale, isReadOnly, isSpacePressed) {
                                     if (isReadOnly) return@pointerInput
                                     var dragTargetId: String? = null
                                     var isPanningStage = false
                                     detectDragGestures(
                                         onDragStart = { offset ->
-                                            val lx = (offset.x / density.density - offsetX) / baseScale
-                                            val ly = (offset.y / density.density - offsetY) / baseScale
-                                            val hitBlock =
-                                                blocks.findHitBlock(lx, ly, 0f, 0f, editingGroupId)
-                                            if (hitBlock != null) {
-                                                dragTargetId = hitBlock.id
-                                                isPanningStage = false
-                                                isInteractingWithBlock = true
-                                                viewModel.historyManager.saveSnapshot("拖动模块位置")
+                                            if (isSpacePressed) {
+                                                dragTargetId = null
+                                                isPanningStage = true
+                                                isInteractingWithBlock = false
                                             } else {
-                                                dragTargetId = null; isPanningStage = true; isInteractingWithBlock =
-                                                    false
+                                                val lx = (offset.x / density.density - offsetX) / baseScale
+                                                val ly = (offset.y / density.density - offsetY) / baseScale
+                                                val hitBlock =
+                                                    blocks.findHitBlock(lx, ly, 0f, 0f, editingGroupId)
+                                                if (hitBlock != null) {
+                                                    dragTargetId = hitBlock.id
+                                                    isPanningStage = false
+                                                    isInteractingWithBlock = true
+                                                    viewModel.historyManager.saveSnapshot("拖动模块位置")
+                                                } else {
+                                                    dragTargetId = null
+                                                    isPanningStage = true
+                                                    isInteractingWithBlock = false
+                                                }
                                             }
                                         },
                                         onDrag = { change, dragAmount ->
                                             change.consume()
-                                            if (isPanningStage) pan += dragAmount else if (dragTargetId != null) {
+                                            if (isPanningStage || isSpacePressed) pan += dragAmount else if (dragTargetId != null) {
                                                 val logicalDx = dragAmount.x / density.density / baseScale
                                                 val logicalDy = dragAmount.y / density.density / baseScale
                                                 if (state.selectedBlockIds.contains(dragTargetId)) {
@@ -283,11 +326,16 @@ fun CanvasArea(
                             blocks.forEach { block ->
                                 RenderBlock(
                                     block = block,
-                                    parentX = offsetX,
-                                    parentY = offsetY,
+                                    parentRenderX = offsetX,
+                                    parentRenderY = offsetY,
+                                    parentLogicX = 0f,
+                                    parentLogicY = 0f,
                                     baseScale = baseScale,
                                     zoom = zoom,
-                                    state = state
+                                    state = state,
+                                    refBitmap = refBitmap,
+                                    pageWidth = pageWidth,
+                                    pageHeight = pageHeight
                                 )
                             }
                         }

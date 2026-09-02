@@ -26,6 +26,7 @@ import org.gemini.ui.forge.viewmodel.AppViewModel
 import org.gemini.ui.forge.viewmodel.GameProjectViewModel
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.state.ui.ProjectState
+import org.gemini.ui.forge.getPlatform
 
 /**
  * 应用主界面（首页）。
@@ -94,6 +95,7 @@ fun HomeScreen(
                                 gameProjectViewModel.openProject(info)
                                 appViewModel.navigateTo(AppScreen.GAME_PROJECT_WORKSPACE)
                             },
+                            onOpenFileDir = { getPlatform().openInFileExplorer(info.localPath) },
                             onDelete = { projectToDelete = info }
                         )
                     }

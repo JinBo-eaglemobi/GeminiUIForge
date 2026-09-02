@@ -1,0 +1,86 @@
+package org.gemini.ui.forge.ui.dialog.system.settings
+
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import geminiuiforge.composeapp.generated.resources.*
+import org.gemini.ui.forge.model.app.ShortcutAction
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
+import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.jetbrains.compose.resources.stringResource
+
+
+/**
+ * 快捷键配置设置区块
+ *
+ * 允许用户查看并修改应用内各种操作（如撤销、重做、保存等）绑定的快捷键。
+ *
+ * @param globalState 全局状态管理对象，包含各项底层设置的当前状态
+ * @param appViewModel 全局 App 视图模型，负责全局操作快捷键绑定状态的维护
+ * @param settingsViewModel 设置相关的业务逻辑视图模型，控制快捷键绑定方案的持久化配置保存
+ */
+@Composable
+fun ShortcutSettings(
+    globalState: org.gemini.ui.forge.state.app.AppGlobalState,
+    appViewModel: org.gemini.ui.forge.viewmodel.AppViewModel,
+    settingsViewModel: org.gemini.ui.forge.viewmodel.AppSettingsViewModel
+) {
+    SettingSectionTitle(stringResource(Res.string.settings_shortcuts_title))
+
+    globalState.shortcuts.filterKeys { action ->
+        action in listOf(
+            ShortcutAction.UNDO, ShortcutAction.REDO, ShortcutAction.SAVE,
+            ShortcutAction.RENAME, ShortcutAction.DELETE, ShortcutAction.COPY,
+            ShortcutAction.PASTE, ShortcutAction.CUT
+        )
+    }.forEach { (action, currentKey) ->
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).padding(vertical = LocalAppSpacing.current.extraSmall),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            val labelStr = when (action) {
+                ShortcutAction.UNDO -> stringResource(Res.string.shortcut_undo)
+                ShortcutAction.REDO -> stringResource(Res.string.shortcut_redo)
+                ShortcutAction.SAVE -> stringResource(Res.string.shortcut_save)
+                ShortcutAction.RENAME -> stringResource(Res.string.shortcut_rename)
+                ShortcutAction.DELETE -> stringResource(Res.string.shortcut_delete)
+                ShortcutAction.COPY -> stringResource(Res.string.shortcut_copy)
+                ShortcutAction.PASTE -> stringResource(Res.string.shortcut_paste)
+                ShortcutAction.CUT -> stringResource(Res.string.shortcut_cut)
+                else -> ""
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(labelStr, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    action.name,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+
+            var editingKey by remember(currentKey) { mutableStateOf(currentKey) }
+
+            SelectAllOutlinedTextField(
+                value = editingKey,
+                onValueChange = {
+                    editingKey = it
+                    settingsViewModel.saveShortcut(action, it)
+                    appViewModel.updateShortcutState(action, it)
+                },
+                modifier = Modifier.width(160.dp),
+                textStyle = MaterialTheme.typography.bodyMedium,
+                singleLine = true,
+                shape = AppShapes.medium
+            )
+        }
+    }
+}

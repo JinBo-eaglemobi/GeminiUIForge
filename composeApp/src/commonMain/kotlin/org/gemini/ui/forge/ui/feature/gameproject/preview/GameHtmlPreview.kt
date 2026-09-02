@@ -21,6 +21,7 @@ expect fun GameHtmlPreview(
     inspectTarget: String? = null,
     onDebugMessage: (String) -> Unit = {},
     reloadTrigger: Int = 0,
+    devToolsTrigger: Int = 0,
     isDemoSelected: Boolean = true,
     isDebugSelected: Boolean = true,
     selectedGame: String = "",

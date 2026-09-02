@@ -33,8 +33,8 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.utils.findBlockById
-import org.gemini.ui.forge.ui.dialog.AddLayerDialog
-import org.gemini.ui.forge.ui.dialog.RenameLayerDialog
+import org.gemini.ui.forge.ui.dialog.layer.AddLayerDialog
+import org.gemini.ui.forge.ui.dialog.layer.RenameLayerDialog
 import kotlin.time.Duration.Companion.milliseconds
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
