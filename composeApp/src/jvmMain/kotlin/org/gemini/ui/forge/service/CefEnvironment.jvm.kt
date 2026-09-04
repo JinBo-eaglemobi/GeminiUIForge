@@ -54,7 +54,7 @@ object CefEnvironment {
      * 供下载进度面板展示"已下载 / 总大小"统计；网络异常时返回 -1（视为未知）。
      */
     fun probeNativesSize(): Long = try {
-        val conn = URL(NATIVES_URL_WINDOWS).openConnection() as HttpURLConnection
+        val conn = java.net.URI.create(NATIVES_URL_WINDOWS).toURL().openConnection() as HttpURLConnection
         conn.requestMethod = "HEAD"
         conn.connectTimeout = 8000
         conn.readTimeout = 8000

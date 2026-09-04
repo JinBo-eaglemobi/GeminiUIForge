@@ -174,7 +174,8 @@ fun App(typography: Typography? = null) {
 
             AppTheme(
                 themeMode = globalState.themeMode,
-                layoutMode = globalState.layoutMode
+                layoutMode = globalState.layoutMode,
+                customTypography = typography
             ) {
                 val coroutineScope = rememberCoroutineScope()
                 val toastData by Toast.toastData.collectAsState()
@@ -336,6 +337,7 @@ fun App(typography: Typography? = null) {
                                 },
                                 onCloudAssetManagerClicked = { showCloudAssetDialog = true },
                                 onCompileClicked = { showCompileDialog = true },
+                                onGlobalStyleClicked = { appViewModel.dispatchGlobalStyleEvent() },
                                 onSettingsClicked = {
                                     settingsInitialCategory = SettingCategory.GENERAL
                                     showSettingsDialog = true

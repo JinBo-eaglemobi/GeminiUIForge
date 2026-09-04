@@ -23,6 +23,8 @@ import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.app.ShortcutAction
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.utils.findBlockById
+import androidx.compose.ui.geometry.Offset
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.CanvasArea
@@ -71,6 +73,7 @@ fun ProjectWorkspaceScreen(
     // 交互辅助状态
     var showImageEditorForBlock by remember { mutableStateOf<Pair<UIBlock, TemplateFile>?>(null) }
     var showProjectSettingsDialog by remember { mutableStateOf(false) }
+    var showGlobalStyleDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     // 键盘修饰键状态（多选判定）
@@ -80,6 +83,11 @@ fun ProjectWorkspaceScreen(
     // 生命周期与全局事件监听
     LaunchedEffect(appState.project, appState.projectName) {
         viewModel.reload(appState.project)
+    }
+    LaunchedEffect(appViewModel.globalStyleEvent) {
+        appViewModel.globalStyleEvent.collect {
+            showGlobalStyleDialog = true
+        }
     }
     LaunchedEffect(appViewModel.saveEvent) {
         appViewModel.saveEvent.collect {
@@ -141,6 +149,15 @@ fun ProjectWorkspaceScreen(
         )
     }
 
+    // 全局风格与参数弹窗
+    if (showGlobalStyleDialog) {
+        org.gemini.ui.forge.ui.dialog.system.AdvancedSettingsDialog(
+            state = state,
+            viewModel = viewModel,
+            onDismiss = { showGlobalStyleDialog = false }
+        )
+    }
+
     // AI 任务执行进度与日志弹窗
     if (state.showAITaskDialog) {
         AITaskProgressDialog(
@@ -188,6 +205,7 @@ fun ProjectWorkspaceScreen(
             candidates = state.historicalImages,
             targetWidth = targetBlock?.bounds?.width ?: 0f,
             targetHeight = targetBlock?.bounds?.height ?: 0f,
+            isProcessing = state.isProcessingHistoricalBg,
             onDismiss = { viewModel.hideHistoricalDialog() },
             onImageSelected = { selectedFile -> 
                 val targetId = state.historicalTargetBlockId ?: targetBlock?.id
@@ -208,6 +226,14 @@ fun ProjectWorkspaceScreen(
             onDeleteImages = { uris -> 
                 viewModel.assetManager.deleteHistoricalImages(uris)
                 viewModel.updateState { it.copy(historicalImages = it.historicalImages.filterNot { img -> img in uris }) }
+            },
+            onBatchRemoveBg = { uris ->
+                val targetId = state.historicalTargetBlockId ?: targetBlock?.id
+                if (targetId != null) {
+                    uris.firstOrNull()?.let { file ->
+                        viewModel.removeBackgroundForHistoricalImage(targetId, file)
+                    }
+                }
             },
             onClearAll = { 
                 targetBlock?.id?.let { id ->
@@ -342,19 +368,22 @@ fun ProjectWorkspaceScreen(
             )
         }
         
-        // 参考区域截图对话框
-        if (state.showReferenceArea && state.currentPage?.sourceImageUri != null) {
-            ReferenceAreaCropDialog(
-                blockId = state.referenceAreaTargetId ?: "",
+        // 统一参考区域设置对话框（复用 BlockRefinementDialog 纯净参考区域模式）
+        val refTargetBlock = state.currentPage?.blocks?.findBlockById(state.referenceAreaTargetId ?: "")
+        if (state.showReferenceArea && state.currentPage?.sourceImageUri != null && refTargetBlock != null) {
+            BlockRefinementDialog(
+                block = refTargetBlock,
+                isReferenceAreaOnly = true,
+                parentOffset = Offset.Zero,
                 imageUri = state.currentPage!!.sourceImageUri!!,
                 pageWidth = state.currentPage!!.width,
                 pageHeight = state.currentPage!!.height,
                 onDismiss = { viewModel.hideReferenceArea() },
-                onConfirm = { rect ->
+                onConfirm = { updatedBlock ->
                     val blockId = state.referenceAreaTargetId
                     viewModel.hideReferenceArea()
-                    blockId?.let { id ->
-                        viewModel.layoutEditor.onSetReferenceArea(id, rect)
+                    if (blockId != null) {
+                        viewModel.layoutEditor.onSetReferenceArea(blockId, updatedBlock.bounds)
                     }
                 }
             )

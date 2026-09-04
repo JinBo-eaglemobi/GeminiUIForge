@@ -422,8 +422,8 @@ class LayoutEditorDelegate(
                     isPng = false
                 )
 
-                updateState { state ->
-                    val updatedPages = state.project.pages.map { page ->
+                val updatedProject = currentState.project.copy(
+                    pages = currentState.project.pages.map { page ->
                         if (page.id == currentPage.id) {
                             page.copy(
                                 blocks = page.blocks.updateBlockInList(blockId) { block ->
@@ -432,10 +432,21 @@ class LayoutEditorDelegate(
                             )
                         } else page
                     }
-                    state.copy(project = state.project.copy(pages = updatedPages))
+                )
+
+                updateState { state ->
+                    state.copy(project = updatedProject)
                 }
                 markDirty()
-                AppLogger.d("LayoutEditor", "✅ 局部参考图保存成功: ${savedFile.relativePath}")
+
+                // ★ 关键修复：设置参考图成功后立即自动异步持久化落盘到 template.json，重启软件永远不丢
+                try {
+                    templateRepo.saveTemplate(currentState.projectName, updatedProject)
+                    AppLogger.d("LayoutEditor", "💾 模块 $blockId 局部参考图已自动持久化落盘: ${savedFile.relativePath}")
+                } catch (e: Exception) {
+                    AppLogger.w("LayoutEditor", "自动保存 template.json 警告", e)
+                }
+
                 Toast.show("局部参考图设置成功", ToastType.SUCCESS)
             } catch (e: Exception) {
                 AppLogger.e("LayoutEditor", "❌ 设置局部参考图失败", e)

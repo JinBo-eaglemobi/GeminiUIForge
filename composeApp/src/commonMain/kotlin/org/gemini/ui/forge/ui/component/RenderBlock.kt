@@ -170,9 +170,13 @@ fun RenderBlock(
     val isSelected = block.id == selectedBlockId || selectedBlockIds.contains(block.id)
     val isDimmed = block.shouldDim(editingGroupId)
 
-    // 1. 异步加载已生成的专属 AI 图像成品
+    // 1. 异步加载已生成的专属 AI 图像成品（精准追踪 relativePath 变动）
+    val currentUri = block.currentImageUri
+    val hasBoundAsset = currentUri != null
     val imageBitmapState =
-        produceState<ImageBitmap?>(null, block.currentImageUri) { value = block.currentImageUri?.decodeToBitmap() }
+        produceState<ImageBitmap?>(null, currentUri, currentUri?.relativePath) { 
+            value = currentUri?.decodeToBitmap() 
+        }
     val imageBitmap = imageBitmapState.value
 
     // 2. 屏幕物理渲染坐标（供 Modifier.offset 使用）
@@ -185,12 +189,12 @@ fun RenderBlock(
     val absWidth = block.bounds.width
     val absHeight = block.bounds.height
 
-    // 4. 是否有可用参考图切片
-    val hasRefSlice = imageBitmap == null && block.currentImageUri == null && refBitmap != null && block.type != UIBlockType.TEXT
+    // 4. 是否有可用参考图切片（★ 强互斥：一旦绑定了资源图片，绝对禁止判定为 hasRefSlice，杜绝底层残留）
+    val hasRefSlice = !hasBoundAsset && imageBitmap == null && refBitmap != null && block.type != UIBlockType.TEXT
 
     // 5. 视觉状态判断
     val hidePlaceholder = isVisualMode && (imageBitmap != null || hasRefSlice)
-    val selectionColor = Color(0xFF18A0FB)
+    val selectionColor = Color(0xFF00E5FF) // 高亮鲜明电光蓝，深浅背景均 100% 夺目
 
     // 解析 VIEW 类型的自定义背景色
     val viewBgColor = if (block.type == UIBlockType.VIEW) {
@@ -203,12 +207,13 @@ fun RenderBlock(
         viewBgColor != null -> viewBgColor
         hidePlaceholder -> Color.Transparent
         hasRefSlice -> Color.Transparent // 切片存在时透明背景，满格渲染
-        isSelected -> selectionColor.copy(alpha = 0.15f)
+        isSelected -> selectionColor.copy(alpha = 0.22f)
         isDimmed -> Color.Black.copy(alpha = 0.4f)
         else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
     }
 
     // 6. 渲染模块容器：处理位移、大小、背景和边框
+    val strokeWidth = if (isSelected) (2.5.dp / zoom).coerceIn(2.dp, 4.dp) else (1.dp / zoom)
     Box(
         modifier = Modifier
             .offset(x = currentRenderX.dp, y = currentRenderY.dp)
@@ -218,7 +223,7 @@ fun RenderBlock(
             .then(
                 if ((isHideOutlines || hidePlaceholder || viewBgColor != null) && !isSelected) Modifier
                 else Modifier.border(
-                    width = (1.dp / zoom),
+                    width = strokeWidth,
                     color = if (isSelected) selectionColor
                     else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                 )
@@ -236,7 +241,7 @@ fun RenderBlock(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.FillBounds
             )
-        } else if (hasRefSlice && showReelBg && refBitmap != null) {
+        } else if (hasRefSlice && showReelBg) {
             // 未生图时：依据绝对逻辑坐标从参考底图中精准裁剪并满格无缝贴合模块
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val imgW = refBitmap.width.toFloat()

@@ -25,12 +25,10 @@ class GeminiModelsGeneratorTest {
         val client = HttpClient()
         val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$testApiKey"
 
-        println("=== 正在请求 Gemini 可用模型列表 ===")
-        
         val response = client.get(url)
         val body = response.bodyAsText()
 
-        assertEquals(response.status.value, 200, "API 请求失败: $body")
+        assertEquals(200, response.status.value, "API 请求失败: $body")
 
         val json = Json { ignoreUnknownKeys = true }
         val element = json.parseToJsonElement(body)
@@ -40,7 +38,7 @@ class GeminiModelsGeneratorTest {
 
         // 构建新的 GeminiModel.kt 文件内容
         val sb = StringBuilder()
-        sb.appendLine("package org.gemini.ui.forge")
+        sb.appendLine("package org.gemini.ui.forge.model")
         sb.appendLine()
         sb.appendLine("/**")
         sb.appendLine(" * 自动生成的 Gemini 模型枚举类")
@@ -58,24 +56,25 @@ class GeminiModelsGeneratorTest {
             val rawName = m["name"]?.jsonPrimitive?.content ?: ""
             // 去除 "models/" 前缀
             val modelName = rawName.removePrefix("models/")
-            
+
             // 将类似 gemini-1.5-flash 转为 GEMINI_1_5_FLASH
             val enumName = modelName.replace("-", "_").replace(".", "_").uppercase()
-            
+
             val displayName = m["displayName"]?.jsonPrimitive?.content ?: ""
             // 将描述中的换行符去掉，防止破坏代码结构，并将双引号转义
             val description = m["description"]?.jsonPrimitive?.content?.replace("\n", " ")?.replace("\"", "\\\"") ?: ""
-            val methods = m["supportedGenerationMethods"]?.jsonArray?.joinToString(", ") { it.jsonPrimitive.content } ?: ""
+            val methods =
+                m["supportedGenerationMethods"]?.jsonArray?.joinToString(", ") { it.jsonPrimitive.content } ?: ""
 
             sb.appendLine("    /**")
             sb.appendLine("     * 显示名称: $displayName")
             sb.appendLine("     * 功能描述: $description")
             sb.appendLine("     * 支持的方法: $methods")
             sb.appendLine("     */")
-            
+
             val isLast = index == models.size - 1
             val terminator = if (isLast) ";" else ","
-            
+
             sb.appendLine("    $enumName(\"$modelName\", \"$displayName\", \"$description\", \"$methods\")$terminator")
             if (!isLast) sb.appendLine()
         }
@@ -83,20 +82,20 @@ class GeminiModelsGeneratorTest {
         sb.appendLine("}")
 
         println(sb)
-        return@runBlocking
+//        return@runBlocking
 
         // 定位到公共源码目录下的 GeminiModel.kt 文件
         // Gradle 测试运行时的 user.dir 通常是子项目目录 (composeApp)
-        val targetFile = File("src/commonMain/kotlin/org/gemini/ui/forge/GeminiModel.kt")
-        
+        val targetFile = File("src/commonMain/kotlin/org/gemini/ui/forge/model/GeminiModel.kt")
+
         // 写入文件
         targetFile.writeText(sb.toString())
-        
+
         println("==================================================")
         println("成功生成并覆盖写入 ${models.size} 个模型到源文件:")
         println(targetFile.absolutePath)
         println("==================================================")
-        
+
         client.close()
     }
 }

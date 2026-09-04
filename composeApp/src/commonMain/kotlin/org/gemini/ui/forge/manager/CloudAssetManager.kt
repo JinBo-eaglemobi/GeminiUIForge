@@ -244,29 +244,4 @@ class CloudAssetManager(private val configManager: ConfigManager) {
             }
         }
     }
-
-    /**
-     * [通用组件] 将图片字节数组包装为适用于 Imagen API 的 JSON 对象。
-     * 自动尝试上传云端，如果成功则返回 `gcsUri` 格式；失败或降级则返回 `bytesBase64Encoded` 格式。
-     */
-    suspend fun buildImagenImagePart(
-        displayName: String,
-        bytes: ByteArray,
-        mimeType: String,
-        onLog: (String) -> Unit = {}
-    ): JsonObject {
-        val fileUri = getOrUploadFile(displayName, bytes, mimeType) { _, status -> onLog("CloudAsset: $status") }
-        return if (fileUri != null) {
-            onLog("✅ 云端同步成功 (GCS)")
-            buildJsonObject {
-                put("gcsUri", fileUri)
-            }
-        } else {
-            onLog("⚠️ 触发 Base64 降级补偿")
-            buildJsonObject {
-                @OptIn(ExperimentalEncodingApi::class)
-                put("bytesBase64Encoded", Base64.encode(bytes))
-            }
-        }
-    }
 }

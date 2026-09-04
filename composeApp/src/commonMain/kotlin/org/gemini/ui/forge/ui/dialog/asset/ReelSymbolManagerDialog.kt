@@ -305,7 +305,7 @@ fun ReelSymbolManagerDialog(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    TabRow(selectedTabIndex = promptTab, containerColor = Color.Transparent) {
+                    PrimaryTabRow(selectedTabIndex = promptTab, containerColor = Color.Transparent) {
                         Tab(selected = promptTab == 0, onClick = { promptTab = 0 }) {
                             Text("中文描述 (Chinese)", modifier = Modifier.padding(12.dp))
                         }

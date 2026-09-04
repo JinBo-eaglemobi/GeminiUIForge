@@ -13,12 +13,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -126,7 +126,7 @@ private fun TreeRow(
         // 展开/收起指示器：仅目录项显示箭头，文件项以 Spacer 占位保持物理对齐（坚决不硬编码字符）
         if (node.isDirectory) {
             Icon(
-                imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
+                imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
@@ -139,7 +139,7 @@ private fun TreeRow(
             imageVector = if (node.isDirectory) {
                 if (expanded) Icons.Default.FolderOpen else Icons.Default.Folder
             } else {
-                Icons.Default.InsertDriveFile
+                Icons.AutoMirrored.Filled.InsertDriveFile
             },
             contentDescription = null,
             modifier = Modifier.size(15.dp),

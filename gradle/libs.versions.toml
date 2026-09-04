@@ -16,10 +16,12 @@ kotlin = "2.3.0"
 kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.9.0"
 kotlinxDatetime = "0.7.1"
+kotlinxIoCore = "0.8.2"
 material3 = "1.10.0-alpha05"
 ktor = "3.4.1"
 materialIconsExtended = "1.7.3"
 coil3 = "3.1.0"
+skiko = "0.9.37.3"
 slf4jSimple = "2.0.17"
 jcefmaven = "146.0.10"
 
@@ -47,6 +49,7 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutinesSwing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
+kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinxIoCore" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinx-serialization" }
 
@@ -68,6 +71,8 @@ ktor-utils = { module = "io.ktor:ktor-utils", version.ref = "ktor" }
 material-icons-extended = { module = "org.jetbrains.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3" }
 coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil3" }
+skiko = { module = "org.jetbrains.skiko:skiko", version.ref = "skiko" }
+skiko-android = { module = "org.jetbrains.skiko:skiko-android", version.ref = "skiko" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4jSimple" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4jSimple" }
 jcefmaven = { module = "me.friwi:jcefmaven", version.ref = "jcefmaven" }

@@ -20,21 +20,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.state.ProjectWorkspaceState
-import org.gemini.ui.forge.ui.feature.workspace.property.AssetGenPropertyContent
 import org.gemini.ui.forge.ui.feature.workspace.property.LayoutPropertyContent
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * 统一属性面板：集成布局编辑、物理参数、AI 生成配置及组件特有属性。
- * 采用选项卡（Tabs）结构，支持在不同职责间无缝切换。
+ * 统一属性面板：集成布局坐标、绑定资产管理、物理加工及 AI 视觉工作室主入口。
+ *
+ * 架构精简：彻底移除双 Tab 切换，单一纯粹高效呈现属性与生图能力。
  *
  * @param state 当前工作区状态快照。
  * @param viewModel 统一工作区 ViewModel。
  * @param apiKey AI 服务密钥。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UnifiedPropertyPanel(
     state: ProjectWorkspaceState,
@@ -126,45 +125,18 @@ fun UnifiedPropertyPanel(
             }
         }
     } else {
-        val selectedTab = state.activePropertyTab
-
-        Column(modifier = modifier.fillMaxSize()) {
-            // 顶部导航选项卡
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = Color.Transparent,
-                divider = {}
-            ) {
-                Tab(selected = selectedTab == 0, onClick = { viewModel.updateState { it.copy(activePropertyTab = 0) } }) {
-                    Box(Modifier.padding(vertical = 12.dp)) {
-                        Text(stringResource(Res.string.editor_properties), style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-                Tab(selected = selectedTab == 1, onClick = { viewModel.updateState { it.copy(activePropertyTab = 1) } }) {
-                    Box(Modifier.padding(vertical = 12.dp)) {
-                        Text(stringResource(Res.string.editor_gen_settings), style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-            }
-
-            // 内容滚动区
-            Box(
-                modifier = Modifier.weight(1f).padding(LocalAppSpacing.current.medium).verticalScroll(rememberScrollState())
-            ) {
-                if (selectedTab == 0) {
-                    LayoutPropertyContent(
-                        state = state,
-                        viewModel = viewModel,
-                        apiKey = apiKey
-                    )
-                } else {
-                    AssetGenPropertyContent(
-                        state = state,
-                        viewModel = viewModel,
-                        apiKey = apiKey
-                    )
-                }
-            }
+        // 单选模块：直接铺开展现属性与 AI 视觉能力
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(LocalAppSpacing.current.medium)
+                .verticalScroll(rememberScrollState())
+        ) {
+            LayoutPropertyContent(
+                state = state,
+                viewModel = viewModel,
+                apiKey = apiKey
+            )
         }
     }
 }

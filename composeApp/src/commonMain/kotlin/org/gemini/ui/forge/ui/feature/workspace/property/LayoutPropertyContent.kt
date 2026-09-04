@@ -1,25 +1,36 @@
 package org.gemini.ui.forge.ui.feature.workspace.property
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.*
+import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.readBytesInternal
 import org.gemini.ui.forge.model.ui.ResourceItem
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.component.*
+import coil3.compose.AsyncImage
+import org.gemini.ui.forge.ui.dialog.asset.ImageEditorDialog
 import org.gemini.ui.forge.ui.dialog.asset.ResourceBindingDialog
 import org.gemini.ui.forge.ui.dialog.ai.BlockRefinementDialog
+import org.gemini.ui.forge.ui.dialog.ai.studio.UniversalVisualChatStudioDialog
+import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.utils.calculateBlockParentOffset
 import org.gemini.ui.forge.model.app.PromptLanguage
 import androidx.compose.ui.geometry.Offset
@@ -47,6 +58,9 @@ fun LayoutPropertyContent(
     val selectedBlock = state.selectedBlock
 
     var showBindingDialog by remember { mutableStateOf(false) }
+    var showImg2ImgStudioDialog by remember { mutableStateOf(false) }
+    var showNoRefDialog by remember { mutableStateOf(false) }
+    var showImageEditor by remember { mutableStateOf(false) }
     var configData by remember { mutableStateOf<List<ResourceItem>?>(null) }
     var configError by remember { mutableStateOf<String?>(null) }
 
@@ -317,7 +331,7 @@ fun LayoutPropertyContent(
                                 )
                             }
 
-                            if (isBindingInvalid && firstInvalidInfo != null) {
+                            if (isBindingInvalid) {
                                 Text(
                                     text = "⚠️ 绑定资源失效 (找不到: \"${firstInvalidInfo.second}\")",
                                     color = MaterialTheme.colorScheme.error,
@@ -482,6 +496,126 @@ fun LayoutPropertyContent(
                 }
             }
 
+            // 独立图片资产展示与操作板块
+            val currentBoundFile = selectedBlock.currentImageUri
+            CollapsibleSection(
+                title = "已绑定图片资产",
+                expanded = "已绑定图片资产" !in blockCollapsedSet,
+                onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, "已绑定图片资产", !it) }
+            ) {
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 1. 独立图片预览显示区域（点击图片本身直接进入九宫格切图与物理加工界面）
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp)
+                            .clip(AppShapes.medium)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), AppShapes.medium)
+                            .clickable(enabled = currentBoundFile != null) { showImageEditor = true }
+                            .tip(if (currentBoundFile != null) "点击进入九宫格切图与物理加工界面" else "当前未绑定图片资产"),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                        shape = AppShapes.medium
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize().padding(4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (currentBoundFile != null) {
+                                AsyncImage(
+                                    model = currentBoundFile.getAbsolutePath(),
+                                    contentDescription = "Bound Asset Preview",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                                )
+                                // 右下角精致小编辑画笔提示图标
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                                    shape = AppShapes.extraSmall,
+                                    modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(11.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(Modifier.width(2.dp))
+                                        Text(
+                                            text = "点击加工",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = "未绑定图片资产",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+
+                    // 2. 独立操作按钮行：历史/切换 与 解绑
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { viewModel.showHistoricalDialog(selectedBlock.id) },
+                            modifier = Modifier.weight(1f).height(36.dp).tip("从历史生成记录或资产库中选择图片"),
+                            shape = AppShapes.small,
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("历史/切换", style = MaterialTheme.typography.labelSmall)
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.assetManager.clearSelectedImage(selectedBlock.id) },
+                            enabled = currentBoundFile != null,
+                            modifier = Modifier.weight(1f).height(36.dp).tip("解除当前模块的图片资产绑定"),
+                            shape = AppShapes.small,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Icon(Icons.Default.LinkOff, null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("解绑", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+
+            // 烘焙与物理加工对话框
+            if (showImageEditor && currentBoundFile != null) {
+                ImageEditorDialog(
+                    block = selectedBlock,
+                    initialImageUri = currentBoundFile.getAbsolutePath(),
+                    onDismiss = { showImageEditor = false },
+                    onConfirm = { bytes, mode, config, cropBytes ->
+                        viewModel.assetManager.bakeBlockImage(
+                            selectedBlock.id,
+                            mode,
+                            config,
+                            selectedBlock.bounds.width.toInt(),
+                            selectedBlock.bounds.height.toInt(),
+                            selectedBlock.bounds.width.toInt(),
+                            selectedBlock.bounds.height.toInt(),
+                            bytes,
+                            cropBytes
+                        )
+                        showImageEditor = false
+                    }
+                )
+            }
+
             val hasSpecificProps = selectedBlock.type.hasSpecificProperties
             if (hasSpecificProps) {
                 CollapsibleSection(
@@ -502,28 +636,46 @@ fun LayoutPropertyContent(
                 expanded = "高级与破坏性操作" !in blockCollapsedSet,
                 onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, "高级与破坏性操作", !it) }
             ) {
-                // AI 结构重塑与参考区域
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { viewModel.showVisualRefine(selectedBlock.id) },
-                        modifier = Modifier.weight(1f).tip("通过 AI 自动 analysis 并重塑该模块的内部层级结构")
-                    ) {
-                        Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("区域重塑")
-                    }
+                // 1. 以图生图 / 智能多轮 AI 视觉工作室核心操作入口
+                Button(
+                    onClick = {
+                        if (selectedBlock.referenceImage != null) {
+                            showImg2ImgStudioDialog = true
+                        } else {
+                            showNoRefDialog = true
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(42.dp).tip(stringResource(Res.string.btn_img2img_tip)),
+                    shape = AppShapes.medium,
+                    enabled = !state.isGenerating
+                ) {
+                    Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(Res.string.btn_img2img_label), style = MaterialTheme.typography.labelMedium)
+                }
 
+                // 2. 参考区域与 AI 结构重塑
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = { viewModel.showReferenceArea(selectedBlock.id) },
                         modifier = Modifier.weight(1f).tip("从原图中截取局部区域作为该模块的 AI 生成参考图")
                     ) {
                         Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("参考区域")
+                        Text("设置参考区域")
+                    }
+
+                    OutlinedButton(
+                        onClick = { viewModel.showVisualRefine(selectedBlock.id) },
+                        modifier = Modifier.weight(1f).tip("通过 AI 自动分析并重塑该模块的内部层级结构")
+                    ) {
+                        Icon(Icons.Default.Tune, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("区域重塑")
                     }
                 }
 
-                // 删除模块
+                // 3. 删除模块
                 Button(
                     onClick = { viewModel.showDeleteConfirmation(selectedBlock.id) },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -535,6 +687,74 @@ fun LayoutPropertyContent(
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(Res.string.action_delete_block))
                 }
+            }
+
+            // 1. 未设置参考区域时的拦截提示对话框
+            if (showNoRefDialog) {
+                AppConfirmDialog(
+                    title = stringResource(Res.string.img2img_no_ref_title),
+                    message = stringResource(Res.string.img2img_no_ref_desc),
+                    confirmText = stringResource(Res.string.img2img_btn_set_now),
+                    onConfirm = {
+                        showNoRefDialog = false
+                        viewModel.showReferenceArea(selectedBlock.id)
+                    },
+                    onDismiss = { showNoRefDialog = false }
+                )
+            }
+
+            // 2. 已设置参考区域时的以图生图 / 智能多轮视觉交互工作室
+            if (showImg2ImgStudioDialog && selectedBlock.referenceImage != null) {
+                val coroutineScope = rememberCoroutineScope()
+                UniversalVisualChatStudioDialog(
+                    scopeId = selectedBlock.id,
+                    projectName = state.projectName,
+                    block = selectedBlock,
+                    initialReferenceImageUri = selectedBlock.referenceImage.getAbsolutePath(),
+                    currentLang = state.currentLang,
+                    apiKey = apiKey,
+                    storage = viewModel.storage,
+                    aiService = viewModel.aiService,
+                    templateRepo = viewModel.templateRepo,
+                    onApplyAsset = { imagePath ->
+                        coroutineScope.launch {
+                            try {
+                                val tFile = if (imagePath.startsWith("data:image")) {
+                                    val base64Data = if (imagePath.contains(",")) imagePath.substringAfter(",") else imagePath
+                                    val bytes = kotlin.io.encoding.Base64.decode(base64Data)
+                                    val isPng = imagePath.contains("image/png")
+                                    viewModel.templateRepo.saveBlockResource(
+                                        templateName = state.projectName,
+                                        blockId = selectedBlock.id,
+                                        fileNamePrefix = "chat_gen",
+                                        bytes = bytes,
+                                        isPng = isPng
+                                    )
+                                } else {
+                                    val fileBytes = org.gemini.ui.forge.utils.readLocalFileBytes(imagePath)
+                                    if (fileBytes != null) {
+                                        viewModel.templateRepo.saveBlockResource(
+                                            templateName = state.projectName,
+                                            blockId = selectedBlock.id,
+                                            fileNamePrefix = "chat_gen",
+                                            bytes = fileBytes,
+                                            isPng = imagePath.endsWith(".png", ignoreCase = true)
+                                        )
+                                    } else {
+                                        TemplateFile(imagePath)
+                                    }
+                                }
+                                viewModel.assetManager.onImageSelected(tFile)
+                                showImg2ImgStudioDialog = false
+                                Toast.show("已成功将生成图片应用到当前模块", ToastType.SUCCESS)
+                            } catch (e: Exception) {
+                                AppLogger.e("LayoutProperty", "应用资产失败", e)
+                                Toast.show("应用资产失败: ${e.message}", ToastType.ERROR)
+                            }
+                        }
+                    },
+                    onDismiss = { showImg2ImgStudioDialog = false }
+                )
             }
         }
     }

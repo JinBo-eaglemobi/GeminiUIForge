@@ -1,0 +1,6 @@
+Generate an image for a UI component. 
+Type: {0}. 
+{1} 
+Description: {2}. 
+Aspect ratio: {3}. 
+[MANDATORY] Respond only with the generated image.

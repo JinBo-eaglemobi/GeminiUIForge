@@ -91,7 +91,7 @@ kotlin {
 //            implementation("androidx.customview:customview:1.1.0")
 //            implementation("androidx.customview:customview-poolingcontainer:1.1.0")
             implementation(libs.ktor.client.okhttp)
-            implementation("org.jetbrains.skiko:skiko-android:0.9.37.3")
+            implementation(libs.skiko.android)
         }
 
         jsMain.dependencies {
@@ -111,19 +111,19 @@ kotlin {
             implementation(libs.kotlinx.serialization.core)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
-            implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.auth)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.client.logging)
             implementation(libs.ktor.http)
             implementation(libs.ktor.io)
             implementation(libs.ktor.utils)
-            implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.client.logging)
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor3)
-            implementation("org.jetbrains.skiko:skiko:0.9.37.3")
-            implementation("org.jetbrains.compose.ui:ui-graphics:1.10.0")
-            implementation("org.jetbrains.kotlinx:kotlinx-io-core:0.8.2")
+            implementation(libs.skiko)
+            implementation(libs.compose.ui.graphics)
+            implementation(libs.kotlinx.io.core)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

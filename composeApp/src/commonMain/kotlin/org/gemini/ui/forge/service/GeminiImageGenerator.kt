@@ -34,14 +34,12 @@ class GeminiImageGenerator(
         }
         
         val aspectRatio = calculateAspectRatio(params.targetWidth, params.targetHeight)
-        val fullPrompt = """
-            Generate an image for a UI component. 
-            Type: ${params.blockType}. 
-            $stylePart 
-            Description: ${params.userPrompt}. 
-            Aspect ratio: $aspectRatio. 
-            [MANDATORY] Respond only with the generated image.
-        """.trimIndent()
+        val template = promptManager.getPrompt("gemini_image_gen")
+        val fullPrompt = template
+            .replace("{0}", params.blockType)
+            .replace("{1}", stylePart)
+            .replace("{2}", params.userPrompt)
+            .replace("{3}", aspectRatio)
 
         val requestBody = buildJsonObject {
             put("contents", buildJsonArray {

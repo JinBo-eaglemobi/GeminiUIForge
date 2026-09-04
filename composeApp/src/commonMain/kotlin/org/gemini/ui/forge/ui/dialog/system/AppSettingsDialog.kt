@@ -189,6 +189,10 @@ fun AppSettingsDialog(
                                         settingsViewModel = settingsViewModel
                                     )
 
+                                    SettingCategory.PROMPTS -> PromptSettings(
+                                        appViewModel = appViewModel
+                                    )
+
                                     SettingCategory.ENVIRONMENT -> EnvironmentSettings(
                                         envViewModel = envViewModel
                                     )

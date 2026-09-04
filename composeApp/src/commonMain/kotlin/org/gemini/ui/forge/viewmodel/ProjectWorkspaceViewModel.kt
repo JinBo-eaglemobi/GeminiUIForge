@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.model.app.PromptLanguage
@@ -37,11 +38,13 @@ class ProjectWorkspaceViewModel(
     initialProject: ProjectState,
     initialProjectName: String,
     initialLang: PromptLanguage,
-    private val templateRepo: TemplateRepository,
+    val templateRepo: TemplateRepository,
     private val cloudAssetManager: CloudAssetManager,
-    private val aiService: AIGenerationService,
+    val aiService: AIGenerationService,
     private val onDirtyChanged: (Boolean) -> Unit = {}
 ) : ViewModel() {
+
+    val storage get() = templateRepo.fileStorage
 
     private val _state = MutableStateFlow(
         ProjectWorkspaceState(
@@ -508,5 +511,34 @@ class ProjectWorkspaceViewModel(
     /** 隐藏删除确认对话框 */
     fun hideDeleteConfirmation() {
         updateState { it.copy(showDeleteBlockConfirmation = false, pendingDeleteBlockId = null) }
+    }
+
+    /** 针对历史生成记录中的某张图片，调用本地 Python/Rembg 引擎执行去背景并生成透明 PNG */
+    fun removeBackgroundForHistoricalImage(targetBlockId: String, file: TemplateFile) {
+        viewModelScope.launch {
+            try {
+                updateState { it.copy(isProcessingHistoricalBg = true) }
+                org.gemini.ui.forge.utils.Toast.show("正在启动本地 AI 抠图引擎...", org.gemini.ui.forge.ui.component.ToastType.INFO)
+                
+                val bytes = file.readBytes() ?: throw Exception("无法读取原图数据")
+                val noBgBytes = aiService.removeBackgroundLocal(bytes) ?: throw Exception("本地抠图未返回有效图像数据")
+                
+                val savedFile = templateRepo.saveBlockResource(
+                    templateName = _state.value.projectName,
+                    blockId = targetBlockId,
+                    fileNamePrefix = "nobg",
+                    bytes = noBgBytes,
+                    isPng = true
+                )
+                
+                val refreshedImages = assetManager.loadHistoricalImages(targetBlockId)
+                updateState { it.copy(historicalImages = refreshedImages, isProcessingHistoricalBg = false) }
+                org.gemini.ui.forge.utils.Toast.show("本地去背景成功！已生成透明 PNG 资产", org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
+            } catch (e: Exception) {
+                updateState { it.copy(isProcessingHistoricalBg = false) }
+                org.gemini.ui.forge.utils.AppLogger.e("ProjectWorkspaceVM", "历史资产去背景失败", e)
+                org.gemini.ui.forge.utils.Toast.show("去背景失败: ${e.message}", org.gemini.ui.forge.ui.component.ToastType.ERROR)
+            }
+        }
     }
 }

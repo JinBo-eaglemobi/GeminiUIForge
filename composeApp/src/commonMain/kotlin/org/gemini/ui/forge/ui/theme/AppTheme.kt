@@ -8,6 +8,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,6 +53,29 @@ private val CompactTypography = Typography(
 )
 
 /**
+ * 为当前 Typography 的所有字阶统一切换指定字体家族
+ */
+fun Typography.withFontFamily(fontFamily: FontFamily): Typography {
+    return this.copy(
+        displayLarge = displayLarge.copy(fontFamily = fontFamily),
+        displayMedium = displayMedium.copy(fontFamily = fontFamily),
+        displaySmall = displaySmall.copy(fontFamily = fontFamily),
+        headlineLarge = headlineLarge.copy(fontFamily = fontFamily),
+        headlineMedium = headlineMedium.copy(fontFamily = fontFamily),
+        headlineSmall = headlineSmall.copy(fontFamily = fontFamily),
+        titleLarge = titleLarge.copy(fontFamily = fontFamily),
+        titleMedium = titleMedium.copy(fontFamily = fontFamily),
+        titleSmall = titleSmall.copy(fontFamily = fontFamily),
+        bodyLarge = bodyLarge.copy(fontFamily = fontFamily),
+        bodyMedium = bodyMedium.copy(fontFamily = fontFamily),
+        bodySmall = bodySmall.copy(fontFamily = fontFamily),
+        labelLarge = labelLarge.copy(fontFamily = fontFamily),
+        labelMedium = labelMedium.copy(fontFamily = fontFamily),
+        labelSmall = labelSmall.copy(fontFamily = fontFamily)
+    )
+}
+
+/**
  * 紧凑模式全局缩放系数：所有以 dp 定义尺寸的组件（菜单项、输入框、按钮及各类内边距）的视觉缩放比例。
  * 取值 0.7 由项目此前手动适配的经验值反推而来（菜单项 48dp→32dp、输入框 56dp→36dp）。
  * 如需调整整体紧凑程度，仅需修改此一处常量即可全局生效。
@@ -63,6 +87,7 @@ private const val COMPACT_DENSITY_SCALE = 0.7f
 fun AppTheme(
     themeMode: ThemeMode,
     layoutMode: LayoutMode = LayoutMode.AUTO,
+    customTypography: Typography? = null,
     content: @Composable () -> Unit
 ) {
     val useDarkTheme = when (themeMode) {
@@ -78,15 +103,20 @@ fun AppTheme(
     }
 
     val actualLayoutMode = if (layoutMode == LayoutMode.AUTO) getSystemDefaultLayoutMode() else layoutMode
+    val isCompact = actualLayoutMode == LayoutMode.COMPACT
 
-    val currentTypography = if (actualLayoutMode == LayoutMode.COMPACT) {
-        CompactTypography
-    } else {
-        DefaultTypography
+    // 提取外部注入的自定义字体（如 JS 端加载的 WOFF2 字体）
+    val customFontFamily = customTypography?.bodyMedium?.fontFamily
+
+    // 精确融合：确保紧凑排版字号/行高 与 自定义字体 能够同时生效
+    val currentTypography = when {
+        customFontFamily != null && isCompact -> CompactTypography.withFontFamily(customFontFamily)
+        customFontFamily != null -> DefaultTypography.withFontFamily(customFontFamily)
+        isCompact -> CompactTypography
+        else -> DefaultTypography
     }
 
     // 在高密度/PC模式下，禁用M3默认的48dp最小触摸目标限制，并使用紧凑间距
-    val isCompact = actualLayoutMode == LayoutMode.COMPACT
     val currentSpacing = if (isCompact) CompactSpacing else DefaultSpacing
 
     // ===== 全局紧凑样式定型点（唯一配置处，业务层无需再做任何布局模式判断） =====

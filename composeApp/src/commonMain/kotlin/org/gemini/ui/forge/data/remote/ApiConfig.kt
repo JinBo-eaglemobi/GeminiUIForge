@@ -11,16 +11,6 @@ object ApiConfig {
     const val BASE_URL = "https://generativelanguage.googleapis.com"
 
     /**
-     * 获取图片生成的完整 Endpoint URL (Imagen)
-     * 使用 Imagen 3 或 4 模型进行 Text-to-Image
-     * @param apiKey 用于认证的 API 密钥
-     * @param modelName 选用的 Imagen 模型名称
-     */
-    fun getImagenEndpoint(apiKey: String, modelName: String = GeminiModel.IMAGEN_4_0_GENERATE_001.modelName): String {
-        return "$BASE_URL/v1beta/models/$modelName:predict?key=$apiKey"
-    }
-
-    /**
      * 获取 Gemini 流式生成 Endpoint URL (SSE)
      * @param apiKey 用于认证的 API 密钥
      * @param modelName 选用的 Gemini 文本/多模态模型名称

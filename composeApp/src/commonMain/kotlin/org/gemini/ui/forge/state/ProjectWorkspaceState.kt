@@ -57,6 +57,8 @@ data class ProjectWorkspaceState(
     val historicalImages: List<TemplateFile> = emptyList(),
     /** 历史弹窗所针对的目标组件块/子属性的标识符（例如："blockId_pressed", "blockId_spin"） */
     val historicalTargetBlockId: String? = null,
+    /** 历史弹窗中是否正在执行本地去背景处理 */
+    val isProcessingHistoricalBg: Boolean = false,
     /** 针对每个组件块与 Gemini 交互的历史对话上下文缓存（Key 为 blockId） */
     val chatHistories: Map<String, List<org.gemini.ui.forge.model.api.ChatMessage>> = emptyMap(),
 

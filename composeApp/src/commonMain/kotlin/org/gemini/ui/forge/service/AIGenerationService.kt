@@ -39,7 +39,6 @@ class AIGenerationService(
     private val scriptManager = ScriptManager(storage)
 
     private val geminiClient = GeminiClient()
-    private val imagenGenerator = ImagenGenerator(cloudAssetManager, promptManager, geminiClient)
     private val geminiGenerator = GeminiImageGenerator(cloudAssetManager, promptManager, geminiClient)
 
     /**
@@ -122,22 +121,16 @@ class AIGenerationService(
         style: String = "",
         referenceImageUri: String? = null,
         isVertexAI: Boolean = false,
+        generationCount: Int? = null,
         onLog: (String) -> Unit = {},
         onImageGenerated: (String) -> Unit = {}
     ): List<String> = coroutineScope {
-        // 从配置中读取总数量，默认为 4
+        // 优先使用传入的会话级数量，若无则从配置中读取总数量，默认为 4
         val configCountStr = configManager.loadKey("IMAGE_GEN_COUNT") ?: "4"
-        val totalCount = configCountStr.toIntOrNull() ?: 4
+        val totalCount = generationCount ?: (configCountStr.toIntOrNull() ?: 4)
 
-        // 路由逻辑：
-        // 1. 如果支持 predict 方法或者是 imagen 名下的，走 ImagenGenerator
-        // 2. 如果支持 generateContent 且包含 image 关键字，走 GeminiImageGenerator
-        // 3. 否则默认走 ImagenGenerator (兼容性考虑)
-        val isImagen = model.supportedMethods.contains("predict") || model.modelName.contains("imagen")
-        val isGeminiNative = model.supportedMethods.contains("generateContent") && model.modelName.contains("image")
-
-        // 单次 API 请求的最大张数限制：Imagen 3 可以单次最高生成4张，原生 Gemini 通常单次最高支持 1 张 (candidateCount/sampleCount)
-        val maxBatchSize = if (isGeminiNative) 1 else 4
+        // 原生 Gemini 多模态模型单次 API 请求生成 1 张，通过并发批次满足多张需求
+        val maxBatchSize = 1
 
         // 计算批次
         val batchCounts = mutableListOf<Int>()
@@ -148,7 +141,7 @@ class AIGenerationService(
             remaining -= nextBatch
         }
 
-        syncLog("🚀 开始生图任务: 总数 $totalCount, 拆分为 ${batchCounts.size} 个批次", onLog)
+        syncLog("🚀 开始生图任务: 模型 ${model.displayName}, 总数 $totalCount, 拆分为 ${batchCounts.size} 个批次", onLog)
 
         // 并发执行批次
         val deferredResults = batchCounts.mapIndexed { index, batchSize ->
@@ -175,14 +168,8 @@ class AIGenerationService(
                             syncLog("⚠️ $batchTag 重试中 (${attempt + 1})...", onLog)
                         }
 
-                        val results = if (isGeminiNative) {
-                            geminiGenerator.generate(model.modelName, params, onLog) {
-                                onImageGenerated(it)
-                            }
-                        } else {
-                            imagenGenerator.generate(model.modelName, params, onLog) {
-                                onImageGenerated(it)
-                            }
+                        val results = geminiGenerator.generate(model.modelName, params, onLog) {
+                            onImageGenerated(it)
                         }
                         return@async results
                     } catch (e: Exception) {
@@ -254,7 +241,7 @@ class AIGenerationService(
     }
 
     /**
-     * 调用云端 API 执行背景去除 (Vertex AI / Imagen 4 标准版)
+     * 调用云端多模态大模型执行背景去除与透明通道处理
      */
     suspend fun removeBackgroundCloud(
         imageBytes: ByteArray,
@@ -266,42 +253,44 @@ class AIGenerationService(
             return null
         }
 
-        val url = ApiConfig.getImagenEndpoint(apiKey)
-        syncLog("☁️ 启动云端 AI 抠图引擎...", onLog)
+        syncLog("☁️ 启动云端多模态抠图引擎...", onLog)
 
         val displayName = "rembg_${getCurrentTimeMillis()}.png"
-        val imagePart = cloudAssetManager.buildImagenImagePart(displayName, imageBytes, "image/png", onLog)
+        val imagePart = cloudAssetManager.buildGeminiImagePart(displayName, imageBytes, "image/png", onLog)
         val prompt = promptManager.getPrompt("cloud_bg_removal")
+        val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey, GeminiModel.GEMINI_2_5_FLASH_IMAGE.modelName)
 
         val requestBody = buildJsonObject {
-            put("instances", buildJsonArray {
+            put("contents", buildJsonArray {
                 add(buildJsonObject {
-                    put("image", imagePart)
-                    put("prompt", prompt)
-                })
-            })
-            put("parameters", buildJsonObject {
-                put("editConfig", buildJsonObject {
-                    put("editMode", "background_removal")
-                })
-                put("outputOptions", buildJsonObject {
-                    put("mimeType", "image/png")
+                    put("role", "user")
+                    put("parts", buildJsonArray {
+                        add(buildJsonObject { put("text", prompt) })
+                        add(imagePart)
+                    })
                 })
             })
         }.toString()
 
         val startTime = getCurrentTimeMillis()
         return try {
-            val resultBase64 = geminiClient.generateContent(url, requestBody, onLog)
+            val responseText = geminiClient.generateContent(url, requestBody, onLog)
             val duration = getCurrentTimeMillis() - startTime
 
-            @OptIn(ExperimentalEncodingApi::class)
-            val resultBytes = Base64.decode(resultBase64)
-            syncLog("✅ 云端抠图处理完成 (${duration}ms)", onLog)
-            resultBytes
+            val base64Match = Regex("data:image/[^;]+;base64,([A-Za-z0-9+/=]+)").find(responseText)
+            if (base64Match != null) {
+                val b64 = base64Match.groupValues[1]
+                @OptIn(ExperimentalEncodingApi::class)
+                val resultBytes = Base64.decode(b64)
+                syncLog("✅ 云端抠图处理完成 (${duration}ms)", onLog)
+                resultBytes
+            } else {
+                syncLog("⚠️ 云端未直接返回 Base64 图像数据，回退至本地抠图", onLog)
+                removeBackgroundLocal(imageBytes)
+            }
         } catch (e: Exception) {
             syncLog("❌ 云端抠图异常: ${e.message}", onLog)
-            null
+            removeBackgroundLocal(imageBytes)
         }
     }
 

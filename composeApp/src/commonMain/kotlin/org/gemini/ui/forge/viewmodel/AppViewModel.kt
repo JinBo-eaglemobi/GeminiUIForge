@@ -46,6 +46,18 @@ class AppViewModel(
     private val _projectSettingsEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val projectSettingsEvent: SharedFlow<Unit> = _projectSettingsEvent.asSharedFlow()
 
+    private val _globalStyleEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val globalStyleEvent: SharedFlow<Unit> = _globalStyleEvent.asSharedFlow()
+
+    /**
+     * 派发全局风格设置弹出事件
+     */
+    fun dispatchGlobalStyleEvent() {
+        viewModelScope.launch {
+            _globalStyleEvent.emit(Unit)
+        }
+    }
+
     /**
      * 派发项目设置弹出事件
      */

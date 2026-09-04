@@ -52,6 +52,8 @@ import org.jetbrains.compose.resources.stringResource
 fun BilingualPromptEditor(
     promptZh: String,
     promptEn: String,
+    initialLanguage: PromptLanguage = PromptLanguage.ZH,
+    onLanguageChanged: (PromptLanguage) -> Unit = {},
     onPromptConfirmed: (zh: String, en: String) -> Unit,
     onOptimizeRequested: (currentPrompt: String, isZh: Boolean) -> Unit,
     isOptimizing: Boolean,
@@ -66,7 +68,7 @@ fun BilingualPromptEditor(
     enabled: Boolean = true
 ) {
     val spacing = LocalAppSpacing.current
-    var currentPromptLang by remember { mutableStateOf(PromptLanguage.ZH) }
+    var currentPromptLang by remember(initialLanguage) { mutableStateOf(initialLanguage) }
 
     var localPromptZh by remember(promptZh) { mutableStateOf(promptZh) }
     var localPromptEn by remember(promptEn) { mutableStateOf(promptEn) }
@@ -97,12 +99,16 @@ fun BilingualPromptEditor(
 
             Spacer(Modifier.weight(1f))
 
-            // 中英文双语切换 SegmentedButton（强制单行展开不折行）
+            // 中英文双语切换 SegmentedButton（强制单行展开不折行，移除挤占空间的图标）
             SingleChoiceSegmentedButtonRow {
                 SegmentedButton(
                     selected = currentPromptLang == PromptLanguage.ZH,
-                    onClick = { currentPromptLang = PromptLanguage.ZH },
+                    onClick = {
+                        currentPromptLang = PromptLanguage.ZH
+                        onLanguageChanged(PromptLanguage.ZH)
+                    },
                     shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    icon = {},
                     enabled = enabled,
                     label = {
                         Text(
@@ -112,12 +118,16 @@ fun BilingualPromptEditor(
                             softWrap = false
                         )
                     },
-                    modifier = Modifier.widthIn(min = 80.dp).tip(stringResource(Res.string.prompt_lang_zh))
+                    modifier = Modifier.widthIn(min = 96.dp).tip(stringResource(Res.string.prompt_lang_zh))
                 )
                 SegmentedButton(
                     selected = currentPromptLang == PromptLanguage.EN,
-                    onClick = { currentPromptLang = PromptLanguage.EN },
+                    onClick = {
+                        currentPromptLang = PromptLanguage.EN
+                        onLanguageChanged(PromptLanguage.EN)
+                    },
                     shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    icon = {},
                     enabled = enabled,
                     label = {
                         Text(
@@ -127,7 +137,7 @@ fun BilingualPromptEditor(
                             softWrap = false
                         )
                     },
-                    modifier = Modifier.widthIn(min = 80.dp).tip(stringResource(Res.string.prompt_lang_en))
+                    modifier = Modifier.widthIn(min = 96.dp).tip(stringResource(Res.string.prompt_lang_en))
                 )
             }
 

@@ -6,29 +6,16 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import org.gemini.ui.forge.data.copyToInternal
-import org.gemini.ui.forge.data.createParentDirsInternal
-import org.gemini.ui.forge.data.deleteInternal
-import org.gemini.ui.forge.data.isFileExistsInternal
-import org.gemini.ui.forge.data.readBytesInternal
-import org.gemini.ui.forge.data.readStreamInternal
-import org.gemini.ui.forge.data.writeBytesInternal
+import org.gemini.ui.forge.data.*
 import kotlin.math.ceil
 import kotlin.math.min
 
@@ -115,7 +102,7 @@ class FileDownloader(private val client: HttpClient = defaultClient()) {
         fileName: String,
         concurrency: Int = DEFAULT_CONCURRENCY,
         onProgress: (DownloadProgress) -> Unit = {}
-    ): DownloadResult = withContext(Dispatchers.IO) {
+    ): DownloadResult = withContext(Dispatchers.Default) {
         val destAbsPath = "$destinationDir/$fileName"
         try {
             downloadInternal(url, destinationDir, fileName, destAbsPath, concurrency, onProgress)
@@ -172,7 +159,7 @@ class FileDownloader(private val client: HttpClient = defaultClient()) {
             val meta = loadMeta(metaPath)
             val resumable = meta != null && meta.url == url && meta.totalBytes == totalBytes &&
                     (etag == null || meta.etag == null || meta.etag == etag)
-            if (resumable && meta != null && meta.chunkCount == plan.size) {
+            if (resumable && meta.chunkCount == plan.size) {
                 completedChunks = meta.completedChunks.toSet()
                 AppLogger.i(TAG, "检测到未完成下载（${completedChunks.size}/${plan.size} 块已完成），继续续传")
             } else {
@@ -232,7 +219,7 @@ class FileDownloader(private val client: HttpClient = defaultClient()) {
                 // 分块状态切换（Started/Finished）与下载结束强制立即广播
                 var lastBroadcastStamp = 0L
                 fun broadcastThrottled(force: Boolean) {
-                    val now = System.currentTimeMillis()
+                    val now = org.gemini.ui.forge.getCurrentTimeMillis()
                     if (force || now - lastBroadcastStamp >= BROADCAST_INTERVAL_MS) {
                         lastBroadcastStamp = now
                         broadcast(chunkStatus.count { it == ChunkStatus.ACTIVE })
@@ -247,7 +234,7 @@ class FileDownloader(private val client: HttpClient = defaultClient()) {
                         }
                         is ChunkEvent.Finished -> chunkStatus[event.index] = ChunkStatus.DONE
                     }
-                    val now = System.currentTimeMillis()
+                    val now = org.gemini.ui.forge.getCurrentTimeMillis()
                     if (event is ChunkEvent.Delta) {
                         if (lastStamp == 0L) {
                             lastStamp = now

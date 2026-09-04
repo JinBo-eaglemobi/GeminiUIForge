@@ -1,0 +1,74 @@
+[
+  {
+    "id": "extract_button",
+    "nameZh": "提取单体按钮",
+    "descriptionZh": "从参考图中精准剥离出指定按钮/图标，去除底图与周边干扰，生成独立纯净的UI组件",
+    "promptZh": "精准提取参考图中的核心交互按钮/组件主体。去除所有底图背景、周边网格与多余干扰元素，保持按钮的完整轮廓、立体高光、材质纹理与边缘清晰度，置于纯净背景中以便提取透明通道。",
+    "nameEn": "Extract Interactive Button",
+    "descriptionEn": "Isolate the interactive button from the reference image, removing background and surrounding noise.",
+    "promptEn": "Precisely extract the core interactive button/component from the reference image. Remove all background textures, surrounding grids, and extraneous elements. Maintain the button's complete silhouette, 3D highlights, material textures, and crisp edges on a clean background suitable for transparency cutout."
+  },
+  {
+    "id": "clean_background_inpaint",
+    "nameZh": "擦除UI并修复背景底图",
+    "descriptionZh": "智能擦除所有按钮、文字、转轴与前景组件，根据周围环境纹理自动智能修复补全底图",
+    "promptZh": "完全擦除参考图中的所有UI交互组件、按钮、转轴线框、弹窗面板、人物立绘及前景非背景元素。根据周围环境的光影、色彩与纹理特征，对被遮挡的区域进行智能内容感知修复与无缝补全，生成一张纯净、完整、无任何UI遮挡的高清游戏全景背景底图。",
+    "nameEn": "Remove UI & Inpaint Clean Background",
+    "descriptionEn": "Remove all UI components, buttons, and characters, inpainting a clean and seamless background.",
+    "promptEn": "Completely remove all UI interactive components, buttons, reel frames, dialog panels, character illustrations, and non-background foreground elements from the reference image. Seamlessly inpaint and restore the occluded areas based on the surrounding lighting, color palette, and textures, creating a pure, intact, and uncluttered high-definition game background."
+  },
+  {
+    "id": "remove_text_keep_frame",
+    "nameZh": "擦除文字保留底板边框",
+    "descriptionZh": "擦除按钮或面板上的所有文字/数字，完美保留底板材质、边框倒角与光影质感",
+    "promptZh": "擦除参考图中所有的文本、数字、标题艺术字及文字阴影描边。100% 完整保留底部的按钮底板、弹窗边框、金属饰边、内外发光与材质纹理，使文字被移除后的区域与底板表面材质平滑融合，生成一个干净无字的可复用 UI 底板组件。",
+    "nameEn": "Remove Text & Retain UI Frame",
+    "descriptionEn": "Erase all text and numbers while preserving the underlying UI frame, bevels, and texture.",
+    "promptEn": "Erase all typography, text labels, numbers, artistic titles, and text shadow strokes from the reference image. 100% preserve the underlying button base, dialog borders, metallic trims, inner/outer glow, and material textures, seamlessly blending the cleared text areas into the background plate to create a reusable blank UI frame."
+  },
+  {
+    "id": "extract_symbol_icon",
+    "nameZh": "提取游戏符号与图标",
+    "descriptionZh": "从转轴或复杂背景中剥离单独的宝石、道具、金币或高价值符号",
+    "promptZh": "从参考图中精准剥离出核心游戏符号/图标（如宝石、金币、特色道具），剔除转轴网格、背景背板与遮罩层，保留符号的 3D 立体感、粒子特效、晶莹光泽与外发光轮廓，生成独立的符号高清资产。",
+    "nameEn": "Extract Game Symbol & Icon",
+    "descriptionEn": "Isolate gemstones, coins, or game props from the reel background with clean transparent contours.",
+    "promptEn": "Precisely extract the core game symbol/icon (e.g. gems, golden coins, themed props) from the reference image. Remove reel grids, background plates, and masks, retaining the symbol's 3D depth, particle effects, crystalline shine, and outer glow contours to produce an isolated high-definition symbol asset."
+  },
+  {
+    "id": "clean_dialog_panel",
+    "nameZh": "提取空白弹窗面板底框",
+    "descriptionZh": "去除弹窗内的所有内容物、商品与文字，提取高质感通用的弹窗背景底板",
+    "promptZh": "去除参考图弹窗内部的所有具体文字、商品图标、关闭按钮及内容卡片，完整保留该弹窗的外框结构、角花装饰、金属边条、背板半透明渐变及整体暗角阴影，生成一个通用的空白弹窗背景框架。",
+    "nameEn": "Clean Dialog Window Frame",
+    "descriptionEn": "Remove dialog contents and text, keeping the high-quality blank window frame and decorations.",
+    "promptEn": "Remove all specific text, item icons, close buttons, and content cards inside the dialog from the reference image. Fully retain the window's outer border structure, corner ornaments, metallic trims, translucent gradient backdrop, and overall vignette shadows to create a versatile blank dialog window frame."
+  },
+  {
+    "id": "high_contrast_solid_bg",
+    "nameZh": "生成纯白高对比度背景",
+    "descriptionZh": "将主体元素置于纯白高对比度无杂色背景上，极大提升本地与云端自动抠图成功率",
+    "promptZh": "保持参考图中主体元素的全部造型、色彩、材质与光影不变，将背景完全替换为极致纯净、单一平整的高对比度纯白色背景（没有任何渐变、阴影、杂色或纹理），确保主体与背景边缘界限分明，便于发丝级无损透明通道抠图。",
+    "nameEn": "High-Contrast Pure Solid Background",
+    "descriptionEn": "Place the subject onto a pure flat high-contrast solid background for flawless automatic cutout.",
+    "promptEn": "Keep all shapes, colors, materials, and lighting of the main subject from the reference image intact, while completely replacing the background with an ultra-clean, flat, high-contrast solid white background without any gradients, cast shadows, noise, or textures, ensuring razor-sharp edges for pixel-perfect transparency cutout."
+  },
+  {
+    "id": "state_disabled_gray",
+    "nameZh": "生成置灰禁用状态",
+    "descriptionZh": "基于参考图的正常按钮状态，生成降低明度与饱和度的沉稳置灰禁用态",
+    "promptZh": "基于参考图中的正常状态按钮/组件，生成其对应的禁用状态 (Disabled State)。降低饱和度至黑白灰阶调，调暗整体明度，去除发光与高亮光晕，保留细腻的金属/石质暗哑纹理与边缘凹凸立体感，呈现关闭不可点击的视觉质感。",
+    "nameEn": "Generate Disabled State (Grayscale)",
+    "descriptionEn": "Create a dimmed and desaturated disabled state variant based on the active button.",
+    "promptEn": "Based on the active button/component in the reference image, generate its corresponding Disabled State variant. Desaturate colors to grayscale tones, dim the overall brightness, remove glows and highlight flares, while preserving subtle matte textures and beveled edge details to convey an unclickable state."
+  },
+  {
+    "id": "state_active_glowing",
+    "nameZh": "生成高亮激活/选中态",
+    "descriptionZh": "基于参考图生成带有金色光芒、外发光粒子与能量流转的激活高亮态",
+    "promptZh": "基于参考图中的基础组件，生成其对应的激活/选中高亮状态 (Active / Highlighted State)。增强光影对比度，在边缘与核心区域添加耀眼的金色辉光、流光溢彩的外发光粒子与强烈的视觉冲击力，呈现被点击或激活的充能质感。",
+    "nameEn": "Generate Active / Glowing State",
+    "descriptionEn": "Create an illuminated active state with vibrant golden glow and particle effects.",
+    "promptEn": "Based on the base component in the reference image, generate its corresponding Active / Highlighted State variant. Enhance lighting contrast, adding radiant golden glow, shimmering outer particle effects, and strong visual punch around the contours to convey an activated energy feel."
+  }
+]

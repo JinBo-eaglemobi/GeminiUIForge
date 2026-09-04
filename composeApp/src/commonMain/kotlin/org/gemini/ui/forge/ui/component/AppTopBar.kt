@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Save
@@ -48,6 +49,7 @@ fun AppTopBar(
     onNavigateHome: () -> Unit,
     onCloudAssetManagerClicked: () -> Unit = {},
     onCompileClicked: () -> Unit = {},
+    onGlobalStyleClicked: () -> Unit = {},
     onSettingsClicked: () -> Unit = {},
     onHelpClicked: () -> Unit = {}
 ) {
@@ -96,7 +98,6 @@ fun AppTopBar(
 
                 // 当前模式标识
                 val modeNameRes = when (currentScreen) {
-                    AppScreen.HOME -> Res.string.screen_home
                     AppScreen.TEMPLATE_GENERATOR -> Res.string.screen_template_generator
                     AppScreen.PROJECT_WORKSPACE -> Res.string.screen_project_workspace
                     AppScreen.GAME_PROJECT_MANAGER -> Res.string.screen_game_project_manager
@@ -169,8 +170,15 @@ fun AppTopBar(
                     }
                 }
                 
-                // 项目设置按钮 (仅在项目工作空间显示)
+                // 项目设置与全局风格按钮 (仅在项目工作空间显示)
                 if (currentScreen == AppScreen.PROJECT_WORKSPACE) {
+                    IconButton(
+                        onClick = onGlobalStyleClicked,
+                        modifier = Modifier.tip("全局风格与图像参数设置")
+                    ) {
+                        Icon(Icons.Default.Palette, contentDescription = "Global Style Settings", tint = MaterialTheme.colorScheme.primary)
+                    }
+
                     IconButton(
                         onClick = { viewModel.dispatchProjectSettingsEvent() },
                         modifier = Modifier.tip("项目资源配置设置")
