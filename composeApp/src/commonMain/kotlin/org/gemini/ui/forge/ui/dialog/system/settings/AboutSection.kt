@@ -28,9 +28,9 @@ import androidx.compose.material3.LinearProgressIndicator
 
 /** 字节数人性化格式（B/KB/MB/GB，语言无关单位），供下载统计行展示 */
 private fun formatBytes(bytes: Long): String = when {
-    bytes >= 1L shl 30 -> "%.1f GB".format(bytes / 1073741824.0)
-    bytes >= 1L shl 20 -> "%.1f MB".format(bytes / 1048576.0)
-    bytes >= 1L shl 10 -> "%.1f KB".format(bytes / 1024.0)
+    bytes >= 1L shl 30 -> "${((bytes * 10L) / 1073741824L) / 10.0} GB"
+    bytes >= 1L shl 20 -> "${((bytes * 10L) / 1048576L) / 10.0} MB"
+    bytes >= 1L shl 10 -> "${((bytes * 10L) / 1024L) / 10.0} KB"
     else -> "$bytes B"
 }
 

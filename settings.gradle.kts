@@ -20,8 +20,13 @@ pluginManagement {
 dependencyResolutionManagement {
     repositories {
         mavenLocal()
+        maven {
+            mavenContent {
+                includeModule("org.jetbrains.skiko", "skiko-android")
+            }
+            url = uri("https://packages.jetbrains.team/maven/p/cmp/dev")
+        }
         maven { url = uri("https://maven.aliyun.com/repository/central") }
-        mavenCentral()
         google {
             mavenContent {
                 includeGroupAndSubgroups("androidx")
@@ -29,6 +34,7 @@ dependencyResolutionManagement {
                 includeGroupAndSubgroups("com.google")
             }
         }
+        mavenCentral()
     }
 }
 

@@ -41,7 +41,8 @@ val appVersion = (project.findProperty("versionName")?.toString()?.trim()
 
 // 动态生成版本号文件任务
 val generateProjectConfig = tasks.register("generateProjectConfig") {
-    val version = appVersion 
+    description = "动态生成版本号文件任务"
+    val version = appVersion
     val outputDir = layout.buildDirectory.dir("generated/projectConfig/kotlin/commonMain/org/gemini/ui/forge")
     outputs.dir(outputDir)
     doLast {
@@ -88,14 +89,14 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation(libs.compose.uiToolingPreview)
 //            implementation(libs.compose.uiTooling)
-//            implementation("androidx.customview:customview:1.1.0")
+//            implementation("androidx.customview:customd view:1.1.0")
 //            implementation("androidx.customview:customview-poolingcontainer:1.1.0")
             implementation(libs.ktor.client.okhttp)
-            implementation(libs.skiko.android)
         }
 
         jsMain.dependencies {
             implementation(libs.ktor.client.js)
+            implementation(libs.wrappers.browser)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -144,6 +145,7 @@ kotlin {
     }
 
     configurations.all {
+        val name = this.name
         resolutionStrategy {
             eachDependency {
                 val group = requested.group
@@ -157,6 +159,9 @@ kotlin {
                         if (name == "kotlin-stdlib") useVersion(libs.versions.kotlin.get())
                     }
                     "io.ktor" -> useVersion(libs.versions.ktor.get())
+                    "org.jetbrains.skiko"-> {
+                        if (name.startsWith("android", true)) useTarget(libs.skiko.android.get())
+                    }
                 }
             }
         }
@@ -168,7 +173,7 @@ compose.desktop {
         mainClass = "org.gemini.ui.forge.MainKt"
         jvmArgs("-Xmx512M", "-Xms256M")
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Pkg, TargetFormat.Msi, TargetFormat.Exe)
+            targetFormats(TargetFormat.Dmg, TargetFormat.Pkg, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageName = "GeminiUIForge"
             packageVersion = appVersion
             description = "Gemini UI Forge"

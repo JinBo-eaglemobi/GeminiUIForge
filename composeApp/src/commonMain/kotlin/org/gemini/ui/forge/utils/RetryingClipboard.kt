@@ -1,5 +1,6 @@
 package org.gemini.ui.forge.utils
 
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.NativeClipboard
@@ -23,6 +24,7 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * @param delegate 平台默认剪贴板实现，承担实际读写
  */
+@OptIn(ExperimentalComposeUiApi::class)
 class RetryingClipboard(
     private val delegate: Clipboard
 ) : Clipboard {

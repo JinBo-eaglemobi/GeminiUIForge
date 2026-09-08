@@ -1,27 +1,29 @@
 [versions]
-agp = "8.13.2"
+agp = "9.1.0"
 android-compileSdk = "36"
 android-minSdk = "24"
 android-targetSdk = "36"
-androidx-activity = "1.12.2"
-androidx-appcompat = "1.7.1"
-androidx-core = "1.17.0"
+androidx-activity = "1.13.0"
+androidx-appcompat = "1.8.0"
+androidx-core = "1.19.0"
 androidx-espresso = "3.7.0"
-androidx-lifecycle = "2.9.6"
+androidx-lifecycle = "2.11.0-beta01"
 androidx-testExt = "1.3.0"
-composeHotReload = "1.0.0"
-composeMultiplatform = "1.10.0"
+composeHotReload = "1.2.0"
+composeMultiplatform = "1.11.1"
 junit = "4.13.2"
-kotlin = "2.3.0"
-kotlinx-coroutines = "1.10.2"
-kotlinx-serialization = "1.9.0"
-kotlinxDatetime = "0.7.1"
-kotlinxIoCore = "0.8.2"
-material3 = "1.10.0-alpha05"
-ktor = "3.4.1"
+kotlin = "2.4.10"
+kotlinx-coroutines = "1.11.0"
+kotlinx-serialization = "1.11.0"
+kotlinxDatetime = "0.8.0"
+kotlinxIoCore = "0.9.1"
+material3 = "1.11.0-alpha07"
+ktor = "3.5.2"
 materialIconsExtended = "1.7.3"
-coil3 = "3.1.0"
-skiko = "0.9.37.3"
+coil3 = "3.5.0"
+kotlinWrappers = "2026.8.4"
+skiko = "0.144.6"
+skikoAndroid = "0.9.43"
 slf4jSimple = "2.0.17"
 jcefmaven = "146.0.10"
 
@@ -71,8 +73,9 @@ ktor-utils = { module = "io.ktor:ktor-utils", version.ref = "ktor" }
 material-icons-extended = { module = "org.jetbrains.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3" }
 coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil3" }
+wrappers-browser = { module = "org.jetbrains.kotlin-wrappers:kotlin-browser", version.ref = "kotlinWrappers" }
 skiko = { module = "org.jetbrains.skiko:skiko", version.ref = "skiko" }
-skiko-android = { module = "org.jetbrains.skiko:skiko-android", version.ref = "skiko" }
+skiko-android = { module = "org.jetbrains.skiko:skiko-android", version.ref = "skikoAndroid" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4jSimple" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4jSimple" }
 jcefmaven = { module = "me.friwi:jcefmaven", version.ref = "jcefmaven" }
@@ -80,9 +83,11 @@ jcefmaven = { module = "me.friwi:jcefmaven", version.ref = "jcefmaven" }
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 androidLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+androidMultiplatformLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 composeHotReload = { id = "org.jetbrains.compose.hot-reload", version.ref = "composeHotReload" }
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 
