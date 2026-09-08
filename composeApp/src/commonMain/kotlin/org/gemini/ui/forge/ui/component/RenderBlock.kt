@@ -381,8 +381,10 @@ fun RenderBlock(
                     }
                 } else {
                     val gridColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                    val colRowCounts = reelProperties.columnRowCounts
                     Canvas(Modifier.fillMaxSize()) {
                         val sw = (1.dp).toPx() / zoom
+                        // 绘制垂直列分割线
                         for (i in 1 until cols) {
                             val x = size.width * i / cols
                             drawLine(
@@ -392,14 +394,34 @@ fun RenderBlock(
                                 strokeWidth = sw
                             )
                         }
-                        for (i in 1 until rows) {
-                            val y = size.height * i / rows
-                            drawLine(
-                                gridColor,
-                                start = androidx.compose.ui.geometry.Offset(0f, y),
-                                end = androidx.compose.ui.geometry.Offset(size.width, y),
-                                strokeWidth = sw
-                            )
+
+                        if (colRowCounts.isNotEmpty() && colRowCounts.size == cols) {
+                            // 异形网格/单行/动态变轴：按每列自有的行数独立绘制水平分割线
+                            for (c in 0 until cols) {
+                                val cRows = colRowCounts[c].coerceAtLeast(1)
+                                val colLeft = size.width * c / cols
+                                val colRight = size.width * (c + 1) / cols
+                                for (r in 1 until cRows) {
+                                    val y = size.height * r / cRows
+                                    drawLine(
+                                        gridColor,
+                                        start = androidx.compose.ui.geometry.Offset(colLeft, y),
+                                        end = androidx.compose.ui.geometry.Offset(colRight, y),
+                                        strokeWidth = sw
+                                    )
+                                }
+                            }
+                        } else {
+                            // 标准规则矩阵：贯穿全宽绘制水平分割线
+                            for (i in 1 until rows) {
+                                val y = size.height * i / rows
+                                drawLine(
+                                    gridColor,
+                                    start = androidx.compose.ui.geometry.Offset(0f, y),
+                                    end = androidx.compose.ui.geometry.Offset(size.width, y),
+                                    strokeWidth = sw
+                                )
+                            }
                         }
                     }
                 }

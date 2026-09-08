@@ -212,11 +212,12 @@ class ProjectWorkspaceViewModel(
             _state.update { current ->
                 val targetPageId = newProject.pages.find { it.id == current.selectedPageId }?.id
                     ?: newProject.pages.firstOrNull()?.id
+                val keepGroupId = if (current.editingGroupId != null && newProject.pages.any { p -> p.blocks.findBlockById(current.editingGroupId!!) != null }) current.editingGroupId else null
                 current.copy(
                     project = newProject,
                     selectedPageId = targetPageId,
                     selectedBlockId = if (newProject.pages.any { p -> p.blocks.any { b -> b.id == current.selectedBlockId } }) current.selectedBlockId else null,
-                    editingGroupId = null,
+                    editingGroupId = keepGroupId,
                     globalStyle = newProject.globalStyle,
                     referenceImageUri = effectiveRefUri,
                     collapsedSections = wsConfig?.collapsedSections ?: current.collapsedSections,
@@ -414,35 +415,35 @@ class ProjectWorkspaceViewModel(
         }
     }
 
-    /** 处理模块双击进入或退出组编辑 */
+    /** 处理模块双击：有子图层进入组编辑；子图层则自动切换进入直接父组编辑并高亮选中该子图层 */
     fun onBlockDoubleClicked(blockId: String) {
         _state.update { currentState ->
+            val currentPage = currentState.currentPage ?: return@update currentState
+            val block = currentPage.blocks.findBlockById(blockId) ?: return@update currentState
+
             if (currentState.editingGroupId == blockId) {
-                // 如果双击的是当前正在编辑的组，则退回父编辑组
-                val currentPage = currentState.currentPage
-                val parentId = if (currentPage != null) {
-                    currentPage.blocks.findParentBlockId(blockId)
-                } else {
-                    null
-                }
+                // 如果双击的是当前正在编辑的组本身，退回上一级父编辑组
+                val parentId = currentPage.blocks.findParentBlockId(blockId)
                 currentState.copy(
                     editingGroupId = parentId,
+                    selectedBlockId = blockId,
+                    selectedBlockIds = setOf(blockId)
+                )
+            } else if (block.children.isNotEmpty()) {
+                // 如果双击的是包含子模块的容器，直接进入该容器的组编辑模式
+                currentState.copy(
+                    editingGroupId = blockId,
                     selectedBlockId = null,
                     selectedBlockIds = emptySet()
                 )
             } else {
-                // 如果双击的是其它组且包含子模块，才进入该组并清除模块选中状态
-                val currentPage = currentState.currentPage
-                val block = currentPage?.blocks?.findBlockById(blockId)
-                if (block != null && block.children.isNotEmpty()) {
-                    currentState.copy(
-                        editingGroupId = blockId,
-                        selectedBlockId = null,
-                        selectedBlockIds = emptySet()
-                    )
-                } else {
-                    currentState
-                }
+                // 如果双击的是一个子图层（自身无子节点），自动切入其直接父模块的编辑模式，并选中此子图层
+                val parentId = currentPage.blocks.findParentBlockId(blockId)
+                currentState.copy(
+                    editingGroupId = parentId,
+                    selectedBlockId = blockId,
+                    selectedBlockIds = setOf(blockId)
+                )
             }
         }
     }

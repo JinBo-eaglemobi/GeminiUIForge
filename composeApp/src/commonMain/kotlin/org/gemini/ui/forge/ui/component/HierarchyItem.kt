@@ -17,6 +17,14 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
@@ -94,6 +104,7 @@ fun HierarchyItem(
 
     var expanded by remember { mutableStateOf(true) }
     val hasChildren = block.children.isNotEmpty()
+    var showContextMenu by remember { mutableStateOf(false) }
 
     // 针对每个图层项目，申请一个视口定位请求器
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
@@ -165,6 +176,12 @@ fun HierarchyItem(
                             isMultiSelectActive = event.keyboardModifiers.isShiftPressed ||
                                     event.keyboardModifiers.isCtrlPressed ||
                                     event.keyboardModifiers.isMetaPressed
+
+                            // ★ 鼠标右键点击弹出上下文菜单
+                            if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                                viewModel.onBlockClicked(block.id, false)
+                                showContextMenu = true
+                            }
                         }
                     }
                 }
@@ -175,6 +192,64 @@ fun HierarchyItem(
                 .padding(start = (8 + depth * 16).dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 图层右键上下文操作菜单
+            DropdownMenu(
+                expanded = showContextMenu,
+                onDismissRequest = { showContextMenu = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("重命名图层") },
+                    leadingIcon = { Icon(Icons.Default.Edit, null, Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        viewModel.onBlockClicked(block.id, false)
+                        viewModel.layoutEditor.triggerRename()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("复制模块") },
+                    leadingIcon = { Icon(Icons.Default.ContentCopy, null, Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        viewModel.onBlockClicked(block.id, false)
+                        viewModel.layoutEditor.copy()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("剪切模块") },
+                    leadingIcon = { Icon(Icons.Default.ContentCut, null, Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        viewModel.onBlockClicked(block.id, false)
+                        viewModel.layoutEditor.cut()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(if (hasChildren) "进入此组编辑" else "进入父组编辑") },
+                    leadingIcon = { Icon(Icons.Default.FolderOpen, null, Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        viewModel.onBlockDoubleClicked(block.id)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(if (block.isVisible) "隐藏图层" else "显示图层") },
+                    leadingIcon = { Icon(if (block.isVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility, null, Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        viewModel.layoutEditor.toggleBlockVisibility(block.id, !block.isVisible)
+                    }
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                DropdownMenuItem(
+                    text = { Text("删除模块", color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(Icons.Default.Delete, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error) },
+                    onClick = {
+                        showContextMenu = false
+                        viewModel.showDeleteConfirmation(block.id)
+                    }
+                )
+            }
             if (hasChildren) {
                 IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(20.dp)) {
                     Icon(

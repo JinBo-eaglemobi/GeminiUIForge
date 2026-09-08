@@ -123,9 +123,12 @@ sealed class BlockProperties {
 
     /**
      * 转轴组件的属性配置。
+     * 支持全形态 Slot 网格（标准对称、单行多列、金字塔异形/动态变轴）。
      *
-     * @property rows 转轴的行数（例如：3）。
+     * @property rows 转轴的基准行数（默认：3；当单行多列时为 1）。
      * @property columns 转轴的列数（例如：5）。
+     * @property columnRowCounts 每列独立的行数数组（例如 [1,1,1,1] 单行，[3,4,5,4,3] 菱形金字塔，[2,3,4,3,2] 阶梯）。为空时走默认 rows × columns 规则矩阵。
+     * @property reelLayoutType 转轴排版形态：STANDARD(标准规则矩阵), SINGLE_ROW(单行多列), ASYMMETRIC(异形/金字塔), TOP_EXTRA(顶部附加轴)。
      * @property items 转轴中包含的可选元素集。每一个元素都是一个完整的 UIBlock。
      * @property showBackground 是否显示转轴背景板。
      */
@@ -133,6 +136,8 @@ sealed class BlockProperties {
     data class ReelProperties(
         val rows: Int = 3,
         val columns: Int = 5,
+        val columnRowCounts: List<Int> = emptyList(),
+        val reelLayoutType: String = "STANDARD",
         val items: List<UIBlock> = emptyList(),
         val showBackground: Boolean = true,
         val rollSeed: Int = 0

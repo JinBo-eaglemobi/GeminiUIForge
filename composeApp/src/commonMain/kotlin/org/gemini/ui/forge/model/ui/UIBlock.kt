@@ -116,14 +116,12 @@ data class UIBlock(
         val processedChildren = children.map { it.postProcess() }
 
         return if (type == UIBlockType.REEL) {
-            // 如果是转轴且包含子级，则将其子级直接作为 items 并入属性中，然后清空子级
+            // 如果是转轴且包含子级，同步并入 items 属性中，同时完整保留 children 子图层树，绝不清空
             if (processedChildren.isNotEmpty()) {
                 val currentProps = properties as? BlockProperties.ReelProperties ?: BlockProperties.ReelProperties()
-                // 直接使用 processedChildren 作为新的 items
                 val updatedProps = currentProps.copy(items = currentProps.items + processedChildren)
-                copy(properties = updatedProps, children = emptyList())
+                copy(properties = updatedProps, children = processedChildren)
             } else {
-                // 没有子级说明已经解析过，或者是一个空的 REEL，无需覆盖原有属性
                 copy(children = processedChildren)
             }
         } else {
