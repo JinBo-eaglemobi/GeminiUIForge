@@ -53,4 +53,12 @@ enum class UIBlockType(val defaultPrompt: String) {
      */
     val hasSpecificProperties: Boolean
         get() = this in listOf(REEL, SPIN_BUTTON, BUTTON, VIEW, TEXT, INPUT)
+
+    /**
+     * 核心特性标识：该类型组件是否支持在未绑定正式图片时，从底图对应全局坐标中提取切片定位渲染。
+     * 排除黑名单：转轴网格(REEL)、顶部导航栏(HEADER)、底部状态栏(FOOTER)、文本(TEXT)、输入框(INPUT)。
+     * 其余所有类型一律支持并保持原图切片定位展示。
+     */
+    val supportsReferenceSlice: Boolean
+        get() = this !in listOf(REEL, HEADER, FOOTER, TEXT, INPUT)
 }

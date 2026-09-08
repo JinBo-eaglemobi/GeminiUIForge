@@ -337,17 +337,17 @@ fun BatchAssetGenDialog(
 
                                                 Spacer(Modifier.width(12.dp))
 
-                                                // 细化编辑按钮：尺寸放大一倍（48dp 按钮 / 28dp 矢量图标），醒目且易于点击
+                                                // 调整大小与提示词按钮：尺寸放大（48dp 按钮 / 28dp 矢量图标），醒目且易于点击
                                                 IconButton(
                                                     onClick = { refiningBlock = block },
                                                     modifier = Modifier
                                                         .size(48.dp)
                                                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), AppShapes.medium)
-                                                        .tip(stringResource(Res.string.batch_gen_refine_block))
+                                                        .tip(stringResource(Res.string.action_adjust_bounds_prompt))
                                                 ) {
                                                     Icon(
                                                         imageVector = Icons.Default.Tune,
-                                                        contentDescription = stringResource(Res.string.batch_gen_refine_block),
+                                                        contentDescription = stringResource(Res.string.action_adjust_bounds_prompt),
                                                         tint = MaterialTheme.colorScheme.primary,
                                                         modifier = Modifier.size(28.dp)
                                                     )

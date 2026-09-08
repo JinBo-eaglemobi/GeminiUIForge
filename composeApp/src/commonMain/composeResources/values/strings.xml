@@ -459,9 +459,10 @@
     <string name="gp_ws_demo_param">Demo Mode</string>
     <string name="gp_ws_debug_param">Debug Mode</string>
     <string name="gp_ws_dev_tools">Open Chrome DevTools</string>
-    <string name="batch_gen_refine_block">Refine Block</string>
-    <string name="block_refine_dialog_title">Block Refinement - %1$s</string>
-    <string name="block_refine_dialog_desc">Drag handles or enter values to refine block bounds. Hold Space to pan canvas.</string>
+    <string name="action_adjust_bounds_prompt">Adjust Size &amp; Prompt</string>
+    <string name="action_adjust_bounds_prompt_tip">Directly adjust block position and dimensions on canvas, and edit generation prompts</string>
+    <string name="block_refine_dialog_title">Adjust Bounds &amp; Prompt - %1$s</string>
+    <string name="block_refine_dialog_desc">Drag handles or enter values to adjust block position and bounds, and edit generation prompts below.</string>
     <string name="block_refine_pos_x">X Pos</string>
     <string name="block_refine_pos_y">Y Pos</string>
     <string name="block_refine_width">Width (W)</string>

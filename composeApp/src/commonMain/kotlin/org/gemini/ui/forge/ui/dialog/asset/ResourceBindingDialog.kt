@@ -34,7 +34,6 @@ import geminiuiforge.composeapp.generated.resources.*
  * 按层级级联选择资源配置表中的 key，并支持添加 (+)、更改（重选）、删除（逐级清除）以及展示说明。
  * 支持任意深度级联，智能解析 value 为 String 数组或 ResourceItem 数组。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResourceBindingDialog(
     block: UIBlock,

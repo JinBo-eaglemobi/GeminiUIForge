@@ -59,7 +59,6 @@ fun LayoutPropertyContent(
 
     var showBindingDialog by remember { mutableStateOf(false) }
     var showImg2ImgStudioDialog by remember { mutableStateOf(false) }
-    var showNoRefDialog by remember { mutableStateOf(false) }
     var showImageEditor by remember { mutableStateOf(false) }
     var configData by remember { mutableStateOf<List<ResourceItem>?>(null) }
     var configError by remember { mutableStateOf<String?>(null) }
@@ -151,10 +150,13 @@ fun LayoutPropertyContent(
                     // 物理尺寸与背景
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        shape = AppShapes.small,
+                        shape = AppShapes.medium,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 EditableInfoItem(
                                     label = "宽度 (W)",
@@ -360,26 +362,22 @@ fun LayoutPropertyContent(
                 }
 
 
-                // 细化编辑按钮：调起全项目公用的 BlockRefinementDialog 弹窗进行原图聚焦微调与文案修改
+                // 调整大小与提示词按钮：调起全项目公用的 BlockRefinementDialog 弹窗进行原图聚焦微调与文案修改
                 var showRefineDialog by remember(selectedBlock.id) { mutableStateOf(false) }
 
                 OutlinedButton(
                     onClick = { showRefineDialog = true },
-                    modifier = Modifier.fillMaxWidth().tip("在原参考图上聚焦放大、微调选区坐标与提示词文案"),
+                    modifier = Modifier.fillMaxWidth().tip(stringResource(Res.string.action_adjust_bounds_prompt_tip)),
                     shape = AppShapes.medium
                 ) {
                     Icon(Icons.Default.Tune, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("细化编辑模块 (聚焦微调)", style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(Res.string.action_adjust_bounds_prompt), style = MaterialTheme.typography.labelLarge)
                 }
 
                 if (showRefineDialog) {
-                    val parentOffset = remember(selectedBlock, state.currentPage?.blocks) {
-                        state.currentPage?.blocks?.calculateBlockParentOffset(selectedBlock.id) ?: Offset.Zero
-                    }
                     BlockRefinementDialog(
                         block = selectedBlock,
-                        parentOffset = parentOffset,
                         imageUri = state.referenceImageUri,
                         pageWidth = state.currentPage?.width ?: 1080f,
                         pageHeight = state.currentPage?.height ?: 1920f,
@@ -636,22 +634,17 @@ fun LayoutPropertyContent(
                 expanded = "高级与破坏性操作" !in blockCollapsedSet,
                 onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, "高级与破坏性操作", !it) }
             ) {
-                // 1. 以图生图 / 智能多轮 AI 视觉工作室核心操作入口
+                // 1. AI 视觉智能生图 / 对话工作室（零门槛直接打开，支持从零创建新图或基于参考图以图生图）
                 Button(
-                    onClick = {
-                        if (selectedBlock.referenceImage != null) {
-                            showImg2ImgStudioDialog = true
-                        } else {
-                            showNoRefDialog = true
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(42.dp).tip(stringResource(Res.string.btn_img2img_tip)),
+                    onClick = { showImg2ImgStudioDialog = true },
+                    modifier = Modifier.fillMaxWidth().height(42.dp).tip("打开 AI 视觉智能对话工作室，支持直接创建新图或基于参考图修改抠图"),
                     shape = AppShapes.medium,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     enabled = !state.isGenerating
                 ) {
-                    Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
+                    Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(Res.string.btn_img2img_label), style = MaterialTheme.typography.labelMedium)
+                    Text("AI 视觉智能生图 / 对话工作室", style = MaterialTheme.typography.labelMedium)
                 }
 
                 // 2. 参考区域与 AI 结构重塑
@@ -689,28 +682,17 @@ fun LayoutPropertyContent(
                 }
             }
 
-            // 1. 未设置参考区域时的拦截提示对话框
-            if (showNoRefDialog) {
-                AppConfirmDialog(
-                    title = stringResource(Res.string.img2img_no_ref_title),
-                    message = stringResource(Res.string.img2img_no_ref_desc),
-                    confirmText = stringResource(Res.string.img2img_btn_set_now),
-                    onConfirm = {
-                        showNoRefDialog = false
-                        viewModel.showReferenceArea(selectedBlock.id)
-                    },
-                    onDismiss = { showNoRefDialog = false }
-                )
-            }
-
-            // 2. 已设置参考区域时的以图生图 / 智能多轮视觉交互工作室
-            if (showImg2ImgStudioDialog && selectedBlock.referenceImage != null) {
+            // 智能多轮视觉交互工作室（零门槛打开，支持从零生图、原图定位自动截取或基于参考图生图）
+            if (showImg2ImgStudioDialog) {
                 val coroutineScope = rememberCoroutineScope()
                 UniversalVisualChatStudioDialog(
                     scopeId = selectedBlock.id,
                     projectName = state.projectName,
                     block = selectedBlock,
-                    initialReferenceImageUri = selectedBlock.referenceImage.getAbsolutePath(),
+                    initialReferenceImageUri = selectedBlock.referenceImage?.getAbsolutePath(),
+                    pageSourceImageUri = state.currentPage?.sourceImageUri?.getAbsolutePath(),
+                    pageWidth = state.currentPage?.width ?: 1080f,
+                    pageHeight = state.currentPage?.height ?: 1920f,
                     currentLang = state.currentLang,
                     apiKey = apiKey,
                     storage = viewModel.storage,

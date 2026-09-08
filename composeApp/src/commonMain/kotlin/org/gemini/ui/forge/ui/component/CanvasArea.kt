@@ -24,9 +24,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -73,6 +76,7 @@ fun CanvasArea(
     var zoom by remember { mutableStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var isSpacePressed by remember { mutableStateOf(false) }
+    var isRightButtonDragging by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val density = LocalDensity.current
 
@@ -120,7 +124,8 @@ fun CanvasArea(
             .background(MaterialTheme.colorScheme.background)
             .focusRequester(focusRequester)
             .focusable()
-            .onKeyEvent { keyEvent ->
+            .onFocusChanged { if (!it.isFocused) isSpacePressed = false }
+            .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.key == Key.Spacebar) {
                     when (keyEvent.type) {
                         KeyEventType.KeyDown -> {
@@ -133,9 +138,7 @@ fun CanvasArea(
                         }
                         else -> false
                     }
-                } else {
-                    false
-                }
+                } else false
             }
     ) {
         val totalHeightPx = with(density) { maxHeight.toPx() }
@@ -239,9 +242,21 @@ fun CanvasArea(
 
                         var isMultiSelectActive by remember { mutableStateOf(false) }
 
+                        // ★ 手势参数动态快照：手势协程一律 pointerInput(Unit) 保持长效保活，
+                        // 运行期通过 State 读取最新值，绝不把 blocks 作为 key，彻底杜绝坐标更新导致手势中断卡死！
+                        val currentBlocksState by rememberUpdatedState(blocks)
+                        val currentEditingGroupState by rememberUpdatedState(editingGroupId)
+                        val currentOffsetXState by rememberUpdatedState(offsetX)
+                        val currentOffsetYState by rememberUpdatedState(offsetY)
+                        val currentBaseScaleState by rememberUpdatedState(baseScale)
+                        val currentIsReadOnlyState by rememberUpdatedState(isReadOnly)
+                        val currentIsSpacePressedState by rememberUpdatedState(isSpacePressed)
+                        val currentDensityState by rememberUpdatedState(density)
+                        val currentSelectedBlockIdsState by rememberUpdatedState(state.selectedBlockIds)
+
                         Box(
                             modifier = Modifier.fillMaxSize()
-                                .pointerHoverIcon(if (isSpacePressed) PointerIcon.Hand else PointerIcon.Default)
+                                .pointerHoverIcon(if (isSpacePressed || isRightButtonDragging) PointerIcon.Hand else PointerIcon.Default)
                                 .pointerInput(Unit) {
                                     awaitPointerEventScope {
                                         while (true) {
@@ -249,47 +264,79 @@ fun CanvasArea(
                                             isMultiSelectActive = event.keyboardModifiers.isShiftPressed ||
                                                     event.keyboardModifiers.isCtrlPressed ||
                                                     event.keyboardModifiers.isMetaPressed
+
+                                            // ★ 遵照用户要求：仅在画布区域鼠标按下时才请求获取焦点，移动时不随意抢焦点
+                                            if (event.type == PointerEventType.Press && event.buttons.isPrimaryPressed) {
+                                                runCatching { focusRequester.requestFocus() }
+                                            }
                                         }
                                     }
                                 }
-                                .pointerInput(blocks, editingGroupId, offsetX, offsetY, baseScale, isSpacePressed) {
+                                // ★ 专用鼠标右键平移画布手势（无需 awaitFirstDown，原生帧事件流即时响应）
+                                .pointerInput(Unit) {
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                                            if (event.buttons.isSecondaryPressed) {
+                                                isRightButtonDragging = true
+                                                if (event.type == PointerEventType.Move) {
+                                                    val change = event.changes.firstOrNull()
+                                                    if (change != null) {
+                                                        val delta = change.position - change.previousPosition
+                                                        pan += delta
+                                                        change.consume()
+                                                    }
+                                                }
+                                            } else {
+                                                if (isRightButtonDragging) {
+                                                    isRightButtonDragging = false
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                .pointerInput(Unit) {
                                     detectTapGestures(
                                         onDoubleTap = { offset ->
-                                            if (isSpacePressed) return@detectTapGestures
-                                            val lx = (offset.x / density.density - offsetX) / baseScale
-                                            val ly = (offset.y / density.density - offsetY) / baseScale
+                                            if (currentIsSpacePressedState || isRightButtonDragging) return@detectTapGestures
+                                            val curDensity = currentDensityState
+                                            val lx = (offset.x / curDensity.density - currentOffsetXState) / currentBaseScaleState
+                                            val ly = (offset.y / curDensity.density - currentOffsetYState) / currentBaseScaleState
                                             val hitBlock =
-                                                blocks.findHitBlock(lx, ly, 0f, 0f, editingGroupId)
-                                            if (hitBlock != null) viewModel.onBlockDoubleClicked(hitBlock.id) else if (editingGroupId != null) viewModel.exitGroupEdit() else viewModel.onBlockClicked(
+                                                currentBlocksState.findHitBlock(lx, ly, 0f, 0f, currentEditingGroupState)
+                                            if (hitBlock != null) viewModel.onBlockDoubleClicked(hitBlock.id) else if (currentEditingGroupState != null) viewModel.exitGroupEdit() else viewModel.onBlockClicked(
                                                 null,
                                                 false
                                             )
                                         },
                                         onTap = { offset ->
-                                            if (isSpacePressed) return@detectTapGestures
-                                            val lx = (offset.x / density.density - offsetX) / baseScale
-                                            val ly = (offset.y / density.density - offsetY) / baseScale
+                                            if (currentIsSpacePressedState || isRightButtonDragging) return@detectTapGestures
+                                            val curDensity = currentDensityState
+                                            val lx = (offset.x / curDensity.density - currentOffsetXState) / currentBaseScaleState
+                                            val ly = (offset.y / curDensity.density - currentOffsetYState) / currentBaseScaleState
                                             val hitBlock =
-                                                blocks.findHitBlock(lx, ly, 0f, 0f, editingGroupId)
+                                                currentBlocksState.findHitBlock(lx, ly, 0f, 0f, currentEditingGroupState)
                                             viewModel.onBlockClicked(hitBlock?.id, isMultiSelectActive)
                                         }
                                     )
                                 }
-                                .pointerInput(blocks, editingGroupId, offsetX, offsetY, baseScale, isReadOnly, isSpacePressed) {
-                                    if (isReadOnly) return@pointerInput
+                                .pointerInput(Unit) {
                                     var dragTargetId: String? = null
                                     var isPanningStage = false
                                     detectDragGestures(
                                         onDragStart = { offset ->
-                                            if (isSpacePressed) {
+                                            runCatching { focusRequester.requestFocus() }
+                                            if (currentIsReadOnlyState || isRightButtonDragging) return@detectDragGestures
+                                            if (currentIsSpacePressedState) {
                                                 dragTargetId = null
                                                 isPanningStage = true
                                                 isInteractingWithBlock = false
                                             } else {
-                                                val lx = (offset.x / density.density - offsetX) / baseScale
-                                                val ly = (offset.y / density.density - offsetY) / baseScale
+                                                val curDensity = currentDensityState
+                                                val lx = (offset.x / curDensity.density - currentOffsetXState) / currentBaseScaleState
+                                                val ly = (offset.y / curDensity.density - currentOffsetYState) / currentBaseScaleState
                                                 val hitBlock =
-                                                    blocks.findHitBlock(lx, ly, 0f, 0f, editingGroupId)
+                                                    currentBlocksState.findHitBlock(lx, ly, 0f, 0f, currentEditingGroupState)
                                                 if (hitBlock != null) {
                                                     dragTargetId = hitBlock.id
                                                     isPanningStage = false
@@ -303,12 +350,16 @@ fun CanvasArea(
                                             }
                                         },
                                         onDrag = { change, dragAmount ->
+                                            if (currentIsReadOnlyState || isRightButtonDragging) return@detectDragGestures
                                             change.consume()
-                                            if (isPanningStage || isSpacePressed) pan += dragAmount else if (dragTargetId != null) {
-                                                val logicalDx = dragAmount.x / density.density / baseScale
-                                                val logicalDy = dragAmount.y / density.density / baseScale
-                                                if (state.selectedBlockIds.contains(dragTargetId)) {
-                                                    viewModel.layoutEditor.moveBlocksBy(state.selectedBlockIds, logicalDx, logicalDy)
+                                            if (isPanningStage || currentIsSpacePressedState) {
+                                                pan += dragAmount
+                                            } else if (dragTargetId != null) {
+                                                val curDensity = currentDensityState
+                                                val logicalDx = dragAmount.x / curDensity.density / currentBaseScaleState
+                                                val logicalDy = dragAmount.y / curDensity.density / currentBaseScaleState
+                                                if (currentSelectedBlockIdsState.contains(dragTargetId)) {
+                                                    viewModel.layoutEditor.moveBlocksBy(currentSelectedBlockIdsState, logicalDx, logicalDy)
                                                 } else {
                                                     viewModel.layoutEditor.moveBlockBy(dragTargetId!!, logicalDx, logicalDy)
                                                 }

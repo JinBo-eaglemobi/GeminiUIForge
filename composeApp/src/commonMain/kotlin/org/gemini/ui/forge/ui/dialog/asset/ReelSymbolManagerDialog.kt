@@ -7,12 +7,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CropRotate
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.ImageNotSupported
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.ImageNotSupported
 import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,19 +22,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
+import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.ProjectWorkspaceState
+import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
+import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.dialog.ai.BlockRefinementDialog
+import org.gemini.ui.forge.ui.dialog.ai.studio.UniversalVisualChatStudioDialog
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.utils.cropImage
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.gemini.ui.forge.getCurrentTimeMillis
 
@@ -52,14 +61,25 @@ fun ReelSymbolManagerDialog(
 ) {
     val scope = rememberCoroutineScope()
 
+    // 自动自适应计算转轴单元格的基础推荐宽高
+    val reelBlock = state.selectedBlock
+    val defaultSymbolW = if (reelBlock != null && props.columns > 0) (reelBlock.bounds.width / props.columns).toInt().coerceAtLeast(20) else 100
+    val defaultSymbolH = if (reelBlock != null && props.rows > 0) (reelBlock.bounds.height / props.rows).toInt().coerceAtLeast(20) else 100
+
     // 控制是否显示新增/编辑符号元素的二级对话框
     var showAddItemDialog by remember { mutableStateOf(false) }
     // 当前正在编辑的元素；为 null 时表示当前处于“新增”模式
     var editingItem by remember { mutableStateOf<UIBlock?>(null) }
 
-    // 在对话框中临时缓存的中英文描述，用于输入绑定
+    // 符号参数输入状态
     var newItemPromptZh by remember { mutableStateOf("") }
     var newItemPromptEn by remember { mutableStateOf("") }
+    var itemWidth by remember { mutableStateOf(defaultSymbolW.toString()) }
+    var itemHeight by remember { mutableStateOf(defaultSymbolH.toString()) }
+
+    // 模块级全套能力触发状态
+    var symbolToRefine by remember { mutableStateOf<UIBlock?>(null) }
+    var symbolForStudio by remember { mutableStateOf<UIBlock?>(null) }
 
     // 提示词 Tab 状态：0 = 中文, 1 = 英文
     var promptTab by remember { mutableStateOf(0) }
@@ -78,15 +98,20 @@ fun ReelSymbolManagerDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.9f),
         title = {
-            // 标题栏：包含标题文字和新增按钮
+            // 标题栏：包含标题文字、自适应单格尺寸说明和新增按钮
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("转轴符号集管理器")
+                Column {
+                    Text("转轴符号集管理器", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Text("单个网格基础尺寸: $defaultSymbolW × $defaultSymbolH px (支持每个符号自定义尺寸与专属参考图)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.weight(1f))
                 IconButton(
                     onClick = {
                         editingItem = null
                         newItemPromptZh = ""
                         newItemPromptEn = ""
+                        itemWidth = defaultSymbolW.toString()
+                        itemHeight = defaultSymbolH.toString()
                         promptTab = 0
                         showAddItemDialog = true
                     },
@@ -156,12 +181,43 @@ fun ReelSymbolManagerDialog(
 
                                 Spacer(Modifier.width(12.dp))
 
-                                // 文本描述：展示中文名称和英文 Prompt
+                                // 文本与尺寸描述：展示中文名称、英文 Prompt 及自适应物理尺寸
                                 Column(Modifier.weight(1f)) {
-                                    Text(
-                                        item.userPromptZh.ifBlank { item.id },
-                                        style = MaterialTheme.typography.titleSmall
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            item.userPromptZh.ifBlank { item.id },
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                                            shape = AppShapes.extraSmall
+                                        ) {
+                                            Text(
+                                                text = "${item.bounds.width.toInt()} × ${item.bounds.height.toInt()} px",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 9.sp,
+                                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                        if (item.referenceImage != null) {
+                                            Spacer(Modifier.width(4.dp))
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.primaryContainer,
+                                                shape = AppShapes.extraSmall
+                                            ) {
+                                                Text(
+                                                    text = "含参考图",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontSize = 9.sp,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(Modifier.height(2.dp))
                                     Text(
                                         item.userPromptEn.ifBlank { "No English Prompt" },
                                         style = MaterialTheme.typography.labelSmall,
@@ -170,19 +226,14 @@ fun ReelSymbolManagerDialog(
                                     )
                                 }
 
-                                // 操作按钮组：编辑、生成、删除
-
-                                // 编辑按钮：点击打开二级对话框修改文本
-                                IconButton(onClick = {
-                                    editingItem = item
-                                    newItemPromptZh = item.userPromptZh
-                                    newItemPromptEn = item.userPromptEn
-                                    promptTab =
-                                        if (item.userPromptEn.isNotBlank() && item.userPromptZh.isBlank()) 1 else 0
-                                    showAddItemDialog = true
-                                }, modifier = Modifier.size(32.dp).tip("编辑符号及生成资源")) {
+                                // 模块化操作按钮组：设置参考图、AI 对话生图、修改尺寸文案、历史资产、删除
+                                // 1. 设置参考图按钮（调起画框选区在底图上裁剪参考图）
+                                IconButton(
+                                    onClick = { symbolToRefine = item },
+                                    modifier = Modifier.size(32.dp).tip("为该符号设置/裁剪专属参考底图")
+                                ) {
                                     Icon(
-                                        Icons.Default.Edit,
+                                        Icons.Default.CropRotate,
                                         null,
                                         Modifier.size(18.dp),
                                         tint = MaterialTheme.colorScheme.primary
@@ -191,15 +242,11 @@ fun ReelSymbolManagerDialog(
 
                                 Spacer(Modifier.width(4.dp))
 
-                                // 生成按钮：点击弹出确认并生成
-                                IconButton(onClick = {
-                                    editingItem = item
-                                    newItemPromptZh = item.userPromptZh
-                                    newItemPromptEn = item.userPromptEn
-                                    promptTab =
-                                        if (item.userPromptEn.isNotBlank() && item.userPromptZh.isBlank()) 1 else 0
-                                    showGenConfirmDialog = true
-                                }, modifier = Modifier.size(32.dp).tip("快速触发 AI 生图")) {
+                                // 2. AI 视觉智能工作室生图
+                                IconButton(
+                                    onClick = { symbolForStudio = item },
+                                    modifier = Modifier.size(32.dp).tip("打开 AI 视觉智能对话工作室（生图/图生图）")
+                                ) {
                                     Icon(
                                         Icons.Default.AutoAwesome,
                                         null,
@@ -210,10 +257,30 @@ fun ReelSymbolManagerDialog(
 
                                 Spacer(Modifier.width(4.dp))
 
-                                // 历史生成记录按钮
+                                // 3. 编辑尺寸与文案按钮
+                                IconButton(onClick = {
+                                    editingItem = item
+                                    newItemPromptZh = item.userPromptZh
+                                    newItemPromptEn = item.userPromptEn
+                                    itemWidth = (if (item.bounds.width > 0) item.bounds.width.toInt() else defaultSymbolW).toString()
+                                    itemHeight = (if (item.bounds.height > 0) item.bounds.height.toInt() else defaultSymbolH).toString()
+                                    promptTab = if (item.userPromptEn.isNotBlank() && item.userPromptZh.isBlank()) 1 else 0
+                                    showAddItemDialog = true
+                                }, modifier = Modifier.size(32.dp).tip("修改符号尺寸与提示词文案")) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        null,
+                                        Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                Spacer(Modifier.width(4.dp))
+
+                                // 4. 历史生成记录按钮
                                 IconButton(onClick = {
                                     viewModel.showHistoricalDialog(item.id)
-                                }, modifier = Modifier.size(32.dp).tip("查看历史候选图")) {
+                                }, modifier = Modifier.size(32.dp).tip("查看该符号的历史资产")) {
                                     Icon(
                                         Icons.Default.History,
                                         null,
@@ -224,7 +291,7 @@ fun ReelSymbolManagerDialog(
 
                                 Spacer(Modifier.width(4.dp))
 
-                                // 删除按钮：将该符号从集合中移除
+                                // 5. 删除符号按钮
                                 IconButton(onClick = {
                                     itemToDeleteIndex = index
                                 }, modifier = Modifier.size(32.dp).tip("删除此符号")) {
@@ -350,6 +417,27 @@ fun ReelSymbolManagerDialog(
                         }
                     } else null
 
+                    // 符号尺寸定义：默认自适应单个网格尺寸，同时支持自由自定义宽高
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        NumberOutlinedTextField(
+                            value = itemWidth,
+                            onValueChange = { itemWidth = it },
+                            label = { Text("符号宽度 (默认: $defaultSymbolW px)") },
+                            modifier = Modifier.weight(1f),
+                            isFloat = false
+                        )
+                        NumberOutlinedTextField(
+                            value = itemHeight,
+                            onValueChange = { itemHeight = it },
+                            label = { Text("符号高度 (默认: $defaultSymbolH px)") },
+                            modifier = Modifier.weight(1f),
+                            isFloat = false
+                        )
+                    }
+
                     if (promptTab == 0) {
                         SelectAllOutlinedTextField(
                             value = newItemPromptZh,
@@ -373,8 +461,11 @@ fun ReelSymbolManagerDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // 仅保存按钮
                     Button(onClick = {
+                        val finalW = itemWidth.toFloatOrNull()?.takeIf { it > 0f } ?: defaultSymbolW.toFloat()
+                        val finalH = itemHeight.toFloatOrNull()?.takeIf { it > 0f } ?: defaultSymbolH.toFloat()
                         val targetItem = if (editingItem != null) {
                             editingItem!!.copy(
+                                bounds = SerialRect(0f, 0f, finalW, finalH),
                                 userPromptZh = newItemPromptZh,
                                 userPromptEn = newItemPromptEn
                             )
@@ -382,7 +473,7 @@ fun ReelSymbolManagerDialog(
                             UIBlock(
                                 id = "sym_${getCurrentTimeMillis()}",
                                 type = UIBlockType.SYMBOL,
-                                bounds = SerialRect(0f, 0f, 100f, 100f),
+                                bounds = SerialRect(0f, 0f, finalW, finalH),
                                 userPromptZh = newItemPromptZh,
                                 userPromptEn = newItemPromptEn
                             )
@@ -422,9 +513,12 @@ fun ReelSymbolManagerDialog(
             message = "将使用当前选中的 $langText 提示词触发 AI 生成任务。生成的图片将作为此符号的候选资产。是否继续？",
             confirmText = "开始生成",
             onConfirm = {
-                // 1. 先保存当前数据（确保生图使用的是最新的 Prompt）
+                // 1. 先保存当前数据（确保生图使用的是最新的 Prompt 与自定义尺寸）
+                val finalW = itemWidth.toFloatOrNull()?.takeIf { it > 0f } ?: defaultSymbolW.toFloat()
+                val finalH = itemHeight.toFloatOrNull()?.takeIf { it > 0f } ?: defaultSymbolH.toFloat()
                 val targetItem = if (editingItem != null) {
                     editingItem!!.copy(
+                        bounds = SerialRect(0f, 0f, finalW, finalH),
                         userPromptZh = newItemPromptZh,
                         userPromptEn = newItemPromptEn
                     )
@@ -432,7 +526,7 @@ fun ReelSymbolManagerDialog(
                     UIBlock(
                         id = "sym_${getCurrentTimeMillis()}",
                         type = UIBlockType.SYMBOL,
-                        bounds = SerialRect(0f, 0f, 100f, 100f),
+                        bounds = SerialRect(0f, 0f, finalW, finalH),
                         userPromptZh = newItemPromptZh,
                         userPromptEn = newItemPromptEn
                     )
@@ -457,6 +551,95 @@ fun ReelSymbolManagerDialog(
                 showAddItemDialog = false
             },
             onDismiss = { showGenConfirmDialog = false }
+        )
+    }
+
+    // 1. 为转轴符号设置/裁剪专属参考底图 (BlockRefinementDialog)
+    if (symbolToRefine != null && state.currentPage?.sourceImageUri != null) {
+        val targetSym = symbolToRefine!!
+        BlockRefinementDialog(
+            block = targetSym,
+            isReferenceAreaOnly = true,
+            imageUri = state.currentPage!!.sourceImageUri!!,
+            pageWidth = state.currentPage!!.width,
+            pageHeight = state.currentPage!!.height,
+            onDismiss = { symbolToRefine = null },
+            onConfirm = { updatedBlock ->
+                scope.launch {
+                    try {
+                        val originalImage = state.currentPage!!.sourceImageUri!!
+                        val croppedBytes = cropImage(
+                            imageSource = originalImage.getAbsolutePath(),
+                            bounds = updatedBlock.bounds,
+                            logicalWidth = state.currentPage!!.width,
+                            logicalHeight = state.currentPage!!.height
+                        )
+                        if (croppedBytes != null) {
+                            val savedFile = viewModel.templateRepo.saveBlockResource(
+                                templateName = state.projectName,
+                                blockId = targetSym.id,
+                                fileNamePrefix = "crop_ref",
+                                bytes = croppedBytes,
+                                isPng = false
+                            )
+                            val updatedSym = targetSym.copy(referenceImage = savedFile)
+                            val newItems = props.items.map { if (it.id == targetSym.id) updatedSym else it }
+                            viewModel.assetManager.updateBlockProperties(state.selectedBlock?.id ?: "", props.copy(items = newItems))
+                            Toast.show("已成功为符号设置专属参考底图", ToastType.SUCCESS)
+                        }
+                    } catch (e: Exception) {
+                        Toast.show("裁剪符号参考底图失败: ${e.message}", ToastType.ERROR)
+                    } finally {
+                        symbolToRefine = null
+                    }
+                }
+            }
+        )
+    }
+
+    // 2. 为转轴符号调起全功能 AI 视觉工作室生图 (UniversalVisualChatStudioDialog)
+    if (symbolForStudio != null) {
+        val targetSym = symbolForStudio!!
+        UniversalVisualChatStudioDialog(
+            scopeId = targetSym.id,
+            projectName = state.projectName,
+            block = targetSym,
+            initialReferenceImageUri = targetSym.referenceImage?.getAbsolutePath(),
+            pageSourceImageUri = state.currentPage?.sourceImageUri?.getAbsolutePath(),
+            pageWidth = state.currentPage?.width ?: 1080f,
+            pageHeight = state.currentPage?.height ?: 1920f,
+            currentLang = state.currentLang,
+            apiKey = apiKey,
+            storage = viewModel.storage,
+            aiService = viewModel.aiService,
+            templateRepo = viewModel.templateRepo,
+            onApplyAsset = { imagePath ->
+                scope.launch {
+                    try {
+                        val fileBytes = org.gemini.ui.forge.utils.readLocalFileBytes(imagePath)
+                        val tFile = if (fileBytes != null) {
+                            viewModel.templateRepo.saveBlockResource(
+                                templateName = state.projectName,
+                                blockId = targetSym.id,
+                                fileNamePrefix = "chat_gen",
+                                bytes = fileBytes,
+                                isPng = imagePath.endsWith(".png", ignoreCase = true)
+                            )
+                        } else {
+                            TemplateFile(imagePath)
+                        }
+                        val updatedSym = targetSym.copy(currentImageUri = tFile)
+                        val newItems = props.items.map { if (it.id == targetSym.id) updatedSym else it }
+                        viewModel.assetManager.updateBlockProperties(state.selectedBlock?.id ?: "", props.copy(items = newItems))
+                        Toast.show("已成功为符号应用生成资产", ToastType.SUCCESS)
+                    } catch (e: Exception) {
+                        Toast.show("应用符号图片失败: ${e.message}", ToastType.ERROR)
+                    } finally {
+                        symbolForStudio = null
+                    }
+                }
+            },
+            onDismiss = { symbolForStudio = null }
         )
     }
 }

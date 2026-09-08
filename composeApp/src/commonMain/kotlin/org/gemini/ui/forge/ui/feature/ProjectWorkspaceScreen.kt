@@ -23,6 +23,7 @@ import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.app.ShortcutAction
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.utils.calculateBlockParentOffset
 import org.gemini.ui.forge.utils.findBlockById
 import androidx.compose.ui.geometry.Offset
 import org.gemini.ui.forge.service.AIGenerationService
@@ -374,7 +375,6 @@ fun ProjectWorkspaceScreen(
             BlockRefinementDialog(
                 block = refTargetBlock,
                 isReferenceAreaOnly = true,
-                parentOffset = Offset.Zero,
                 imageUri = state.currentPage!!.sourceImageUri!!,
                 pageWidth = state.currentPage!!.width,
                 pageHeight = state.currentPage!!.height,

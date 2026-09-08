@@ -108,40 +108,28 @@ fun CanvasFloatingControlBar(
             VerticalDivider(modifier = Modifier.height(16.dp))
 
             // ==========================================
-            // 3. 视觉模式切换区 (Visual Mode Toggle)
+            // 3. 骨架网格与辅助线开关 (Wireframe Grid Toggle 二合一合并版)
+            // 默认开启（高亮 GridOn），点击后一键隐藏骨架色块与边框线，进入 100% 纯净预览
             // ==========================================
+            val isWireframeOn = !(state.isVisualMode && state.isHideOutlines)
             IconToggleButton(
-                checked = state.isVisualMode,
-                onCheckedChange = { viewModel.toggleVisualMode() },
-                modifier = Modifier.size(28.dp).tip("切换视觉/线框模式")
+                checked = isWireframeOn,
+                onCheckedChange = { viewModel.toggleWireframe() },
+                modifier = Modifier.size(28.dp).tip(
+                    if (isWireframeOn) "骨架网格已开启，点击进入纯净预览模式"
+                    else "当前为纯净预览，点击显示骨架网格与边框"
+                )
             ) {
                 Icon(
-                    imageVector = if (state.isVisualMode) Icons.Default.AutoFixNormal else Icons.Default.AutoFixOff,
-                    contentDescription = "视觉模式",
+                    imageVector = if (isWireframeOn) Icons.Default.GridOn else Icons.Default.GridOff,
+                    contentDescription = "骨架网格与辅助线",
                     modifier = Modifier.size(18.dp),
-                    // 开启时高亮显示
-                    tint = if (state.isVisualMode) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                    tint = if (isWireframeOn) MaterialTheme.colorScheme.primary else LocalContentColor.current
                 )
             }
 
             // ==========================================
-            // 4. 隐藏描边切换区 (Hide Outlines Toggle)
-            // ==========================================
-            IconToggleButton(
-                checked = state.isHideOutlines,
-                onCheckedChange = { viewModel.toggleHideOutlines() },
-                modifier = Modifier.size(28.dp).tip("显示/隐藏模块边框")
-            ) {
-                Icon(
-                    imageVector = if (state.isHideOutlines) Icons.Default.GridOff else Icons.Default.GridOn,
-                    contentDescription = "隐藏描边",
-                    modifier = Modifier.size(18.dp),
-                    tint = if (state.isHideOutlines) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                )
-            }
-
-            // ==========================================
-            // 5. 参考图控制区 (Reference Image Controls)
+            // 4. 参考图控制区 (Reference Image Controls)
             // 仅当存在参考图 (referenceUri != null) 时才渲染此区域
             // ==========================================
             if (referenceUri != null) {

@@ -194,6 +194,7 @@ class LayoutEditorDelegate(
                             ))
                         }
                     }
+                    currentBlocks = currentBlocks.bindParents()
                     page.copy(blocks = currentBlocks)
                 } else page
             }
@@ -417,7 +418,7 @@ class LayoutEditorDelegate(
                 val savedFile = templateRepo.saveBlockResource(
                     templateName = currentState.projectName,
                     blockId = blockId,
-                    fileNamePrefix = "ref",
+                    fileNamePrefix = "crop_ref",
                     bytes = croppedBytes,
                     isPng = false
                 )

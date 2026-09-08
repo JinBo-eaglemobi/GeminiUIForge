@@ -16,6 +16,7 @@ import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.utils.bindParents
 import org.gemini.ui.forge.utils.findBlockById
 import org.gemini.ui.forge.utils.findParentBlockId
 import org.gemini.ui.forge.utils.updateBlockInList
@@ -28,6 +29,8 @@ import org.gemini.ui.forge.viewmodel.delegate.AssetManagerDelegate
 import org.gemini.ui.forge.viewmodel.delegate.HistoryManagerDelegate
 import org.gemini.ui.forge.viewmodel.delegate.LayoutEditorDelegate
 import org.gemini.ui.forge.viewmodel.delegate.ShortcutManagerDelegate
+import org.gemini.ui.forge.utils.isFileExists
+import org.gemini.ui.forge.utils.AppLogger
 
 /**
  * 统一工作区 ViewModel。
@@ -70,7 +73,7 @@ class ProjectWorkspaceViewModel(
     /** 1. 历史管理 (底层基础，供其它所有修改状态的委托使用) */
     val historyManager = HistoryManagerDelegate(
         getState = { _state.value },
-        updateState = { _state.update(it) },
+        updateState = { updateState(it) },
         markDirty = { markDirty() }
     )
 
@@ -80,7 +83,7 @@ class ProjectWorkspaceViewModel(
         aiService = aiService,
         templateRepo = templateRepo,
         getState = { _state.value },
-        updateState = { _state.update(it) },
+        updateState = { updateState(it) },
         notifySelectionHandled = { /* 内部逻辑已通过 AssetManager 同步 */ }
     )
 
@@ -91,7 +94,7 @@ class ProjectWorkspaceViewModel(
         templateRepo = templateRepo,
         cloudAssetManager = cloudAssetManager,
         getState = { _state.value },
-        updateState = { _state.update(it) },
+        updateState = { updateState(it) },
         markDirty = { markDirty() },
         saveSnapshot = { historyManager.saveSnapshot(it) },
         undo = { historyManager.undo() },
@@ -104,7 +107,7 @@ class ProjectWorkspaceViewModel(
         scope = viewModelScope,
         templateRepo = templateRepo,
         getState = { _state.value },
-        updateState = { _state.update(it) },
+        updateState = { updateState(it) },
         markDirty = { markDirty() },
         saveSnapshot = { historyManager.saveSnapshot(it) },
         notifySelectionHandled = { assetGen.completeConfirmation() }
@@ -151,6 +154,48 @@ class ProjectWorkspaceViewModel(
                     resourceConfigPath = wsConfig?.resourceConfigPath
                 )
             }
+            // ★ 内存级物理存在性清洗：若参考图文件物理不存在则在内存中置空，绝不主动写磁盘
+            cleanMissingReferenceImagesInMemory()
+        }
+    }
+
+    /**
+     * 内存安全校验与清洗：检查所有页面的 blocks 的 referenceImage 物理文件是否存在，
+     * 若文件不存在则仅在内存中置为 null，绝不主动调用 saveTemplate 写磁盘。
+     */
+    private suspend fun cleanMissingReferenceImagesInMemory() {
+        try {
+            var hasCleaned = false
+            val currentProj = _state.value.project
+            val updatedPages = currentProj.pages.map { page ->
+                var pageModified = false
+                suspend fun cleanBlock(block: UIBlock): UIBlock {
+                    val ref = block.referenceImage
+                    val validRef = if (ref != null && ref.relativePath.isNotBlank()) {
+                        if (isFileExists(ref.getAbsolutePath())) ref else null
+                    } else null
+
+                    if (validRef != ref) {
+                        pageModified = true
+                        hasCleaned = true
+                    }
+                    val cleanedChildren = block.children.map { cleanBlock(it) }
+                    return block.copy(referenceImage = validRef, children = cleanedChildren)
+                }
+
+                val cleanedBlocks = page.blocks.map { cleanBlock(it) }
+                if (pageModified) page.copy(blocks = cleanedBlocks) else page
+            }
+
+            val boundPages = updatedPages.map { page ->
+                page.copy(blocks = page.blocks.bindParents())
+            }
+            _state.update { it.copy(project = it.project.copy(pages = boundPages)) }
+            if (hasCleaned) {
+                AppLogger.i("ProjectWorkspaceVM", "已完成内存级参考图物理校验：已清理不存在的失效 referenceImage 引用（未主动写入磁盘）")
+            }
+        } catch (e: Exception) {
+            AppLogger.w("ProjectWorkspaceVM", "内存级参考图物理校验异常", e)
         }
     }
 
@@ -159,6 +204,8 @@ class ProjectWorkspaceViewModel(
         val effectiveRefUri = newProject.styleReferenceUri
             ?: newProject.referenceImages.firstOrNull()
             ?: newProject.pages.firstOrNull()?.sourceImageUri
+
+        newProject.pages.forEach { it.blocks.bindParents() }
 
         viewModelScope.launch {
             val wsConfig = templateRepo.loadWorkspaceConfig(_state.value.projectName)
@@ -216,6 +263,19 @@ class ProjectWorkspaceViewModel(
                 currentMap[targetId] = currentSet
             }
             it.copy(collapsedSections = currentMap)
+        }
+        saveWorkspaceConfig()
+    }
+
+    /** 切换骨架网格与辅助线（二合一合并操作：开启时显示色块与边框，隐藏时进入100%纯净预览） */
+    fun toggleWireframe() {
+        val currentOn = !(_state.value.isVisualMode && _state.value.isHideOutlines)
+        val nextOn = !currentOn
+        _state.update {
+            it.copy(
+                isVisualMode = !nextOn,
+                isHideOutlines = !nextOn
+            )
         }
         saveWorkspaceConfig()
     }

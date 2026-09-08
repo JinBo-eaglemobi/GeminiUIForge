@@ -7,8 +7,9 @@ import kotlinx.serialization.Serializable
  *
  * @param id 消息唯一ID
  * @param role 发送者角色：user 或 model
- * @param textZh 中文描述或提示词
- * @param textEn 英文描述或提示词
+ * @param prompt 真实上传给 AI 或 AI 真实回复的完整纯正内容（所发即所存）
+ * @param textZh 中文描述或提示词（兼容保留字段）
+ * @param textEn 英文描述或提示词（兼容保留字段）
  * @param inputImageUris 输入参考图或上一轮选区图像 URI 列表
  * @param generatedImageUri 模型生成的图像本地或网络 URI
  * @param isCompressed 是否已被上下文提炼引擎压缩/归档
@@ -18,6 +19,7 @@ import kotlinx.serialization.Serializable
 data class VisualChatMessage(
     val id: String,
     val role: String,
+    val prompt: String = "",
     val textZh: String = "",
     val textEn: String = "",
     val inputImageUris: List<String> = emptyList(),

@@ -37,11 +37,12 @@ import org.gemini.ui.forge.utils.looseJson
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * 视觉工作室会话完整 JSON 交互日志查看器（支持 Base64 智能折叠与专属预览）
+ * 视觉工作室真实的 API 网络通信日志与原始交互报文查看器
  */
 @Composable
 fun StudioSessionLogDialog(
     session: VisualChatSession?,
+    rawNetworkLog: String? = null,
     onDismiss: () -> Unit
 ) {
     val spacing = LocalAppSpacing.current
@@ -49,16 +50,18 @@ fun StudioSessionLogDialog(
 
     var selectedBase64Payload by remember { mutableStateOf<String?>(null) }
 
-    // 格式化完整 JSON
-    val rawJsonString = remember(session) {
-        if (session != null) {
+    // 格式化真实原始通信日志
+    val rawJsonString = remember(session, rawNetworkLog) {
+        if (!rawNetworkLog.isNullOrBlank()) {
+            rawNetworkLog
+        } else if (session != null) {
             try {
                 looseJson.encodeToString(VisualChatSession.serializer(), session)
             } catch (e: Exception) {
                 "JSON 序列化失败: ${e.message}"
             }
         } else {
-            "当前无活动会话"
+            "当前会话尚未发起通信，暂无原始网络数据"
         }
     }
 
@@ -98,12 +101,12 @@ fun StudioSessionLogDialog(
                         Spacer(Modifier.width(spacing.small))
                         Column {
                             Text(
-                                text = "会话完整 JSON 交互日志",
+                                text = "真实 API 网络通信数据与原始报文",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "超长 Base64 数据已在视图中自动折叠，点击右上角复制获取全量数据",
+                                text = "100% 原始格式的 Request URL 与完整 Request/Response JSON，点击右上角一键复制原始数据",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

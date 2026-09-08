@@ -170,6 +170,13 @@ class AppViewModel(
                     )
                 )
             }
+
+            // ★ 应用启动自检：确保 IMAGE_TO_UI_SPEC 规范同步至本地外部缓存目录
+            try {
+                org.gemini.ui.forge.manager.PromptManager(templateRepo.fileStorage).ensureSpecSyncedToCache()
+            } catch (e: Exception) {
+                AppLogger.w("AppViewModel", "启动同步 IMAGE_TO_UI_SPEC 失败", e)
+            }
         }
     }
 

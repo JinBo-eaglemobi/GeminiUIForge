@@ -25,9 +25,14 @@ class SessionCacheManager(private val storage: LocalFileStorage) {
     }
 
     /**
-     * 保存或更新会话到本地外部缓存
+     * 保存或更新会话到本地外部缓存（仅在产生真实对话时才允许落盘）
      */
     suspend fun saveSession(session: VisualChatSession): Boolean = withContext(Dispatchers.Default) {
+        // ★ 核心约束：0 轮会话（未发送任何真实用户对话）绝对不保存到磁盘
+        if (session.messages.none { it.role == "user" }) {
+            return@withContext true
+        }
+
         val safeScope = sanitizeScopeId(session.scopeId)
         val relativePath = "$SESSIONS_ROOT/$safeScope/${session.id}.json"
         try {

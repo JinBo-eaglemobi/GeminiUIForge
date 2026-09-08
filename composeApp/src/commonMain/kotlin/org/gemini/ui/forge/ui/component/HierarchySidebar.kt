@@ -122,13 +122,16 @@ fun HierarchySidebar(
     var dropPosition by remember { mutableStateOf(DropPosition.INSIDE) }
 
     Box(modifier = modifier.fillMaxHeight()) {
+        val currentBlocksState by rememberUpdatedState(blocks)
+        val currentIsReadOnlyState by rememberUpdatedState(isReadOnly)
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 .onGloballyPositioned { listCoordinates = it }
-                .pointerInput(blocks, isReadOnly) {
-                    if (isReadOnly) return@pointerInput
+                .pointerInput(Unit) {
+                    if (currentIsReadOnlyState) return@pointerInput
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val windowOffset = listCoordinates?.localToWindow(down.position) ?: down.position
@@ -136,21 +139,21 @@ fun HierarchySidebar(
                         fun walk(l: List<UIBlock>) {
                             l.forEach { walk(it.children); allIds.add(it.id) }
                         }
-                        walk(blocks)
+                        walk(currentBlocksState)
                         val hit = itemBounds.entries.toList().asReversed()
                             .filter { it.key in allIds }
                             .find { it.value.contains(windowOffset) }
                         pressedBlockId = hit?.key
                     }
                 }
-                .pointerInput(blocks, isReadOnly) {
-                    if (isReadOnly) return@pointerInput
+                .pointerInput(Unit) {
+                    if (currentIsReadOnlyState) return@pointerInput
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
                             val sourceId = pressedBlockId
                             if (sourceId != null) {
                                 draggedBlockId = sourceId
-                                val blockObj = blocks.findBlockById(sourceId)
+                                val blockObj = currentBlocksState.findBlockById(sourceId)
                                 if (blockObj != null) {
                                     dragShadowIcon = blockObj.type.getIcon()
                                     dragShadowLabel = blockObj.id

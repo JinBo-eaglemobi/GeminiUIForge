@@ -47,7 +47,6 @@ import kotlin.math.min
  * @param onDismiss 取消/关闭对话框时的回调
  * @param onConfirm 确认保存回调（返回坐标与文案更新后的全新 UIBlock 对象）
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BlockRefinementDialog(
     block: UIBlock,
@@ -59,27 +58,15 @@ fun BlockRefinementDialog(
     onDismiss: () -> Unit,
     onConfirm: (UIBlock) -> Unit
 ) {
-    // 1. 初始化计算全局绝对坐标
-    val initialAbsBounds = remember(block.bounds, parentOffset) {
-        val minX = min(block.bounds.left, block.bounds.right)
-        val minY = min(block.bounds.top, block.bounds.bottom)
-        val w = abs(block.bounds.width)
-        val h = abs(block.bounds.height)
-        val absLeft = parentOffset.x + minX
-        val absTop = parentOffset.y + minY
-        SerialRect(
-            left = absLeft,
-            top = absTop,
-            right = absLeft + w,
-            bottom = absTop + h
-        )
+    // 1. 无参直接获取全局绝对坐标（模块属性自推导）
+    val initialAbsBounds = remember(block) {
+        block.absoluteBounds
     }
 
     // 2. 当前正在微调的全局绝对物理矩形坐标（支持可空，清除后允许重新划选）
     var currentAbsBounds by remember(initialAbsBounds) { mutableStateOf<SerialRect?>(initialAbsBounds) }
 
     // 3. 提示词中英文双语编辑与加载状态
-    var currentPromptLang by remember { mutableStateOf(PromptLanguage.ZH) }
     var promptZh by remember(block.userPromptZh) { mutableStateOf(block.userPromptZh) }
     var promptEn by remember(block.userPromptEn) { mutableStateOf(block.userPromptEn) }
     var isOptimizing by remember { mutableStateOf(false) }
@@ -275,18 +262,16 @@ fun BlockRefinementDialog(
                                 Toast.show("请先在底图上框选模块范围", ToastType.INFO)
                                 return@Button
                             }
-                            // 逆向扣除父级绝对偏移量，换算回局部坐标
-                            val relLeft = bounds.left - parentOffset.x
-                            val relTop = bounds.top - parentOffset.y
-                            val relRight = bounds.right - parentOffset.x
-                            val relBottom = bounds.bottom - parentOffset.y
+                            // 坐标解耦与逆向换算处理
+                            val finalBounds = if (isReferenceAreaOnly) {
+                                // ★ 设置参考区域模式：裁剪整张页面原图必须使用全景绝对逻辑矩形，严禁逆向扣除 parentOffset
+                                bounds
+                            } else {
+                                // ★ 常规模块微调模式：由模块内建无参推导逆向换算回直接父级的局部相对坐标
+                                block.toLocalBounds(bounds)
+                            }
                             val updatedBlock = block.copy(
-                                bounds = SerialRect(
-                                    left = relLeft,
-                                    top = relTop,
-                                    right = relRight,
-                                    bottom = relBottom
-                                ),
+                                bounds = finalBounds,
                                 userPromptZh = promptZh,
                                 userPromptEn = promptEn
                             )

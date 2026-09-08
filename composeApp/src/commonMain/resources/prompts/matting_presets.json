@@ -2,11 +2,20 @@
   {
     "id": "extract_button",
     "nameZh": "提取单体按钮",
-    "descriptionZh": "从参考图中精准剥离出指定按钮/图标，去除底图与周边干扰，生成独立纯净的UI组件",
-    "promptZh": "精准提取参考图中的核心交互按钮/组件主体。去除所有底图背景、周边网格与多余干扰元素，保持按钮的完整轮廓、立体高光、材质纹理与边缘清晰度，置于纯净背景中以便提取透明通道。",
+    "descriptionZh": "从参考图中精准剥离指定按钮主体，完整保留外发光、霓虹辉光与阴影投影，残缺部分自动外延补齐",
+    "promptZh": "精准提取参考图中的核心交互按钮/组件主体。完整保留并扣下按钮原有的外发光（Outer Glow）、霓虹辉光、投射阴影与立体高光。若按钮边缘的发光光晕或阴影在参考图中存在残缺或被画布边缘切断，请依据对称性与光照角度自动进行外延补全与柔和光晕修复，使按钮的光效与阴影自然完整。去除所有底图网格与杂乱背景，置于平整纯色高对比度背景上以便提取透明通道。",
     "nameEn": "Extract Interactive Button",
-    "descriptionEn": "Isolate the interactive button from the reference image, removing background and surrounding noise.",
-    "promptEn": "Precisely extract the core interactive button/component from the reference image. Remove all background textures, surrounding grids, and extraneous elements. Maintain the button's complete silhouette, 3D highlights, material textures, and crisp edges on a clean background suitable for transparency cutout."
+    "descriptionEn": "Isolate the interactive button while preserving outer glows, neon blooms, and drop shadows, auto-completing cropped edges.",
+    "promptEn": "Precisely extract the core interactive button/component from the reference image. Fully retain and isolate the button's native outer glow, neon luminescence, cast shadows, and 3D highlights. If any glow halos, aura, or shadow edges are cropped or incomplete in the reference image, automatically outpaint, complete, and smoothly restore the full symmetry and feathered falloff. Remove all background textures and surrounding clutter, placing the complete glowing button on a flat, high-contrast solid background suitable for lossless transparency cutout."
+  },
+  {
+    "id": "extract_glowing_effect_icon",
+    "nameZh": "提取发光光效与渐变图标",
+    "descriptionZh": "提取带有半透明发光、柔和光晕、多层霓虹与渐变色彩的光效图标，自动补齐周边光晕，保留细腻半透明亮度",
+    "promptZh": "精准提取参考图中的发光特效、光效图标或半透明能量组件。重点保留其细腻的线性/径向色彩渐变、半透明亮度（Luminescence）、柔和的边缘羽化辉光（Bloom/Glow）与流动光斑。若光效外边缘在参考图中存在截断或不全，请根据光晕衰减曲线自动智能补齐外延扩散的完整光晕弧度，确保整个光晕过渡柔滑自然。剔除底图硬杂质与无关UI，置于平整深纯色背景上，以便完整保留半透明透明通道。",
+    "nameEn": "Extract Glowing Light Effect & Gradient Icon",
+    "descriptionEn": "Isolate icons with semi-transparent luminescence, soft bloom halos, neon gradients, and feathered glows, auto-completing cropped halos.",
+    "promptEn": "Precisely extract the glowing visual effect, luminous icon, or semi-transparent energy element from the reference image. Crucially preserve its delicate linear/radial color gradients, semi-transparent brightness levels (luminescence), soft feathered bloom/glow halos, and specular flares. If the glow or aura is cropped or incomplete at the edges, intelligently extrapolate and restore the complete radial falloff curve and diffusion arcs. Eliminate all background clutter, placing the effect on a flat, solid dark background to facilitate seamless alpha-channel transparency extraction."
   },
   {
     "id": "clean_background_inpaint",

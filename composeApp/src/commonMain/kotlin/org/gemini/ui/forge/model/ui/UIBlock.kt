@@ -2,7 +2,9 @@ package org.gemini.ui.forge.model.ui
 
 import org.gemini.ui.forge.data.TemplateFile
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.geometry.Offset
 import org.gemini.ui.forge.model.app.PromptLanguage
 
 /**
@@ -31,8 +33,75 @@ data class UIBlock(
     val children: List<UIBlock> = emptyList(),
     val isVisible: Boolean = true, // 新增：图层是否可见
     val properties: BlockProperties? = null, // 新增：不同类型模块的专属属性
-    val resourceBindingPath: List<String> = emptyList() // 新增：资源绑定层级路径
+    val resourceBindingPath: List<String> = emptyList(), // 新增：资源绑定层级路径
+    // ★ 运行时持有直接父级引用，主构造函数声明 + @Transient 阻断 JSON 序列化，copy() 自动继承，永不断裂！
+    @Transient
+    val parent: UIBlock? = null
 ) : AssetSupport {
+
+    /**
+     * 当前模块在页面全景大图上的全局绝对逻辑矩形 (核心只读计算属性)
+     *
+     * 性能与数学铁律：
+     * 1. 纯二维平移变换，模块宽高绝对恒定，100% 不参与平移计算；
+     * 2. 扁平 while 循环直接累加原始浮点数位移，中间过程 0 临时对象分配 (Zero Allocation)。
+     *
+     * @return 当前模块在整张页面全景大图坐标系下的全局绝对逻辑矩形 [SerialRect]
+     */
+    val absoluteBounds: SerialRect
+        get() {
+            var cur = parent
+            var ox = 0f
+            var oy = 0f
+            while (cur != null) {
+                ox += cur.bounds.left
+                oy += cur.bounds.top
+                cur = cur.parent
+            }
+            val absLeft = bounds.left + ox
+            val absTop = bounds.top + oy
+            return SerialRect(
+                left = absLeft,
+                top = absTop,
+                right = absLeft + bounds.width,
+                bottom = absTop + bounds.height
+            )
+        }
+
+    /**
+     * 无参直接获取全局绝对逻辑矩形（函数式别名，等价于直接访问 [absoluteBounds] 属性）
+     *
+     * @return 当前模块在全景大图坐标系下的全局绝对逻辑矩形 [SerialRect]
+     */
+    fun toAbsoluteBounds(): SerialRect = absoluteBounds
+
+    /**
+     * 将全局绝对矩形逆向换算回相对于当前模块直接父容器的局部相对矩形 (对称逆向方法)
+     *
+     * 宽高恒定保持一致，仅做原点平移反算，中间过程 0 临时对象创建。
+     *
+     * @param absRect 在整页全景大图绝对坐标系下的目标矩形（如用户拖拽、画框选区或画布吸附计算出的绝对矩形）
+     * @return 逆向扣除所有父级累计位移后，适合直接持久化写回当前模块 [bounds] 的局部相对矩形 [SerialRect]
+     */
+    fun toLocalBounds(absRect: SerialRect): SerialRect {
+        var cur = parent
+        var ox = 0f
+        var oy = 0f
+        while (cur != null) {
+            ox += cur.bounds.left
+            oy += cur.bounds.top
+            cur = cur.parent
+        }
+        val relLeft = absRect.left - ox
+        val relTop = absRect.top - oy
+        return SerialRect(
+            left = relLeft,
+            top = relTop,
+            right = relLeft + absRect.width,
+            bottom = relTop + absRect.height
+        )
+    }
+
     /** 自动拼接基础类别描述与用户自定义描述，形成最终发给生图模型的完整 Prompt */
     val fullPrompt: String
         get() = "${type.defaultPrompt}, $userPrompt"

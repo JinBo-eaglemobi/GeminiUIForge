@@ -748,6 +748,15 @@ private fun EditorStage(
     var dragT by remember(config.top) { mutableStateOf(config.top.toFloat()) }
     var dragB by remember(config.bottom) { mutableStateOf(config.bottom.toFloat()) }
 
+    val currentViewZoom by rememberUpdatedState(viewZoom)
+    val currentViewOffset by rememberUpdatedState(viewOffset)
+    val currentCanvasW by rememberUpdatedState(canvasW)
+    val currentCanvasH by rememberUpdatedState(canvasH)
+    val currentContentW by rememberUpdatedState(contentW)
+    val currentContentH by rememberUpdatedState(contentH)
+
+    var isRightMouseDragging by remember { mutableStateOf(false) }
+
     Canvas(
         modifier = Modifier.fillMaxSize().onGloballyPositioned {
             if (!isInitialized && it.size.width > 0) {
@@ -772,20 +781,43 @@ private fun EditorStage(
                     }
                 }
             }
-        }.pointerInput(mode, viewZoom, viewOffset, canvasW, canvasH, contentW, contentH) {
+        }.pointerInput(Unit) {
+            // ★ 专用鼠标右键自由平移切图画布
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    if (event.buttons.isSecondaryPressed) {
+                        isRightMouseDragging = true
+                        if (event.type == PointerEventType.Move) {
+                            val change = event.changes.firstOrNull()
+                            if (change != null) {
+                                val delta = change.position - change.previousPosition
+                                viewOffset += delta
+                                change.consume()
+                            }
+                        }
+                    } else {
+                        if (isRightMouseDragging) {
+                            isRightMouseDragging = false
+                        }
+                    }
+                }
+            }
+        }.pointerInput(mode) {
             detectDragGestures(
                 onDragStart = { start ->
+                    if (isRightMouseDragging) return@detectDragGestures
                     if (mode == ImageResizeMode.NINE_PATCH) {
-                        val cX = viewOffset.x + (canvasW * viewZoom - contentW * viewZoom) / 2f
-                        val cY = viewOffset.y + (canvasH * viewZoom - contentH * viewZoom) / 2f
-                        val tx = (start.x - cX) / viewZoom
-                        val ty = (start.y - cY) / viewZoom
-                        val slop = 20f / viewZoom
+                        val cX = currentViewOffset.x + (currentCanvasW * currentViewZoom - currentContentW * currentViewZoom) / 2f
+                        val cY = currentViewOffset.y + (currentCanvasH * currentViewZoom - currentContentH * currentViewZoom) / 2f
+                        val tx = (start.x - cX) / currentViewZoom
+                        val ty = (start.y - cY) / currentViewZoom
+                        val slop = 20f / currentViewZoom
                         activeLine = when {
                             abs(tx - config.left) < slop -> DragTarget.LEFT
-                            abs(tx - (contentW - config.right)) < slop -> DragTarget.RIGHT
+                            abs(tx - (currentContentW - config.right)) < slop -> DragTarget.RIGHT
                             abs(ty - config.top) < slop -> DragTarget.TOP
-                            abs(ty - (contentH - config.bottom)) < slop -> DragTarget.BOTTOM
+                            abs(ty - (currentContentH - config.bottom)) < slop -> DragTarget.BOTTOM
                             else -> DragTarget.PAN
                         }
                     } else activeLine = DragTarget.PAN
@@ -796,8 +828,8 @@ private fun EditorStage(
                     if (activeLine == DragTarget.PAN) {
                         viewOffset += amt
                     } else if (mode == ImageResizeMode.NINE_PATCH) {
-                        val dx = amt.x / viewZoom
-                        val dy = amt.y / viewZoom
+                        val dx = amt.x / currentViewZoom
+                        val dy = amt.y / currentViewZoom
                         when (activeLine) {
                             DragTarget.LEFT -> dragL = (dragL + dx).coerceIn(0f, contentW - dragR - 10f)
                             DragTarget.RIGHT -> dragR = (dragR - dx).coerceIn(0f, contentW - dragL - 10f)

@@ -170,7 +170,7 @@ fun RenderBlock(
     val isSelected = block.id == selectedBlockId || selectedBlockIds.contains(block.id)
     val isDimmed = block.shouldDim(editingGroupId)
 
-    // 1. 异步加载已生成的专属 AI 图像成品（精准追踪 relativePath 变动）
+    // 1. 异步加载已生成的专属 AI 图像成品（第一级）
     val currentUri = block.currentImageUri
     val hasBoundAsset = currentUri != null
     val imageBitmapState =
@@ -179,21 +179,35 @@ fun RenderBlock(
         }
     val imageBitmap = imageBitmapState.value
 
-    // 2. 屏幕物理渲染坐标（供 Modifier.offset 使用）
+    // 2. 异步加载已设置并保存的该模块专属参考切片图（第二级）
+    val refUri = block.referenceImage
+    val customRefBitmapState =
+        produceState<ImageBitmap?>(null, refUri, refUri?.relativePath) {
+            value = refUri?.decodeToBitmap()
+        }
+    val customRefBitmap = customRefBitmapState.value
+
+    // 3. 屏幕物理渲染坐标（供 Modifier.offset 使用）
     val currentRenderX = parentRenderX + block.bounds.left * baseScale
     val currentRenderY = parentRenderY + block.bounds.top * baseScale
 
-    // 3. 逻辑绝对物理坐标（供底图切片裁剪使用，100% 纯净准确）
-    val absLeft = parentLogicX + block.bounds.left
-    val absTop = parentLogicY + block.bounds.top
-    val absWidth = block.bounds.width
-    val absHeight = block.bounds.height
+    // 4. 逻辑绝对物理坐标（直接访问内建绝对矩形，自推导所有父级位移）
+    val absBounds = block.absoluteBounds
+    val absLeft = absBounds.left
+    val absTop = absBounds.top
+    val absWidth = absBounds.width
+    val absHeight = absBounds.height
 
-    // 4. 是否有可用参考图切片（★ 强互斥：一旦绑定了资源图片，绝对禁止判定为 hasRefSlice，杜绝底层残留）
-    val hasRefSlice = !hasBoundAsset && imageBitmap == null && refBitmap != null && block.type != UIBlockType.TEXT
+    // 5. 是否有可用参考图切片（第三级：仅在无成品图且无专属参考图时，由合规类型从底图按全局绝对坐标现场截取呈现）
+    val hasRefSlice = block.type.supportsReferenceSlice &&
+            !hasBoundAsset &&
+            imageBitmap == null &&
+            customRefBitmap == null &&
+            refBitmap != null
 
-    // 5. 视觉状态判断
-    val hidePlaceholder = isVisualMode && (imageBitmap != null || hasRefSlice)
+    // 6. 视觉状态判断
+    val hasVisualImage = imageBitmap != null || customRefBitmap != null || hasRefSlice
+    val hidePlaceholder = isVisualMode && hasVisualImage
     val selectionColor = Color(0xFF00E5FF) // 高亮鲜明电光蓝，深浅背景均 100% 夺目
 
     // 解析 VIEW 类型的自定义背景色
@@ -206,7 +220,7 @@ fun RenderBlock(
         isHideOutlines && !isSelected -> Color.Transparent
         viewBgColor != null -> viewBgColor
         hidePlaceholder -> Color.Transparent
-        hasRefSlice -> Color.Transparent // 切片存在时透明背景，满格渲染
+        hasRefSlice || customRefBitmap != null -> Color.Transparent // 图片存在时透明背景，满格渲染
         isSelected -> selectionColor.copy(alpha = 0.22f)
         isDimmed -> Color.Black.copy(alpha = 0.4f)
         else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
@@ -234,15 +248,23 @@ fun RenderBlock(
         val showReelBg = reelProps?.showBackground != false
 
         if (imageBitmap != null && showReelBg) {
-            // 优先渲染已生成的 AI 图像成品
+            // 优先级 1：已生成的正式 AI 图像成品
             Image(
                 bitmap = imageBitmap,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.FillBounds
             )
+        } else if (customRefBitmap != null && showReelBg) {
+            // 优先级 2：该模块专属设置并保存过的参考切片图（固定专属图，不随模块位移发生原图错位）
+            Image(
+                bitmap = customRefBitmap,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.FillBounds
+            )
         } else if (hasRefSlice && showReelBg) {
-            // 未生图时：依据绝对逻辑坐标从参考底图中精准裁剪并满格无缝贴合模块
+            // 优先级 3：尚未设置专属参考图时，依据模块当前的全局绝对坐标从全景底图中现场切片呈现
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val imgW = refBitmap.width.toFloat()
                 val imgH = refBitmap.height.toFloat()

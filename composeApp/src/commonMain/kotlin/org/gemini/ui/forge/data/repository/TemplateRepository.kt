@@ -219,15 +219,39 @@ class TemplateRepository(
             if (content != null) {
                 try {
                     val state = looseJson.decodeFromString<ProjectState>(content)
+                    // ★ 内存安全物理校验：检查所有模块的 referenceImage 物理文件是否存在，若丢失则仅在内存中置空，绝不主动落盘写磁盘
+                    val validatedState = validateAndCleanMissingReferencesInMemory(state)
                     val title = dirName.replace("_", " ")
-                    AppLogger.d("TemplateRepository", "📖 已加载模板: $title")
-                    title to state
+                    AppLogger.d("TemplateRepository", "📖 已加载模板并完成内存参考图校验: $title")
+                    title to validatedState
                 } catch (e: Exception) {
                     AppLogger.e("TemplateRepository", "❌ 解析模板 JSON 失败: $dirName", e)
                     null
                 }
             } else null
         }
+    }
+
+    /**
+     * 内存安全校验与清洗：检查所有 blocks 的 referenceImage 物理文件是否存在，
+     * 若文件丢失则仅在内存运行时置为 null（不写磁盘，保留原文件）。
+     */
+    private suspend fun validateAndCleanMissingReferencesInMemory(projectState: ProjectState): ProjectState {
+        val updatedPages = projectState.pages.map { page ->
+            suspend fun cleanBlock(block: UIBlock): UIBlock {
+                val ref = block.referenceImage
+                val validRef = if (ref != null && ref.relativePath.isNotBlank()) {
+                    if (isFileExists(ref.getAbsolutePath())) ref else null
+                } else null
+
+                val cleanedChildren = block.children.map { cleanBlock(it) }
+                return block.copy(referenceImage = validRef, children = cleanedChildren)
+            }
+
+            val cleanedBlocks = page.blocks.map { cleanBlock(it) }
+            page.copy(blocks = cleanedBlocks.bindParents())
+        }
+        return projectState.copy(pages = updatedPages)
     }
 
     suspend fun updateStorageDir(newPath: String): Boolean {

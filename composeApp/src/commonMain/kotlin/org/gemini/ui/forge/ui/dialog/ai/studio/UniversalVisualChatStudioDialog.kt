@@ -12,9 +12,15 @@ import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -31,12 +37,18 @@ import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.dialog.ai.BlockRefinementDialog
+import org.gemini.ui.forge.ui.dialog.ai.studio.component.StudioReferenceSourceDialog
 import org.gemini.ui.forge.ui.dialog.ai.studio.component.StudioSessionLogDialog
 import org.gemini.ui.forge.ui.dialog.asset.AssetSelectionDialog
+import org.gemini.ui.forge.ui.dialog.asset.ImageEditorDialog
+import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.utils.isFileExists
+import org.gemini.ui.forge.utils.rememberFilePicker
 import org.gemini.ui.forge.viewmodel.VisualChatStudioViewModel
 import org.jetbrains.compose.resources.stringResource
 
@@ -49,6 +61,9 @@ fun UniversalVisualChatStudioDialog(
     projectName: String = "",
     block: UIBlock? = null,
     initialReferenceImageUri: String? = null,
+    pageSourceImageUri: String? = null,
+    pageWidth: Float = 1080f,
+    pageHeight: Float = 1920f,
     currentLang: PromptLanguage = PromptLanguage.ZH,
     apiKey: String,
     storage: LocalFileStorage,
@@ -76,7 +91,33 @@ fun UniversalVisualChatStudioDialog(
     var selectedVariantRefImage by remember { mutableStateOf<String?>(null) }
     var lightboxImageUri by remember { mutableStateOf<String?>(null) }
     var showAssetGalleryDialog by remember { mutableStateOf(false) }
+    var moduleHistoricalImages by remember { mutableStateOf<List<TemplateFile>>(emptyList()) }
+    var isProcessingHistoricalBg by remember { mutableStateOf(false) }
     var showLogDialog by remember { mutableStateOf(false) }
+    var pendingEditorImageUri by remember { mutableStateOf<String?>(null) }
+    var showRefSourceDialog by remember { mutableStateOf(false) }
+    var showRegionSelectorDialog by remember { mutableStateOf(false) }
+    var showNoInitialRefGuideDialog by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    val localRefImagePicker = rememberFilePicker(
+        title = "选择参考底图",
+        isFolder = false,
+        extensions = listOf("png", "jpg", "jpeg", "webp")
+    ) { uri ->
+        if (!uri.isNullOrBlank()) {
+            viewModel.updateActiveReferenceImage(uri)
+            selectedVariantRefImage = null
+            Toast.show("已更新参考底图", ToastType.SUCCESS)
+        }
+    }
+
+    // 当打开历史资产窗口时，自动加载当前模块磁盘目录下的全量历史图片（与属性面板完全一致）
+    LaunchedEffect(showAssetGalleryDialog) {
+        if (showAssetGalleryDialog) {
+            moduleHistoricalImages = viewModel.loadModuleHistoricalImages()
+        }
+    }
 
     // 左侧会话抽屉宽度比例（默认 0.2f，支持鼠标自由拖拽）
     var leftSidebarWeight by remember { mutableStateOf(0.2f) }
@@ -177,12 +218,15 @@ fun UniversalVisualChatStudioDialog(
                     val totalWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
 
                     Row(modifier = Modifier.fillMaxSize()) {
-                        // 左侧会话抽屉 (响应式动态权重)
+                        // 左侧会话抽屉 (响应式动态权重，全量支持多会话列表与删除)
                         Box(modifier = Modifier.weight(leftSidebarWeight).fillMaxHeight()) {
                             StudioSessionSidebar(
+                                sessions = state.historySessions,
                                 currentSession = state.currentSession,
                                 hasCompressedContext = state.hasCompressedContext,
                                 onNewChat = { viewModel.createNewChat() },
+                                onSelectSession = { viewModel.switchSession(it) },
+                                onDeleteSession = { viewModel.deleteSession(it) },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
@@ -220,7 +264,24 @@ fun UniversalVisualChatStudioDialog(
                                 currentVariantImageUri = selectedVariantRefImage,
                                 onImageClick = { imgUri -> lightboxImageUri = imgUri },
                                 onApplyImage = { imageUri ->
-                                    onApplyAsset(imageUri)
+                                    coroutineScope.launch {
+                                        val targetW = block?.bounds?.width?.toInt() ?: 0
+                                        val targetH = block?.bounds?.height?.toInt() ?: 0
+                                        val size = try {
+                                            org.gemini.ui.forge.utils.getImageSize(imageUri)
+                                        } catch (e: Exception) {
+                                            null
+                                        }
+                                        val actualW = size?.first ?: 0
+                                        val actualH = size?.second ?: 0
+                                        if (targetW > 0 && targetH > 0 && (actualW != targetW || actualH != targetH)) {
+                                            // 尺寸不符，弹出切图加工与烘焙界面
+                                            pendingEditorImageUri = imageUri
+                                            Toast.show("图片尺寸 ($actualW×$actualH) 与当前模块 ($targetW×$targetH) 不一致，正在打开切图加工...", ToastType.INFO)
+                                        } else {
+                                            onApplyAsset(imageUri)
+                                        }
+                                    }
                                 },
                                 onVariantImage = { imageUri ->
                                     if (selectedVariantRefImage == imageUri || imageUri.isBlank()) {
@@ -236,17 +297,23 @@ fun UniversalVisualChatStudioDialog(
 
                             Spacer(Modifier.height(spacing.small))
 
-                            // 底部智能输入中枢（包含左侧固定参考图卡片 + 自适应双列宽屏场景下拉器 + 独立模型/张数配置 + 中止按钮 + 云端上传开关）
+                            val effectiveRefImage = selectedVariantRefImage ?: state.activeReferenceImageUri ?: initialReferenceImageUri
+
+                            // 底部智能输入中枢（包含场景下拉器 + 从零新图/以图生图双模分段切换 + 纯净参考图卡片与弹窗配置 + 独立模型/张数 + 中止按钮）
                             StudioInputBottomBar(
                                 promptZh = block?.userPromptZh ?: "",
                                 promptEn = block?.userPromptEn ?: "",
-                                referenceImageUri = selectedVariantRefImage ?: initialReferenceImageUri,
+                                referenceImageUri = effectiveRefImage,
+                                previewMemoryBytes = state.previewMemoryBytes,
+                                isImageToImage = state.isImageToImageMode,
+                                onModeChanged = { viewModel.setCreationMode(it) },
+                                onOpenRefConfig = { showRefSourceDialog = true },
                                 isVariantMode = selectedVariantRefImage != null,
                                 onRevertToOriginal = {
                                     selectedVariantRefImage = null
                                     Toast.show("已还原为模块初始参考底图", ToastType.INFO)
                                 },
-                                onReferenceImageClick = { lightboxImageUri = it },
+                                onReferenceImageClick = { lightboxImageUri = it.toString() },
                                 initialLanguage = currentLang,
                                 selectedModel = state.selectedModel,
                                 onModelSelected = { viewModel.updateModel(it) },
@@ -259,7 +326,7 @@ fun UniversalVisualChatStudioDialog(
                                     viewModel.optimizePrompt(text, apiKey) {}
                                 },
                                 onCancel = { viewModel.cancelCurrentGeneration() },
-                                onSend = { zh, en, activeLang, isPng, cloudBg, uploadCloud, model, count ->
+                                onSend = { zh, en, activeLang, isI2I, isPng, cloudBg, uploadCloud, model, count ->
                                     viewModel.sendGenerationRequest(
                                         promptZh = zh,
                                         promptEn = en,
@@ -267,7 +334,8 @@ fun UniversalVisualChatStudioDialog(
                                         apiKey = apiKey,
                                         model = model,
                                         generationCount = count,
-                                        referenceImageUri = selectedVariantRefImage ?: initialReferenceImageUri,
+                                        referenceImageUri = effectiveRefImage,
+                                        isImageToImage = isI2I,
                                         isPng = isPng,
                                         useCloudBgRemoval = cloudBg,
                                         isUploadToCloud = uploadCloud
@@ -288,31 +356,164 @@ fun UniversalVisualChatStudioDialog(
             )
         }
 
-        // 4. 标准历史生成资产选择弹窗 (AssetSelectionDialog)
+        // 4. 参考底图配置与专业来源选择弹窗
+        if (showRefSourceDialog) {
+            StudioReferenceSourceDialog(
+                canCropFromPage = !pageSourceImageUri.isNullOrBlank() && block != null,
+                hasCurrentReference = state.previewMemoryBytes != null || !state.activeReferenceImageUri.isNullOrBlank(),
+                hasInitialReference = !initialReferenceImageUri.isNullOrBlank(),
+                onStartRegionSelect = { showRegionSelectorDialog = true },
+                onPickLocalImage = { localRefImagePicker() },
+                onRestoreInitial = {
+                    coroutineScope.launch {
+                        val initUri = initialReferenceImageUri?.ifBlank { null }
+                        val exists = if (initUri != null) isFileExists(initUri) else false
+                        if (exists) {
+                            viewModel.updateActiveReferenceImage(initUri)
+                            selectedVariantRefImage = null
+                            Toast.show("已还原为模块初始参考底图", ToastType.INFO)
+                        } else {
+                            // 发现没有设置过或文件已丢失，弹窗引导去设置！
+                            showNoInitialRefGuideDialog = true
+                        }
+                    }
+                },
+                onClearReference = {
+                    viewModel.clearReferenceImage()
+                    selectedVariantRefImage = null
+                    Toast.show("已清除参考底图", ToastType.INFO)
+                },
+                onDismiss = { showRefSourceDialog = false }
+            )
+        }
+
+        // 5. 自由交互式选区画框对话框（延时按需切图：仅内存暂存预览，发送时自动物理切图）
+        if (showRegionSelectorDialog && !pageSourceImageUri.isNullOrBlank() && block != null) {
+            BlockRefinementDialog(
+                block = block,
+                isReferenceAreaOnly = true,
+                imageUri = TemplateFile(pageSourceImageUri),
+                pageWidth = pageWidth,
+                pageHeight = pageHeight,
+                onDismiss = { showRegionSelectorDialog = false },
+                onConfirm = { updatedBlock ->
+                    showRegionSelectorDialog = false
+                    coroutineScope.launch {
+                        viewModel.setPendingReferenceArea(
+                            pageSourceUri = pageSourceImageUri,
+                            bounds = updatedBlock.bounds,
+                            pageWidth = pageWidth,
+                            pageHeight = pageHeight
+                        )
+                        selectedVariantRefImage = null
+                        Toast.show("已在内存中暂存选区（发送时自动物理切图）", ToastType.SUCCESS)
+                    }
+                }
+            )
+        }
+
+        // 6. 初始参考图未设置引导对话框
+        if (showNoInitialRefGuideDialog) {
+            AppConfirmDialog(
+                title = "尚未设置初始参考图",
+                message = "该模块此前尚未设置过专属初始参考区域。是否现在前往页面原图进行画框框选？",
+                confirmText = "前往设置参考图",
+                onConfirm = {
+                    showNoInitialRefGuideDialog = false
+                    showRegionSelectorDialog = true
+                },
+                onDismiss = { showNoInitialRefGuideDialog = false }
+            )
+        }
+
+        // 4. 标准历史生成资产选择弹窗 (全量对齐属性面板历史数据源与功能)
         if (showAssetGalleryDialog) {
-            val candidateFiles = state.sessionGeneratedImages.map { TemplateFile(it) }
             AssetSelectionDialog(
                 title = "当前模块历史生成资产",
-                candidates = candidateFiles,
+                candidates = moduleHistoricalImages,
                 targetWidth = block?.bounds?.width ?: 0f,
                 targetHeight = block?.bounds?.height ?: 0f,
+                isProcessing = isProcessingHistoricalBg,
                 onImageSelected = { selectedFile ->
                     onApplyAsset(selectedFile.getAbsolutePath())
                     showAssetGalleryDialog = false
                     Toast.show("已成功应用选中的历史资产", ToastType.SUCCESS)
                     onDismiss()
                 },
-                onDeleteImages = {},
-                onClearAll = {},
+                onBatchRemoveBg = { uris ->
+                    coroutineScope.launch {
+                        val file = uris.firstOrNull() ?: return@launch
+                        try {
+                            isProcessingHistoricalBg = true
+                            Toast.show("正在启动本地 AI 抠图引擎...", ToastType.INFO)
+                            val bytes = file.readBytes() ?: throw Exception("无法读取文件数据")
+                            val noBgBytes = aiService.removeBackgroundLocal(bytes) ?: throw Exception("本地抠图失败")
+                            templateRepo.saveBlockResource(
+                                templateName = projectName,
+                                blockId = block?.id ?: "chat_gen",
+                                fileNamePrefix = "nobg",
+                                bytes = noBgBytes,
+                                isPng = true
+                            )
+                            moduleHistoricalImages = viewModel.loadModuleHistoricalImages()
+                            isProcessingHistoricalBg = false
+                            Toast.show("本地去背景成功！已生成透明 PNG", ToastType.SUCCESS)
+                        } catch (e: Exception) {
+                            isProcessingHistoricalBg = false
+                            Toast.show("本地去背景失败: ${e.message}", ToastType.ERROR)
+                        }
+                    }
+                },
+                onDeleteImages = { filesToDelete ->
+                    coroutineScope.launch {
+                        filesToDelete.forEach { it.delete() }
+                        moduleHistoricalImages = viewModel.loadModuleHistoricalImages()
+                        Toast.show("已删除选中的资产文件", ToastType.SUCCESS)
+                    }
+                },
+                onClearAll = {
+                    coroutineScope.launch {
+                        moduleHistoricalImages.forEach { it.delete() }
+                        moduleHistoricalImages = emptyList()
+                        Toast.show("已清空该模块的所有历史资产", ToastType.SUCCESS)
+                    }
+                },
                 onDismiss = { showAssetGalleryDialog = false }
             )
         }
 
-        // 5. 会话完整 JSON 交互日志弹窗 (StudioSessionLogDialog)
+        // 5. 真实 API 网络通信日志弹窗 (StudioSessionLogDialog)
         if (showLogDialog) {
             StudioSessionLogDialog(
                 session = state.currentSession,
+                rawNetworkLog = state.rawNetworkLog,
                 onDismiss = { showLogDialog = false }
+            )
+        }
+
+        // 6. 尺寸不一致时弹出的加工与烘焙切图界面 (ImageEditorDialog)
+        if (pendingEditorImageUri != null && block != null) {
+            ImageEditorDialog(
+                block = block,
+                initialImageUri = pendingEditorImageUri!!,
+                onDismiss = { pendingEditorImageUri = null },
+                onConfirm = { bytes, mode, config, cropBytes ->
+                    coroutineScope.launch {
+                        try {
+                            val savedFile = templateRepo.saveBlockResource(
+                                templateName = projectName,
+                                blockId = block.id,
+                                fileNamePrefix = "baked",
+                                bytes = bytes,
+                                isPng = true
+                            )
+                            onApplyAsset(savedFile.getAbsolutePath())
+                            pendingEditorImageUri = null
+                        } catch (e: Exception) {
+                            Toast.show("保存烘焙切图失败: ${e.message}", ToastType.ERROR)
+                        }
+                    }
+                }
             )
         }
     }

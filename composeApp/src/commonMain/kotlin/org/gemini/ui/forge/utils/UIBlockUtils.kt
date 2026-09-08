@@ -9,6 +9,23 @@ import org.gemini.ui.forge.model.ui.UIBlock
  */
 
 /**
+ * 双向父级引用自动递归接线 (Auto-Bind Parents)
+ *
+ * 遍历整棵模块树，将每个子节点的 parent 引用准确回填为其直接父级节点对象。
+ * 用于从 JSON 反序列化加载后瞬间建立血缘树连接，赋能无参坐标转换。
+ *
+ * @param parent 当前层级模块的直接父级 [UIBlock] 实例，根节点层级为 null
+ * @return 完成父级双向引用的模块列表自身 [List<UIBlock>]
+ */
+fun List<UIBlock>.bindParents(parent: UIBlock? = null): List<UIBlock> {
+    return this.map { block ->
+        val boundBlock = block.copy(parent = parent)
+        val boundChildren = boundBlock.children.bindParents(boundBlock)
+        boundBlock.copy(children = boundChildren)
+    }
+}
+
+/**
  * 递归遍历模块树，通过 ID 检索对应的 UIBlock。
  *
  * @param id 目标模块的唯一标识符

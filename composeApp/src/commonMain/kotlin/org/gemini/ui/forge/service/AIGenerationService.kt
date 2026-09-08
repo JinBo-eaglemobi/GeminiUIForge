@@ -306,7 +306,6 @@ class AIGenerationService(
      * @param onChunk 解析结果的流式片段回调。
      * @return 解析后的项目状态 [ProjectState]。
      */
-    @OptIn(ExperimentalEncodingApi::class)
     suspend fun analyzeImagesForTemplate(
         imageUris: List<String>,
         apiKey: String = "",
@@ -321,7 +320,13 @@ class AIGenerationService(
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
         val client = NetworkClient.shared
 
-        val promptText = promptManager.getPrompt("analyze_template")
+        val basePrompt = promptManager.getPrompt("analyze_template")
+        val specText = promptManager.getImageToUiSpec()
+        val promptText = if (specText.isNotBlank()) {
+            "$basePrompt\n\n--- MANDATORY SPECIFICATION (IMAGE_TO_UI_SPEC) ---\n$specText"
+        } else {
+            basePrompt
+        }
 
         syncLog("🚀 正在同步参考资源 (并发模式)...", onLog)
 
@@ -420,7 +425,13 @@ class AIGenerationService(
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
 
         val promptTemplate = promptManager.getPrompt("refine_template")
-        val fullPrompt = promptTemplate.replace($$"${USER_INSTRUCTION}", userInstruction)
+        val basePrompt = promptTemplate.replace($$"${USER_INSTRUCTION}", userInstruction)
+        val specText = promptManager.getImageToUiSpec()
+        val fullPrompt = if (specText.isNotBlank()) {
+            "$$basePrompt\n\n--- MANDATORY SPECIFICATION (IMAGE_TO_UI_SPEC) ---\n$$specText"
+        } else {
+            basePrompt
+        }
 
 
         // 使用统一图片预处理方法处理 croppedBytes

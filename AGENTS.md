@@ -39,6 +39,7 @@
 - **编译优先 (Compiling First)**: **【红线规则】** 验证是任务完成的唯一标准。对于影响编译的修改，严禁在未确认编译通过的情况下交付任务。若编译或自动化校验过程中出现报错，必须主动修复直至完全通过，不得带病进入下一阶段。
 - 结合平台优先级规范：`compileKotlinJvm`（桌面端）通过即视为编译校验达标；其他平台的编译问题记录后延后处理，不作为任务完成的阻塞项。
 - **物理校验优先 (Physical Check First)**: **【红线规则】** 外部脚本或工具修改文件后，IntelliJ IDEA 的编辑器可能会由于内存缓冲区机制（VFS 缓存）而显示未更新的视图。**切勿单凭编辑器的视觉表现来判断修改成败**。必须始终通过原生 `git diff` 或 `Get-Content` / `cat` 物理读取作为落盘的唯一铁证。若发现 IDE 刷新滞后，可右键文件选择 `Reload from Disk`，或利用 `Synchronize` 和 `ReloadFromFile` 的 IDE Action。
+- **破坏性文件与数据清理强制二次确认 (Mandatory Confirmation for Destructive Actions)**: **【红线规则】** 严禁在任何 UI 交互或按钮逻辑中编写“点击后未经确认直接静默物理删除/清空本地磁盘文件或核心数据”的代码。任何涉及物理删除文件、清空资产历史库、删除项目模板或破坏性重置数据库的操作，**必须强制弹出带有清晰后果警示说明的二次确认弹窗（如 `AppConfirmDialog`）**，且确认操作必须使用警示样式（`isDestructive = true`），只有经用户在弹窗中显式确认授权后方可调用底层物理清理！
 - **定位底层具体实现 (Target Direct Implementations)**: 在 JetBrains Compose 等界面开发中，大片 UI 卡片常常被抽取成同文件内的辅助私有组件（如 `private fun CredentialSection`）。编辑前必须使用 `grep` 检索全文，**确保将具体修改落实到承载具体逻辑的辅助函数定义体内，而不是主界面内的调用点**，防止误伤整体调用。
 
 ## 代码规范
@@ -46,6 +47,26 @@
 - **文件规范与单文件规模控制**: 严格遵循"一文件一类 / 一文件一主组件（One Class/Component Per File）"的原则。禁止将多个类（Class/Interface/Enum 等）声明在同一个物理文件中，除非是私有的匿名内部类、紧密相关的极小数据类或密封类扩展。单个 UI 文件代码量原则上严格控制在 300~500 行以内。严禁在主界面文件中堆砌大量承载独立复杂业务的辅助私有 `@Composable` 函数，必须按功能和职责拆分成独立的物理文件并放入对应的子文件夹中组织，做到"一文件一职责，看文件名即可秒懂实现"。
 - **禁止硬编码数字与尺寸 (Design Tokens & Spacing System)**: **【红线规则】** 严禁在 UI 代码中随意写死硬编码数字（如 `8.dp`, `16.dp`, `440.dp` 等物理常数）。所有的边距、间隙、内边距、组件宽高以及弹窗尺寸等，必须统一使用项目中公用的设计系统配置（Design Tokens，如 `LocalAppSpacing.current` / `AppSpacing.kt` 中声明的语义化属性）来进行赋值。弹窗宽度（如 `dialogConfirmWidth`, `dialogConfigWidth`）与通用组件尺寸必须统一收拢到 `AppSpacing.kt` 或对应的公共维度配置中管理，实现一处修改、全局自动响应。
 - **PC 端交互按钮 Tooltip 规范**: 所有 PC 桌面端的交互型按钮（包括但不限于 `Button`、`IconButton`、`TextButton`、`OutlinedButton` 以及各类可点击的操作图标/胶囊等所有可交互按钮）均必须使用项目内置的轻量单例修饰符 `Modifier.tip(...)`（来自 `AppTooltip.kt`）挂载悬浮提示信息，提示文案必须严格遵循下述 I18n 规范通过 `stringResource(...)` 注入，严禁硬编码文案。
+- **多层树状图元层级坐标系通用规范 (Hierarchical Coordinate System Specification)**: **【红线规则】**
+  - **二元空间分离铁律 (Local vs Absolute)**：
+    1. **持久化局部相对性 (Local Space)**：在多层模块树中，图元数据模型（`UIBlock.bounds`）持久化存储的**永远是相对于其直接父容器的局部相对矩形**。严禁将全局绝对坐标直接写回未解耦的实体，防止破坏树状层级相对拓扑；
+    2. **全景绝对全局性 (Global Space)**：所有跨越父级边界的行为（包括全景原图视口呈现、全屏选区框选、全图物理裁剪切片、画布碰撞检测与悬浮吸附），必须统一运行在**整页全局绝对坐标系**下。
+  - **模块自推导与无参转换管道 (Zero-Argument Pipeline)**：
+    1. **运行时父引用阻断序列化**：图元在运行时通过 `@Transient var parent: UIBlock?` 持有直接父级引用，完全阻断 JSON 序列化死循环；加载反序列化后通过 `bindParents()` 统一递归自动接线；
+    2. **纯平移变换与宽高绝对解耦原则**：父容器的层级嵌套影响本质上纯粹是二维平面位移量 ($\Delta X, \Delta Y$)。图元的宽度 `width` 与高度 `height` 在局部与全局坐标系下**永远绝对恒定守恒，严禁将宽高卷入平移加减计算**；
+    3. **零中间对象分配性能原则 (Zero Allocation)**：坐标推导与父级累计位移必须采用扁平 `while` 循环与原始浮点数寄存器累加，严禁在递归或迭代中频繁创建临时的 `SerialRect` 垃圾对象，杜绝 GC 抖动；
+    4. **强制使用模块内建管道，严禁散落手写**：严禁在任何 ViewModel、UI 界面或算法中散落手写 `parentOffset.x` 的加减计算；
+    5. **标准无参调用范式**：
+       - 获取全局绝对矩形：一律访问模块属性 `block.absoluteBounds`（或 `block.toAbsoluteBounds()`）；
+       - 逆向映射回局部矩形：一律调用对称方法 `block.toLocalBounds(absoluteRect)`；
+  - **坐标转换可逆与守恒定律**：全局绝对矩形逆向转回局部矩形时，必须满足代数守恒：`block.toLocalBounds(block.absoluteBounds) == block.bounds`，确保无论树嵌套多深，坐标运算均无损可逆。
+- **画布鼠标坐标交互、视口缩放与高 DPI 精度规范 (Pointer Interaction, Zoom & High-DPI Specification)**: **【红线规则】**
+  - **绝对位置锚定优于相对增量累加 (Direct Position Pinning vs Delta Accumulation)**：
+    在具有自由视口缩放 (Zoom)、画布平移 (Pan) 或高 DPI 密度的图形交互界面中，对于控制点拉伸（如选区 8 手柄、图元边缘拉伸等），**严禁采用每帧微小增量（如 `dragAmount / scale`）逐步累加的方式**。因为在非整数缩放因数、鼠标高速拖拽以及边缘截断时，增量累加必然发生浮点丢失与严重滞后，导致“鼠标拉出很远，手柄才挪动一点点”的严重失步缺陷；
+  - **光标逻辑位置直接锚定铁律**：
+    控制点拉伸坐标**必须统一直接锚定在当前光标反投影到画布的逻辑绝对坐标点（`screenToLogical(cursorPosition)`）**。光标拖到哪个逻辑像素，手柄坐标就直接赋值到该像素，从根本上保证光标与手柄 100% 绝对粘合对齐，误差永远为 0 像素！
+  - **手势协程唯一保活原则**：
+    所有复杂画布手势修饰器一律使用长效保活的 `.pointerInput(Unit)`，动态视口状态（Scale、Pan、Bounds）一律通过 `rememberUpdatedState` 传入，严禁将动态变化的数据作为 key 传入，杜绝手势中途被打断重启。
 - **提示词编辑界面规范与组件复用 (Prompt UI & BilingualPromptEditor)**: **【红线规则】**
   - **严禁重复手搓 Prompt UI**：全项目凡是涉及或创建"AI 生图提示词 / 提交文案 (Prompt)"的输入与编辑界面（无论是在属性面板、弹窗还是页面中），**一律强制复用标准公共组件 `BilingualPromptEditor`**（位于 `org.gemini.ui.forge.ui.dialog.ai.component.BilingualPromptEditor` 或公共组件库），严禁在业务代码中再次手搓双语切换 Tab、输入框及优化按钮。
   - **组件核心规范与标准使用范式**：

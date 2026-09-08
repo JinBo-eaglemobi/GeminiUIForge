@@ -54,12 +54,22 @@ fun StudioChatMessageList(
     val spacing = LocalAppSpacing.current
     val listState = rememberLazyListState()
 
-    LaunchedEffect(messages.size, isGenerating, streamingText) {
-        if (messages.isNotEmpty() || isGenerating) {
-            val targetIdx = (messages.size + if (isGenerating) 1 else 0) - 1
-            if (targetIdx >= 0) {
-                listState.animateScrollToItem(targetIdx)
-            }
+    // 自动吸底感知：判断当前列表是否正贴近底部（距底<=2项）
+    val isNearBottom by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            if (totalItems <= 1) return@derivedStateOf true
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible >= totalItems - 2
+        }
+    }
+
+    // 智能平滑吸底：当列表正处于底部时，新增消息、生成展开或流式推进自动持续保持在底部
+    LaunchedEffect(messages.size, isGenerating, streamingText, statusLog) {
+        val total = messages.size + (if (isGenerating) 1 else 0)
+        if (total > 0 && isNearBottom) {
+            listState.animateScrollToItem(total - 1)
         }
     }
 
@@ -174,19 +184,14 @@ private fun UserMessageBubble(
                     }
                 }
 
-                if (msg.textZh.isNotBlank()) {
+                // ★ 纯渲染器架构：由传递到 AI 的真实数据决定展示，不做任何过滤推测或语言拼接
+                val displayText = msg.prompt.ifBlank { msg.textEn.ifBlank { msg.textZh } }
+
+                if (displayText.isNotBlank()) {
                     Text(
-                        text = msg.textZh,
+                        text = displayText,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
-                    )
-                }
-                if (msg.textEn.isNotBlank() && msg.textEn != msg.textZh) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = msg.textEn,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                     )
                 }
             }
@@ -343,25 +348,50 @@ private fun ModelMessageBubble(
                         }
                     }
 
-                    // 底部详细信息指示栏（展示文件名、格式与本地路径）
+                    // 底部详细信息指示栏（展示真实尺寸、体积、格式与完整路径）
                     val fileName = remember(imgUri) {
-                        if (imgUri.startsWith("data:image")) "Base64 临时数据"
-                        else imgUri.substringAfterLast("/").substringAfterLast("\\")
+                        imgUri.substringAfterLast("/").substringAfterLast("\\")
                     }
+                    val imageMetaState = produceState(initialValue = "", imgUri) {
+                        if (imgUri.isNotBlank() && !imgUri.startsWith("data:image")) {
+                            try {
+                                val size = org.gemini.ui.forge.utils.getImageSize(imgUri)
+                                val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(imgUri)
+                                val kb = if (bytes != null) "${bytes.size / 1024} KB" else ""
+                                val dim = if (size != null && size.first > 0 && size.second > 0) "${size.first}×${size.second} px" else ""
+                                value = listOf(dim, kb).filter { it.isNotBlank() }.joinToString(" • ")
+                            } catch (e: Exception) {
+                                value = ""
+                            }
+                        }
+                    }
+                    val metaInfo = imageMetaState.value
+
                     Spacer(Modifier.height(4.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth().tip(imgUri),
+                        modifier = Modifier.fillMaxWidth().tip("文件位置: $imgUri"),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (imgUri.endsWith(".png", ignoreCase = true)) "PNG (Alpha 透明)" else "JPG 原图",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            if (metaInfo.isNotBlank()) {
+                                Text(
+                                    text = " • $metaInfo",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                                )
+                            }
+                        }
+
                         Text(
-                            text = if (imgUri.endsWith(".png", ignoreCase = true)) "PNG (Alpha 透明)" else if (imgUri.startsWith("data:image")) "Base64 图像" else "JPG 高清原图",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = fileName.take(36),
+                            text = fileName.take(30),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )

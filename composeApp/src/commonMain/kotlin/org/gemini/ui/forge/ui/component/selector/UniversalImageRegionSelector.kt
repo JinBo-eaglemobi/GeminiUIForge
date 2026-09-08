@@ -127,6 +127,7 @@ fun UniversalImageRegionSelector(
 
     // 5. 交互修饰键与视口缩放状态 (Px)
     var isSpacePressed by remember { mutableStateOf(false) }
+    var isRightButtonDragging by remember { mutableStateOf(false) }
     var isAltPressed by remember { mutableStateOf(false) }
     var isShiftPressed by remember { mutableStateOf(false) }
     var zoom by remember { mutableStateOf(initialZoom.coerceIn(0.1f, 15f)) }
@@ -239,7 +240,30 @@ fun UniversalImageRegionSelector(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerHoverIcon(if (isSpacePressed) PointerIcon.Hand else currentCursorIcon)
+                    .pointerHoverIcon(if (isSpacePressed || isRightButtonDragging) PointerIcon.Hand else currentCursorIcon)
+                    // ★ 专属鼠标右键平移底图手势（与空格平移体验 100% 一致）
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                if (event.buttons.isSecondaryPressed) {
+                                    isRightButtonDragging = true
+                                    if (event.type == PointerEventType.Move) {
+                                        val change = event.changes.firstOrNull()
+                                        if (change != null) {
+                                            val delta = change.position - change.previousPosition
+                                            pan += delta
+                                            change.consume()
+                                        }
+                                    }
+                                } else {
+                                    if (isRightButtonDragging) {
+                                        isRightButtonDragging = false
+                                    }
+                                }
+                            }
+                        }
+                    }
                     .pointerInput(Unit) {
                         // 监听鼠标滚轮：光标定点无级缩放
                         awaitPointerEventScope {
@@ -305,7 +329,7 @@ fun UniversalImageRegionSelector(
                         // 拖动手势：100% 绝对对称数学跟踪（Unit key：防止空格平移修改 pan 时 key 变化中断手势）
                         detectDragGestures(
                             onDragStart = { offset ->
-                                if (spaceState) {
+                                if (spaceState || isRightButtonDragging) {
                                     activeHandle = null
                                     isMovingRect = false
                                     isCreatingNew = false
@@ -361,12 +385,13 @@ fun UniversalImageRegionSelector(
                                     val deltaLogicalY = dragAmount.y / effectiveScaleState
 
                                     if (activeHandle != null) {
+                                        // ★ 工业级光标绝对锚定铁律 (Direct Cursor Pinning)：手柄直接锚定在当前鼠标反投影的逻辑绝对坐标上，彻底杜绝增量累加导致的严重失步滞后！
                                         val cur = currentRectState ?: return@detectDragGestures
-                                        val resized = resizeRegion(
+                                        val curLogical = screenToLogical(change.position)
+                                        val resized = resizeRegionDirectPin(
                                             current = cur,
                                             handle = activeHandle!!,
-                                            deltaX = deltaLogicalX,
-                                            deltaY = deltaLogicalY,
+                                            cursorPos = curLogical,
                                             isAltCenterResize = altState,
                                             maxW = pageWidth,
                                             maxH = pageHeight,
@@ -720,6 +745,101 @@ fun hitTestHandle(
         isNear(r, cy) -> RegionHandle.CENTER_RIGHT
         else -> null
     }
+}
+
+/**
+ * 选区拉伸尺寸计算：光标绝对坐标直接锚定法 (Direct Cursor Pinning)
+ *
+ * 彻底废除增量累加，手柄物理位置直接绑定鼠标当前反投影的逻辑点，100% 绝对实时对齐，误差永远为 0。
+ */
+fun resizeRegionDirectPin(
+    current: SerialRect,
+    handle: RegionHandle,
+    cursorPos: Offset,
+    isAltCenterResize: Boolean,
+    maxW: Float,
+    maxH: Float,
+    minSize: Float = 8f
+): SerialRect {
+    var l = min(current.left, current.right)
+    var r = max(current.left, current.right)
+    var t = min(current.top, current.bottom)
+    var b = max(current.top, current.bottom)
+
+    val cx = (l + r) / 2f
+    val cy = (t + b) / 2f
+
+    when (handle) {
+        RegionHandle.TOP_LEFT -> {
+            l = cursorPos.x.coerceIn(0f, (r - minSize).coerceAtLeast(0f))
+            t = cursorPos.y.coerceIn(0f, (b - minSize).coerceAtLeast(0f))
+            if (isAltCenterResize) {
+                val dx = cx - l
+                val dy = cy - t
+                r = (cx + dx).coerceIn((l + minSize).coerceAtMost(maxW), maxW)
+                b = (cy + dy).coerceIn((t + minSize).coerceAtMost(maxH), maxH)
+            }
+        }
+        RegionHandle.TOP_CENTER -> {
+            t = cursorPos.y.coerceIn(0f, (b - minSize).coerceAtLeast(0f))
+            if (isAltCenterResize) {
+                val dy = cy - t
+                b = (cy + dy).coerceIn((t + minSize).coerceAtMost(maxH), maxH)
+            }
+        }
+        RegionHandle.TOP_RIGHT -> {
+            r = cursorPos.x.coerceIn((l + minSize).coerceAtMost(maxW), maxW)
+            t = cursorPos.y.coerceIn(0f, (b - minSize).coerceAtLeast(0f))
+            if (isAltCenterResize) {
+                val dx = r - cx
+                val dy = cy - t
+                l = (cx - dx).coerceIn(0f, (r - minSize).coerceAtLeast(0f))
+                b = (cy + dy).coerceIn((t + minSize).coerceAtMost(maxH), maxH)
+            }
+        }
+        RegionHandle.CENTER_LEFT -> {
+            l = cursorPos.x.coerceIn(0f, (r - minSize).coerceAtLeast(0f))
+            if (isAltCenterResize) {
+                val dx = cx - l
+                r = (cx + dx).coerceIn((l + minSize).coerceAtMost(maxW), maxW)
+            }
+        }
+        RegionHandle.CENTER_RIGHT -> {
+            r = cursorPos.x.coerceIn((l + minSize).coerceAtMost(maxW), maxW)
+            if (isAltCenterResize) {
+                val dx = r - cx
+                l = (cx - dx).coerceIn(0f, (r - minSize).coerceAtLeast(0f))
+            }
+        }
+        RegionHandle.BOTTOM_LEFT -> {
+            l = cursorPos.x.coerceIn(0f, (r - minSize).coerceAtLeast(0f))
+            b = cursorPos.y.coerceIn((t + minSize).coerceAtMost(maxH), maxH)
+            if (isAltCenterResize) {
+                val dx = cx - l
+                val dy = b - cy
+                r = (cx + dx).coerceIn((l + minSize).coerceAtMost(maxW), maxW)
+                t = (cy - dy).coerceIn(0f, (b - minSize).coerceAtLeast(0f))
+            }
+        }
+        RegionHandle.BOTTOM_CENTER -> {
+            b = cursorPos.y.coerceIn((t + minSize).coerceAtMost(maxH), maxH)
+            if (isAltCenterResize) {
+                val dy = b - cy
+                t = (cy - dy).coerceIn(0f, (b - minSize).coerceAtLeast(0f))
+            }
+        }
+        RegionHandle.BOTTOM_RIGHT -> {
+            r = cursorPos.x.coerceIn((l + minSize).coerceAtMost(maxW), maxW)
+            b = cursorPos.y.coerceIn((t + minSize).coerceAtMost(maxH), maxH)
+            if (isAltCenterResize) {
+                val dx = r - cx
+                val dy = b - cy
+                l = (cx - dx).coerceIn(0f, (r - minSize).coerceAtLeast(0f))
+                t = (cy - dy).coerceIn(0f, (b - minSize).coerceAtLeast(0f))
+            }
+        }
+    }
+    return SerialRect(l, t, r, b)
 }
 
 /**

@@ -469,9 +469,10 @@
     <string name="gp_ws_demo_param">Demo 模式</string>
     <string name="gp_ws_debug_param">Debug 模式</string>
     <string name="gp_ws_dev_tools">打开 Chrome DevTools</string>
-    <string name="batch_gen_refine_block">细化编辑模块</string>
-    <string name="block_refine_dialog_title">模块细化编辑 - %1$s</string>
-    <string name="block_refine_dialog_desc">拖动边框手柄或输入数值微调模块位置与宽高，按住空格键可拖动画布</string>
+    <string name="action_adjust_bounds_prompt">调整大小与提示词</string>
+    <string name="action_adjust_bounds_prompt_tip">在原图上直观调整模块位置尺寸，并编辑修改中英文生图提示词</string>
+    <string name="block_refine_dialog_title">调整模块范围与提示词 - %1$s</string>
+    <string name="block_refine_dialog_desc">在底图上拖动边框手柄微调模块位置与宽高，并在下方编辑修改生图提示词</string>
     <string name="block_refine_pos_x">X 坐标</string>
     <string name="block_refine_pos_y">Y 坐标</string>
     <string name="block_refine_width">宽度 (W)</string>

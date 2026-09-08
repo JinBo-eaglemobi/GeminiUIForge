@@ -49,7 +49,8 @@ fun HomeScreen(
     var moduleToDelete by remember { mutableStateOf<UIModule?>(null) }
     var projectToDelete by remember { mutableStateOf<GameProjectInfo?>(null) }
 
-    LaunchedEffect(templateRepo) {
+    // 每次进入大厅时，重新从本地物理磁盘扫描加载最新的模板数据，杜绝脏内存复用
+    LaunchedEffect(Unit) {
         templatesList = templateRepo.getTemplates()
     }
 
@@ -105,11 +106,17 @@ fun HomeScreen(
                         ModuleCard(
                             module = module,
                             onOpenWorkspace = {
-                                appViewModel.loadProject(
-                                    module.nameStr ?: module.id,
-                                    module.projectState!!
-                                )
-                                appViewModel.navigateTo(AppScreen.PROJECT_WORKSPACE)
+                                coroutineScope.launch {
+                                    // 重新从磁盘读取新鲜的纯净模板数据，避免内存脏数据残留
+                                    val diskTemplates = templateRepo.getTemplates()
+                                    val targetName = module.nameStr ?: module.id
+                                    val freshState = diskTemplates.find { it.first == targetName }?.second ?: module.projectState!!
+                                    appViewModel.loadProject(
+                                        targetName,
+                                        freshState
+                                    )
+                                    appViewModel.navigateTo(AppScreen.PROJECT_WORKSPACE)
+                                }
                             },
                             onOpenFileDir = {
                                 coroutineScope.launch {

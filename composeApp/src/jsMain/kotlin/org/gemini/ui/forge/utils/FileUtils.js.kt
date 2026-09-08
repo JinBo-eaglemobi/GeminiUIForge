@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.utils
 
 import org.gemini.ui.forge.utils.LocalFileStorage
+import kotlin.io.encoding.Base64
 import kotlin.math.sin
 
 actual fun Throwable.getPlatformStackTrace(): String {
@@ -41,8 +42,7 @@ actual suspend fun readLocalFileBytes(filePath: String): ByteArray? {
     if (filePath.startsWith("data:image")) {
         return try {
             val base64Data = filePath.substringAfter("base64,")
-            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-            kotlin.io.encoding.Base64.Default.decode(base64Data)
+            Base64.decode(base64Data)
         } catch (e: Exception) {
             null
         }

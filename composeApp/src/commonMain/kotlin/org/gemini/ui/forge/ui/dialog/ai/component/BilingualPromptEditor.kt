@@ -68,7 +68,19 @@ fun BilingualPromptEditor(
     enabled: Boolean = true
 ) {
     val spacing = LocalAppSpacing.current
-    var currentPromptLang by remember(initialLanguage) { mutableStateOf(initialLanguage) }
+    val resolvedInitialLang = remember(initialLanguage, promptZh, promptEn) {
+        when {
+            initialLanguage == PromptLanguage.ZH -> PromptLanguage.ZH
+            initialLanguage == PromptLanguage.EN -> PromptLanguage.EN
+            promptEn.isNotBlank() && promptZh.isBlank() -> PromptLanguage.EN
+            else -> PromptLanguage.ZH // AUTO 默认优先中文
+        }
+    }
+    var currentPromptLang by remember(resolvedInitialLang) { mutableStateOf(resolvedInitialLang) }
+
+    LaunchedEffect(resolvedInitialLang) {
+        onLanguageChanged(resolvedInitialLang)
+    }
 
     var localPromptZh by remember(promptZh) { mutableStateOf(promptZh) }
     var localPromptEn by remember(promptEn) { mutableStateOf(promptEn) }
@@ -108,12 +120,17 @@ fun BilingualPromptEditor(
                         onLanguageChanged(PromptLanguage.ZH)
                     },
                     shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
                     icon = {},
                     enabled = enabled,
                     label = {
                         Text(
                             text = stringResource(Res.string.prompt_lang_zh),
                             style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (currentPromptLang == PromptLanguage.ZH) FontWeight.Bold else FontWeight.Normal,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -127,12 +144,17 @@ fun BilingualPromptEditor(
                         onLanguageChanged(PromptLanguage.EN)
                     },
                     shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
                     icon = {},
                     enabled = enabled,
                     label = {
                         Text(
                             text = stringResource(Res.string.prompt_lang_en),
                             style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (currentPromptLang == PromptLanguage.EN) FontWeight.Bold else FontWeight.Normal,
                             maxLines = 1,
                             softWrap = false
                         )
