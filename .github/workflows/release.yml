@@ -35,33 +35,29 @@ jobs:
           Write-Host "Resolved Version: $projectVersion"
       
       - name: 构建 Windows 安装包 (MSI/EXE)
-        run: ./gradlew :composeApp:packageDistributionForCurrentOS -PversionName="${{ env.PROJECT_VERSION }}"
+        run: ./gradlew :desktopApp:packageDistributionForCurrentOS -PversionName="${{ env.PROJECT_VERSION }}"
       
       - name: 构建 Windows 绿色版目录
-        run: ./gradlew :composeApp:createDistributable -PversionName="${{ env.PROJECT_VERSION }}"
+        run: ./gradlew :desktopApp:createDistributable -PversionName="${{ env.PROJECT_VERSION }}"
       
       - name: 构建 Windows UberJar
-        run: ./gradlew :composeApp:packageUberJarForCurrentOS -PversionName="${{ env.PROJECT_VERSION }}"
+        run: ./gradlew :desktopApp:packageUberJarForCurrentOS -PversionName="${{ env.PROJECT_VERSION }}"
 
       - name: 压缩绿色版
         shell: pwsh
-        run: Compress-Archive -Path "composeApp/build/compose/binaries/main/app/GeminiUIForge/*" -DestinationPath "GeminiUIForge-Windows-Portable.zip"
+        run: Compress-Archive -Path "desktopApp/build/compose/binaries/main/app/GeminiUIForge/*" -DestinationPath "GeminiUIForge-Windows-Portable.zip"
       
       - name: 打印详细错误日志 (仅在失败时)
         if: failure()
         shell: pwsh
         run: |
-          Write-Host "Checking for error logs in composeApp/build/compose/logs..."
-          if (Test-Path "composeApp/build/compose/logs") {
-            $logFiles = Get-ChildItem -Path "composeApp/build/compose/logs" -Filter "*-err.txt" -Recurse
-            if ($logFiles.Count -eq 0) {
-                Write-Host "No *-err.txt files found in logs directory."
-            } else {
-                foreach ($file in $logFiles) {
-                    Write-Host "`n-----------------   ERROR LOG: $($file.FullName)   -----------------"
-                    Get-Content $file.FullName
-                    Write-Host "--------------------------------------------------------------------`n"
-                }
+          Write-Host "Checking for error logs in desktopApp/build/compose/logs..."
+          if (Test-Path "desktopApp/build/compose/logs") {
+              Get-ChildItem -Path "desktopApp/build/compose/logs" -Filter "*-err.txt" | ForEach-Object {
+                  Write-Host "`n-----------------   ERROR LOG: $($_.FullName)   -----------------" -ForegroundColor Red
+                  Get-Content $_.FullName
+              }
+          }
             }
           } else {
             Write-Host "Log directory 'composeApp/build/compose/logs' does not exist."
@@ -114,24 +110,24 @@ jobs:
           chmod +x gradlew
 
       - name: 构建 macOS 安装包 (DMG)
-        run: ./gradlew :composeApp:packageDistributionForCurrentOS -PversionName="${{ env.PROJECT_VERSION }}"
+        run: ./gradlew :desktopApp:packageDistributionForCurrentOS -PversionName="${{ env.PROJECT_VERSION }}"
       
       - name: 构建 macOS 绿色版目录
-        run: ./gradlew :composeApp:createDistributable -PversionName="${{ env.PROJECT_VERSION }}"
+        run: ./gradlew :desktopApp:createDistributable -PversionName="${{ env.PROJECT_VERSION }}"
       
       - name: 构建 macOS UberJar
-        run: ./gradlew :composeApp:packageUberJarForCurrentOS -PversionName="${{ env.PROJECT_VERSION }}"
+        run: ./gradlew :desktopApp:packageUberJarForCurrentOS -PversionName="${{ env.PROJECT_VERSION }}"
 
       - name: 压缩绿色版
         run: |
-          cd composeApp/build/compose/binaries/main/app && zip -r ../../../../../GeminiUIForge-macOS-Portable.zip GeminiUIForge.app
+          cd desktopApp/build/compose/binaries/main/app && zip -r ../../../../../GeminiUIForge-macOS-Portable.zip GeminiUIForge.app
       
       - name: 打印详细错误日志 (仅在失败时)
         if: failure()
         run: |
-          echo "Checking for error logs in composeApp/build/compose/logs..."
-          if [ -d "composeApp/build/compose/logs" ]; then
-            ERROR_LOGS=$(find composeApp/build/compose/logs -name "*-err.txt")
+          echo "Checking for error logs in desktopApp/build/compose/logs..."
+          if [ -d "desktopApp/build/compose/logs" ]; then
+            ERROR_LOGS=$(find desktopApp/build/compose/logs -name "*-err.txt")
             if [ -z "$ERROR_LOGS" ]; then
               echo "No *-err.txt files found in logs directory."
             else
@@ -142,7 +138,7 @@ jobs:
               done
             fi
           else
-            echo "Log directory 'composeApp/build/compose/logs' does not exist."
+            echo "Log directory 'desktopApp/build/compose/logs' does not exist."
           fi
       
       - name: 上传错误日志 (仅在失败时)
@@ -150,14 +146,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-build-logs
-          path: composeApp/build/compose/logs
+          path: desktopApp/build/compose/logs
       
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            composeApp/build/compose/binaries/main/dmg/*.dmg
-            composeApp/build/compose/jars/*.jar
+            desktopApp/build/compose/binaries/main/dmg/*.dmg
+            desktopApp/build/compose/jars/*.jar
             GeminiUIForge-macOS-Portable.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -171,6 +167,8 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: 设置 JDK 23
         uses: actions/setup-java@v4
         with:
@@ -185,10 +183,10 @@ jobs:
           else
             PROJECT_VERSION="1.0.0"
           fi
-          ./gradlew :composeApp:assembleRelease -PversionName="$PROJECT_VERSION"
+          ./gradlew :androidApp:assembleRelease -PversionName="$PROJECT_VERSION"
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:
-          files: composeApp/build/outputs/apk/release/*.apk
+          files: androidApp/build/outputs/apk/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

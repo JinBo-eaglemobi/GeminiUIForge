@@ -4,11 +4,12 @@
 
 ## 模块与平台边界
 
-- `composeApp` — 核心共享模块，几乎所有业务代码都在此（commonMain 按职责分包：`data / event / manager / model / service / state / ui / utils / viewmodel`）。
-- `androidApp` — Android 壳模块（application），仅依赖 `:composeApp`。
+- `shared` — 核心共享模块，几乎所有业务代码都在此（commonMain 按职责分包：`data / event / manager / model / service / state / ui / utils / viewmodel`）。
+- `desktopApp` — 桌面端独立应用壳模块（application），专职 JVM 启动、JVM 内存调优参数与原生安装包分发打包，入口位于 `desktopApp/src/main/kotlin/org/gemini/ui/forge/main.kt`。
+- `androidApp` — Android 壳模块（application），仅依赖 `:shared`。
+- `webApp` — 独立 Web 浏览器宿主壳模块（application），仅依赖 `:shared`，包含 `index.html`、`styles.css` 及浏览器入口。
 - `iosApp/` — Xcode 工程，独立于 Gradle 构建。
-- **实际 Gradle 编译目标只有 android / jvm / js(browser)**。README 中的 `:composeApp:wasmJsBrowserDevelopmentRun` 已失效（无 wasmJs target），Web 端实际命令为 `jsBrowserDevelopmentRun`；`iosMain` 源码集存在但不参与 Gradle 编译。
-- 桌面端入口：`composeApp/src/jvmMain/kotlin/org/gemini/ui/forge/main.kt`（`org.gemini.ui.forge.MainKt`）。
+- **实际 Gradle 编译目标覆盖 android / jvm / js(browser)**；`iosMain` 源码集导出 `Shared.framework` 供 Xcode 消费。
 
 ### 平台优先级规范（桌面版优先）
 
@@ -19,14 +20,14 @@
 ## 常用命令
 
 ```shell
-./gradlew :composeApp:run                          # 运行桌面端 (JVM)
-./gradlew :composeApp:compileKotlinJvm             # 最小编译校验（见下方红线）
-./gradlew :composeApp:jsBrowserDevelopmentRun      # Web 端 (JS)
-./gradlew :composeApp:assembleRelease              # Android APK → composeApp/build/outputs/apk/release/
-./gradlew :composeApp:createDistributable          # 桌面绿色版 → composeApp/build/compose/binaries/main/app/
-./gradlew :composeApp:packageDistributionForCurrentOS  # 桌面安装包 (MSI/EXE/DMG)
-./gradlew :composeApp:jvmTest                      # 运行 JVM 测试
-./gradlew :composeApp:jvmTest --tests "org.gemini.ui.forge.ComposeAppCommonTest"  # 运行单个测试类
+./gradlew :desktopApp:run                          # 运行桌面端 (JVM)
+./gradlew :desktopApp:compileKotlin                # 桌面端最小编译校验
+./gradlew :shared:compileKotlinJvm                 # 共享库 JVM 编译校验
+./gradlew :webApp:jsBrowserDevelopmentRun          # Web 端 (JS) 运行与调试
+./gradlew :androidApp:assembleRelease              # Android APK → androidApp/build/outputs/apk/release/
+./gradlew :desktopApp:createDistributable          # 桌面绿色版 → desktopApp/build/compose/binaries/main/app/
+./gradlew :desktopApp:packageDistributionForCurrentOS  # 桌面安装包 (MSI/EXE/DMG/DEB)
+./gradlew :shared:jvmTest                          # 运行 JVM 测试
 ```
 
 构建环境统一使用 **JDK 23**（CI 实证）；toolchain 缺失时由 foojay resolver 自动下载。
@@ -34,7 +35,7 @@
 ## 质量与校验（红线规则）
 
 - 每次代码逻辑或文件结构的改动完成后，如果修改的文件影响项目最终代码编译，**必须**立即执行以下编译命令进行实证校验：
-  - `./gradlew :composeApp:compileKotlinJvm`
+  - `./gradlew :shared:compileKotlinJvm` (或 `:desktopApp:compileKotlin`)
   - 如果修改的文件不影响项目最终代码编译，那么在修改完成后将不再执行编译验证。
 - **编译优先 (Compiling First)**: **【红线规则】** 验证是任务完成的唯一标准。对于影响编译的修改，严禁在未确认编译通过的情况下交付任务。若编译或自动化校验过程中出现报错，必须主动修复直至完全通过，不得带病进入下一阶段。
 - 结合平台优先级规范：`compileKotlinJvm`（桌面端）通过即视为编译校验达标；其他平台的编译问题记录后延后处理，不作为任务完成的阻塞项。
@@ -107,9 +108,22 @@
 - **最小改动**: 仅修改与当前任务直接相关的代码，避免大面积重构，除非方案中已明确说明并获得许可。
 - **透明度**: 在执行任何 Shell 命令前，必须完整打印命令内容。
 
+## 常用公共组件与核心工具封装规范 (Core Framework & Utility Conventions)
+
+- **剪贴板工具与点击复制 (Clipboard Specification)**: **【红线规则】**
+  - **严禁直接散落手写底层剪贴板与协程**：全项目凡是需要将文本、命令、URL 或日志写入系统剪贴板的场景，**一律强制复用项目内建的高阶扩展**（位于 `org.gemini.ui.forge.extend.ClipboardExtend.kt`），严禁在业务 UI 内重复声明 `LocalClipboard.current`、`rememberCoroutineScope()` 与 `scope.launch`。
+  - **标准调用范式**：
+    1. **组件内动作式**：使用 `val copy = rememberClipboardAction()`，在任意点击回调中调用 `copy(text, toastMessage)`，支持传入 `onResult = { isSuccess -> ... }` 获取执行成功与否的布尔值以执行自定义联动；
+    2. **修饰符声明式**：针对整行、卡片等点击即复制的场景，直接链式调用 `Modifier.copyOnClick(text, toastMessage, onResult)`；
+    3. **内置异常与体验保障**：该扩展自动处理 Windows 剪贴板独占瞬锁异常重试、自动打包跨端 `toClipEntry()` 并弹出成功 Toast 提示。
+- **全局通知与气泡 (Toast Specification)**:
+  - 界面全局轻量级提示统一使用单例 `Toast.show(message, type = ToastType.SUCCESS/INFO/ERROR, durationMillis = 3000L)`（来自 `org.gemini.ui.forge.utils.Toast`），严禁手搓独立浮层。
+- **设计系统间距与弹窗规范**:
+  - 统一调用 `LocalAppSpacing.current`（来自 `AppSpacing.kt`），严禁硬编码 dp 数值。
+
 ## 代码生成与版本号
 
-- `composeApp/build.gradle.kts` 中的 `generateProjectConfig` 任务会在构建时生成 `ProjectConfig.kt`（位于 `composeApp/build/generated/`），提供 `ProjectConfig.VERSION`。**勿手动编辑该生成文件**。
+- `shared/build.gradle.kts` 中的 `generateProjectConfig` 任务会在构建时生成 `ProjectConfig.kt`（位于 `shared/build/generated/`），提供 `ProjectConfig.VERSION`。**勿手动编辑该生成文件**。
 - 版本号推导链（取首个命中）：`-PversionName=x.y.z` 参数 > 环境变量 `GITHUB_REF_NAME`（CI tag）> `git describe --tags` > 兜底 `1.0.0`。本地不带参数构建时版本号为 1.0.0。
 
 ## 发布与 CI
