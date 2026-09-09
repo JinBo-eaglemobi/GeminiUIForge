@@ -26,6 +26,7 @@ skiko = "0.144.6"
 skikoAndroid = "0.9.43"
 slf4jSimple = "2.0.17"
 jcefmaven = "146.0.10"
+mcpKotlin = "0.15.0"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -79,6 +80,9 @@ skiko-android = { module = "org.jetbrains.skiko:skiko-android", version.ref = "s
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4jSimple" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4jSimple" }
 jcefmaven = { module = "me.friwi:jcefmaven", version.ref = "jcefmaven" }
+mcp-kotlin-sdk = { module = "io.modelcontextprotocol:kotlin-sdk", version.ref = "mcpKotlin" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
+ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

@@ -82,6 +82,15 @@ fun main(args: Array<String>) {
 
     val configManager = ConfigManager()
 
+    // 检查是否通过 --mcp-server 参数显式指定开启，或本地配置默认开启
+    val isMcpArg = args.contains("--mcp-server")
+    val isMcpConfigEnabled = runBlocking { configManager.loadKey("MCP_ENABLED") } == "true"
+    if (isMcpArg || isMcpConfigEnabled) {
+        val port = runBlocking { configManager.loadKey("MCP_PORT") }?.toIntOrNull() ?: 18330
+        val host = runBlocking { configManager.loadKey("MCP_HOST") } ?: "127.0.0.1"
+        org.gemini.ui.forge.service.mcp.McpServerManager.start(host = host, port = port)
+    }
+
     // 同步加载上次保存的窗口状态
     val savedWidth = runBlocking { configManager.loadKey("WINDOW_WIDTH") }?.toFloatOrNull() ?: 1280f
     val savedHeight = runBlocking { configManager.loadKey("WINDOW_HEIGHT") }?.toFloatOrNull() ?: 800f
@@ -106,6 +115,8 @@ fun main(args: Array<String>) {
 
         Window(
             onCloseRequest = {
+                // 关闭前先安全停止 MCP 服务
+                org.gemini.ui.forge.service.mcp.McpServerManager.stop()
                 // 关闭前只保存当前是否全屏的状态
                 runBlocking {
                     val currentIsMaximized = windowState.placement == WindowPlacement.Maximized

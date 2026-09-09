@@ -510,4 +510,19 @@
     <string name="ai_studio_applied_success">Applied generated image to current block successfully</string>
     <string name="ai_studio_delete_session">Delete Session</string>
     <string name="ai_studio_delete_session_confirm">Are you sure you want to delete this session? This action cannot be undone.</string>
+
+    <!-- MCP Service Configuration -->
+    <string name="settings_category_mcp">MCP Service</string>
+    <string name="mcp_title">Model Context Protocol (MCP) Service</string>
+    <string name="mcp_desc">Expose GeminiUIForge core capabilities (templates, environment check) as standard MCP tools for external AI agents (Gemini CLI, opencode, Claude Desktop, Cursor, etc.).</string>
+    <string name="mcp_enable_switch">Enable MCP HTTP Server</string>
+    <string name="mcp_port_label">Server Port</string>
+    <string name="mcp_host_label">Host Binding</string>
+    <string name="mcp_host_warning">Warning: Binding 0.0.0.0 exposes the service to local network devices. Ensure your network is secure.</string>
+    <string name="mcp_status_running">Running on: %1$s</string>
+    <string name="mcp_status_stopped">Service Stopped</string>
+    <string name="mcp_client_config_title">AI Client Configuration (mcpServers)</string>
+    <string name="mcp_client_config_tip">Copy and paste the JSON snippet below into your Gemini CLI settings.json, opencode, or Claude Desktop configuration:</string>
+    <string name="mcp_copy_config">Copy Configuration</string>
+    <string name="mcp_config_copied">MCP configuration copied to clipboard</string>
 </resources>

@@ -16,11 +16,16 @@ import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
+import org.gemini.ui.forge.service.mcp.McpController
 import androidx.compose.ui.text.font.FontWeight
 
 import androidx.compose.ui.draw.drawBehind
@@ -51,6 +56,7 @@ fun AppTopBar(
     onCompileClicked: () -> Unit = {},
     onGlobalStyleClicked: () -> Unit = {},
     onSettingsClicked: () -> Unit = {},
+    onMcpClicked: () -> Unit = {},
     onHelpClicked: () -> Unit = {}
 ) {
     val currentScreen = globalState.currentScreen
@@ -187,6 +193,29 @@ fun AppTopBar(
                     }
                 }
                 
+                // MCP 服务中心入口（常驻显示）
+                val isMcpRunning by McpController.isRunning.collectAsState()
+                IconButton(
+                    onClick = onMcpClicked,
+                    modifier = Modifier.tip(if (isMcpRunning) "MCP 服务运行中 (点击管理)" else "MCP 服务与客户端配置")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Hub,
+                            contentDescription = "MCP Service",
+                            tint = if (isMcpRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (isMcpRunning) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .align(Alignment.TopEnd)
+                                    .background(Color(0xFF4CAF50), shape = CircleShape)
+                            )
+                        }
+                    }
+                }
+
                 // 帮助与设置按钮（始终显示）
                 IconButton(onClick = onHelpClicked, modifier = Modifier.tip("查看使用说明")) {
                     Icon(Icons.AutoMirrored.Filled.Help, contentDescription = stringResource(Res.string.menu_help))

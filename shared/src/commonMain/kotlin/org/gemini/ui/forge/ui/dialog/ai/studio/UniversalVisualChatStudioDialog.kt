@@ -322,8 +322,16 @@ fun UniversalVisualChatStudioDialog(
                                 isGenerating = state.isGenerating,
                                 isOptimizingPrompt = state.isOptimizingPrompt,
                                 storage = storage,
-                                onOptimizeRequested = { text, _ ->
-                                    viewModel.optimizePrompt(text, apiKey) {}
+                                onOptimizeRequested = { text, isZh, onOptimized ->
+                                    if (apiKey.isBlank()) {
+                                        Toast.show("请先在设置中配置 Gemini API Key", ToastType.ERROR)
+                                        return@StudioInputBottomBar
+                                    }
+                                    Toast.show("AI 正在优化提示词...", ToastType.INFO)
+                                    viewModel.optimizePrompt(text, apiKey) { optimized ->
+                                        onOptimized(optimized)
+                                        Toast.show("提示词优化完成", ToastType.SUCCESS)
+                                    }
                                 },
                                 onCancel = { viewModel.cancelCurrentGeneration() },
                                 onSend = { zh, en, activeLang, isI2I, isPng, cloudBg, uploadCloud, model, count ->

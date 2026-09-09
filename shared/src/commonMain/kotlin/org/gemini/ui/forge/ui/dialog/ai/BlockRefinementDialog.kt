@@ -226,7 +226,7 @@ fun BlockRefinementDialog(
                                 promptZh = newZh
                                 promptEn = newEn
                             },
-                            onOptimizeRequested = { _, _ ->
+                            onOptimizeRequested = { _, _, _ ->
                                 coroutineScope.launch {
                                     isOptimizing = true
                                     isOptimizing = false

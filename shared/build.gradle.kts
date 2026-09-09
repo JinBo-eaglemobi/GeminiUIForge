@@ -2,6 +2,7 @@ import org.gradle.kotlin.dsl.kotlin
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.internal.config.LanguageVersion
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 import java.io.ByteArrayOutputStream
 
@@ -152,6 +153,10 @@ kotlin {
             implementation(libs.slf4j.api)
             // JVM 桌面端 CEF（Chromium）嵌入式浏览器，用于游戏项目 HTML 预览
             implementation(libs.jcefmaven)
+            // MCP 服务端依赖（桌面端专属）
+            implementation(libs.mcp.kotlin.sdk)
+            implementation(libs.ktor.server.cio)
+            implementation(libs.ktor.server.cors)
         }
     }
 
@@ -181,4 +186,5 @@ kotlin {
             }
         }
     }
+
 }

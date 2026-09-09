@@ -55,7 +55,7 @@ fun BilingualPromptEditor(
     initialLanguage: PromptLanguage = PromptLanguage.ZH,
     onLanguageChanged: (PromptLanguage) -> Unit = {},
     onPromptConfirmed: (zh: String, en: String) -> Unit,
-    onOptimizeRequested: (currentPrompt: String, isZh: Boolean) -> Unit,
+    onOptimizeRequested: (currentPrompt: String, isZh: Boolean, onOptimized: (String) -> Unit) -> Unit,
     isOptimizing: Boolean,
     modifier: Modifier = Modifier,
     title: String = "生图提示词 / 提交文案 (Prompt)",
@@ -169,7 +169,15 @@ fun BilingualPromptEditor(
             FilledTonalButton(
                 onClick = {
                     val source = activePrompt.ifBlank { alternatePrompt }
-                    onOptimizeRequested(source, currentPromptLang == PromptLanguage.ZH)
+                    val isZh = currentPromptLang == PromptLanguage.ZH
+                    onOptimizeRequested(source, isZh) { optimizedResult ->
+                        if (isZh) {
+                            localPromptZh = optimizedResult
+                        } else {
+                            localPromptEn = optimizedResult
+                        }
+                        onPromptConfirmed(localPromptZh, localPromptEn)
+                    }
                 },
                 enabled = enabled && !isOptimizing && (activePrompt.isNotBlank() || alternatePrompt.isNotBlank()),
                 shape = AppShapes.small,
@@ -230,7 +238,7 @@ fun BilingualPromptEditor(
             modifier = Modifier.fillMaxWidth().heightIn(min = minFieldHeight),
             shape = AppShapes.small,
             maxLines = maxLines,
-            enabled = enabled
+            enabled = enabled && !isOptimizing
         )
 
         // 3. 可选：会话上下文选项与变动确认按钮

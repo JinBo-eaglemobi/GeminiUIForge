@@ -212,7 +212,9 @@ class ProjectWorkspaceViewModel(
             _state.update { current ->
                 val targetPageId = newProject.pages.find { it.id == current.selectedPageId }?.id
                     ?: newProject.pages.firstOrNull()?.id
-                val keepGroupId = if (current.editingGroupId != null && newProject.pages.any { p -> p.blocks.findBlockById(current.editingGroupId!!) != null }) current.editingGroupId else null
+                val keepGroupId = if (current.editingGroupId != null && newProject.pages.any { p -> p.blocks.findBlockById(
+                        current.editingGroupId
+                    ) != null }) current.editingGroupId else null
                 current.copy(
                     project = newProject,
                     selectedPageId = targetPageId,

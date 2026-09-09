@@ -520,4 +520,19 @@
     <string name="ai_studio_applied_success">已成功将生成图片应用到当前模块</string>
     <string name="ai_studio_delete_session">删除会话</string>
     <string name="ai_studio_delete_session_confirm">确定要删除该设计会话吗？此操作无法撤销。</string>
+
+    <!-- MCP 服务配置 -->
+    <string name="settings_category_mcp">MCP 服务</string>
+    <string name="mcp_title">Model Context Protocol (MCP) 服务</string>
+    <string name="mcp_desc">将 GeminiUIForge 的核心工具（模板管理、环境检测等）作为标准 MCP 服务开放，供外部 AI 智能体（如 Gemini CLI、opencode、Claude Desktop、Cursor 等）直接调用。</string>
+    <string name="mcp_enable_switch">启用 MCP HTTP 服务</string>
+    <string name="mcp_port_label">服务监听端口</string>
+    <string name="mcp_host_label">绑定主机地址</string>
+    <string name="mcp_host_warning">警告：绑定 0.0.0.0 会将服务暴露给局域网其他设备，请确保网络环境安全。</string>
+    <string name="mcp_status_running">正在运行：%1$s</string>
+    <string name="mcp_status_stopped">服务未运行</string>
+    <string name="mcp_client_config_title">AI 客户端配置代码 (mcpServers)</string>
+    <string name="mcp_client_config_tip">复制以下 JSON 代码并粘贴到 Gemini CLI 的 settings.json、opencode 或 Claude Desktop 配置文件中即可完成集成：</string>
+    <string name="mcp_copy_config">复制配置代码</string>
+    <string name="mcp_config_copied">已复制 MCP 客户端配置代码到剪贴板</string>
 </resources>

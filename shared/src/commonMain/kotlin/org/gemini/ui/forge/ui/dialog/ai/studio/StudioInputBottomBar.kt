@@ -1,5 +1,10 @@
 package org.gemini.ui.forge.ui.dialog.ai.studio
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -69,7 +74,7 @@ fun StudioInputBottomBar(
     isGenerating: Boolean,
     isOptimizingPrompt: Boolean,
     storage: LocalFileStorage,
-    onOptimizeRequested: (sourceText: String, isZh: Boolean) -> Unit,
+    onOptimizeRequested: (sourceText: String, isZh: Boolean, onOptimized: (String) -> Unit) -> Unit,
     onSend: (zh: String, en: String, activeLang: PromptLanguage, isImageToImage: Boolean, isPng: Boolean, useCloudBgRemoval: Boolean, isUploadToCloud: Boolean, model: GeminiModel, count: Int) -> Unit,
     onCancel: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -207,6 +212,37 @@ fun StudioInputBottomBar(
                         generationCount = generationCount,
                         onCountSelected = onCountSelected
                     )
+                }
+
+                // 优化中提示横幅
+                AnimatedVisibility(
+                    visible = isOptimizingPrompt,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                        shape = AppShapes.small,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = spacing.small)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = spacing.medium, vertical = spacing.extraSmall),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(spacing.small))
+                            Text(
+                                text = "AI 正在深度润色并扩展视觉细节提示词，请稍候...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
                 }
 
                 // 2. 中部核心区：模式自适应展开（从零生图全宽铺开；以图生图展示 135dp 纯净视口卡片）
@@ -410,9 +446,19 @@ fun StudioInputBottomBar(
                                 currentZh = newZh
                                 currentEn = newEn
                             },
-                            onOptimizeRequested = onOptimizeRequested,
+                            onOptimizeRequested = { sourceText, isZh, onOptimized ->
+                                onOptimizeRequested(sourceText, isZh) { optimizedResult ->
+                                    if (isZh) {
+                                        currentZh = optimizedResult
+                                    } else {
+                                        currentEn = optimizedResult
+                                    }
+                                    onOptimized(optimizedResult)
+                                }
+                            },
                             isOptimizing = isOptimizingPrompt,
-                            showExplicitConfirmButton = false
+                            showExplicitConfirmButton = false,
+                            enabled = !isOptimizingPrompt && !isGenerating
                         )
                     }
                 }
@@ -488,6 +534,30 @@ fun StudioInputBottomBar(
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                    } else if (isOptimizingPrompt) {
+                        // 正在优化提示词时禁用并展示加载指示
+                        Button(
+                            onClick = {},
+                            enabled = false,
+                            modifier = Modifier.height(38.dp).tip("正在优化提示词，请稍候"),
+                            shape = AppShapes.medium,
+                            colors = ButtonDefaults.buttonColors(
+                                disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                disabledContentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(Modifier.width(spacing.small))
+                            Text(
+                                text = "优化中...",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     } else {
                         Button(
                             onClick = {
@@ -500,7 +570,7 @@ fun StudioInputBottomBar(
                                 }
                                 onSend(currentZh, currentEn, currentActiveLang, isImageToImage, isPng, useCloudBgRemoval, isUploadToCloud, selectedModel, generationCount)
                             },
-                            enabled = currentZh.isNotBlank() || currentEn.isNotBlank(),
+                            enabled = (currentZh.isNotBlank() || currentEn.isNotBlank()) && !isOptimizingPrompt,
                             modifier = Modifier.height(38.dp).tip(stringResource(Res.string.ai_studio_send_btn)),
                             shape = AppShapes.medium,
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)

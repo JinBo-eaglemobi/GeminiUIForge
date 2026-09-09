@@ -171,6 +171,7 @@ fun App(typography: Typography? = null) {
 
             var showCloudAssetDialog by remember { mutableStateOf(false) }
             var showSettingsDialog by remember { mutableStateOf(false) }
+            var showMcpDialog by remember { mutableStateOf(false) }
             var showCompileDialog by remember { mutableStateOf(false) }
             var showHelpDialog by remember { mutableStateOf(false) }
             var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
@@ -254,6 +255,13 @@ fun App(typography: Typography? = null) {
                     }
 
 
+
+                    if (showMcpDialog) {
+                        org.gemini.ui.forge.ui.dialog.mcp.McpServerDialog(
+                            onDismissRequest = { showMcpDialog = false },
+                            configManager = configManager
+                        )
+                    }
 
                     if (showExitConfirmDialog) {
                         AlertDialog(
@@ -345,6 +353,7 @@ fun App(typography: Typography? = null) {
                                     settingsInitialCategory = SettingCategory.GENERAL
                                     showSettingsDialog = true
                                 },
+                                onMcpClicked = { showMcpDialog = true },
                                 onHelpClicked = { showHelpDialog = true }
                             )
                         },
