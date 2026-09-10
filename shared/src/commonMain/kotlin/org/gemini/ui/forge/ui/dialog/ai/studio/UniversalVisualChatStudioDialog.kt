@@ -90,7 +90,7 @@ fun UniversalVisualChatStudioDialog(
     val spacing = LocalAppSpacing.current
 
     var selectedVariantRefImage by remember { mutableStateOf<String?>(null) }
-    var lightboxImageUri by remember { mutableStateOf<String?>(null) }
+    var lightboxImageModel by remember { mutableStateOf<Any?>(null) }
     var showAssetGalleryDialog by remember { mutableStateOf(false) }
     var moduleHistoricalImages by remember { mutableStateOf<List<TemplateFile>>(emptyList()) }
     var isProcessingHistoricalBg by remember { mutableStateOf(false) }
@@ -233,7 +233,7 @@ fun UniversalVisualChatStudioDialog(
                                 streamingText = state.streamingText,
                                 pendingCount = state.pendingCount,
                                 currentVariantImageUri = selectedVariantRefImage,
-                                onImageClick = { imgUri -> lightboxImageUri = imgUri },
+                                onImageClick = { imgUri -> lightboxImageModel = imgUri },
                                 onApplyImage = { imageUri ->
                                     coroutineScope.launch {
                                         val targetW = block?.bounds?.width?.toInt() ?: 0
@@ -278,7 +278,7 @@ fun UniversalVisualChatStudioDialog(
                                 originalBlockPromptEn = block?.userPromptEn,
                                 referenceImageUri = effectiveRefImage,
                                 previewMemoryBytes = state.previewMemoryBytes,
-                                onReferenceImageClick = { lightboxImageUri = it.toString() },
+                                onReferenceImageClick = { lightboxImageModel = it },
                                 canCropFromPage = !pageSourceImageUri.isNullOrBlank() && block != null,
                                 onStartRegionCrop = { showRegionSelectorDialog = true },
                                 onOpenRefConfig = { showRefSourceDialog = true },
@@ -306,19 +306,19 @@ fun UniversalVisualChatStudioDialog(
                                 historicalAssetCount = state.sessionGeneratedImages.size,
                                 dialogWidth = studioDialogWidth,
                                 dialogHeight = studioDialogHeight,
-                                onSend = { userPrompt, activeLang, isI2I, isPng, cloudBg, uploadCloud, model, count, customBytes ->
+                                onSend = { userPrompt, activeLang, pendingUri, pendingBytes, isPng, uploadCloud, model, count ->
+                                    val finalRefUri = pendingUri ?: effectiveRefImage
                                     viewModel.sendGenerationRequest(
                                         userPrompt = userPrompt,
                                         activeLang = activeLang,
                                         apiKey = apiKey,
                                         model = model,
                                         generationCount = count,
-                                        referenceImageUri = effectiveRefImage,
-                                        isImageToImage = isI2I,
+                                        referenceImageUri = finalRefUri,
+                                        isImageToImage = pendingUri != null || pendingBytes != null || !finalRefUri.isNullOrBlank(),
                                         isPng = isPng,
-                                        useCloudBgRemoval = cloudBg,
                                         isUploadToCloud = uploadCloud,
-                                        customImageBytes = customBytes
+                                        customImageBytes = pendingBytes
                                     )
                                 }
                             )
@@ -329,11 +329,11 @@ fun UniversalVisualChatStudioDialog(
         }
     }
 
-        // 3. 全屏高清图片灯箱覆盖层
-        if (!lightboxImageUri.isNullOrBlank()) {
+        // 3. 全屏高清图片灯箱覆盖层（支持文件路径与内存切片字节流）
+        if (lightboxImageModel != null) {
             StudioImageLightbox(
-                imageUri = lightboxImageUri!!,
-                onDismiss = { lightboxImageUri = null }
+                imageModel = lightboxImageModel!!,
+                onDismiss = { lightboxImageModel = null }
             )
         }
 
@@ -466,8 +466,9 @@ fun UniversalVisualChatStudioDialog(
         // 5. 真实 API 网络通信日志弹窗 (StudioSessionLogDialog)
         if (showLogDialog) {
             StudioSessionLogDialog(
-                session = state.currentSession,
-                rawNetworkLog = state.rawNetworkLog,
+                scopeId = scopeId,
+                sessionId = state.currentSession?.id ?: "default_sess",
+                trafficStore = viewModel.trafficStore,
                 onDismiss = { showLogDialog = false }
             )
         }

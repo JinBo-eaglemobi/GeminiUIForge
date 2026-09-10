@@ -46,7 +46,6 @@ class PromptManager(private val storage: LocalFileStorage) {
         PromptMeta("optimize_instruction_en", "英文生图提示词优化指令", "针对英文生图意图的高清材质与渲染风格系统约束指令"),
         PromptMeta("refine_instruction_update", "模块局部修改默认指令", "在局部重塑时，针对已有模块进行修改的默认指令模板"),
         PromptMeta("refine_instruction_new", "模块新增生成默认指令", "在局部重塑时，针对新选区生成新模块的默认指令模板"),
-        PromptMeta("cloud_bg_removal", "云端大模型透明抠图去背", "通过云端多模态大模型精准剔除背景、保留主体元素的提示词"),
         PromptMeta("image_gen_transparent", "透明背景生图引导指令", "指导视觉模型直接生成纯白/纯黑/可抠图背景的引导提示词"),
         PromptMeta("gemini_image_gen", "Gemini 图像生成组装模板", "调用 Gemini 视觉模型生成单体 UI 图像时的顶层提示词组装结构")
     )

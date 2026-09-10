@@ -90,6 +90,12 @@ actual class LocalFileStorage {
         return files.filter { it.endsWith(".json") }
     }
 
+    actual suspend fun listFiles(parentDir: String): List<String> {
+        val targetDir = "$dataDir/$parentDir"
+        val items = fileManager.contentsOfDirectoryAtPath(targetDir, error = null) as? List<String> ?: emptyList()
+        return items
+    }
+
     actual suspend fun listDirectories(parentDir: String?): List<String> {
         val targetDir = if (parentDir == null) dataDir else "$dataDir/$parentDir"
         val items = fileManager.contentsOfDirectoryAtPath(targetDir, error = null) as? List<String> ?: emptyList()

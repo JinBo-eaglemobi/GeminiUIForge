@@ -3,8 +3,11 @@ package org.gemini.ui.forge.service
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.model.chat.TrafficDirection
 import org.gemini.ui.forge.utils.getMimeType
 import org.gemini.ui.forge.utils.readLocalFileBytes
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import org.gemini.ui.forge.manager.*
 
 /**
@@ -23,7 +26,8 @@ class GeminiImageGenerator(
         model: String,
         params: GenParams,
         onLog: (String) -> Unit,
-        onImageGenerated: (String) -> Unit = {}
+        onImageGenerated: (String) -> Unit = {},
+        onRawTraffic: ((TrafficDirection, String, String) -> Unit)? = null
     ): List<String> {
         val url = ApiConfig.getStreamGenerateContentEndpoint(params.apiKey, model)
         
@@ -52,13 +56,19 @@ class GeminiImageGenerator(
                         
                         if (!params.referenceImageUri.isNullOrBlank()) {
                             val bytes = readLocalFileBytes(params.referenceImageUri)
-                            if (bytes != null) {
-                                val displayName = params.referenceImageUri.substringAfterLast("/")
-                                    .substringAfterLast("\\")
-                                    .ifEmpty { "ref_${getCurrentTimeMillis()}.jpg" }
+                            if (bytes != null && bytes.isNotEmpty()) {
                                 val mime = getMimeType(params.referenceImageUri)
-                                val imagePart = cloudAssetManager.buildGeminiImagePart(displayName, bytes, mime, onLog)
+                                @OptIn(ExperimentalEncodingApi::class)
+                                val imagePart = buildJsonObject {
+                                    put("inlineData", buildJsonObject {
+                                        put("mimeType", mime)
+                                        put("data", Base64.encode(bytes))
+                                    })
+                                }
                                 add(imagePart)
+                                syncLog(TAG, "📎 已将参考底图内联打包至生图请求 (体积: ${bytes.size / 1024} KB)", onLog)
+                            } else {
+                                syncLog(TAG, "⚠️ 未能读取到参考图本地文件: ${params.referenceImageUri}", onLog)
                             }
                         }
                     })
@@ -77,6 +87,7 @@ class GeminiImageGenerator(
                 url = url,
                 requestBody = requestBody,
                 onLog = onLog,
+                onRawTraffic = onRawTraffic,
                 onRawData = { jsonElement ->
                     try {
                         val candidates = jsonElement.jsonObject["candidates"]?.jsonArray

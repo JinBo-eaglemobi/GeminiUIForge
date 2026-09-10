@@ -10,6 +10,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.gemini.ui.forge.data.remote.NetworkClient
+import org.gemini.ui.forge.model.chat.TrafficDirection
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.looseJson
 
@@ -44,9 +45,12 @@ class GeminiClient {
         requestBody: String,
         onLog: (String) -> Unit = {},
         onRawData: (JsonElement) -> Unit = {}, 
-        onChunk: (String) -> Unit = {}
+        onChunk: (String) -> Unit = {},
+        onRawTraffic: ((direction: TrafficDirection, url: String, body: String) -> Unit)? = null
     ) {
         val client = NetworkClient.shared
+        // ★ 原始档案通道：在任何脱敏/截断前捕获完整请求原文
+        onRawTraffic?.invoke(TrafficDirection.REQ, url, requestBody)
         // 打印脱敏后的请求体日志，避免 Base64 刷屏
         logRequest(url, requestBody, onLog)
 
@@ -62,6 +66,7 @@ class GeminiClient {
             }.execute { response ->
                 if (response.status.isSuccess()) {
                     val channel = response.bodyAsChannel()
+                    val rawResponses = mutableListOf<String>()
                     // 持续读取直到通道关闭
                     while (!channel.isClosedForRead) {
                         // 替换已废弃的 readUTF8Line()，改用官方推荐的 readLine()
@@ -73,6 +78,7 @@ class GeminiClient {
                             
                             // 忽略流结束标记
                             if (dataJson.isEmpty() || dataJson == "[DONE]") continue
+                            rawResponses.add(dataJson)
                             
                             try {
                                 val jsonElement = looseJson.parseToJsonElement(dataJson)
@@ -86,6 +92,12 @@ class GeminiClient {
                                 // 忽略单次 JSON 块解析错误，避免中断整个流
                             }
                         }
+                    }
+
+                    // 流式读取完成后，将聚合的原始完整响应原文回调归档
+                    if (rawResponses.isNotEmpty()) {
+                        val fullRawResp = if (rawResponses.size == 1) rawResponses.first() else "[\n" + rawResponses.joinToString(",\n") + "\n]"
+                        onRawTraffic?.invoke(TrafficDirection.RESP, url, fullRawResp)
                     }
                 } else {
                     // HTTP 非 20x 时，记录详细的错误 Body 并向上抛出
@@ -115,9 +127,11 @@ class GeminiClient {
     suspend fun generateContent(
         url: String,
         requestBody: String,
-        onLog: (String) -> Unit = {}
+        onLog: (String) -> Unit = {},
+        onRawTraffic: ((direction: TrafficDirection, url: String, body: String) -> Unit)? = null
     ): String {
         val client = NetworkClient.shared
+        onRawTraffic?.invoke(TrafficDirection.REQ, url, requestBody)
         logRequest(url, requestBody, onLog)
 
         try {
@@ -132,6 +146,7 @@ class GeminiClient {
 
             if (response.status.isSuccess()) {
                 val responseText = response.bodyAsText()
+                onRawTraffic?.invoke(TrafficDirection.RESP, url, responseText)
                 val jsonElement = looseJson.parseToJsonElement(responseText)
                 // 尝试提取文本内容，若提取不到则视为失败
                 return extractText(jsonElement) ?: throw Exception("响应中未找到有效文本")

@@ -616,16 +616,18 @@ fun ReelSymbolManagerDialog(
             onApplyAsset = { imagePath ->
                 scope.launch {
                     try {
-                        val fileBytes = org.gemini.ui.forge.utils.readLocalFileBytes(imagePath)
-                        val tFile = if (fileBytes != null) {
+                        val tFile = if (imagePath.startsWith("data:image")) {
+                            val base64Data = if (imagePath.contains(",")) imagePath.substringAfter(",") else imagePath
+                            val bytes = kotlin.io.encoding.Base64.decode(base64Data)
                             viewModel.templateRepo.saveBlockResource(
                                 templateName = state.projectName,
                                 blockId = targetSym.id,
                                 fileNamePrefix = "chat_gen",
-                                bytes = fileBytes,
-                                isPng = imagePath.endsWith(".png", ignoreCase = true)
+                                bytes = bytes,
+                                isPng = imagePath.contains("image/png")
                             )
                         } else {
+                            // ★ 修复重复文件Bug：已落盘资产直接使用，绝不盲目克隆二次保存
                             TemplateFile(imagePath)
                         }
                         val updatedSym = targetSym.copy(currentImageUri = tFile)

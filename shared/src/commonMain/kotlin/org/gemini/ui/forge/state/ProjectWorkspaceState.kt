@@ -69,8 +69,6 @@ data class ProjectWorkspaceState(
     val isLocalProcessing: Boolean = false,
     /** 资产生成：生成新资产时是否默认启用 AI 自动去背景（保留透明通道） */
     val isGenerateTransparent: Boolean = true,
-    /** 资产生成：是否优先调用云端高精度抠图算法处理透明去背 */
-    val isPrioritizeCloudRemoval: Boolean = false,
     /** 资产生成：最近一次生成任务产生的所有候选资产文件列表 */
     val generatedCandidates: List<TemplateFile> = emptyList(),
     /** 视觉呈现：画布舞台是否开启纯视觉展示模式（隐藏辅助线和选择手柄） */

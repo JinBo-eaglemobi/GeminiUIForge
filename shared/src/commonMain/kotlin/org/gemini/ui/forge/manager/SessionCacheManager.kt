@@ -97,8 +97,12 @@ class SessionCacheManager(private val storage: LocalFileStorage) {
     suspend fun deleteSession(scopeId: String, sessionId: String): Boolean = withContext(Dispatchers.Default) {
         val safeScope = sanitizeScopeId(scopeId)
         val relativePath = "$SESSIONS_ROOT/$safeScope/$sessionId.json"
+        val trafficDir = "$SESSIONS_ROOT/$safeScope/$sessionId"
         try {
             storage.deleteFile(relativePath)
+            // 级联清理旁路原始通信档案目录
+            storage.deleteDirectory(trafficDir)
+            true
         } catch (e: Exception) {
             AppLogger.e(TAG, "Failed to delete session $sessionId", e)
             false

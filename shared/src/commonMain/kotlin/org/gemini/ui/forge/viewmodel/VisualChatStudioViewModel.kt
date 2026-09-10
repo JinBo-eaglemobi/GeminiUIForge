@@ -14,6 +14,8 @@ import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.manager.SessionCacheManager
+import org.gemini.ui.forge.manager.SessionTrafficStore
+import org.gemini.ui.forge.model.chat.TrafficRecord
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.chat.VisualChatMessage
@@ -49,8 +51,7 @@ data class VisualChatStudioState(
     val activeReferenceImageUri: String? = null,
     val previewMemoryBytes: ByteArray? = null,
     val pendingCropBounds: SerialRect? = null,
-    val isImageToImageMode: Boolean = true,
-    val rawNetworkLog: String = ""
+    val isImageToImageMode: Boolean = true
 ) {
     /** 提取当前会话中生成的所有历史图片集合 */
     val sessionGeneratedImages: List<String>
@@ -115,6 +116,7 @@ class VisualChatStudioViewModel(
 ) : ViewModel() {
 
     private val TAG = "VisualChatStudioVM"
+    val trafficStore = SessionTrafficStore()
     private val compressionEngine = ContextCompressionEngine()
     private var currentGenerationJob: Job? = null
 
@@ -428,7 +430,6 @@ class VisualChatStudioViewModel(
         referenceImageUri: String? = null,
         isImageToImage: Boolean = _uiState.value.isImageToImageMode,
         isPng: Boolean = true,
-        useCloudBgRemoval: Boolean = false,
         isUploadToCloud: Boolean = false,
         customImageBytes: ByteArray? = null
     ) {
@@ -519,16 +520,22 @@ class VisualChatStudioViewModel(
                     generationCount = generationCount,
                     referenceImageUri = finalRefUri,
                     onLog = { log ->
-                        // ★ 真实原始通信报文与对话界面彻底解耦
-                        if (log.contains("[AI REQUEST]") || log.contains("URL:") || log.contains("Body:")) {
-                            // 真实的原始网络请求报文：100% 原始格式归档，供右上角通信日志查看器原样展示
-                            _uiState.update { s ->
-                                val updatedTraffic = if (s.rawNetworkLog.isBlank()) log else "${s.rawNetworkLog}\n\n$log"
-                                s.copy(rawNetworkLog = updatedTraffic)
-                            }
-                        } else {
-                            // 纯净的人类可读业务状态才输出给对话界面
+                        // 纯净的人类可读业务状态才输出给对话界面
+                        if (!log.contains("[AI REQUEST]") && !log.contains("URL:") && !log.contains("Body:")) {
                             _uiState.update { it.copy(statusLog = log) }
+                        }
+                    },
+                    onRawTraffic = { direction, url, body ->
+                        viewModelScope.launch {
+                            val record = TrafficRecord(
+                                seq = 0,
+                                direction = direction,
+                                timestamp = getCurrentTimeMillis(),
+                                url = url,
+                                model = model.modelName,
+                                body = body
+                            )
+                            trafficStore.append(record, scopeId, current.id)
                         }
                     }
                 )

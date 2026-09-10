@@ -713,18 +713,8 @@ fun LayoutPropertyContent(
                                         isPng = isPng
                                     )
                                 } else {
-                                    val fileBytes = org.gemini.ui.forge.utils.readLocalFileBytes(imagePath)
-                                    if (fileBytes != null) {
-                                        viewModel.templateRepo.saveBlockResource(
-                                            templateName = state.projectName,
-                                            blockId = selectedBlock.id,
-                                            fileNamePrefix = "chat_gen",
-                                            bytes = fileBytes,
-                                            isPng = imagePath.endsWith(".png", ignoreCase = true)
-                                        )
-                                    } else {
-                                        TemplateFile(imagePath)
-                                    }
+                                    // ★ 修复重复文件Bug：imagePath 已经是本地已落盘物理资产（如已烘焙切图 baked_ 或原生成图），直接使用，严禁二次另存克隆！
+                                    TemplateFile(imagePath)
                                 }
                                 viewModel.assetManager.onImageSelected(tFile)
                                 showImg2ImgStudioDialog = false

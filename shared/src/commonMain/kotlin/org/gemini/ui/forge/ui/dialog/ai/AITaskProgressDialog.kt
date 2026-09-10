@@ -12,22 +12,21 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import org.gemini.ui.forge.extend.rememberClipboardAction
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import geminiuiforge.composeapp.generated.resources.*
-import kotlinx.coroutines.launch
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.action_copy_log
+import geminiuiforge.composeapp.generated.resources.log_title
+import geminiuiforge.composeapp.generated.resources.toast_log_copied
+import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.ui.component.ToastType
-import org.gemini.ui.forge.utils.Toast
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -59,8 +58,7 @@ fun AITaskProgressDialog(
     // 任务 3 新增：组合扩展点，允许在日志上方插入自定义 UI (如任务 4 的并行列表)
     extraContent: (@Composable ColumnScope.() -> Unit)? = null 
 ) {
-    val scope = rememberCoroutineScope()
-    
+
     Dialog(
         onDismissRequest = { if (!isProcessing) onDismiss() },
         properties = DialogProperties(

@@ -136,6 +136,23 @@ actual class LocalFileStorage {
         return files
     }
 
+    actual suspend fun listFiles(parentDir: String): List<String> {
+        val files = mutableListOf<String>()
+        try {
+            val dirHandle = getTargetDirectoryHandle(parentDir, createIfNotExists = false) ?: return emptyList()
+            val iterator = dirHandle.values().unsafeCast<dynamic>()
+            while (true) {
+                val nextResult = iterator.next().unsafeCast<kotlin.js.Promise<dynamic>>().await()
+                if (nextResult.done.unsafeCast<Boolean?>() ?: true) break
+                val value = nextResult.value
+                if (value != null && value.kind == "file") {
+                    files.add(value.name.unsafeCast<String>())
+                }
+            }
+        } catch (_: Exception) {}
+        return files
+    }
+
     suspend fun listFilesRecursive(dirPath: String): List<String> {
         val files = mutableListOf<String>()
         try {

@@ -15,6 +15,7 @@ import org.gemini.ui.forge.manager.PromptManager
 import org.gemini.ui.forge.manager.ScriptManager
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.api.ChatMessage
+import org.gemini.ui.forge.model.chat.TrafficDirection
 import org.gemini.ui.forge.model.ui.UIPage
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.utils.AppLogger
@@ -123,7 +124,8 @@ class AIGenerationService(
         isVertexAI: Boolean = false,
         generationCount: Int? = null,
         onLog: (String) -> Unit = {},
-        onImageGenerated: (String) -> Unit = {}
+        onImageGenerated: (String) -> Unit = {},
+        onRawTraffic: ((TrafficDirection, String, String) -> Unit)? = null
     ): List<String> = coroutineScope {
         // 优先使用传入的会话级数量，若无则从配置中读取总数量，默认为 4
         val configCountStr = configManager.loadKey("IMAGE_GEN_COUNT") ?: "4"
@@ -168,9 +170,13 @@ class AIGenerationService(
                             syncLog("⚠️ $batchTag 重试中 (${attempt + 1})...", onLog)
                         }
 
-                        val results = geminiGenerator.generate(model.modelName, params, onLog) {
-                            onImageGenerated(it)
-                        }
+                        val results = geminiGenerator.generate(
+                            model = model.modelName,
+                            params = params,
+                            onLog = onLog,
+                            onImageGenerated = { onImageGenerated(it) },
+                            onRawTraffic = onRawTraffic
+                        )
                         return@async results
                     } catch (e: Exception) {
                         lastException = e
@@ -237,60 +243,6 @@ class AIGenerationService(
         } finally {
             org.gemini.ui.forge.utils.deleteLocalFile(inputPath)
             org.gemini.ui.forge.utils.deleteLocalFile(outputPath)
-        }
-    }
-
-    /**
-     * 调用云端多模态大模型执行背景去除与透明通道处理
-     */
-    suspend fun removeBackgroundCloud(
-        imageBytes: ByteArray,
-        apiKey: String,
-        onLog: (String) -> Unit = {}
-    ): ByteArray? {
-        if (apiKey.isBlank()) {
-            syncLog("❌ 云端抠图失败: API Key 为空", onLog)
-            return null
-        }
-
-        syncLog("☁️ 启动云端多模态抠图引擎...", onLog)
-
-        val displayName = "rembg_${getCurrentTimeMillis()}.png"
-        val imagePart = cloudAssetManager.buildGeminiImagePart(displayName, imageBytes, "image/png", onLog)
-        val prompt = promptManager.getPrompt("cloud_bg_removal")
-        val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey, GeminiModel.GEMINI_2_5_FLASH_IMAGE.modelName)
-
-        val requestBody = buildJsonObject {
-            put("contents", buildJsonArray {
-                add(buildJsonObject {
-                    put("role", "user")
-                    put("parts", buildJsonArray {
-                        add(buildJsonObject { put("text", prompt) })
-                        add(imagePart)
-                    })
-                })
-            })
-        }.toString()
-
-        val startTime = getCurrentTimeMillis()
-        return try {
-            val responseText = geminiClient.generateContent(url, requestBody, onLog)
-            val duration = getCurrentTimeMillis() - startTime
-
-            val base64Match = Regex("data:image/[^;]+;base64,([A-Za-z0-9+/=]+)").find(responseText)
-            if (base64Match != null) {
-                val b64 = base64Match.groupValues[1]
-                @OptIn(ExperimentalEncodingApi::class)
-                val resultBytes = Base64.decode(b64)
-                syncLog("✅ 云端抠图处理完成 (${duration}ms)", onLog)
-                resultBytes
-            } else {
-                syncLog("⚠️ 云端未直接返回 Base64 图像数据，回退至本地抠图", onLog)
-                removeBackgroundLocal(imageBytes)
-            }
-        } catch (e: Exception) {
-            syncLog("❌ 云端抠图异常: ${e.message}", onLog)
-            removeBackgroundLocal(imageBytes)
         }
     }
 

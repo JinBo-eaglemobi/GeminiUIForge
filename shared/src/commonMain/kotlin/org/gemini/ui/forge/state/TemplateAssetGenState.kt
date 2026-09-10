@@ -32,7 +32,6 @@ data class TemplateAssetGenState(
 
     /** 生成偏好 */
     val isGenerateTransparent: Boolean = true,
-    val isPrioritizeCloudRemoval: Boolean = false,
 
     /** 候选资产 */
     val generatedCandidates: List<TemplateFile> = emptyList(),

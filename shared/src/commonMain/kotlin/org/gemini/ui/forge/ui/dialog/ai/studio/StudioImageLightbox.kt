@@ -26,11 +26,11 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * 视觉工作室高清图片大图灯箱查看器
+ * 视觉工作室高清图片大图灯箱查看器（支持文件路径与内存切片字节流）
  */
 @Composable
 fun StudioImageLightbox(
-    imageUri: String,
+    imageModel: Any,
     onDismiss: () -> Unit
 ) {
     val spacing = LocalAppSpacing.current
@@ -63,7 +63,7 @@ fun StudioImageLightbox(
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
-                    model = imageUri,
+                    model = imageModel,
                     contentDescription = "Full Size Preview",
                     modifier = Modifier
                         .fillMaxSize()

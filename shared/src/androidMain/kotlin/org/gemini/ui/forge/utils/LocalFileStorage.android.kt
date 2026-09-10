@@ -88,6 +88,11 @@ actual class LocalFileStorage {
         return@withContext currentDir.listFiles()?.filter { it.isFile && it.name.endsWith(".json") }?.map { it.name } ?: emptyList()
     }
 
+    actual suspend fun listFiles(parentDir: String): List<String> = withContext(Dispatchers.IO) {
+        val base = File(currentDir, parentDir)
+        return@withContext base.listFiles()?.filter { it.isFile }?.map { it.name } ?: emptyList()
+    }
+
     actual suspend fun listDirectories(parentDir: String?): List<String> = withContext(Dispatchers.IO) {
         val base = if (parentDir != null) File(currentDir, parentDir) else currentDir
         return@withContext base.listFiles()?.filter { it.isDirectory }?.map { it.name } ?: emptyList()

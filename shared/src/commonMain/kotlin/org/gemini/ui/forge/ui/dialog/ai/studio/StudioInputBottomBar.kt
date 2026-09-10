@@ -73,7 +73,7 @@ fun StudioInputBottomBar(
     isOptimizingPrompt: Boolean,
     storage: LocalFileStorage,
     onOptimizeRequested: (sourceText: String, isZh: Boolean, onOptimized: (String) -> Unit) -> Unit,
-    onSend: (userPrompt: String, activeLang: PromptLanguage, isImageToImage: Boolean, isPng: Boolean, useCloudBgRemoval: Boolean, isUploadToCloud: Boolean, model: GeminiModel, count: Int, customImageBytes: ByteArray?) -> Unit,
+    onSend: (userPrompt: String, activeLang: PromptLanguage, pendingImageUri: String?, pendingImageBytes: ByteArray?, isPng: Boolean, isUploadToCloud: Boolean, model: GeminiModel, count: Int) -> Unit,
     onCancel: () -> Unit = {},
     onOpenLogs: () -> Unit = {},
     onOpenAssetGallery: () -> Unit = {},
@@ -626,18 +626,17 @@ fun StudioInputBottomBar(
                         } else {
                             Button(
                                 onClick = {
-                                    val promptToSend = currentDisplayPrompt.trim()
-                                    onSend(
-                                        promptToSend,
-                                        activeLang,
-                                        hasPendingImage,
-                                        isPng,
-                                        false,
-                                        isUploadToCloud,
-                                        selectedModel,
-                                        generationCount,
-                                        pendingImageBytes
-                                    )
+                                val promptToSend = currentDisplayPrompt.trim()
+                                onSend(
+                                    promptToSend,
+                                    activeLang,
+                                    if (hasPendingImage) pendingImageUri else null,
+                                    if (hasPendingImage) pendingImageBytes else null,
+                                    isPng,
+                                    isUploadToCloud,
+                                    selectedModel,
+                                    generationCount
+                                )
                                 },
                                 enabled = currentDisplayPrompt.isNotBlank() || hasPendingImage,
                                 modifier = Modifier.height(38.dp).tip("发送当前文案给 AI 开始生成"),

@@ -78,7 +78,6 @@ class AssetGenerationDelegate(
         val block = currentState.selectedBlock ?: return
         val projectName = currentState.projectName
         val isTransparent = currentState.isGenerateTransparent
-        val prioritizeCloud = currentState.isPrioritizeCloudRemoval
         val globalStyle = currentState.globalStyle
         val refUri = currentState.referenceImageUri
         val selectedModel = currentState.selectedModel
@@ -147,18 +146,10 @@ class AssetGenerationDelegate(
 
                                 if (isTransparent) {
                                     var processedBytes: ByteArray? = null
-                                    if (prioritizeCloud && apiKey.isNotBlank()) {
-                                        try {
-                                            updateStatus("云端抠图中...")
-                                            processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) { addLog("[Cloud] $it") }
-                                        } catch (e: Exception) { addLog("⚠️ [Cloud] 失败: ${e.message}") }
-                                    }
-                                    if (processedBytes == null) {
-                                        try {
-                                            updateStatus("本地抠图中...")
-                                            processedBytes = aiService.removeBackgroundLocal(bytes) { addLog("[Local] $it") }
-                                        } catch (e: Exception) { addLog("❌ [Local] 异常") }
-                                    }
+                                    try {
+                                        updateStatus("本地抠图中...")
+                                        processedBytes = aiService.removeBackgroundLocal(bytes) { addLog("[Local] $it") }
+                                    } catch (e: Exception) { addLog("❌ [Local] 异常: ${e.message}") }
                                     if (processedBytes != null) {
                                         displayFile = templateRepo.saveBlockResource(projectName, targetBlockId, "processed_${idx}_$timestamp", processedBytes, isPng = true)
                                     }
@@ -185,7 +176,6 @@ class AssetGenerationDelegate(
         val currentState = getState()
         val projectName = currentState.projectName
         val isTransparent = currentState.isGenerateTransparent
-        val prioritizeCloud = currentState.isPrioritizeCloudRemoval
         val globalStyle = currentState.globalStyle
         val refUri = currentState.referenceImageUri
         val selectedModel = currentState.selectedModel
@@ -233,18 +223,13 @@ class AssetGenerationDelegate(
                                             val originalTFile = templateRepo.saveBlockResource(projectName, block.id, "batch_${getCurrentTimeMillis()}", bytes, isPng = false)
                                             
                                             var displayFile = originalTFile
-                                            if (isTransparent) {
-                                                var processedBytes: ByteArray? = null
-                                                if (prioritizeCloud && apiKey.isNotBlank()) {
-                                                    try { processedBytes = aiService.removeBackgroundCloud(bytes, apiKey) } catch (e: Exception) {}
-                                                }
-                                                if (processedBytes == null) {
-                                                    try { processedBytes = aiService.removeBackgroundLocal(bytes) } catch (e: Exception) {}
-                                                }
-                                                if (processedBytes != null) {
-                                                    displayFile = templateRepo.saveBlockResource(projectName, block.id, "batch_proc_${getCurrentTimeMillis()}", processedBytes, isPng = true)
-                                                }
-                                            }
+                                             if (isTransparent) {
+                                                 var processedBytes: ByteArray? = null
+                                                 try { processedBytes = aiService.removeBackgroundLocal(bytes) } catch (e: Exception) {}
+                                                 if (processedBytes != null) {
+                                                     displayFile = templateRepo.saveBlockResource(projectName, block.id, "batch_proc_${getCurrentTimeMillis()}", processedBytes, isPng = true)
+                                                 }
+                                             }
                                             currentCandidates.add(displayFile)
                                         }
                                     }

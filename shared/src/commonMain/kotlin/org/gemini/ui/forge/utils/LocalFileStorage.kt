@@ -41,6 +41,13 @@ expect class LocalFileStorage() {
     suspend fun listFiles(): List<String>
 
     /**
+     * 列出指定相对路径目录下的所有文件名称
+     * @param parentDir 相对于根目录的路径
+     * @return 文件名称列表
+     */
+    suspend fun listFiles(parentDir: String): List<String>
+
+    /**
      * 列出指定路径下的所有子目录名称
      * @param parentDir 相对于根目录的路径，为 null 则列出根目录
      * @return 目录名称列表
