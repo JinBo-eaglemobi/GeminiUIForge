@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 /**
  * 枚举类：定义所有的 UI 功能模块类型 (UIBlockType)
  * 供 Gemini 视觉大模型在分析图片时进行分类标记，并附带针对图像生成的默认英文 Prompt 前缀，
- * 确保扩散模型 (如 Imagen) 在生图时有基础的环境语义作为支撑。
+ * 确保扩散模型在生图时有基础的环境语义作为支撑。
  */
 @Serializable(with = UIBlockTypeSerializer::class)
 enum class UIBlockType(val defaultPrompt: String) {

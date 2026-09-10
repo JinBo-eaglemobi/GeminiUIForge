@@ -420,8 +420,7 @@ class VisualChatStudioViewModel(
      * 发送生图/改图多轮指令（先存本地磁盘物理文件再渲染，彻底杜绝 Base64 传递与假透明）
      */
     fun sendGenerationRequest(
-        promptZh: String,
-        promptEn: String,
+        userPrompt: String,
         activeLang: PromptLanguage = PromptLanguage.ZH,
         apiKey: String,
         model: GeminiModel = _uiState.value.selectedModel,
@@ -430,7 +429,8 @@ class VisualChatStudioViewModel(
         isImageToImage: Boolean = _uiState.value.isImageToImageMode,
         isPng: Boolean = true,
         useCloudBgRemoval: Boolean = false,
-        isUploadToCloud: Boolean = false
+        isUploadToCloud: Boolean = false,
+        customImageBytes: ByteArray? = null
     ) {
         val current = _uiState.value.currentSession ?: return
         if (apiKey.isBlank()) {
@@ -447,7 +447,7 @@ class VisualChatStudioViewModel(
             }
 
             // ★ 延时按需切图机制：仅在向 AI 发送生图请求的瞬间，才真正将内存预览字节流物理落盘
-            val memBytes = _uiState.value.previewMemoryBytes
+            val memBytes = customImageBytes ?: _uiState.value.previewMemoryBytes
             if (isImageToImage && memBytes != null) {
                 try {
                     val targetBlockId = block?.id?.ifBlank { "chat_gen" } ?: "chat_gen"
@@ -473,9 +473,9 @@ class VisualChatStudioViewModel(
                 }
             }
 
-            // 1. 构造生图参数：★ 严格根据当前激活语言选定纯净提示词
+            // 1. 构造生图参数：★ 所见即所发，严格以当前输入框中的纯净单语提示词为准
             val isEn = activeLang == PromptLanguage.EN
-            val effectivePrompt = if (isEn) promptEn.ifBlank { promptZh } else promptZh.ifBlank { promptEn }
+            val effectivePrompt = userPrompt.trim()
 
             _uiState.update {
                 it.copy(

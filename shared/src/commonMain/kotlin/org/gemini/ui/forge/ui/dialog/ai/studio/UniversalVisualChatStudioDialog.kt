@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
@@ -131,7 +132,11 @@ fun UniversalVisualChatStudioDialog(
             shape = AppShapes.large,
             elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val studioDialogWidth = maxWidth
+                val studioDialogHeight = maxHeight
+
+                Column(modifier = Modifier.fillMaxSize()) {
                 // 1. 顶栏 Header（标准 16dp / 12dp 呼吸感边距）
                 Row(
                     modifier = Modifier
@@ -169,45 +174,11 @@ fun UniversalVisualChatStudioDialog(
                         }
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(spacing.small)
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(32.dp).tip(stringResource(Res.string.btn_close_dialog))
                     ) {
-                        // 【会话 JSON 交互日志】查看按钮
-                        IconButton(
-                            onClick = { showLogDialog = true },
-                            modifier = Modifier.size(32.dp).tip("查看当前会话完整交互 JSON 数据与 Prompt 结构")
-                        ) {
-                            Icon(
-                                Icons.Default.DataObject,
-                                contentDescription = "JSON Log",
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        // 【历史生成资产】按需呼出操作按钮
-                        FilledTonalButton(
-                            onClick = { showAssetGalleryDialog = true },
-                            shape = AppShapes.small,
-                            modifier = Modifier.height(32.dp).tip("查看并选择当前模块/会话的历史生成资产"),
-                            contentPadding = PaddingValues(horizontal = 10.dp)
-                        ) {
-                            Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = "历史生成资产 (${state.sessionGeneratedImages.size})",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.size(32.dp).tip(stringResource(Res.string.btn_close_dialog))
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                        }
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
                 }
 
@@ -299,22 +270,18 @@ fun UniversalVisualChatStudioDialog(
 
                             val effectiveRefImage = selectedVariantRefImage ?: state.activeReferenceImageUri ?: initialReferenceImageUri
 
-                            // 底部智能输入中枢（包含场景下拉器 + 从零新图/以图生图双模分段切换 + 纯净参考图卡片与弹窗配置 + 独立模型/张数 + 中止按钮）
+                            // 底部智能输入中枢（自然多模态双层聊天输入）
                             StudioInputBottomBar(
                                 promptZh = block?.userPromptZh ?: "",
                                 promptEn = block?.userPromptEn ?: "",
+                                originalBlockPromptZh = block?.userPromptZh,
+                                originalBlockPromptEn = block?.userPromptEn,
                                 referenceImageUri = effectiveRefImage,
                                 previewMemoryBytes = state.previewMemoryBytes,
-                                isImageToImage = state.isImageToImageMode,
-                                onModeChanged = { viewModel.setCreationMode(it) },
-                                onOpenRefConfig = { showRefSourceDialog = true },
-                                isVariantMode = selectedVariantRefImage != null,
-                                onRevertToOriginal = {
-                                    selectedVariantRefImage = null
-                                    Toast.show("已还原为模块初始参考底图", ToastType.INFO)
-                                },
                                 onReferenceImageClick = { lightboxImageUri = it.toString() },
-                                initialLanguage = currentLang,
+                                canCropFromPage = !pageSourceImageUri.isNullOrBlank() && block != null,
+                                onStartRegionCrop = { showRegionSelectorDialog = true },
+                                onOpenRefConfig = { showRefSourceDialog = true },
                                 selectedModel = state.selectedModel,
                                 onModelSelected = { viewModel.updateModel(it) },
                                 generationCount = state.generationCount,
@@ -334,10 +301,14 @@ fun UniversalVisualChatStudioDialog(
                                     }
                                 },
                                 onCancel = { viewModel.cancelCurrentGeneration() },
-                                onSend = { zh, en, activeLang, isI2I, isPng, cloudBg, uploadCloud, model, count ->
+                                onOpenLogs = { showLogDialog = true },
+                                onOpenAssetGallery = { showAssetGalleryDialog = true },
+                                historicalAssetCount = state.sessionGeneratedImages.size,
+                                dialogWidth = studioDialogWidth,
+                                dialogHeight = studioDialogHeight,
+                                onSend = { userPrompt, activeLang, isI2I, isPng, cloudBg, uploadCloud, model, count, customBytes ->
                                     viewModel.sendGenerationRequest(
-                                        promptZh = zh,
-                                        promptEn = en,
+                                        userPrompt = userPrompt,
                                         activeLang = activeLang,
                                         apiKey = apiKey,
                                         model = model,
@@ -346,7 +317,8 @@ fun UniversalVisualChatStudioDialog(
                                         isImageToImage = isI2I,
                                         isPng = isPng,
                                         useCloudBgRemoval = cloudBg,
-                                        isUploadToCloud = uploadCloud
+                                        isUploadToCloud = uploadCloud,
+                                        customImageBytes = customBytes
                                     )
                                 }
                             )
@@ -355,6 +327,7 @@ fun UniversalVisualChatStudioDialog(
                 }
             }
         }
+    }
 
         // 3. 全屏高清图片灯箱覆盖层
         if (!lightboxImageUri.isNullOrBlank()) {

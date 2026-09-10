@@ -16,10 +16,10 @@ import org.gemini.ui.forge.utils.looseJson
 /**
  * 统一的 Gemini AI 通信客户端
  * 
- * 本类负责封装与 Google Gemini (以及 Imagen) API 的底层 HTTP 通信。
+ * 本类负责封装与 Google Gemini API 的底层 HTTP 通信。
  * 核心功能包括：
  * 1. **流式与非流式调用**：支持基于 Server-Sent Events (SSE) 的流式响应以及普通的一键式请求。
- * 2. **数据解析统一化**：兼容 Gemini 的 `candidates` 和 Imagen 的 `predictions` 数据结构，自动提取有效文本。
+ * 2. **数据解析统一化**：兼容 Gemini 的 `candidates` 数据结构，自动提取有效文本。
  * 3. **日志脱敏与跟踪**：自动拦截并替换请求中庞大的 Base64 图片数据，保持控制台与磁盘日志的整洁。
  * 4. **超时与异常处理**：内置合理的请求超时配置，并对网络异常进行统一捕获与抛出。
  */
@@ -149,10 +149,6 @@ class GeminiClient {
     /**
      * 从 API 响应的 JsonElement 中智能提取文本内容
      * 
-     * 该方法内置了对 Google 不同 AI 产品线响应结构的兼容：
-     * - **Gemini 模型**：数据包裹在 `candidates[0].content.parts[...].text`
-     * - **Imagen 模型**：数据包裹在 `predictions[...].bytesBase64Encoded` 等
-     * 
      * @param jsonElement Ktor 解析出的顶层 JSON 节点
      * @return 提取到的字符串（文本或 Base64），若无匹配格式则返回 null
      */
@@ -166,10 +162,6 @@ class GeminiClient {
             if (parts != null) {
                 return parts.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.content ?: "" }
             }
-            
-            // 2. 尝试匹配 Imagen 模型结构或老版扁平 text 字段
-            return candidate["text"]?.jsonPrimitive?.content 
-                ?: candidate["bytesBase64Encoded"]?.jsonPrimitive?.content
         }
         return null
     }
@@ -183,8 +175,6 @@ class GeminiClient {
         val sanitizedBody = requestBody
             // 替换 inlineData 中的 data 节点
             .replace(Regex("\"data\"\\s*:\\s*\"[^\"]+\""), "\"data\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
-            // 替换 Imagen 请求中的 bytesBase64Encoded 节点
-            .replace(Regex("\"bytesBase64Encoded\"\\s*:\\s*\"[^\"]+\""), "\"bytesBase64Encoded\": \"<BASE64_IMAGE_DATA_OMITTED>\"")
 
         val logMessage = "---- [AI REQUEST] ----\nURL: $url\nBody: \n$sanitizedBody\n------------------------"
         onLog(logMessage)

@@ -634,17 +634,17 @@ fun LayoutPropertyContent(
                 expanded = "高级与破坏性操作" !in blockCollapsedSet,
                 onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, "高级与破坏性操作", !it) }
             ) {
-                // 1. AI 视觉智能生图 / 对话工作室（零门槛直接打开，支持从零创建新图或基于参考图以图生图）
+                // 1. AI 视觉工作室（零门槛直接打开，支持从零创建新图或基于参考图以图生图）
                 Button(
                     onClick = { showImg2ImgStudioDialog = true },
-                    modifier = Modifier.fillMaxWidth().height(42.dp).tip("打开 AI 视觉智能对话工作室，支持直接创建新图或基于参考图修改抠图"),
+                    modifier = Modifier.fillMaxWidth().height(42.dp).tip("打开 AI 视觉工作室"),
                     shape = AppShapes.medium,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     enabled = !state.isGenerating
                 ) {
                     Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("AI 视觉智能生图 / 对话工作室", style = MaterialTheme.typography.labelMedium)
+                    Text("AI 视觉工作室", style = MaterialTheme.typography.labelMedium)
                 }
 
                 // 2. 参考区域与 AI 结构重塑

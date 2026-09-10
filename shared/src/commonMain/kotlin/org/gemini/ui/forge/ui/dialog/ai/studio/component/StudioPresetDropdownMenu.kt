@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.FilterDrama
+import androidx.compose.material.icons.filled.Grain
 import androidx.compose.material.icons.filled.TipsAndUpdates
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -25,20 +29,39 @@ import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
+/** 预设结构化分组定义 */
+private enum class PresetCategoryGroup(
+    val title: String,
+    val icon: ImageVector,
+    val filterPredicate: (String) -> Boolean
+) {
+    EXTRACTION("元素剥离与光效提取", Icons.Default.Grain, { id ->
+        id == "extract_button" || id == "extract_glowing_effect_icon" || id == "extract_symbol_icon"
+    }),
+    INPAINT_CLEAN("底图擦除与面板修复", Icons.Default.CleaningServices, { id ->
+        id == "clean_background_inpaint" || id == "remove_text_keep_frame" || id == "clean_dialog_panel"
+    }),
+    STATE_TRANSFORM("状态衍生与背景处理", Icons.Default.FilterDrama, { id ->
+        id == "high_contrast_solid_bg" || id == "state_disabled_gray" || id == "state_active_glowing"
+    });
+
+    companion object {
+        fun of(presetId: String): PresetCategoryGroup {
+            return entries.firstOrNull { it.filterPredicate(presetId) } ?: EXTRACTION
+        }
+    }
+}
+
 /**
- * 视觉工作室专业场景预设下拉菜单（单行清爽版）
- *
- * 核心特性：
- * 1. 纯净单行排版：分类胶囊 + 场景名称 + 详细描述单行横向铺开，绝不分行堆叠，视觉整洁利落；
- * 2. 视口自适应宽度：根据界面宽度自适应展开至 560dp ~ 880dp；
- * 3. 纵向规整单列展示 8 大场景。
+ * 视觉工作室专业场景预设下拉菜单（结构化分类版）
  */
 @Composable
 fun StudioPresetDropdownMenu(
     presets: List<MattingPreset>,
     selectedPresetId: String?,
     onPresetSelected: (MattingPreset) -> Unit,
-    adaptiveWidth: Dp = 680.dp,
+    maxMenuWidth: Dp = 680.dp,
+    maxMenuHeight: Dp? = null,
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
@@ -47,17 +70,15 @@ fun StudioPresetDropdownMenu(
         presets.find { it.id == selectedPresetId }
     }
 
-    val menuWidth = adaptiveWidth.coerceIn(560.dp, 880.dp)
-
     Box(modifier = modifier) {
-        // 1. 触发胶囊按钮
+        // 触发胶囊按钮
         OutlinedButton(
             onClick = { isExpanded = true },
             shape = AppShapes.small,
             modifier = Modifier
                 .height(32.dp)
-                .tip("点击展开专业场景提示词预设方案库（支持 8 大高质感场景）"),
-            contentPadding = PaddingValues(horizontal = 10.dp)
+                .tip("选择专业场景提示词方案（已按提取、修复、状态分组排布）"),
+            contentPadding = PaddingValues(horizontal = 8.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.TipsAndUpdates,
@@ -67,28 +88,21 @@ fun StudioPresetDropdownMenu(
             )
             Spacer(Modifier.width(spacing.extraSmall))
             Text(
-                text = currentSelected?.nameZh ?: "💡 选择专业场景预设 (8 大场景)...",
+                text = currentSelected?.nameZh ?: "场景预设 ▾",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Medium,
                 color = if (currentSelected != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
-            Spacer(Modifier.width(spacing.extraSmall))
-            Icon(
-                imageVector = Icons.Default.ArrowDropDown,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp)
-            )
         }
 
-        // 2. 单列单行卡片式下拉弹窗
         DropdownMenu(
             expanded = isExpanded,
             onDismissRequest = { isExpanded = false },
             offset = DpOffset(0.dp, 4.dp),
             properties = PopupProperties(focusable = true),
             modifier = Modifier
-                .width(menuWidth)
-                .heightIn(max = 420.dp)
+                .widthIn(min = 380.dp, max = maxMenuWidth)
+                .heightIn(max = maxMenuHeight ?: 520.dp)
                 .background(MaterialTheme.colorScheme.surface)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), AppShapes.medium)
         ) {
@@ -96,26 +110,52 @@ fun StudioPresetDropdownMenu(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(spacing.small),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(spacing.small)
             ) {
-                Text(
-                    text = "🎯 专业场景预设方案库 (点击一键填入，可继续自由编辑)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-
-                presets.forEach { preset ->
-                    val isSelected = preset.id == selectedPresetId
-                    SingleLinePresetItem(
-                        preset = preset,
-                        isSelected = isSelected,
-                        onClick = {
-                            onPresetSelected(preset)
-                            isExpanded = false
+                // 3 大分类分别渲染
+                PresetCategoryGroup.entries.forEach { group ->
+                    val groupPresets = presets.filter { group.filterPredicate(it.id) }
+                    if (groupPresets.isNotEmpty()) {
+                        // 分类标题行
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = group.icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = group.title,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
-                    )
+
+                        // 该分类下的条目
+                        groupPresets.forEach { preset ->
+                            val isSelected = preset.id == selectedPresetId
+                            SingleLinePresetItem(
+                                preset = preset,
+                                isSelected = isSelected,
+                                onClick = {
+                                    onPresetSelected(preset)
+                                    isExpanded = false
+                                }
+                            )
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        )
+                    }
                 }
             }
         }
@@ -123,7 +163,7 @@ fun StudioPresetDropdownMenu(
 }
 
 /**
- * 单行预设条目组件（一行完整展示分类、名称与描述）
+ * 单行预设条目组件
  */
 @Composable
 private fun SingleLinePresetItem(
@@ -132,18 +172,17 @@ private fun SingleLinePresetItem(
     onClick: () -> Unit
 ) {
     val spacing = LocalAppSpacing.current
-    val categoryTag = getCategoryTag(preset.id)
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(38.dp)
+            .heightIn(min = 40.dp)
             .clip(AppShapes.small)
             .clickable(onClick = onClick),
         color = if (isSelected) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
         } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
         },
         shape = AppShapes.small,
         border = if (isSelected) {
@@ -152,27 +191,11 @@ private fun SingleLinePresetItem(
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 10.dp),
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. 分类微胶囊
-            Surface(
-                color = categoryTag.containerColor,
-                shape = AppShapes.small
-            ) {
-                Text(
-                    text = categoryTag.label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = categoryTag.contentColor,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            }
-
-            Spacer(Modifier.width(spacing.small))
-
-            // 2. 场景名称
+            // 场景名称
             Text(
                 text = preset.nameZh,
                 style = MaterialTheme.typography.labelMedium,
@@ -189,17 +212,16 @@ private fun SingleLinePresetItem(
             )
             Spacer(Modifier.width(spacing.small))
 
-            // 3. 详细描述（单行展示）
+            // 详细描述（允许两行弹性展示，完整展现丰富内容）
             Text(
                 text = preset.descriptionZh,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
 
-            // 4. 选中图标
             if (isSelected) {
                 Spacer(Modifier.width(spacing.small))
                 Icon(
@@ -210,34 +232,5 @@ private fun SingleLinePresetItem(
                 )
             }
         }
-    }
-}
-
-/** 场景分类标签辅助模型 */
-private data class PresetCategoryTag(val label: String, val containerColor: Color, val contentColor: Color)
-
-@Composable
-private fun getCategoryTag(presetId: String): PresetCategoryTag {
-    return when {
-        presetId.startsWith("extract") -> PresetCategoryTag(
-            label = "提取",
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.primary
-        )
-        presetId.startsWith("clean") || presetId.startsWith("remove") -> PresetCategoryTag(
-            label = "修复",
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-            contentColor = MaterialTheme.colorScheme.tertiary
-        )
-        presetId.contains("contrast") || presetId.contains("bg") -> PresetCategoryTag(
-            label = "抠图",
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.secondary
-        )
-        else -> PresetCategoryTag(
-            label = "状态",
-            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
-            contentColor = MaterialTheme.colorScheme.onErrorContainer
-        )
     }
 }

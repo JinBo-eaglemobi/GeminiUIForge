@@ -19,6 +19,12 @@ import org.gemini.ui.forge.utils.Toast
 expect fun String.toClipEntry(): ClipEntry
 
 /**
+ * 尝试从系统剪贴板中读取图片二进制字节流 (PNG 格式)。
+ * 若当前剪贴板中无图片或平台不支持，返回 null。
+ */
+expect suspend fun readClipboardImageBytes(): ByteArray?
+
+/**
  * 异步复制字符串至指定 Clipboard 对象
  */
 suspend fun String.toClipboard(clipboard: Clipboard) {

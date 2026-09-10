@@ -1,72 +1,70 @@
 package org.gemini.ui.forge.ui.dialog.ai.studio
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.BrokenImage
-import androidx.compose.material.icons.filled.Crop
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Restore
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import geminiuiforge.composeapp.generated.resources.*
+import kotlinx.coroutines.launch
+import org.gemini.ui.forge.extend.readClipboardImageBytes
 import org.gemini.ui.forge.manager.MattingPreset
 import org.gemini.ui.forge.manager.PromptPresetManager
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
-import org.gemini.ui.forge.utils.Toast
-import org.gemini.ui.forge.utils.isFileExists
-import org.gemini.ui.forge.ui.dialog.ai.component.BilingualPromptEditor
 import org.gemini.ui.forge.ui.dialog.ai.studio.component.StudioPresetDropdownMenu
 import org.gemini.ui.forge.ui.dialog.ai.studio.component.StudioSessionConfigRow
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.LocalFileStorage
+import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.utils.rememberFilePicker
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * 视觉工作室底部智能输入中枢（自适应宽屏 Bento 场景预设 + 独立模型与张数控制 + 固定参考图 + 中止按钮）
+ * 待发送图片来源元信息
+ */
+private enum class PendingImageSource(val label: String) {
+    ORIGINAL_BLOCK("图元参考图"),
+    LOCAL_PICKER("本地图片"),
+    CLIPBOARD_PASTE("剪贴板截图")
+}
+
+/**
+ * 全新自然多模态双层聊天输入中枢
  */
 @Composable
 fun StudioInputBottomBar(
     promptZh: String,
     promptEn: String,
-    referenceImageUri: String? = null,
-    previewMemoryBytes: ByteArray? = null,
-    isImageToImage: Boolean = true,
-    onModeChanged: (Boolean) -> Unit = {},
-    onOpenRefConfig: () -> Unit = {},
-    isVariantMode: Boolean = false,
-    onRevertToOriginal: (() -> Unit)? = null,
+    originalBlockPromptZh: String? = null,
+    originalBlockPromptEn: String? = null,
+    referenceImageUri: String?,
+    previewMemoryBytes: ByteArray?,
     onReferenceImageClick: ((Any) -> Unit)? = null,
-    initialLanguage: PromptLanguage = PromptLanguage.ZH,
+    canCropFromPage: Boolean = false,
+    onStartRegionCrop: () -> Unit = {},
+    onOpenRefConfig: () -> Unit = {},
     selectedModel: GeminiModel,
     onModelSelected: (GeminiModel) -> Unit,
     generationCount: Int,
@@ -75,146 +73,232 @@ fun StudioInputBottomBar(
     isOptimizingPrompt: Boolean,
     storage: LocalFileStorage,
     onOptimizeRequested: (sourceText: String, isZh: Boolean, onOptimized: (String) -> Unit) -> Unit,
-    onSend: (zh: String, en: String, activeLang: PromptLanguage, isImageToImage: Boolean, isPng: Boolean, useCloudBgRemoval: Boolean, isUploadToCloud: Boolean, model: GeminiModel, count: Int) -> Unit,
+    onSend: (userPrompt: String, activeLang: PromptLanguage, isImageToImage: Boolean, isPng: Boolean, useCloudBgRemoval: Boolean, isUploadToCloud: Boolean, model: GeminiModel, count: Int, customImageBytes: ByteArray?) -> Unit,
     onCancel: () -> Unit = {},
+    onOpenLogs: () -> Unit = {},
+    onOpenAssetGallery: () -> Unit = {},
+    historicalAssetCount: Int = 0,
+    dialogWidth: androidx.compose.ui.unit.Dp? = null,
+    dialogHeight: androidx.compose.ui.unit.Dp? = null,
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
-    var currentZh by remember(promptZh) { mutableStateOf(promptZh) }
-    var currentEn by remember(promptEn) { mutableStateOf(promptEn) }
-    var currentActiveLang by remember(initialLanguage) { mutableStateOf(initialLanguage) }
+    val scope = rememberCoroutineScope()
+
+    // 中英提示词模板选择器（ZH | EN 紧凑胶囊）
+    var activeLang by remember {
+        mutableStateOf(if (promptZh.isNotBlank() || promptEn.isBlank()) PromptLanguage.ZH else PromptLanguage.EN)
+    }
+    var textZh by remember(promptZh) { mutableStateOf(promptZh) }
+    var textEn by remember(promptEn) { mutableStateOf(promptEn) }
+
+    val currentDisplayPrompt = if (activeLang == PromptLanguage.ZH) textZh else textEn
+
+    // 待发送附加图片（支持三种来源：图元自带参考图、本地选择图片、剪贴板粘贴图片）
+    var pendingImageBytes by remember(previewMemoryBytes) { mutableStateOf<ByteArray?>(previewMemoryBytes) }
+    var pendingImageUri by remember(referenceImageUri) { mutableStateOf<String?>(referenceImageUri) }
+    var pendingSource by remember(referenceImageUri, previewMemoryBytes) {
+        mutableStateOf(
+            if (previewMemoryBytes != null || !referenceImageUri.isNullOrBlank()) PendingImageSource.ORIGINAL_BLOCK
+            else null
+        )
+    }
 
     var isPng by remember { mutableStateOf(true) }
     var isUploadToCloud by remember { mutableStateOf(false) }
-    val useCloudBgRemoval = false // 当前项目环境临时禁止选择
 
     val presetManager = remember { PromptPresetManager(storage) }
     var presets by remember { mutableStateOf<List<MattingPreset>>(emptyList()) }
     var selectedPresetId by remember { mutableStateOf<String?>(null) }
 
-    // 物理文件真实存在性探测（若已被磁盘物理删除，呈现丢失警示）
-    var isRefImageMissing by remember(referenceImageUri, previewMemoryBytes) { mutableStateOf(false) }
-
-    LaunchedEffect(referenceImageUri, previewMemoryBytes) {
-        if (previewMemoryBytes == null && !referenceImageUri.isNullOrBlank()) {
-            isRefImageMissing = !isFileExists(referenceImageUri)
-        } else {
-            isRefImageMissing = false
-        }
-    }
-
     LaunchedEffect(Unit) {
         presets = presetManager.loadPresets()
     }
 
+    // 本地文件选择器
+    val filePicker = rememberFilePicker(
+        title = "选择参考图片",
+        isFolder = false,
+        extensions = listOf("png", "jpg", "jpeg", "webp")
+    ) { pickedPath ->
+        if (!pickedPath.isNullOrBlank()) {
+            pendingImageUri = pickedPath
+            pendingImageBytes = null
+            pendingSource = PendingImageSource.LOCAL_PICKER
+            Toast.show("已添加本地图片", ToastType.SUCCESS)
+        }
+    }
+
+    // 剪贴板图片粘贴逻辑
+    fun pasteImageFromClipboard(): Boolean {
+        var handled = false
+        scope.launch {
+            val bytes = readClipboardImageBytes()
+            if (bytes != null && bytes.isNotEmpty()) {
+                pendingImageBytes = bytes
+                pendingImageUri = null
+                pendingSource = PendingImageSource.CLIPBOARD_PASTE
+                Toast.show("已自动挂载剪贴板截图", ToastType.SUCCESS)
+                handled = true
+            }
+        }
+        return handled
+    }
+
+    // 是否有待发送图片
+    val hasPendingImage = pendingImageBytes != null || !pendingImageUri.isNullOrBlank()
+
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val containerWidth = maxWidth
-        val adaptiveMenuWidth = (containerWidth * 0.88f).coerceIn(560.dp, 880.dp)
+        val effectiveDialogWidth = dialogWidth ?: containerWidth
+        // ★ 核心动态响应式视口：预设菜单严格占视口宽度的 85%，菜单最大高度严格占视口高度的 70%
+        val adaptivePresetMenuWidth = effectiveDialogWidth * 0.85f
+        val adaptiveModelMenuWidth = (effectiveDialogWidth * 0.55f).coerceIn(380.dp, 600.dp)
+        val dynamicMenuMaxHeight = dialogHeight?.let { it * 0.70f }
 
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-            shape = AppShapes.medium,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(spacing.medium),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(spacing.medium),
                 verticalArrangement = Arrangement.spacedBy(spacing.small)
             ) {
-                // 1. 顶部工具栏：【创建新图 vs 以图生图双模分段切换】 + 【场景预设库】 + 【独立模型与张数控制】
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // ──────────────────────────────────────────────────────────
+                // 1. 上层：待发送图片/参考图预览附件栏 (有图展开，无图折叠)
+                // ──────────────────────────────────────────────────────────
+                AnimatedVisibility(
+                    visible = hasPendingImage,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
                 ) {
-                    // 左侧与中间：双模切换大胶囊 + 专业场景预设下拉器
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(spacing.medium)
+                    Card(
+                        shape = AppShapes.medium,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        ),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = spacing.extraSmall)
                     ) {
-                        // 核心模式切换大胶囊（高度 36dp，彻底屏蔽 M3 自带重叠勾选图标）
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.height(36.dp)) {
-                            SegmentedButton(
-                                selected = !isImageToImage,
-                                onClick = { onModeChanged(false) },
-                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                ),
-                                icon = {}, // ★ 彻底屏蔽自带的勾选打勾图标，杜绝重叠！
-                                label = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(15.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(
-                                            text = "从零创建新图",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = if (!isImageToImage) FontWeight.Bold else FontWeight.Normal,
-                                            maxLines = 1,
-                                            softWrap = false
+                        Row(
+                            modifier = Modifier.padding(8.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                // 72dp 缩略预览图
+                                Surface(
+                                    modifier = Modifier
+                                        .size(72.dp)
+                                        .clip(AppShapes.small)
+                                        .clickable {
+                                            val model = pendingImageBytes ?: pendingImageUri
+                                            if (model != null) onReferenceImageClick?.invoke(model)
+                                        },
+                                    shape = AppShapes.small,
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    val model = pendingImageBytes ?: pendingImageUri
+                                    if (model != null) {
+                                        AsyncImage(
+                                            model = model,
+                                            contentDescription = "Pending Image",
+                                            contentScale = ContentScale.Fit,
+                                            modifier = Modifier.fillMaxSize()
                                         )
                                     }
-                                },
-                                modifier = Modifier.widthIn(min = 120.dp).tip("纯文字从零直接创建新图（不携带参考底图，全宽展开输入区）")
-                            )
-                            SegmentedButton(
-                                selected = isImageToImage,
-                                onClick = { onModeChanged(true) },
-                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    activeContentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                ),
-                                icon = {}, // ★ 彻底屏蔽自带的勾选打勾图标，杜绝重叠！
-                                label = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(Icons.Default.Image, null, modifier = Modifier.size(15.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(
-                                            text = "以图生图/微调",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = if (isImageToImage) FontWeight.Bold else FontWeight.Normal,
-                                            maxLines = 1,
-                                            softWrap = false
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.widthIn(min = 120.dp).tip("基于参考底图进行风格重塑、局部修改或抠图")
-                            )
-                        }
-
-                        // 专业场景预设下拉器
-                        if (presets.isNotEmpty()) {
-                            StudioPresetDropdownMenu(
-                                presets = presets,
-                                selectedPresetId = selectedPresetId,
-                                adaptiveWidth = adaptiveMenuWidth,
-                                onPresetSelected = { preset ->
-                                    selectedPresetId = preset.id
-                                    currentZh = preset.promptZh
-                                    currentEn = preset.promptEn
                                 }
-                            )
+
+                                Spacer(Modifier.width(spacing.medium))
+
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = AppShapes.small,
+                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                                        ) {
+                                            Text(
+                                                text = pendingSource?.label ?: "图片附件",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        Spacer(Modifier.width(spacing.small))
+                                        Text(
+                                            text = "多模态改图模式",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+
+                                    Spacer(Modifier.height(4.dp))
+
+                                    val desc = when (pendingSource) {
+                                        PendingImageSource.ORIGINAL_BLOCK -> "当前图元关联的参考裁切图"
+                                        PendingImageSource.LOCAL_PICKER -> pendingImageUri?.substringAfterLast('\\')?.substringAfterLast('/') ?: "本地图片"
+                                        PendingImageSource.CLIPBOARD_PASTE -> "来自系统剪贴板截图 (PNG 格式)"
+                                        null -> ""
+                                    }
+                                    Text(
+                                        text = desc,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // 放大查看按钮
+                                IconButton(
+                                    onClick = {
+                                        val model = pendingImageBytes ?: pendingImageUri
+                                        if (model != null) onReferenceImageClick?.invoke(model)
+                                    },
+                                    modifier = Modifier.size(30.dp).tip("全屏查看大图")
+                                ) {
+                                    Icon(Icons.Default.ZoomIn, null, modifier = Modifier.size(18.dp))
+                                }
+
+                                Spacer(Modifier.width(4.dp))
+
+                                // 移除按钮
+                                IconButton(
+                                    onClick = {
+                                        pendingImageBytes = null
+                                        pendingImageUri = null
+                                        pendingSource = null
+                                    },
+                                    modifier = Modifier.size(30.dp).tip("移除当前图片（转为纯文本生成）")
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
                         }
                     }
-
-                    // 右侧：当前会话专属模型切换器与单次生图数量胶囊
-                    StudioSessionConfigRow(
-                        selectedModel = selectedModel,
-                        onModelSelected = onModelSelected,
-                        generationCount = generationCount,
-                        onCountSelected = onCountSelected
-                    )
                 }
 
+                // ──────────────────────────────────────────────────────────
                 // 优化中提示横幅
+                // ──────────────────────────────────────────────────────────
                 AnimatedVisibility(
                     visible = isOptimizingPrompt,
                     enter = expandVertically() + fadeIn(),
@@ -223,20 +307,20 @@ fun StudioInputBottomBar(
                     Surface(
                         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
                         shape = AppShapes.small,
-                        modifier = Modifier.fillMaxWidth().padding(bottom = spacing.small)
+                        modifier = Modifier.fillMaxWidth().padding(bottom = spacing.extraSmall)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = spacing.medium, vertical = spacing.extraSmall),
+                            modifier = Modifier.padding(horizontal = spacing.medium, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(13.dp),
                                 strokeWidth = 2.dp,
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Spacer(Modifier.width(spacing.small))
                             Text(
-                                text = "AI 正在深度润色并扩展视觉细节提示词，请稍候...",
+                                text = "AI 正在润色并扩展提示词细节，请稍候...",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 fontWeight = FontWeight.Medium
@@ -245,234 +329,140 @@ fun StudioInputBottomBar(
                     }
                 }
 
-                // 2. 中部核心区：模式自适应展开（从零生图全宽铺开；以图生图展示 135dp 纯净视口卡片）
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.small),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isImageToImage) {
-                        val hasRef = previewMemoryBytes != null || (!referenceImageUri.isNullOrBlank() && !isRefImageMissing)
-                        val previewModel: Any? = previewMemoryBytes ?: referenceImageUri
-
-                        // 以图生图模式：纯净大方视口卡片（宽 135dp，高 135dp，点击弹窗统一配置）
-                        Surface(
-                            modifier = Modifier
-                                .width(135.dp)
-                                .height(135.dp)
-                                .clip(AppShapes.medium)
-                                .border(
-                                    1.dp,
-                                    if (isRefImageMissing) MaterialTheme.colorScheme.error
-                                    else if (hasRef) MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f)
-                                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                    AppShapes.medium
-                                )
-                                .clickable { onOpenRefConfig() }
-                                .tip(if (isRefImageMissing) "参考图文件已丢失，点击重新配置或框选" else "点击配置、重新框选或更换参考底图"),
-                            color = if (isRefImageMissing) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
-                                    else MaterialTheme.colorScheme.surface
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isRefImageMissing) {
-                                    // 物理文件已丢失状态
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center,
-                                        modifier = Modifier.padding(6.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.BrokenImage,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            text = "参考图资源已丢失",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.error,
-                                            textAlign = TextAlign.Center
-                                        )
-                                        Spacer(Modifier.height(2.dp))
-                                        Text(
-                                            text = "点击重新框选/更换",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onErrorContainer,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                } else if (hasRef && previewModel != null) {
-                                    AsyncImage(
-                                        model = previewModel,
-                                        contentDescription = "Reference Image Preview",
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Fit
-                                    )
-
-                                    // 左上角状态徽章
-                                    Surface(
-                                        modifier = Modifier
-                                            .align(Alignment.TopStart)
-                                            .padding(4.dp),
-                                        shape = AppShapes.extraSmall,
-                                        color = if (previewMemoryBytes != null) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
-                                                else if (isVariantMode) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.9f)
-                                                else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
-                                    ) {
-                                        Text(
-                                            text = if (previewMemoryBytes != null) "框选预览"
-                                                   else if (isVariantMode) "微调底图"
-                                                   else "参考底图",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (previewMemoryBytes != null) MaterialTheme.colorScheme.onPrimaryContainer
-                                                    else if (isVariantMode) MaterialTheme.colorScheme.onTertiaryContainer
-                                                    else MaterialTheme.colorScheme.onSecondaryContainer,
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                        )
-                                    }
-
-                                    // 右上角还原（微调模式可用）
-                                    if (isVariantMode && onRevertToOriginal != null) {
-                                        Surface(
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .padding(4.dp)
-                                                .size(22.dp)
-                                                .clickable { onRevertToOriginal() }
-                                                .tip("撤销微调，还原为初始底图"),
-                                            shape = AppShapes.small,
-                                            color = MaterialTheme.colorScheme.errorContainer
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Restore,
-                                                contentDescription = "Restore Original",
-                                                tint = MaterialTheme.colorScheme.onErrorContainer,
-                                                modifier = Modifier.padding(3.dp)
-                                            )
-                                        }
-                                    }
-
-                                    // 右下角放大查看
-                                    Surface(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomEnd)
-                                            .padding(bottom = 24.dp, end = 4.dp)
-                                            .size(20.dp)
-                                            .clickable { onReferenceImageClick?.invoke(previewModel) }
-                                            .tip("点击全屏放大查看"),
-                                        shape = AppShapes.small,
-                                        color = Color.Black.copy(alpha = 0.65f)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.ZoomIn,
-                                            contentDescription = "Zoom In",
-                                            tint = Color.White,
-                                            modifier = Modifier.padding(2.dp)
-                                        )
-                                    }
-
-                                    // 底部悬浮磨砂操作条（提示点击弹窗配置）
-                                    Surface(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomCenter)
-                                            .fillMaxWidth(),
-                                        color = Color.Black.copy(alpha = 0.7f)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                                            horizontalArrangement = Arrangement.Center,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Edit,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(11.dp)
-                                            )
-                                            Spacer(Modifier.width(3.dp))
-                                            Text(
-                                                text = "点击更换/框选",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Color.White
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    // 尚未设置参考图
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center,
-                                        modifier = Modifier.padding(8.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.AddPhotoAlternate,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            text = "未设置参考底图",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(Modifier.height(2.dp))
-                                        Text(
-                                            text = "点击配置/框选",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
+                // ──────────────────────────────────────────────────────────
+                // 2. 下层：聊天对话输入框（★ 弹性 2~6 行，超过自动内部滚动）
+                // ──────────────────────────────────────────────────────────
+                OutlinedTextField(
+                    value = currentDisplayPrompt,
+                    onValueChange = { newText ->
+                        // 手动改动内容时，重置预设选中状态
+                        selectedPresetId = null
+                        if (activeLang == PromptLanguage.ZH) {
+                            textZh = newText
+                        } else {
+                            textEn = newText
+                        }
+                    },
+                    placeholder = {
+                        Text(
+                            text = if (hasPendingImage) "描述修改要求（如：给边缘添加发光光晕、修改主色调为金色，支持 Ctrl+V 粘贴新截图）..."
+                            else "发消息给 AI（描述生图要求，支持 Ctrl+V 粘贴截图）...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onPreviewKeyEvent { keyEvent ->
+                            // 监听 Ctrl+V / Cmd+V 快捷键粘贴图片
+                            if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.V && (keyEvent.isCtrlPressed || keyEvent.isMetaPressed)) {
+                                if (pasteImageFromClipboard()) {
+                                    return@onPreviewKeyEvent true
                                 }
                             }
-                        }
-                    }
+                            false
+                        },
+                    minLines = 2,
+                    maxLines = 6,
+                    shape = AppShapes.medium,
+                    enabled = !isOptimizingPrompt && !isGenerating
+                )
 
-                    // 右侧双语提示词编辑器（唯一的提示词编辑器，从零生图时填满 100% 宽度，以图生图时填满剩余空间）
-                    Box(modifier = Modifier.weight(1f)) {
-                        BilingualPromptEditor(
-                            promptZh = currentZh,
-                            promptEn = currentEn,
-                            initialLanguage = initialLanguage,
-                            onLanguageChanged = { currentActiveLang = it },
-                            onPromptConfirmed = { newZh, newEn ->
-                                currentZh = newZh
-                                currentEn = newEn
-                            },
-                            onOptimizeRequested = { sourceText, isZh, onOptimized ->
-                                onOptimizeRequested(sourceText, isZh) { optimizedResult ->
-                                    if (isZh) {
-                                        currentZh = optimizedResult
-                                    } else {
-                                        currentEn = optimizedResult
-                                    }
-                                    onOptimized(optimizedResult)
-                                }
-                            },
-                            isOptimizing = isOptimizingPrompt,
-                            showExplicitConfirmButton = false,
-                            enabled = !isOptimizingPrompt && !isGenerating
-                        )
-                    }
-                }
-
-                // 3. 底部选项开关与发送/中止按钮
+                // ──────────────────────────────────────────────────────────
+                // 3. 底部功能工具栏
+                // ──────────────────────────────────────────────────────────
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // 左侧工具图标组（★ 常驻参考图画框与来源管理入口）
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(spacing.medium)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        // 📎 添加本地图片
+                        IconButton(
+                            onClick = { filePicker() },
+                            enabled = !isOptimizingPrompt && !isGenerating,
+                            modifier = Modifier.size(34.dp).tip("添加本地参考图片 (PNG/JPG)")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AttachFile,
+                                contentDescription = "Add Image",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        // ✂️ 画框选区截取（★ 常驻显示：只要原图存在，随时可重新画框截取）
+                        if (canCropFromPage) {
+                            IconButton(
+                                onClick = onStartRegionCrop,
+                                enabled = !isOptimizingPrompt && !isGenerating,
+                                modifier = Modifier.size(34.dp).tip("从原图中自定义画框截取局部区域作为参考底图")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Crop,
+                                    contentDescription = "Crop from Page",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        // ⚙️ 参考图配置管理（★ 常驻显示：支持选区/换图/一键还原初始底图/清除）
+                        IconButton(
+                            onClick = onOpenRefConfig,
+                            enabled = !isOptimizingPrompt && !isGenerating,
+                            modifier = Modifier.size(34.dp).tip("参考底图来源配置管理（选区/换图/还原初始）")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = "Reference Config",
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        // ❝ 一键引用当前图元原本的双语提示词
+                        val hasOriginalPrompt = !originalBlockPromptZh.isNullOrBlank() || !originalBlockPromptEn.isNullOrBlank()
+                        IconButton(
+                            onClick = {
+                                selectedPresetId = null
+                                textZh = originalBlockPromptZh ?: ""
+                                textEn = originalBlockPromptEn ?: ""
+                                Toast.show("已带入当前图元原始提示词", ToastType.SUCCESS)
+                            },
+                            enabled = !isOptimizingPrompt && !isGenerating && hasOriginalPrompt,
+                            modifier = Modifier.size(34.dp).tip(if (hasOriginalPrompt) "一键引用带入当前图元已有的原始提示词" else "当前图元无提示词")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FormatQuote,
+                                contentDescription = "Quote Original",
+                                tint = if (hasOriginalPrompt) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        // ✦ 分类专业场景预设（★ 最大 85% 视口自适应包裹 + 70% 最大高度 + 双语成对注入）
+                        if (presets.isNotEmpty()) {
+                            StudioPresetDropdownMenu(
+                                presets = presets,
+                                selectedPresetId = selectedPresetId,
+                                maxMenuWidth = adaptivePresetMenuWidth,
+                                maxMenuHeight = dynamicMenuMaxHeight,
+                                onPresetSelected = { preset ->
+                                    selectedPresetId = preset.id
+                                    textZh = preset.promptZh
+                                    textEn = preset.promptEn
+                                }
+                            )
+                        }
+
+                        Spacer(Modifier.width(spacing.extraSmall))
+
+                        // 透明 PNG 勾选
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.tip("生成透明 PNG 图像（去除背景色）")
@@ -480,108 +470,188 @@ fun StudioInputBottomBar(
                             Checkbox(
                                 checked = isPng,
                                 onCheckedChange = { isPng = it },
-                                modifier = Modifier.size(24.dp)
+                                enabled = !isOptimizingPrompt && !isGenerating,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(Modifier.width(spacing.extraSmall))
-                            Text("透明 PNG", style = MaterialTheme.typography.labelMedium)
+                            Spacer(Modifier.width(4.dp))
+                            Text("透明PNG", style = MaterialTheme.typography.labelSmall)
                         }
 
-                        // 是否上传至云端（默认不选中）
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.tip("将参考图上传至云端存储，方便跨会话多次复用与历史引用")
+                        Spacer(Modifier.width(spacing.extraSmall))
+
+                        // 📜 通信报文日志按钮
+                        IconButton(
+                            onClick = onOpenLogs,
+                            modifier = Modifier.size(34.dp).tip("查看本次会话与 AI 通信的原始真实网络报文 (Request/Response)")
                         ) {
-                            Checkbox(
-                                checked = isUploadToCloud,
-                                onCheckedChange = { isUploadToCloud = it },
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(Modifier.width(spacing.extraSmall))
-                            Text("上传参考图至云端", style = MaterialTheme.typography.labelMedium)
+                            Icon(Icons.Default.DataObject, contentDescription = "Logs", modifier = Modifier.size(18.dp))
                         }
 
-                        // 临时禁用的云端抠图选项
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .alpha(0.5f)
-                                .tip("当前项目环境暂不可用（临时禁用）")
+                        // 🖼️ 历史生成资产弹窗按钮
+                        IconButton(
+                            onClick = onOpenAssetGallery,
+                            modifier = Modifier.size(34.dp).tip("查看历史生成资产 ($historicalAssetCount)")
                         ) {
-                            Checkbox(
-                                checked = false,
-                                onCheckedChange = {},
-                                enabled = false,
-                                modifier = Modifier.size(24.dp)
+                            Icon(
+                                imageVector = Icons.Default.PhotoLibrary,
+                                contentDescription = "Asset Gallery",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
                             )
-                            Spacer(Modifier.width(spacing.extraSmall))
-                            Text("大模型抠图 (暂不可用)", style = MaterialTheme.typography.labelMedium)
                         }
                     }
 
-                    if (isGenerating) {
-                        // 正在生成时展示红色【中止生成】按钮
-                        Button(
-                            onClick = onCancel,
-                            modifier = Modifier.height(38.dp).tip("中止当前 AI 生成任务"),
-                            shape = AppShapes.medium,
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    // 右侧：中英微型切换胶囊 + 模型参数 + 优化按钮 + 发送按钮
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(spacing.small)
+                    ) {
+                        // ★ 极简紧凑型中英切换微胶囊 (28dp，双向即时切换当前文案)
+                        Surface(
+                            shape = AppShapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                            modifier = Modifier.height(28.dp)
                         ) {
-                            Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(spacing.extraSmall))
-                            Text(
-                                text = "中止生成",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(AppShapes.small)
+                                        .background(if (activeLang == PromptLanguage.ZH) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                        .clickable { activeLang = PromptLanguage.ZH }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "ZH",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (activeLang == PromptLanguage.ZH) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(AppShapes.small)
+                                        .background(if (activeLang == PromptLanguage.EN) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                        .clickable { activeLang = PromptLanguage.EN }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "EN",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (activeLang == PromptLanguage.EN) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
-                    } else if (isOptimizingPrompt) {
-                        // 正在优化提示词时禁用并展示加载指示
-                        Button(
-                            onClick = {},
-                            enabled = false,
-                            modifier = Modifier.height(38.dp).tip("正在优化提示词，请稍候"),
-                            shape = AppShapes.medium,
-                            colors = ButtonDefaults.buttonColors(
-                                disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                                disabledContentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                            Spacer(Modifier.width(spacing.small))
-                            Text(
-                                text = "优化中...",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    } else {
-                        Button(
+
+                        // 模型配置微型条 (自适应内容包裹，最大宽度 55% 视口，最大高度 70%)
+                        StudioSessionConfigRow(
+                            selectedModel = selectedModel,
+                            onModelSelected = onModelSelected,
+                            generationCount = generationCount,
+                            onCountSelected = onCountSelected,
+                            maxMenuWidth = adaptiveModelMenuWidth,
+                            maxMenuHeight = dynamicMenuMaxHeight
+                        )
+
+                        // ⚡ 提示词优化按钮
+                        FilledTonalIconButton(
                             onClick = {
-                                if (isImageToImage) {
-                                    val hasValidRef = previewMemoryBytes != null || (!referenceImageUri.isNullOrBlank() && !isRefImageMissing)
-                                    if (!hasValidRef) {
-                                        Toast.show("当前以图生图参考底图不存在或已丢失，请重新配置参考图，或切换为「从零创建新图」", ToastType.ERROR)
-                                        return@Button
+                                val source = currentDisplayPrompt.trim()
+                                if (source.isNotBlank()) {
+                                    onOptimizeRequested(source, activeLang == PromptLanguage.ZH) { optimized ->
+                                        selectedPresetId = null
+                                        if (activeLang == PromptLanguage.ZH) {
+                                            textZh = optimized
+                                        } else {
+                                            textEn = optimized
+                                        }
                                     }
                                 }
-                                onSend(currentZh, currentEn, currentActiveLang, isImageToImage, isPng, useCloudBgRemoval, isUploadToCloud, selectedModel, generationCount)
                             },
-                            enabled = (currentZh.isNotBlank() || currentEn.isNotBlank()) && !isOptimizingPrompt,
-                            modifier = Modifier.height(38.dp).tip(stringResource(Res.string.ai_studio_send_btn)),
-                            shape = AppShapes.medium,
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(spacing.extraSmall))
-                            Text(
-                                text = stringResource(Res.string.ai_studio_send_btn),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold
+                            enabled = !isOptimizingPrompt && !isGenerating && currentDisplayPrompt.isNotBlank(),
+                            modifier = Modifier.size(38.dp).tip("AI 自动优化并润色当前输入的提示词"),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer
                             )
+                        ) {
+                            if (isOptimizingPrompt) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.AutoFixHigh,
+                                    contentDescription = "Optimize",
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        // ➤ 发送 / 中止生成按钮（★ 所见即所发：严格只发送当前输入框内的单语文案）
+                        if (isGenerating) {
+                            Button(
+                                onClick = onCancel,
+                                modifier = Modifier.height(38.dp).tip("中止当前 AI 任务"),
+                                shape = AppShapes.medium,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Icon(Icons.Default.Stop, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("中止", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            }
+                        } else if (isOptimizingPrompt) {
+                            Button(
+                                onClick = {},
+                                enabled = false,
+                                modifier = Modifier.height(38.dp),
+                                shape = AppShapes.medium,
+                                colors = ButtonDefaults.buttonColors(
+                                    disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                    disabledContentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text("优化中...", style = MaterialTheme.typography.labelMedium)
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    val promptToSend = currentDisplayPrompt.trim()
+                                    onSend(
+                                        promptToSend,
+                                        activeLang,
+                                        hasPendingImage,
+                                        isPng,
+                                        false,
+                                        isUploadToCloud,
+                                        selectedModel,
+                                        generationCount,
+                                        pendingImageBytes
+                                    )
+                                },
+                                enabled = currentDisplayPrompt.isNotBlank() || hasPendingImage,
+                                modifier = Modifier.height(38.dp).tip("发送当前文案给 AI 开始生成"),
+                                shape = AppShapes.medium,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(spacing.extraSmall))
+                                Text(
+                                    text = "发送",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

@@ -242,10 +242,10 @@ fun ReelSymbolManagerDialog(
 
                                 Spacer(Modifier.width(4.dp))
 
-                                // 2. AI 视觉智能工作室生图
+                                // 2. AI 视觉工作室生图
                                 IconButton(
                                     onClick = { symbolForStudio = item },
-                                    modifier = Modifier.size(32.dp).tip("打开 AI 视觉智能对话工作室（生图/图生图）")
+                                    modifier = Modifier.size(32.dp).tip("打开 AI 视觉工作室")
                                 ) {
                                     Icon(
                                         Icons.Default.AutoAwesome,

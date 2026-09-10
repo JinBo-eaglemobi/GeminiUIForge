@@ -25,7 +25,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * AI 生成服务类（门面），协调 ImagenGenerator 和 GeminiImageGenerator。
+ * AI 生成服务类（门面），已有接入AI GeminiImageGenerator。
  */
 class AIGenerationService(
     private val storage: LocalFileStorage,
@@ -89,7 +89,7 @@ class AIGenerationService(
     }
 
     /**
-     * 核心生图方法，根据选中的 [GeminiModel] 自动路由到 Imagen 或 Native Gemini 生成逻辑。
+     * 核心生图方法，根据选中的 [GeminiModel] 自动路由 Native Gemini 生成逻辑。
      * 支持从设置中读取默认生图数量，并自动拆分为并发批次请求（单次上限 4 张）。
      *
      * @param model 使用的 Gemini 模型。

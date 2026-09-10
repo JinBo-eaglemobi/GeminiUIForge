@@ -506,7 +506,7 @@
     <string name="prompt_apply_default_tip">将出厂原始文本复制到编辑框作为修改基准</string>
     <string name="prompt_apply_default_success">已将出厂预设应用至当前编辑框</string>
     <string name="prompt_readonly_notice">正在查看出厂内置预设（只读模式）</string>
-    <string name="ai_studio_title">AI 视觉智能对话工作室</string>
+    <string name="ai_studio_title">AI 视觉工作室</string>
     <string name="ai_studio_new_chat">新建会话</string>
     <string name="ai_studio_session_list_title">历史会话列表</string>
     <string name="ai_studio_empty_chat_tip">开始与 AI 进行多轮对话生图与细化调整</string>
