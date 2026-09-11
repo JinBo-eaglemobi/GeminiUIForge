@@ -69,6 +69,57 @@ class AssetManagerDelegate(
         notifySelectionHandled()
     }
 
+    /**
+     * 将图片资源原子化批量应用到当前组件块的一个或多个指定资源状态槽位中。
+     *
+     * @param blockId 目标组件块 ID。
+     * @param imageUri 要绑定的物理图片资产。
+     * @param stateIndices 用户多选的目标槽位索引列表 (如 0: 默认态, 1: Stop/Pressed, 2: Disabled 等)。
+     */
+    fun assignImageToBlockStates(blockId: String, imageUri: TemplateFile, stateIndices: List<Int>) {
+        val pageId = getState().selectedPageId ?: return
+        if (stateIndices.isEmpty()) return
+
+        saveSnapshot("批量绑定多态资源: $blockId (槽位: $stateIndices)")
+        updateState { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) page.copy(blocks = page.blocks.updateBlockInList(blockId) { block ->
+                    var updatedBlock = block
+                    stateIndices.forEach { idx ->
+                        updatedBlock = when (updatedBlock.type) {
+                            UIBlockType.SPIN_BUTTON -> {
+                                val props = updatedBlock.properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
+                                when (idx) {
+                                    0 -> updatedBlock.copy(currentImageUri = imageUri)
+                                    1 -> updatedBlock.copy(properties = props.copy(stopUri = imageUri))
+                                    else -> updatedBlock
+                                }
+                            }
+                            UIBlockType.BUTTON -> {
+                                val props = updatedBlock.properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
+                                when (idx) {
+                                    0 -> updatedBlock.copy(currentImageUri = imageUri)
+                                    1 -> updatedBlock.copy(properties = props.copy(pressedUri = imageUri, isMultiState = true))
+                                    2 -> updatedBlock.copy(properties = props.copy(disabledUri = imageUri, isMultiState = true))
+                                    else -> updatedBlock
+                                }
+                            }
+                            else -> {
+                                if (idx == 0) updatedBlock.copy(currentImageUri = imageUri) else updatedBlock
+                            }
+                        }
+                    }
+                    updatedBlock
+                }) else page
+            }
+            currentState.copy(
+                project = currentState.project.copy(pages = updatedPages)
+            )
+        }
+        markDirty()
+        notifySelectionHandled()
+    }
+
     fun selectReelItem(itemId: String?) {
         updateState { it.copy(selectedReelItemId = itemId) }
     }

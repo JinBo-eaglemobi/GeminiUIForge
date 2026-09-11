@@ -113,55 +113,6 @@ class GeminiClient {
     }
 
     /**
-     * 执行一次性生成内容请求 (Generate Content)
-     * 
-     * 适用于短文本交互、属性分析、抠图请求等不需要打字机效果的场景。
-     * 它将等待整个服务端生成完毕后一次性返回结果。
-     *
-     * @param url 请求的 API 完整路径
-     * @param requestBody 序列化后的 JSON 请求体字符串
-     * @param onLog 外部传入的日志回调
-     * @return 解析后的 AI 回复纯文本（或特定关键字段）
-     * @throws Exception 当找不到有效文本或网络失败时抛出异常
-     */
-    suspend fun generateContent(
-        url: String,
-        requestBody: String,
-        onLog: (String) -> Unit = {},
-        onRawTraffic: ((direction: TrafficDirection, url: String, body: String) -> Unit)? = null
-    ): String {
-        val client = NetworkClient.shared
-        onRawTraffic?.invoke(TrafficDirection.REQ, url, requestBody)
-        logRequest(url, requestBody, onLog)
-
-        try {
-            val response = client.post(url) {
-                contentType(ContentType.Application.Json)
-                setBody(requestBody)
-                // 非流式请求超时时间较短
-                timeout { 
-                    requestTimeoutMillis = 60_000L // 60秒 
-                }
-            }
-
-            if (response.status.isSuccess()) {
-                val responseText = response.bodyAsText()
-                onRawTraffic?.invoke(TrafficDirection.RESP, url, responseText)
-                val jsonElement = looseJson.parseToJsonElement(responseText)
-                // 尝试提取文本内容，若提取不到则视为失败
-                return extractText(jsonElement) ?: throw Exception("响应中未找到有效文本")
-            } else {
-                val errorBody = response.bodyAsText()
-                AppLogger.e(TAG, "API 响应失败: ${response.status}\n$errorBody")
-                throw Exception("API 失败: ${response.status}")
-            }
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "非流式通信异常", e)
-            throw e
-        }
-    }
-
-    /**
      * 从 API 响应的 JsonElement 中智能提取文本内容
      * 
      * @param jsonElement Ktor 解析出的顶层 JSON 节点

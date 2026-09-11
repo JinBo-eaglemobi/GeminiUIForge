@@ -3,6 +3,7 @@ package org.gemini.ui.forge.ui.feature.workspace.property
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Palette
@@ -12,17 +13,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.readBytesInternal
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.ResourceItem
+import org.gemini.ui.forge.state.ProjectWorkspaceState
+import org.gemini.ui.forge.ui.component.ToastType
+import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.dialog.ai.studio.UniversalVisualChatStudioDialog
 import org.gemini.ui.forge.ui.dialog.asset.ResourceBindingDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.gemini.ui.forge.utils.looseJson
 
@@ -32,19 +40,21 @@ import org.gemini.ui.forge.utils.looseJson
  * 1. 属性面板展示两个状态的紧凑缩略图片，支持点击看大图。
  * 2. 增强历史记录按钮尺寸与视觉呈现，使其更大且更容易点击。
  * 3. 当状态有生成图片时，支持从当前按钮绑定资源的子层级（子类）中单独绑定资源 ID。
- * 4. 底部提供“👉 配置并生图 (AI 绘制)”的跳转生图配置提示。
+ * 4. 底部提供“👉 打开 AI 视觉工作室 (配置并生图)”入口，点击直接进入多模态工作室并支持多槽位智能多选分配。
  */
 @Composable
 fun SpinButtonPropertiesPanel(
     viewModel: ProjectWorkspaceViewModel,
+    state: ProjectWorkspaceState,
+    apiKey: String,
     selectedBlock: UIBlock
 ) {
     val props = selectedBlock.properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
-    val state by viewModel.state.collectAsState()
     
     var bigImageToShow by remember { mutableStateOf<TemplateFile?>(null) }
     var showSpinBindingDialog by remember { mutableStateOf(false) }
     var showStopBindingDialog by remember { mutableStateOf(false) }
+    var showStudioDialog by remember { mutableStateOf(false) }
 
     // 级联加载解析当前最新的静态资源绑定元数据 JSON 
     var configData by remember { mutableStateOf<List<ResourceItem>>(emptyList()) }
@@ -297,15 +307,22 @@ fun SpinButtonPropertiesPanel(
     
     Spacer(Modifier.height(LocalAppSpacing.current.small))
     
+    // 唤起 AI 视觉工作室（多模态会话式生图），支持多槽位智能多选应用
     Button(
-        onClick = { viewModel.updateState { it.copy(activePropertyTab = 1) } },
-        modifier = Modifier.fillMaxWidth().height(40.dp),
+        onClick = { showStudioDialog = true },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .tip("打开 AI 视觉工作室，为旋转按钮生成或微调图像方案"),
         shape = AppShapes.small,
-        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        )
     ) {
-        Icon(Icons.Default.Palette, null, modifier = Modifier.size(16.dp))
+        Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(8.dp))
-        Text("👉 【AI 资产生成】配置并生图", style = MaterialTheme.typography.labelSmall)
+        Text("👉 打开 AI 视觉工作室 (配置并生图)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
     }
 
     // Spin 默认状态单独子资源绑定弹窗
@@ -373,6 +390,50 @@ fun SpinButtonPropertiesPanel(
                 viewModel.assetManager.updateBlockProperties(selectedBlock.id, updatedProps)
                 showStopBindingDialog = false
             }
+        )
+    }
+
+    // AI 视觉工作室弹窗（自动携带底图参考，并支持多槽位多选批量赋权）
+    if (showStudioDialog) {
+        val coroutineScope = rememberCoroutineScope()
+        UniversalVisualChatStudioDialog(
+            scopeId = selectedBlock.id,
+            projectName = state.projectName,
+            block = selectedBlock,
+            initialReferenceImageUri = selectedBlock.currentImageUri?.getAbsolutePath(),
+            pageSourceImageUri = state.currentPage?.sourceImageUri?.getAbsolutePath(),
+            pageWidth = state.currentPage?.width ?: 1080f,
+            pageHeight = state.currentPage?.height ?: 1920f,
+            currentLang = state.currentLang,
+            apiKey = apiKey,
+            storage = viewModel.storage,
+            aiService = viewModel.aiService,
+            templateRepo = viewModel.templateRepo,
+            onApplyAsset = { imagePath ->
+                coroutineScope.launch {
+                    try {
+                        val tFile = TemplateFile(imagePath)
+                        viewModel.assetManager.onImageSelected(tFile)
+                        showStudioDialog = false
+                        Toast.show("已成功为旋转按钮应用生成图片", ToastType.SUCCESS)
+                    } catch (e: Exception) {
+                        Toast.show("应用资产失败: ${e.message}", ToastType.ERROR)
+                    }
+                }
+            },
+            onApplyAssetToSlots = { imagePath, selectedSlots ->
+                coroutineScope.launch {
+                    try {
+                        val tFile = TemplateFile(imagePath)
+                        viewModel.assetManager.assignImageToBlockStates(selectedBlock.id, tFile, selectedSlots)
+                        showStudioDialog = false
+                        Toast.show("已成功将图片批量应用到选中的 ${selectedSlots.size} 个状态槽位", ToastType.SUCCESS)
+                    } catch (e: Exception) {
+                        Toast.show("批量应用资产失败: ${e.message}", ToastType.ERROR)
+                    }
+                }
+            },
+            onDismiss = { showStudioDialog = false }
         )
     }
 }

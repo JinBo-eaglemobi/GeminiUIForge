@@ -412,5 +412,14 @@ fun ProjectWorkspaceScreen(
                 }
             )
         }
+
+        // 按钮多态生成（Pressed / Disabled）专属对话框
+        if (state.showButtonGenDialog) {
+            ButtonStateGenDialog(
+                state = state,
+                viewModel = viewModel,
+                apiKey = globalState.effectiveApiKey
+            )
+        }
     }
 }

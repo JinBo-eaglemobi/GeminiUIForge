@@ -55,6 +55,10 @@ fun StudioSessionLogDialog(
     var records by remember { mutableStateOf<List<TrafficRecord>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
+    // 全局一键折叠/展开控制
+    var isAllExpanded by remember { mutableStateOf(true) }
+    var expandToggleVersion by remember { mutableStateOf(0) }
+
     // 存储当前选中的完整未折叠 Base64 字符串以供弹窗查看与解码
     var viewingBase64Payload by remember { mutableStateOf<String?>(null) }
 
@@ -146,8 +150,22 @@ fun StudioSessionLogDialog(
                             }
                         }
 
-                        // 右侧操作区：刷新 + 关闭
+                        // 右侧操作区：一键折叠/展开 + 刷新 + 关闭
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    isAllExpanded = !isAllExpanded
+                                    expandToggleVersion++
+                                },
+                                modifier = Modifier.tip(if (isAllExpanded) "一键折叠全部报文" else "一键展开全部报文")
+                            ) {
+                                Icon(
+                                    imageVector = if (isAllExpanded) Icons.Default.UnfoldLess else Icons.Default.UnfoldMore,
+                                    contentDescription = if (isAllExpanded) "Collapse All" else "Expand All",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(Modifier.width(spacing.extraSmall))
                             IconButton(
                                 onClick = { refreshRecords() },
                                 modifier = Modifier.tip("刷新最新通信报文")
@@ -205,6 +223,8 @@ fun StudioSessionLogDialog(
                         items(records, key = { "${it.seq}_${it.direction}" }) { record ->
                             TrafficRecordItem(
                                 record = record,
+                                defaultExpanded = isAllExpanded,
+                                expandToggleVersion = expandToggleVersion,
                                 onCopyRaw = { copyAction(record.body, "已复制第 ${record.seq} 条报文原文") },
                                 onInspectPayload = { payload -> viewingBase64Payload = payload }
                             )
@@ -251,11 +271,19 @@ private fun formatJsonPretty(raw: String): String {
 @Composable
 private fun TrafficRecordItem(
     record: TrafficRecord,
+    defaultExpanded: Boolean = true,
+    expandToggleVersion: Int = 0,
     onCopyRaw: () -> Unit,
     onInspectPayload: (String) -> Unit
 ) {
     val spacing = LocalAppSpacing.current
-    var isExpanded by remember { mutableStateOf(true) }
+    var isExpanded by remember { mutableStateOf(defaultExpanded) }
+
+    LaunchedEffect(expandToggleVersion) {
+        if (expandToggleVersion > 0) {
+            isExpanded = defaultExpanded
+        }
+    }
 
     val isReq = record.direction == TrafficDirection.REQ
     val dirColor = if (isReq) Color(0xFF2196F3) else Color(0xFF4CAF50)

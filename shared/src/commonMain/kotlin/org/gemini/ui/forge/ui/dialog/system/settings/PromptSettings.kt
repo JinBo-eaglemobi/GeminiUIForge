@@ -3,11 +3,14 @@ package org.gemini.ui.forge.ui.dialog.system.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
@@ -21,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.manager.PromptManager
@@ -73,8 +77,23 @@ fun PromptSettings(
     var isLoading by remember(selectedMeta) { mutableStateOf(true) }
     var viewMode by remember(selectedMeta) { mutableStateOf(PromptViewMode.CURRENT) }
 
+    // 全局所有模板的外部自定义状态缓存字典 (meta.id -> Boolean)
+    var customizedMap by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+
     val coroutineScope = rememberCoroutineScope()
     val spacing = LocalAppSpacing.current
+
+    // 重新扫描所有模板是否已被用户自定义
+    fun reloadCustomizedMap() {
+        coroutineScope.launch {
+            val map = metas.associate { it.id to promptManager.isCustomized(it.id) }
+            customizedMap = map
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        reloadCustomizedMap()
+    }
 
     val saveSuccessTip = stringResource(Res.string.prompt_settings_save_success)
     val resetSuccessTip = stringResource(Res.string.prompt_settings_reset_success)
@@ -120,24 +139,63 @@ fun PromptSettings(
         )
 
         // 2. 模板选择列表与快速状态栏
+        val customizedCount = customizedMap.count { it.value }
+        val defaultCount = metas.size - customizedCount
+
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
             shape = AppShapes.medium
         ) {
-            Column(modifier = Modifier.padding(spacing.small)) {
-                Text(
-                    text = "选择要配置的提示词功能模板:",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = spacing.extraSmall, bottom = spacing.extraSmall)
-                )
+            Column(modifier = Modifier.padding(spacing.medium)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = spacing.small),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "选择要配置的提示词功能模板:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
 
-                // 模板标签选择群组
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(spacing.small),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = AppShapes.small,
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                        ) {
+                            Text(
+                                text = "已自定义: $customizedCount",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        Surface(
+                            shape = AppShapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = "出厂预置: $defaultCount",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+
+                // 模板标签选择群组：对已修改自定义模板做醒目区分
                 OptInHorizontalFlowRow(
                     metas = metas,
                     selectedMeta = selectedMeta,
+                    customizedMap = customizedMap,
                     onSelect = { selectedMeta = it }
                 )
             }
@@ -172,15 +230,41 @@ fun PromptSettings(
                             )
                             Spacer(Modifier.width(spacing.small))
                             Surface(
-                                color = if (isCustomized || hasDiffFromDefault) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                color = when {
+                                    isModified -> MaterialTheme.colorScheme.errorContainer
+                                    isCustomized -> MaterialTheme.colorScheme.primaryContainer
+                                    else -> MaterialTheme.colorScheme.surfaceVariant
+                                },
                                 shape = AppShapes.small
                             ) {
-                                Text(
-                                    text = if (isCustomized && !isModified) "外部已自定义" else if (hasDiffFromDefault) "已修改 (未保存)" else "出厂默认",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isCustomized || hasDiffFromDefault) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (isCustomized || isModified) {
+                                        Icon(
+                                            imageVector = if (isModified) Icons.Default.EditNote else Icons.Default.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(13.dp),
+                                            tint = if (isModified) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                    }
+                                    Text(
+                                        text = when {
+                                            isModified -> "正在编辑 (未保存 *)"
+                                            isCustomized -> "已自定义 (外部生效中)"
+                                            else -> "出厂预置默认"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when {
+                                            isModified -> MaterialTheme.colorScheme.onErrorContainer
+                                            isCustomized -> MaterialTheme.colorScheme.onPrimaryContainer
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
                             }
                         }
                         Text(
@@ -190,33 +274,79 @@ fun PromptSettings(
                         )
                     }
 
-                    // 版本对比与切换分段按钮
-                    SingleChoiceSegmentedButtonRow(
-                        modifier = Modifier.height(32.dp)
+                    // 版本对比与切换：官方 ButtonGroup + customItem + ToggleButton 官方连接形状（ButtonGroupDefaults.connected*），
+                    // 零间距拼接 + 锁定形状不形变，重现旧 SingleChoiceSegmentedButtonRow 一颗胶囊分两半的经典分段外观
+                    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+                    ButtonGroup(
+                        // 仅 2 个切换项，禁用溢出指示器；零间距让两段无缝拼为一颗胶囊
+                        overflowIndicator = { },
+                        horizontalArrangement = Arrangement.spacedBy(0.dp),
+                        modifier = Modifier
                     ) {
-                        SegmentedButton(
-                            selected = viewMode == PromptViewMode.CURRENT,
-                            onClick = { viewMode = PromptViewMode.CURRENT },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                            modifier = Modifier.tip("查看并编辑当前生效/编辑中的提示词")
-                        ) {
-                            Text(
-                                text = if (hasDiffFromDefault) "$tabCurrentText ($badgeModifiedText)" else tabCurrentText,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                        SegmentedButton(
-                            selected = viewMode == PromptViewMode.FACTORY_DEFAULT,
-                            onClick = { viewMode = PromptViewMode.FACTORY_DEFAULT },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                            modifier = Modifier.tip("查看内置的原始出厂预设模板（只读对比）")
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(tabDefaultText, style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
+                        // 左半段：当前生效/编辑中版本（外侧全圆角、内侧直角、选中不形变）
+                        customItem(
+                            buttonGroupContent = {
+                                val leadingShape = RoundedCornerShape(
+                                    topStart = 20.dp, bottomStart = 20.dp,
+                                    topEnd = 0.dp, bottomEnd = 0.dp
+                                )
+                                ToggleButton(
+                                    checked = viewMode == PromptViewMode.CURRENT,
+                                    onCheckedChange = { viewMode = PromptViewMode.CURRENT },
+                                    shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(
+                                        shape = leadingShape,
+                                        pressedShape = leadingShape,
+                                        checkedShape = leadingShape
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(spacing.small))
+                                    Text(
+                                        text = if (hasDiffFromDefault) "$tabCurrentText ($badgeModifiedText)" else tabCurrentText,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            },
+                            menuContent = { }
+                        )
+                        // 右半段：出厂预置原始模板（镜像对称，选中不形变）
+                        customItem(
+                            buttonGroupContent = {
+                                val trailingShape = RoundedCornerShape(
+                                    topStart = 0.dp, bottomStart = 0.dp,
+                                    topEnd = 20.dp, bottomEnd = 20.dp
+                                )
+                                ToggleButton(
+                                    checked = viewMode == PromptViewMode.FACTORY_DEFAULT,
+                                    onCheckedChange = { viewMode = PromptViewMode.FACTORY_DEFAULT },
+                                    shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(
+                                        shape = trailingShape,
+                                        pressedShape = trailingShape,
+                                        checkedShape = trailingShape
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.Default.History,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(spacing.small))
+                                    Text(
+                                        text = tabDefaultText,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            },
+                            menuContent = { }
+                        )
                     }
                 }
 
@@ -318,6 +448,7 @@ fun PromptSettings(
                                     initialContent = defaultText
                                     hasPhysicalFile = false
                                     isCustomized = false
+                                    reloadCustomizedMap()
                                     Toast.show(resetSuccessTip, ToastType.SUCCESS)
                                 }
                             },
@@ -341,6 +472,7 @@ fun PromptSettings(
                                         initialContent = currentContent
                                         hasPhysicalFile = true
                                         isCustomized = promptManager.isCustomized(selectedMeta.id)
+                                        reloadCustomizedMap()
                                         Toast.show(saveSuccessTip, ToastType.SUCCESS)
                                     } else {
                                         Toast.show("保存提示词失败", ToastType.ERROR)
@@ -365,28 +497,92 @@ fun PromptSettings(
 }
 
 /**
- * 模板横向流式选择组件
+ * 模板横向流式选择组件：对已修改/已自定义模板实现鲜明视觉高亮与徽章区分
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OptInHorizontalFlowRow(
     metas: List<PromptMeta>,
     selectedMeta: PromptMeta,
+    customizedMap: Map<String, Boolean>,
     onSelect: (PromptMeta) -> Unit
 ) {
     FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
     ) {
         metas.forEach { meta ->
             val isSelected = selectedMeta.id == meta.id
-            FilterChip(
-                selected = isSelected,
-                onClick = { onSelect(meta) },
-                label = { Text(meta.displayNameZh, style = MaterialTheme.typography.labelSmall) },
-                modifier = Modifier.height(28.dp).tip(meta.descZh)
-            )
+            val isCustomized = customizedMap[meta.id] == true
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = when {
+                    isSelected && isCustomized -> MaterialTheme.colorScheme.primary
+                    isSelected -> MaterialTheme.colorScheme.secondary
+                    isCustomized -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                },
+                border = androidx.compose.foundation.BorderStroke(
+                    width = if (isSelected) 1.5.dp else 1.dp,
+                    color = when {
+                        isSelected && isCustomized -> MaterialTheme.colorScheme.primary
+                        isSelected -> MaterialTheme.colorScheme.secondary
+                        isCustomized -> MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+                        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    }
+                ),
+                modifier = Modifier
+                    .height(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onSelect(meta) }
+                    .tip(if (isCustomized) "【已自定义修改】${meta.descZh}" else "【出厂预置】${meta.descZh}")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isCustomized) {
+                        // 鲜明的已修改标记小图标
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(13.dp),
+                            tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = meta.displayNameZh,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (isSelected || isCustomized) FontWeight.Bold else FontWeight.Normal,
+                        color = when {
+                            isSelected && isCustomized -> MaterialTheme.colorScheme.onPrimary
+                            isSelected -> MaterialTheme.colorScheme.onSecondary
+                            isCustomized -> MaterialTheme.colorScheme.onPrimaryContainer
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+                    if (isCustomized) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
+                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "已修改",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
+
 }

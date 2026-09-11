@@ -39,6 +39,9 @@ class AIGenerationService(
     val promptManager = PromptManager(storage)
     private val scriptManager = ScriptManager(storage)
 
+    /** 专职负责本地离线图像处理与透明抠图的本地服务 */
+    val localMattingService = LocalMattingService(storage, scriptManager)
+
     private val geminiClient = GeminiClient()
     private val geminiGenerator = GeminiImageGenerator(cloudAssetManager, promptManager, geminiClient)
 
@@ -193,57 +196,15 @@ class AIGenerationService(
     }
 
     /**
-     * 调用本地 Python 脚本执行背景去除 (rembg)
+     * 架构解耦转接：调用专职本地抠图服务 [LocalMattingService] 执行离线透明去背 (rembg/pillow)。
+     *
+     * 遵循关注点分离规范，底层实现已迁移至独立的 [LocalMattingService]，建议后续直接注入或调用该服务。
      */
     suspend fun removeBackgroundLocal(
         imageBytes: ByteArray,
         onLog: (String) -> Unit = {}
     ): ByteArray? {
-        val scriptPath = scriptManager.getScriptPath("remove_bg.py") ?: run {
-            syncLog("❌ 未能获取本地抠图脚本路径", onLog)
-            return null
-        }
-
-        val timestamp = getCurrentTimeMillis()
-        val inputPath = storage.getFilePath("temp/input_$timestamp.png")
-        val outputPath = storage.getFilePath("temp/output_$timestamp.png")
-
-        return try {
-            storage.saveBytesToFile("temp/input_$timestamp.png", imageBytes)
-
-            syncLog("🚀 启动本地 Python 抠图引擎...", onLog)
-
-            val commands = listOf("python", "python3")
-            var success = false
-            val executionLogs = StringBuilder()
-            
-            for (cmd in commands) {
-                success = org.gemini.ui.forge.utils.executeSystemCommand(
-                    command = cmd,
-                    args = listOf(scriptPath, inputPath, outputPath),
-                    onLog = { 
-                        syncLog("[LocalRembg] $it", onLog)
-                        executionLogs.appendLine(it)
-                    }
-                )
-                if (success) break
-            }
-
-            if (success && org.gemini.ui.forge.utils.isFileExists(outputPath)) {
-                val result = org.gemini.ui.forge.utils.readLocalFileBytes(outputPath)
-                syncLog("✅ 本地抠图处理完成", onLog)
-                result
-            } else {
-                syncLog("❌ 本地抠图脚本执行失败。可能的原因如下:\n$executionLogs", onLog)
-                null
-            }
-        } catch (e: Exception) {
-            syncLog("❌ 本地抠图异常: ${e.message}\n${e.stackTraceToString()}", onLog)
-            null
-        } finally {
-            org.gemini.ui.forge.utils.deleteLocalFile(inputPath)
-            org.gemini.ui.forge.utils.deleteLocalFile(outputPath)
-        }
+        return localMattingService.removeBackground(imageBytes, onLog)
     }
 
     /**
@@ -473,7 +434,8 @@ class AIGenerationService(
         maxRetries: Int = 3,
         history: List<ChatMessage> = emptyList(),
         onLog: (String) -> Unit = {},
-        onChunk: (String) -> Unit = {}
+        onChunk: (String) -> Unit = {},
+        onRawTraffic: ((direction: TrafficDirection, url: String, body: String) -> Unit)? = null
     ): String {
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
@@ -517,7 +479,8 @@ class AIGenerationService(
                     onChunk = { chunk ->
                         accumulatedText.append(chunk)
                         onChunk(chunk)
-                    }
+                    },
+                    onRawTraffic = onRawTraffic
                 )
                 val finalString = accumulatedText.toString()
                 if (finalString.isEmpty()) throw Exception("优化响应为空")

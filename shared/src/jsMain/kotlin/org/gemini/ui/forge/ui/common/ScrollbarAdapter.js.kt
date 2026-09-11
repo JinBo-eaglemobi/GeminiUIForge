@@ -4,6 +4,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import js.promise.Promise
 
 @Composable
 actual fun VerticalScrollbarAdapter(modifier: Modifier, scrollState: ScrollState) {
@@ -13,4 +14,5 @@ actual fun VerticalScrollbarAdapter(modifier: Modifier, scrollState: ScrollState
 @Composable
 actual fun VerticalScrollbarAdapter(modifier: Modifier, scrollState: LazyListState) {
     // JS 占位符
+
 }

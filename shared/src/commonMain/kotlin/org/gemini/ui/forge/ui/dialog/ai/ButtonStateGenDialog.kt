@@ -37,15 +37,23 @@ fun ButtonStateGenDialog(
 ) {
     if (!state.showButtonGenDialog) return
 
+    val spacing = org.gemini.ui.forge.ui.theme.LocalAppSpacing.current
+
     Dialog(
         onDismissRequest = { if (!state.isButtonGenInProgress) viewModel.closeButtonGenDialog() },
-        properties = DialogProperties(dismissOnClickOutside = false, dismissOnBackPress = !state.isButtonGenInProgress)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+            dismissOnBackPress = !state.isButtonGenInProgress
+        )
     ) {
         Surface(
             shape = AppShapes.large,
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
+            modifier = Modifier
+                .widthIn(min = 640.dp, max = spacing.dialogMediumWidth)
+                .padding(spacing.medium)
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
                 Text(

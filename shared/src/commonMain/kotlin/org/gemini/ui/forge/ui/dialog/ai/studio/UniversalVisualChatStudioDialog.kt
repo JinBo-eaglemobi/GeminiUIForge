@@ -43,6 +43,7 @@ import org.gemini.ui.forge.ui.dialog.ai.studio.component.StudioReferenceSourceDi
 import org.gemini.ui.forge.ui.dialog.ai.studio.component.StudioSessionLogDialog
 import org.gemini.ui.forge.ui.dialog.asset.AssetSelectionDialog
 import org.gemini.ui.forge.ui.dialog.asset.ImageEditorDialog
+import org.gemini.ui.forge.ui.dialog.asset.ResourceSlotSelectionDialog
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -71,6 +72,7 @@ fun UniversalVisualChatStudioDialog(
     aiService: AIGenerationService,
     templateRepo: TemplateRepository,
     onApplyAsset: (imagePath: String) -> Unit,
+    onApplyAssetToSlots: ((imagePath: String, selectedSlots: List<Int>) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val sessionCacheManager = remember { SessionCacheManager(storage) }
@@ -96,10 +98,21 @@ fun UniversalVisualChatStudioDialog(
     var isProcessingHistoricalBg by remember { mutableStateOf(false) }
     var showLogDialog by remember { mutableStateOf(false) }
     var pendingEditorImageUri by remember { mutableStateOf<String?>(null) }
+    var pendingSlotSelectionImagePath by remember { mutableStateOf<String?>(null) }
     var showRefSourceDialog by remember { mutableStateOf(false) }
     var showRegionSelectorDialog by remember { mutableStateOf(false) }
     var showNoInitialRefGuideDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+
+    // 智能拦截分发：检查当前图元是否具有多个资源状态槽位
+    val handleFinalApplyAsset: (String) -> Unit = { finalPath ->
+        val slots = block?.assetStates ?: emptyList()
+        if (slots.size > 1 && onApplyAssetToSlots != null) {
+            pendingSlotSelectionImagePath = finalPath
+        } else {
+            onApplyAsset(finalPath)
+        }
+    }
 
     val localRefImagePicker = rememberFilePicker(
         title = "选择参考底图",
@@ -250,7 +263,7 @@ fun UniversalVisualChatStudioDialog(
                                             pendingEditorImageUri = imageUri
                                             Toast.show("图片尺寸 ($actualW×$actualH) 与当前模块 ($targetW×$targetH) 不一致，正在打开切图加工...", ToastType.INFO)
                                         } else {
-                                            onApplyAsset(imageUri)
+                                            handleFinalApplyAsset(imageUri)
                                         }
                                     }
                                 },
@@ -294,11 +307,18 @@ fun UniversalVisualChatStudioDialog(
                                         Toast.show("请先在设置中配置 Gemini API Key", ToastType.ERROR)
                                         return@StudioInputBottomBar
                                     }
-                                    Toast.show("AI 正在优化提示词...", ToastType.INFO)
-                                    viewModel.optimizePrompt(text, apiKey) { optimized ->
-                                        onOptimized(optimized)
-                                        Toast.show("提示词优化完成", ToastType.SUCCESS)
-                                    }
+                                    Toast.show("AI 正在流式优化提示词...", ToastType.INFO)
+                                    viewModel.optimizePrompt(
+                                        sourceText = text,
+                                        apiKey = apiKey,
+                                        onChunk = { partial ->
+                                            onOptimized(partial)
+                                        },
+                                        onResult = { finalOptimized ->
+                                            onOptimized(finalOptimized)
+                                            Toast.show("提示词优化完成", ToastType.SUCCESS)
+                                        }
+                                    )
                                 },
                                 onCancel = { viewModel.cancelCurrentGeneration() },
                                 onOpenLogs = { showLogDialog = true },
@@ -489,12 +509,26 @@ fun UniversalVisualChatStudioDialog(
                                 bytes = bytes,
                                 isPng = true
                             )
-                            onApplyAsset(savedFile.getAbsolutePath())
+                            handleFinalApplyAsset(savedFile.getAbsolutePath())
                             pendingEditorImageUri = null
                         } catch (e: Exception) {
                             Toast.show("保存烘焙切图失败: ${e.message}", ToastType.ERROR)
                         }
                     }
+                }
+            )
+        }
+
+        // 7. 多资源状态槽位多选应用对话框 (ResourceSlotSelectionDialog)
+        if (pendingSlotSelectionImagePath != null && block != null) {
+            ResourceSlotSelectionDialog(
+                block = block,
+                imagePath = pendingSlotSelectionImagePath!!,
+                onDismiss = { pendingSlotSelectionImagePath = null },
+                onConfirm = { selectedSlots ->
+                    val path = pendingSlotSelectionImagePath!!
+                    pendingSlotSelectionImagePath = null
+                    onApplyAssetToSlots?.invoke(path, selectedSlots)
                 }
             )
         }

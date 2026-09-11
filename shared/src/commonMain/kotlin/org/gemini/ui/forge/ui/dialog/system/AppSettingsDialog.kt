@@ -3,7 +3,9 @@ package org.gemini.ui.forge.ui.dialog.system
 import org.gemini.ui.forge.ui.dialog.system.settings.*
 
 import androidx.compose.foundation.*
+import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.gemini.ui.forge.ui.component.tip
 import androidx.compose.foundation.gestures.*
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.foundation.layout.*
@@ -57,12 +59,12 @@ fun AppSettingsDialog(
     onLanguageChanged: () -> Unit
 ) {
     val isPc = remember { hostOs.isWindows || hostOs.isMacOS || hostOs.isLinux }
+    val spacing = LocalAppSpacing.current
     var selectedCategory by remember {
         mutableStateOf(
             if (!isPc && initialCategory == SettingCategory.SHORTCUTS) SettingCategory.GENERAL else initialCategory
         )
     }
-    var leftWeight by remember { mutableStateOf(0.3f) }
 
     LaunchedEffect(Unit) {
         org.gemini.ui.forge.utils.AppLogger.d("AppSettingsDialog", "Current Project Version: ${ProjectConfig.VERSION}")
@@ -74,105 +76,143 @@ fun AppSettingsDialog(
             usePlatformDefaultWidth = false // 允许自定义超出默认系统宽度的尺寸
         )
     ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.9f),
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).padding(horizontal = LocalAppSpacing.current.medium, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(Res.string.settings_app_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(LocalAppSpacing.current.extraLarge)) { Icon(Icons.Default.Close, null) }
-                }
+            // 人机工程学响应式尺寸：宽度范围收拢在 980dp ~ 1280dp，高度 680dp ~ 880dp，保持优雅黄金比例
+            val dialogWidth = (maxWidth * 0.88f).coerceIn(980.dp, 1280.dp)
+            val dialogHeight = (maxHeight * 0.88f).coerceIn(680.dp, 880.dp)
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    val totalWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
-
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        // Left Navigation
-                        Box(modifier = Modifier.weight(leftWeight).fillMaxHeight()) {
-                            val leftScrollState = rememberScrollState()
-                            Column(
-                                modifier = Modifier.fillMaxSize().verticalScroll(leftScrollState).padding(LocalAppSpacing.current.small),
-                                verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.extraSmall)
+            Surface(
+                modifier = Modifier
+                    .width(dialogWidth)
+                    .height(dialogHeight)
+                    .padding(spacing.medium),
+                shape = AppShapes.large,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Header 顶栏
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = spacing.large, vertical = spacing.medium),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = AppShapes.small,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(32.dp)
                             ) {
-                                SettingCategory.entries.filter { isPc || it != SettingCategory.SHORTCUTS }.forEach { category ->
-                                    val isSelected = selectedCategory == category
-                                    Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable { selectedCategory = category },
-                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = category.icon,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(20.dp),
-                                                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Spacer(Modifier.width(10.dp))
-                                            Text(
-                                                text = stringResource(category.labelRes),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
-                                    }
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
-                            VerticalScrollbarAdapter(
-                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                                scrollState = leftScrollState
+                            Spacer(Modifier.width(spacing.medium))
+                            Text(
+                                text = stringResource(Res.string.settings_app_title),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
                             )
                         }
 
-                        // Draggable Divider
-                        Box(
-                            modifier = Modifier
-                                .width(LocalAppSpacing.current.extraSmall)
-                                .fillMaxHeight()
-                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                                .pointerHoverIcon(ResizeHorizontalIcon)
-                                .draggable(
-                                    orientation = Orientation.Horizontal,
-                                    state = rememberDraggableState { delta ->
-                                        val deltaWeight = delta / totalWidthPx
-                                        leftWeight = (leftWeight + deltaWeight).coerceIn(0.2f, 0.45f)
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(32.dp).tip("关闭设置")
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(20.dp))
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        // 1. 左侧导航栏：采用现代化标准固定宽度 220dp，紧凑精致，彻底告别空白浪费
+                        Surface(
+                            modifier = Modifier.width(220.dp).fillMaxHeight(),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        ) {
+                            val leftScrollState = rememberScrollState()
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(leftScrollState)
+                                        .padding(horizontal = spacing.small, vertical = spacing.medium),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    SettingCategory.entries.filter { isPc || it != SettingCategory.SHORTCUTS }.forEach { category ->
+                                        val isSelected = selectedCategory == category
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(42.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable { selectedCategory = category },
+                                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .padding(horizontal = 12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = category.icon,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp),
+                                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Spacer(Modifier.width(10.dp))
+                                                Text(
+                                                    text = stringResource(category.labelRes),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
                                     }
+                                }
+                                VerticalScrollbarAdapter(
+                                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                    scrollState = leftScrollState
                                 )
+                            }
+                        }
+
+                        // 垂直精致分割线
+                        VerticalDivider(
+                            modifier = Modifier.fillMaxHeight(),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                            thickness = 1.dp
                         )
 
-                        // Right Content
-                        Box(modifier = Modifier.weight(1f - leftWeight).fillMaxHeight()) {
+                        // 2. 右侧主工作区：铺满剩余全部空间 (weight 1f)，空间充裕舒展
+                        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                             val rightScrollState = rememberScrollState()
-                            val coroutineScope = rememberCoroutineScope()
                             var currentJvmXmx by remember { mutableStateOf("2G") }
                             val configManager = remember { settingsViewModel.getConfigManager() }
-                            
+
                             LaunchedEffect(Unit) {
                                 currentJvmXmx = configManager.loadJvmXmx()
                             }
 
                             Column(
-                                modifier = Modifier.fillMaxSize().verticalScroll(rightScrollState).padding(LocalAppSpacing.current.medium),
-                                verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.medium)
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rightScrollState)
+                                    .padding(spacing.large),
+                                verticalArrangement = Arrangement.spacedBy(spacing.large)
                             ) {
                                 when (selectedCategory) {
                                     SettingCategory.GENERAL -> GeneralSettings(
@@ -202,6 +242,7 @@ fun AppSettingsDialog(
                                         appViewModel = appViewModel,
                                         settingsViewModel = settingsViewModel
                                     )
+
                                     SettingCategory.ABOUT -> AboutSection(
                                         updateViewModel = updateViewModel
                                     )

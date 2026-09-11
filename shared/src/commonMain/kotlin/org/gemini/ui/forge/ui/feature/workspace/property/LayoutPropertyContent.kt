@@ -725,6 +725,32 @@ fun LayoutPropertyContent(
                             }
                         }
                     },
+                    onApplyAssetToSlots = { imagePath, selectedSlots ->
+                        coroutineScope.launch {
+                            try {
+                                val tFile = if (imagePath.startsWith("data:image")) {
+                                    val base64Data = if (imagePath.contains(",")) imagePath.substringAfter(",") else imagePath
+                                    val bytes = kotlin.io.encoding.Base64.decode(base64Data)
+                                    val isPng = imagePath.contains("image/png")
+                                    viewModel.templateRepo.saveBlockResource(
+                                        templateName = state.projectName,
+                                        blockId = selectedBlock.id,
+                                        fileNamePrefix = "chat_gen",
+                                        bytes = bytes,
+                                        isPng = isPng
+                                    )
+                                } else {
+                                    TemplateFile(imagePath)
+                                }
+                                viewModel.assetManager.assignImageToBlockStates(selectedBlock.id, tFile, selectedSlots)
+                                showImg2ImgStudioDialog = false
+                                Toast.show("已成功将图片批量应用到选中的 ${selectedSlots.size} 个状态槽位", ToastType.SUCCESS)
+                            } catch (e: Exception) {
+                                AppLogger.e("LayoutProperty", "批量应用资产失败", e)
+                                Toast.show("批量应用资产失败: ${e.message}", ToastType.ERROR)
+                            }
+                        }
+                    },
                     onDismiss = { showImg2ImgStudioDialog = false }
                 )
             }

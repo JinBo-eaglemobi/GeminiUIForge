@@ -73,7 +73,7 @@ fun StudioSessionConfigRow(
                 )
                 Spacer(Modifier.width(spacing.extraSmall))
                 Text(
-                    text = selectedModel.displayName.replace("Preview", "").trim(),
+                    text = selectedModel.modelName,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Medium
                 )
@@ -274,7 +274,7 @@ private fun ModelMenuItemCard(
                     Spacer(Modifier.width(spacing.small))
 
                     Text(
-                        text = meta.model.displayName,
+                        text = meta.model.modelName,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface

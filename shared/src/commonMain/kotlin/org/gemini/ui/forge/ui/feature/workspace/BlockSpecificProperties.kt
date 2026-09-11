@@ -35,7 +35,7 @@ fun BlockSpecificProperties(
         UIBlockType.TEXT -> TextPropertiesPanel(selectedBlock, onPropertiesChanged)
         UIBlockType.INPUT -> InputPropertiesPanel(selectedBlock, onPropertiesChanged)
         UIBlockType.REEL -> ReelPropertiesPanel(viewModel, state, apiKey, selectedBlock, onPropertiesChanged)
-        UIBlockType.SPIN_BUTTON -> SpinButtonPropertiesPanel(viewModel, selectedBlock)
+        UIBlockType.SPIN_BUTTON -> SpinButtonPropertiesPanel(viewModel, state, apiKey, selectedBlock)
         else -> {
             // 其他类型保持原样
         }

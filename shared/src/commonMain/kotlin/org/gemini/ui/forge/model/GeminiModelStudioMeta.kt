@@ -50,40 +50,6 @@ data class ModelStudioMeta(
 object StudioModelResolver {
 
     /**
-     * 已知核心主力模型的精修元数据配置表
-     */
-    private val curatedMetaMap: Map<GeminiModel, Pair<String, String>> = mapOf(
-        GeminiModel.GEMINI_3_1_FLASH_IMAGE to Pair(
-            "最新一代",
-            "最新一代智能生图大模型，质感细腻、光影自然、响应极速"
-        ),
-        GeminiModel.GEMINI_3_PRO_IMAGE to Pair(
-            "旗舰渲染",
-            "专为商业级高精度设计渲染优化，材质逼真、外发光层次丰富"
-        ),
-        GeminiModel.GEMINI_2_5_FLASH_IMAGE to Pair(
-            "快速生成",
-            "经典快速视觉图像生成，适合低成本创意草稿探索"
-        ),
-        GeminiModel.GEMINI_3_1_FLASH_LITE_IMAGE to Pair(
-            "超轻量",
-            "超低延迟轻量图像生成，秒级验证构图与色彩方向"
-        ),
-        GeminiModel.GEMINI_3_7_FLASH to Pair(
-            "混合推理",
-            "具备复杂视觉空间理解与混合思维链的最新多模态旗舰"
-        ),
-        GeminiModel.GEMINI_2_5_PRO to Pair(
-            "高精度构图",
-            "超强复杂语义解析与高难度多轮构图推理"
-        ),
-        GeminiModel.GEMINI_2_5_FLASH to Pair(
-            "极速多模态",
-            "极速响应与低延迟视觉多模态交互"
-        )
-    )
-
-    /**
      * 动态从 [GeminiModel.entries] 解析出所有适合视觉工作室的模型，并附带自适应元数据。
      * 自动过滤纯语音 (TTS)、向量 (Embedding) 等无关模型。
      */
@@ -140,36 +106,25 @@ object StudioModelResolver {
     }
 
     /**
-     * 动态组装单个模型的元数据（已知模型使用精修配置，未知新模型自动语义推导）
+     * 动态组装单个模型的元数据（全部字段源自服务器返回数据，按名称规则自适应推导）
      */
     private fun buildModelMeta(model: GeminiModel): ModelStudioMeta {
-        val curated = curatedMetaMap[model]
-
         // 1. 判定分组体系
         val isImageSpecialized = model.modelName.contains("image", ignoreCase = true) ||
                 model.displayName.contains("Banana", ignoreCase = true)
         val group = if (isImageSpecialized) ModelStudioGroup.IMAGE_SPECIALIZED else ModelStudioGroup.MULTIMODAL_REASONING
 
-        // 2. 推导标签徽标
-        val badge = if (curated != null) {
-            curated.first
-        } else {
-            val n = model.modelName.lowercase()
-            when {
-                n.contains("pro") -> "旗舰"
-                n.contains("lite") -> "轻量"
-                n.contains("latest") || n.contains("preview") -> "最新"
-                else -> "通用"
-            }
+        // 2. 按名称规则推导标签徽标（不依赖人工维护表）
+        val n = model.modelName.lowercase()
+        val badge = when {
+            n.contains("pro") -> "旗舰"
+            n.contains("lite") -> "轻量"
+            n.contains("latest") || n.contains("preview") -> "最新"
+            else -> "通用"
         }
 
-        // 3. 推导特性说明
-        val summary = if (curated != null) {
-            curated.second
-        } else {
-            // 未知新模型：自适应提取官方描述或名称
-            model.description.ifBlank { "${model.displayName} 官方多模态模型" }.take(60)
-        }
+        // 3. 特性说明直接采用服务器返回的官方描述
+        val summary = model.description.ifBlank { "${model.modelName} 官方多模态模型" }
 
         return ModelStudioMeta(
             model = model,

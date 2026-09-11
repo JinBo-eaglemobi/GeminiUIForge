@@ -395,19 +395,44 @@ class VisualChatStudioViewModel(
     }
 
     /**
-     * AI 提示词一键优化
+     * AI 提示词一键优化（全链路支持流式增量生成与网络通信报文捕获）
      */
-    fun optimizePrompt(sourceText: String, apiKey: String, onResult: (String) -> Unit) {
+    fun optimizePrompt(
+        sourceText: String, 
+        apiKey: String, 
+        onChunk: ((String) -> Unit)? = null,
+        onResult: (String) -> Unit
+    ) {
         if (sourceText.isBlank() || apiKey.isBlank()) return
+        val current = _uiState.value.currentSession ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isOptimizingPrompt = true) }
             try {
+                var accumulated = ""
                 val optimized = aiService.optimizePrompt(
                     originalPrompt = sourceText,
-                    apiKey = apiKey
+                    apiKey = apiKey,
+                    onChunk = { chunk ->
+                        accumulated += chunk
+                        onChunk?.invoke(accumulated)
+                    },
+                    onRawTraffic = { direction, url, body ->
+                        viewModelScope.launch {
+                            val record = TrafficRecord(
+                                seq = 0,
+                                direction = direction,
+                                timestamp = getCurrentTimeMillis(),
+                                url = url,
+                                model = "prompt-optimizer",
+                                body = body
+                            )
+                            trafficStore.append(record, scopeId, current.id)
+                        }
+                    }
                 )
-                if (optimized.isNotBlank()) {
-                    onResult(optimized)
+                val cleanOptimized = optimized.trim()
+                if (cleanOptimized.isNotBlank()) {
+                    onResult(cleanOptimized)
                 }
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Failed to optimize prompt", e)
