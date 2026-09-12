@@ -99,6 +99,7 @@ kotlin {
 //            implementation(libs.compose.uiTooling)
 //            implementation("androidx.customview:customd view:1.1.0")
 //            implementation("androidx.customview:customview-poolingcontainer:1.1.0")
+            implementation(libs.kotlinx.io.core)
             implementation(libs.ktor.client.okhttp)
         }
 
@@ -120,6 +121,7 @@ kotlin {
             implementation(libs.kotlinx.serialization.core)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.io.core)
             implementation(libs.ktor.client.auth)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
@@ -132,7 +134,6 @@ kotlin {
             implementation(libs.coil.network.ktor3)
             implementation(libs.skiko)
             implementation(libs.compose.ui.graphics)
-            implementation(libs.kotlinx.io.core)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

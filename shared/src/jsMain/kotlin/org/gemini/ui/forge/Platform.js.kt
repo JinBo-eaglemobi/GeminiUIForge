@@ -1,5 +1,4 @@
 package org.gemini.ui.forge
-import androidx.compose.ui.input.pointer.PointerIcon
 
 class JsPlatform : Platform {
     override val name: String = "Web with Kotlin/JS"
@@ -25,9 +24,3 @@ class JsPlatform : Platform {
 
 actual fun getPlatform(): Platform = JsPlatform()
 
-actual val ResizeHorizontalIcon: PointerIcon = PointerIcon.Default
-actual val ResizeVerticalIcon: PointerIcon = PointerIcon.Default
-
-actual fun getProcessorCount(): Int = kotlinx.browser.window.navigator.hardwareConcurrency.toInt()
-
-actual val userHomePath: String = "opfs://"

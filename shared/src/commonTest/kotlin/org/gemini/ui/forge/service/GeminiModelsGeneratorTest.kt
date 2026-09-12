@@ -3,37 +3,19 @@ package org.gemini.ui.forge.service
 import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
-import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.floatOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
+import io.ktor.utils.io.core.*
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.*
+import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.manager.ConfigManager
-import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Gemini 模型枚举生成器（开发期工具，非常规单元测试）。
- *
- * 工作流程：调用 `models.list` 接口拉取当前 API Key 可用的全部模型 → 解析全部有用属性
- * （含版本、基座、Token 上限、采样参数与思考能力）→ 以标准模板重新生成并覆盖写入
- * `GeminiModel.kt` 枚举源文件。
- *
- * 【运行须知】
- * 1. 本测试会真实发起网络请求，且会物理覆盖 `src/commonMain/kotlin/org/gemini/ui/forge/model/GeminiModel.kt`；
- * 2. 请仅在需要刷新模型清单时手动按需执行；
- * 3. 生成的枚举构造参数带有默认值，保证既有引用代码零破坏。
- */
-class GeminiModelsGeneratorTest2 {
+class GeminiModelsGeneratorTest {
 
     @Test
-    fun generateGeminiModelEnum() = runBlocking {
+    fun generateGeminiModelEnum() = runTest {
 
         val configManager = ConfigManager()
         val testApiKey = configManager.loadKey("GEMINI_API_KEY") ?: configManager.loadGlobalGeminiKey()
@@ -163,22 +145,25 @@ class GeminiModelsGeneratorTest2 {
         }
 
         sb.appendLine("}")
-
         println(sb)
 //        return@runBlocking
 
         // 定位到共享模块公共源码目录下的 GeminiModel.kt 文件
         // Gradle 测试运行时的 user.dir 通常是子项目目录 (shared)
-        val targetFile = File("src/commonMain/kotlin/org/gemini/ui/forge/model/GeminiModel.kt")
+        val targetFile = TemplateFile.inAppDir("src/commonMain/kotlin/org/gemini/ui/forge/model/GeminiModel.kt")
 
         // 写入文件
-        targetFile.writeText(sb.toString())
+        targetFile.writeBytes(sb.toString().toByteArray())
 
         println("==================================================")
         println("成功生成并覆盖写入 ${models.size} 个模型到源文件:")
-        println(targetFile.absolutePath)
+        println(targetFile.getAbsolutePath())
         println("==================================================")
 
         client.close()
+
+
     }
+
+
 }

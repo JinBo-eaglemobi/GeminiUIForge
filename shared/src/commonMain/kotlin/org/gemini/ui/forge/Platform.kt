@@ -100,10 +100,34 @@ fun formatIsoTime(isoString: String?): String {
 }
 
 /**
- * 跨平台获取当前用户的主目录
- * - JVM: System.getProperty("user.home")
- * - iOS: NSHomeDirectory()
- * - Web: "/web/local" (虚拟路径)
- * - Android: System.getProperty("user.home")
+ * 跨平台获取当前用户主目录（各平台真实实现如下）
+ * - JVM (桌面端): System.getProperty("user.home")，如 C:\Users\xxx
+ * - Android: androidContext.filesDir.absolutePath（应用私有文件目录，如 /data/user/0/<包名>/files）
+ * - Web (JS): "opfs://"（OPFS 虚拟文件系统协议根路径）
+ * - iOS: NSHomeDirectory()（应用沙盒主目录，如 /var/mobile/Containers/Data/Application/<UUID>）
  */
 expect val userHomePath: String
+
+/**
+ * 跨平台获取当前运行工作目录路径。
+ *
+ * 当前进程启动时所在的工作目录（Working Directory），一般用于相对路径向绝对路径的转换和运行期环境自检。
+ *各平台真实实现如下：
+ * - JVM (桌面端): System.getProperty("user.dir")，即当前进程的工作目录
+ * - Android: 对应 [userHomePath]（即应用私有文件目录，保障存储可用性）
+ * - Web (JS): 对应 [userHomePath]（即 "opfs://" 虚拟协议根路径）
+ * - iOS: 对应 [userHomePath]（即应用沙盒主目录）
+ */
+expect val runDir: String
+
+/**
+ * 跨平台获取应用程序安装/宿主程序包根目录路径。
+ *
+ * 物理程序、类路径（JAR）或二进制 Bundle 所在的绝对安装目录，可用于加载内置资产文件和自举逻辑。
+ * 各平台真实实现如下：
+ * - JVM (桌面端): 双模态自适应：在开发环境下（IDE/Gradle 运行）自动向上回溯定位包含 settings.gradle.kts/.git 的真实项目工程根目录；在生产打包环境下返回真实物理安装包（EXE/MSI/JAR）宿主根目录
+ * - Android: 对应 `androidContext.applicationInfo.dataDir`（返回如 `/data/user/0/org.gemini.ui.forge`），即应用物理包根目录
+ * - Web (JS): 对应 [userHomePath]（即 "opfs://" 虚拟协议根路径）
+ * - iOS: 对应 `NSBundle.mainBundle.bundlePath`，即只读的 App Bundle 安装包根目录
+ */
+expect val appDir: String

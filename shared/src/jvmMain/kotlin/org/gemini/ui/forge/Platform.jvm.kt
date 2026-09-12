@@ -137,3 +137,46 @@ actual val ResizeVerticalIcon: PointerIcon = PointerIcon(Cursor(Cursor.N_RESIZE_
 actual fun getProcessorCount(): Int = Runtime.getRuntime().availableProcessors()
 
 actual val userHomePath: String = System.getProperty("user.home")
+
+actual val runDir: String
+    get() = System.getProperty("user.dir")
+
+actual val appDir: String
+    get() = try {
+        val path = JVMPlatform::class.java.protectionDomain.codeSource.location.toURI().path
+        val rawFile = java.io.File(path)
+
+        // 1. 开发环境智能探测：若类文件处于构建输出目录（如 build/classes 或 out/production）
+        // 则向上递归回溯定位当前代码直接所属的子模块工程根目录（如 shared/ 或 desktopApp/）
+        val moduleRoot = findProjectRootInDev(rawFile)
+        if (moduleRoot != null) {
+            moduleRoot.absolutePath.replace("\\", "/").trimEnd('/')
+        } else {
+            // 2. 生产打包环境：应用已编译打包为真实二进制 EXE/MSI/JAR，返回该可执行包体所在的物理安装根目录
+            val abs = if (rawFile.isFile) rawFile.parentFile.absolutePath else rawFile.absolutePath
+            abs.replace("\\", "/").trimEnd('/')
+        }
+    } catch (_: Throwable) {
+        System.getProperty("user.dir").replace("\\", "/").trimEnd('/') // 降级安全兜底
+    }
+
+/**
+ * 在开发或测试运行环境下，从类文件物理加载路径一路向上回溯遍历父级目录，
+ * 优先定位当前正在执行的直接所属模块根目录（以当前模块的 build.gradle.kts / build.gradle 为准）。
+ */
+private fun findProjectRootInDev(startFile: java.io.File): java.io.File? {
+    var current: java.io.File? = if (startFile.isFile) startFile.parentFile else startFile
+    while (current != null && current.exists()) {
+        val hasBuildGradle = java.io.File(current, "build.gradle.kts").exists() ||
+                java.io.File(current, "build.gradle").exists()
+        val hasSettingsGradle = java.io.File(current, "settings.gradle.kts").exists() ||
+                java.io.File(current, "settings.gradle").exists()
+
+        // 优先命中第一个包含构建脚本的目录（即当前代码所属的直接子模块目录，如 shared/ 或 desktopApp/）
+        if (hasBuildGradle || hasSettingsGradle) {
+            return current
+        }
+        current = current.parentFile
+    }
+    return null
+}

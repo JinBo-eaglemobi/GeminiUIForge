@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import java.io.File
 
-actual typealias PlatformPath = java.io.File
+actual typealias PlatformPath = File
 
 actual fun resolvePlatformPath(absolutePath: String): PlatformPath {
     // Android (API < 26) 可能不支持 java.nio.file.Path，返回 File 对象作为替代

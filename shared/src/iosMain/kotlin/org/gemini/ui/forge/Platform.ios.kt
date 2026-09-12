@@ -44,3 +44,9 @@ actual val ResizeVerticalIcon: PointerIcon = PointerIcon.Default
 actual fun getProcessorCount(): Int = platform.Foundation.NSProcessInfo.processInfo.processorCount.toInt()
 
 actual val userHomePath: String = platform.Foundation.NSHomeDirectory()
+
+actual val runDir: String
+    get() = userHomePath
+
+actual val appDir: String
+    get() = platform.Foundation.NSBundle.mainBundle.bundlePath

@@ -1,7 +1,22 @@
 package org.gemini.ui.forge.model
 
 /**
+ * 自动生成的 Gemini 模型枚举类。
+ * 由 [GeminiModelsGeneratorTest] 从服务器 `models.list` 接口拉取并生成，请勿手工编辑。
  *
+ * @param modelName 模型唯一标识（API 调用时使用的名称，如 gemini-2.5-flash）
+ * @param displayName 服务端返回的模型显示名称（英文）
+ * @param description 服务端返回的模型功能描述（英文原文）
+ * @param supportedMethods 该模型支持的生成方法集合（逗号分隔，如 generateContent, countTokens）
+ * @param version 模型版本号（服务端元数据，如 2.5-flash-002）
+ * @param baseModelId 基座模型标识（微调/衍生模型的来源基座；原生模型为空）
+ * @param inputTokenLimit 单次请求允许的最大输入 Token 数（0 表示服务端未披露）
+ * @param outputTokenLimit 单次响应允许生成的最大输出 Token 数（0 表示服务端未披露）
+ * @param temperature 服务端默认采样温度（null 表示服务端未披露）
+ * @param maxTemperature 服务端允许的最高采样温度（null 表示服务端未披露）
+ * @param topP 服务端默认核采样概率阈值（null 表示服务端未披露）
+ * @param topK 服务端默认 Top-K 采样候选数（null 表示服务端未披露）
+ * @param supportsThinking 是否具备思考/推理能力（服务端官方 thinking 字段；字段缺失时启发式兜底）
  */
 enum class GeminiModel(
     val modelName: String,

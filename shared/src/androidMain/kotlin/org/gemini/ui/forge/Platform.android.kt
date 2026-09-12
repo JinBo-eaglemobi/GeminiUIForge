@@ -50,3 +50,9 @@ actual fun getProcessorCount(): Int = Runtime.getRuntime().availableProcessors()
 
 actual val userHomePath: String
     get() = androidContext.filesDir.absolutePath
+
+actual val runDir: String
+    get() = userHomePath
+
+actual val appDir: String
+    get() = androidContext.applicationInfo.dataDir.replace("\\", "/").trimEnd('/')

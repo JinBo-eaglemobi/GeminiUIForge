@@ -8,7 +8,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
-actual typealias PlatformPath = java.io.File
+actual typealias PlatformPath = File
 
 actual fun resolvePlatformPath(absolutePath: String): PlatformPath {
     return File(absolutePath)
