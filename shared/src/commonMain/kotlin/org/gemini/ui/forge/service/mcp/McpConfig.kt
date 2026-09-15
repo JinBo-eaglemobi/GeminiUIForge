@@ -15,5 +15,6 @@ data class McpConfig(
     val enabled: Boolean = false,
     val port: Int = 18330,
     val host: String = "127.0.0.1",
-    val token: String? = null
+    val token: String? = null,
+    val followNavigation: Boolean = false
 )

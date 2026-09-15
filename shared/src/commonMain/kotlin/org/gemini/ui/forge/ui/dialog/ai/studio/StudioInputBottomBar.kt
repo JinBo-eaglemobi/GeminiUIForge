@@ -69,6 +69,8 @@ fun StudioInputBottomBar(
     onModelSelected: (GeminiModel) -> Unit,
     generationCount: Int,
     onCountSelected: (Int) -> Unit,
+    currentThinkingLevel: org.gemini.ui.forge.model.chat.ThinkingLevel = org.gemini.ui.forge.model.chat.ThinkingLevel.OFF,
+    onThinkingLevelSelected: (org.gemini.ui.forge.model.chat.ThinkingLevel) -> Unit = {},
     isGenerating: Boolean,
     isOptimizingPrompt: Boolean,
     storage: LocalFileStorage,
@@ -551,6 +553,8 @@ fun StudioInputBottomBar(
                             onModelSelected = onModelSelected,
                             generationCount = generationCount,
                             onCountSelected = onCountSelected,
+                            currentThinkingLevel = currentThinkingLevel,
+                            onThinkingLevelSelected = onThinkingLevelSelected,
                             maxMenuWidth = adaptiveModelMenuWidth,
                             maxMenuHeight = dynamicMenuMaxHeight
                         )

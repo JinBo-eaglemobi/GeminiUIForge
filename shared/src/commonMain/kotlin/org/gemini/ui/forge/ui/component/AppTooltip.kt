@@ -1,5 +1,6 @@
 package org.gemini.ui.forge.ui.component
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -89,19 +90,15 @@ fun Modifier.tip(text: String?): Modifier = composed {
 
                 when (event.type) {
                     PointerEventType.Enter -> {
-                        // 鼠标进入组件范围
                         tooltipState.show(text, absolutePointer)
                     }
                     PointerEventType.Move -> {
-                        // 鼠标在组件内移动，更新位置，让提示框跟随
                         tooltipState.updatePosition(absolutePointer)
                     }
                     PointerEventType.Exit -> {
-                        // 鼠标离开组件范围
                         tooltipState.hide()
                     }
                     PointerEventType.Press -> {
-                        // 鼠标点击组件时，通常也应该隐藏提示
                         tooltipState.hide()
                     }
                 }
@@ -112,33 +109,70 @@ fun Modifier.tip(text: String?): Modifier = composed {
 
 /**
  * 全局 Tooltip 宿主组件。
- * 建议挂载在 App 根节点的 Box 中，确保层级在最上方。
+ * 挂载在 App 根节点 Box 中，内置视口边界碰撞与动态上下/左右智能翻转算法，绝对杜绝遮挡按钮或超出屏幕。
  */
 @Composable
 fun GlobalTooltipHost() {
     val state = LocalGlobalTooltip.current
     if (state.isVisible && !state.text.isNullOrBlank()) {
-        Popup(
-            // 在鼠标指针的右下方添加安全偏移显示，避免遮挡光标引发闪烁
-            offset = IntOffset(state.pointerPosition.x.toInt() + 15, state.pointerPosition.y.toInt() + 15),
-            properties = PopupProperties(
-                focusable = false,
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false
-            )
-        ) {
-            Surface(
-                color = Color(0xFF323232),
-                shape = RoundedCornerShape(4.dp),
-                shadowElevation = 8.dp,
-                tonalElevation = 4.dp
-            ) {
-                Text(
-                    text = state.text!!,
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelSmall
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val windowWidthPx = constraints.maxWidth.toFloat()
+            val windowHeightPx = constraints.maxHeight.toFloat()
+
+            var tooltipWidthPx by remember(state.text) { mutableStateOf(0f) }
+            var tooltipHeightPx by remember(state.text) { mutableStateOf(0f) }
+
+            val pointerX = state.pointerPosition.x
+            val pointerY = state.pointerPosition.y
+
+            // 预估尺寸（尚未测量时使用安全预估）
+            val estimatedHeight = if (tooltipHeightPx > 0f) tooltipHeightPx else 28f
+            val estimatedWidth = if (tooltipWidthPx > 0f) tooltipWidthPx else 140f
+
+            // 1. 垂直 Y 轴自适应翻转定位：
+            // 当鼠标靠近窗口下边缘，且下方不足以容纳 Tooltip 时，翻转至上方显示，绝不遮挡底部状态栏按钮
+            val isNearBottom = pointerY + estimatedHeight + 36f > windowHeightPx
+            val targetY = if (isNearBottom) {
+                (pointerY - estimatedHeight - 12f).coerceAtLeast(8f)
+            } else {
+                (pointerY + 16f).coerceAtMost(windowHeightPx - estimatedHeight - 8f)
+            }
+
+            // 2. 水平 X 轴自适应内缩定位：
+            // 当鼠标靠近窗口右边缘时，自动向左收缩对齐，防止超出可视视口
+            val isNearRight = pointerX + estimatedWidth + 24f > windowWidthPx
+            val targetX = if (isNearRight) {
+                (windowWidthPx - estimatedWidth - 12f).coerceAtLeast(8f)
+            } else {
+                (pointerX + 14f).coerceAtLeast(8f)
+            }
+
+            Popup(
+                offset = IntOffset(targetX.toInt(), targetY.toInt()),
+                properties = PopupProperties(
+                    focusable = false,
+                    dismissOnBackPress = false,
+                    dismissOnClickOutside = false
                 )
+            ) {
+                Surface(
+                    color = Color(0xFF262626),
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, Color(0xFF4D4D4D)),
+                    shadowElevation = 8.dp,
+                    tonalElevation = 4.dp,
+                    modifier = Modifier.onGloballyPositioned {
+                        tooltipWidthPx = it.size.width.toFloat()
+                        tooltipHeightPx = it.size.height.toFloat()
+                    }
+                ) {
+                    Text(
+                        text = state.text!!,
+                        color = Color(0xFFF0F0F0),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
         }
     }

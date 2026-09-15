@@ -180,3 +180,18 @@ private fun findProjectRootInDev(startFile: java.io.File): java.io.File? {
     }
     return null
 }
+
+actual fun captureActiveScreenShot(): ByteArray? {
+    return try {
+        val ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+        val defaultScreen = ge.defaultScreenDevice
+        val bounds = defaultScreen.defaultConfiguration.bounds
+        val robot = java.awt.Robot()
+        val screenCapture = robot.createScreenCapture(bounds)
+        val baos = java.io.ByteArrayOutputStream()
+        javax.imageio.ImageIO.write(screenCapture, "png", baos)
+        baos.toByteArray()
+    } catch (_: Throwable) {
+        null
+    }
+}

@@ -6,6 +6,8 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -113,7 +115,7 @@ class GeminiClient {
     }
 
     /**
-     * 从 API 响应的 JsonElement 中智能提取文本内容
+     * 从 API 响应的 JsonElement 中智能提取文本内容（自动过滤内部思考链，仅返回最终正文）
      * 
      * @param jsonElement Ktor 解析出的顶层 JSON 节点
      * @return 提取到的字符串（文本或 Base64），若无匹配格式则返回 null
@@ -126,10 +128,39 @@ class GeminiClient {
             // 1. 尝试匹配常规 Gemini 文本节点
             val parts = candidate["content"]?.jsonObject?.get("parts")?.jsonArray
             if (parts != null) {
-                return parts.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.content ?: "" }
+                // 仅提取正式正文部分（过滤掉内部思考草稿 thought: true）
+                val normalParts = parts.filter { it.jsonObject["thought"]?.jsonPrimitive?.booleanOrNull != true }
+                return normalParts.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.content ?: "" }
             }
         }
         return null
+    }
+
+    /**
+     * 从响应节点中提取思维链思考内容 (thought) 与 Google 官方密码学思考指纹 (thoughtSignature)
+     */
+    fun extractThoughtInfo(jsonElement: JsonElement): Pair<String?, String?> {
+        val candidates = jsonElement.jsonObject["candidates"]?.jsonArray ?: return null to null
+        candidates.firstOrNull()?.jsonObject?.let { candidate ->
+            val parts = candidate["content"]?.jsonObject?.get("parts")?.jsonArray ?: return null to null
+            var thoughtText: String? = null
+            var signature: String? = null
+            for (p in parts) {
+                val pObj = p.jsonObject
+                if (pObj["thought"]?.jsonPrimitive?.booleanOrNull == true) {
+                    val t = pObj["text"]?.jsonPrimitive?.contentOrNull
+                    if (!t.isNullOrBlank()) {
+                        thoughtText = (thoughtText ?: "") + t
+                    }
+                }
+                val sig = pObj["thoughtSignature"]?.jsonPrimitive?.contentOrNull
+                if (!sig.isNullOrBlank()) {
+                    signature = sig
+                }
+            }
+            return thoughtText to signature
+        }
+        return null to null
     }
 
     /**
@@ -159,5 +190,49 @@ class GeminiClient {
             .removePrefix("```")
             .removeSuffix("```")
             .trim()
+    }
+
+    /**
+     * 发起 Interactions API 请求 (返回完整的 InteractionResponse JSON 字符串)
+     *
+     * @param url 请求的 API 完整路径 (如 ApiConfig.getInteractionsEndpoint(apiKey))
+     * @param requestBody 序列化后的 JSON 请求体字符串
+     * @param onLog 外部传入的日志回调
+     * @param onRawTraffic 原始报文监控回调
+     * @return 响应原始 JSON 字符串
+     */
+    suspend fun postInteraction(
+        url: String,
+        requestBody: String,
+        onLog: (String) -> Unit = {},
+        onRawTraffic: ((direction: TrafficDirection, url: String, body: String) -> Unit)? = null
+    ): String {
+        val client = NetworkClient.shared
+        onRawTraffic?.invoke(TrafficDirection.REQ, url, requestBody)
+        logRequest(url, requestBody, onLog)
+
+        try {
+            val response = client.post(url) {
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+                timeout {
+                    requestTimeoutMillis = 300_000L
+                    connectTimeoutMillis = 30_000L
+                }
+            }
+
+            val respBody = response.bodyAsText()
+            onRawTraffic?.invoke(TrafficDirection.RESP, url, respBody)
+
+            if (response.status.isSuccess()) {
+                return respBody
+            } else {
+                AppLogger.e(TAG, "Interactions API 响应失败: ${response.status}\n$respBody")
+                throw Exception("Interactions API 失败: ${response.status} - $respBody")
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Interactions 通信异常", e)
+            throw e
+        }
     }
 }

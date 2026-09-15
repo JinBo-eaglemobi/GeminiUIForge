@@ -65,12 +65,20 @@ fun McpServerDialog(
 
     var hostInput by remember { mutableStateOf("127.0.0.1") }
     var portInput by remember { mutableStateOf(18330) }
-    var autoStart by remember { mutableStateOf(false) }
+    var followNav by remember { mutableStateOf(false) }
 
     // 三大核心功能块独立折叠状态
     var isServerConsoleExpanded by remember { mutableStateOf(true) }
     var isWizardExpanded by remember { mutableStateOf(true) }
     var isJsonSnippetExpanded by remember { mutableStateOf(false) }
+
+    val isAllCollapsed = !isServerConsoleExpanded && !isWizardExpanded && !isJsonSnippetExpanded
+    fun toggleAllCollapse() {
+        val target = isAllCollapsed
+        isServerConsoleExpanded = target
+        isWizardExpanded = target
+        isJsonSnippetExpanded = target
+    }
 
     // 客户端探测状态列表
     var clientsStatus by remember { mutableStateOf<List<ClientAppConfigStatus>>(emptyList()) }
@@ -81,14 +89,29 @@ fun McpServerDialog(
         clientsStatus = McpClientConfigManager.getSupportedClientsStatus(currentUrl)
     }
 
+    fun toggleMcpServer() {
+        if (isRunning) {
+            McpController.stop()
+            scope.launch { configManager.saveKey("MCP_ENABLED", "false") }
+        } else {
+            McpController.start(host = hostInput, port = portInput)
+            scope.launch {
+                configManager.saveKey("MCP_ENABLED", "true")
+                configManager.saveKey("MCP_HOST", hostInput)
+                configManager.saveKey("MCP_PORT", portInput.toString())
+            }
+        }
+        refreshClients()
+    }
+
     // 初始化加载
     LaunchedEffect(Unit) {
         val savedHost = configManager.loadKey("MCP_HOST")
         if (!savedHost.isNullOrBlank()) hostInput = savedHost
         val savedPort = configManager.loadKey("MCP_PORT")?.toIntOrNull()
         if (savedPort != null) portInput = savedPort
-        val savedAutoStart = configManager.loadKey("MCP_ENABLED") == "true"
-        autoStart = savedAutoStart
+        val savedFollowNav = configManager.loadKey("MCP_FOLLOW_NAV") == "true"
+        followNav = savedFollowNav
         refreshClients()
     }
 
@@ -99,7 +122,8 @@ fun McpServerDialog(
         {
           "mcpServers": {
             "gemini-ui-forge": {
-              "url": "$currentUrl"
+              "url": "$currentUrl",
+              "disabled": true
             }
           }
         }
@@ -116,7 +140,7 @@ fun McpServerDialog(
     ) {
         Surface(
             modifier = Modifier
-                .widthIn(min = 680.dp, max = 800.dp)
+                .width(spacing.dialogLargeWidth)
                 .fillMaxHeight(0.92f)
                 .padding(spacing.medium),
             shape = RoundedCornerShape(20.dp),
@@ -178,11 +202,27 @@ fun McpServerDialog(
                         }
                     }
 
-                    IconButton(
-                        onClick = onDismissRequest,
-                        modifier = Modifier.tip("关闭")
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { toggleAllCollapse() },
+                            modifier = Modifier.size(32.dp).tip(if (isAllCollapsed) "一键展开全部模块" else "一键折叠全部模块")
+                        ) {
+                            Icon(
+                                imageVector = if (isAllCollapsed) Icons.Default.UnfoldMore else Icons.Default.UnfoldLess,
+                                contentDescription = "Toggle All Fold",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Spacer(Modifier.width(spacing.small))
+
+                        IconButton(
+                            onClick = onDismissRequest,
+                            modifier = Modifier.size(32.dp).tip("关闭")
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Close")
+                        }
                     }
                 }
 
@@ -225,14 +265,7 @@ fun McpServerDialog(
                             // 折叠状态下的快速启停小胶囊按钮
                             if (!isServerConsoleExpanded) {
                                 Button(
-                                    onClick = {
-                                        if (isRunning) {
-                                            McpController.stop()
-                                        } else {
-                                            McpController.start(host = hostInput, port = portInput)
-                                        }
-                                        refreshClients()
-                                    },
+                                    onClick = { toggleMcpServer() },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = if (isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                                     ),
@@ -308,14 +341,7 @@ fun McpServerDialog(
                                         Spacer(Modifier.width(spacing.small))
 
                                         Button(
-                                            onClick = {
-                                                if (isRunning) {
-                                                    McpController.stop()
-                                                } else {
-                                                    McpController.start(host = hostInput, port = portInput)
-                                                }
-                                                refreshClients()
-                                            },
+                                            onClick = { toggleMcpServer() },
                                             colors = ButtonDefaults.buttonColors(
                                                 containerColor = if (isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                                             ),
@@ -367,7 +393,9 @@ fun McpServerDialog(
                                 }
                             }
 
-                            // 启动自启开关
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                            // 界面执行跟随开关
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -375,21 +403,21 @@ fun McpServerDialog(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "开机或应用启动时自启",
+                                        text = "AI 工具执行界面跟随",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Medium
                                     )
                                     Text(
-                                        text = "开启后每次启动应用均自动在后台就绪 MCP 服务",
+                                        text = "开启后工具执行完成将自动跳转至对应工作区页面（默认关闭，保持纯后台静默运行）",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                                 Switch(
-                                    checked = autoStart,
+                                    checked = followNav,
                                     onCheckedChange = { isChecked ->
-                                        autoStart = isChecked
-                                        scope.launch { configManager.saveKey("MCP_ENABLED", isChecked.toString()) }
+                                        followNav = isChecked
+                                        scope.launch { configManager.saveKey("MCP_FOLLOW_NAV", isChecked.toString()) }
                                     }
                                 )
                             }
@@ -733,6 +761,7 @@ private fun ClientBentoCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     color = when {
+                        status.isConfigured && status.isServiceDisabled -> Color(0xFFFF9800).copy(alpha = 0.15f)
                         status.isConfigured -> Color(0xFF4CAF50).copy(alpha = 0.15f)
                         status.isFileExists -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                         else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
@@ -741,12 +770,14 @@ private fun ClientBentoCard(
                 ) {
                     Text(
                         text = when {
-                            status.isConfigured -> "已接入"
+                            status.isConfigured && status.isServiceDisabled -> "已配置 (默认禁用)"
+                            status.isConfigured -> "已接入并启用"
                             status.isFileExists -> "未配置"
                             else -> "未检测到配置"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = when {
+                            status.isConfigured && status.isServiceDisabled -> Color(0xFFE65100)
                             status.isConfigured -> Color(0xFF2E7D32)
                             status.isFileExists -> MaterialTheme.colorScheme.onSurfaceVariant
                             else -> MaterialTheme.colorScheme.error

@@ -52,4 +52,14 @@ object ApiConfig {
     fun getFileEndpoint(fileName: String, apiKey: String): String {
         return "$BASE_URL/v1beta/$fileName?key=$apiKey"
     }
+
+    /**
+     * 获取 Google Interactions API 端点 URL
+     * @param apiKey API 密钥
+     * @param sse 是否使用 SSE 流式
+     */
+    fun getInteractionsEndpoint(apiKey: String, sse: Boolean = false): String {
+        val sseParam = if (sse) "&alt=sse" else ""
+        return "$BASE_URL/v1beta/interactions?key=$apiKey$sseParam"
+    }
 }

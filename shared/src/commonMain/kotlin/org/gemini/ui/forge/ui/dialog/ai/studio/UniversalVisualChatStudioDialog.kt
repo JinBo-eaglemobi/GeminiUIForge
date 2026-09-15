@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -102,7 +103,17 @@ fun UniversalVisualChatStudioDialog(
     var showRefSourceDialog by remember { mutableStateOf(false) }
     var showRegionSelectorDialog by remember { mutableStateOf(false) }
     var showNoInitialRefGuideDialog by remember { mutableStateOf(false) }
+    var showExitConfirmDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+
+    // 退出防误触拦截：若 AI 正在生图或优化中，强制弹窗二次确认并安全中止
+    val handleSafeDismiss: () -> Unit = {
+        if (state.isGenerating || state.isOptimizingPrompt) {
+            showExitConfirmDialog = true
+        } else {
+            onDismiss()
+        }
+    }
 
     // 智能拦截分发：检查当前图元是否具有多个资源状态槽位
     val handleFinalApplyAsset: (String) -> Unit = { finalPath ->
@@ -137,7 +148,7 @@ fun UniversalVisualChatStudioDialog(
     var leftSidebarWeight by remember { mutableStateOf(0.2f) }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = handleSafeDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Card(
@@ -188,7 +199,7 @@ fun UniversalVisualChatStudioDialog(
                     }
 
                     IconButton(
-                        onClick = onDismiss,
+                        onClick = handleSafeDismiss,
                         modifier = Modifier.size(32.dp).tip(stringResource(Res.string.btn_close_dialog))
                     ) {
                         Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -299,6 +310,8 @@ fun UniversalVisualChatStudioDialog(
                                 onModelSelected = { viewModel.updateModel(it) },
                                 generationCount = state.generationCount,
                                 onCountSelected = { viewModel.updateGenerationCount(it) },
+                                currentThinkingLevel = state.thinkingLevel,
+                                onThinkingLevelSelected = { viewModel.updateThinkingLevel(it) },
                                 isGenerating = state.isGenerating,
                                 isOptimizingPrompt = state.isOptimizingPrompt,
                                 storage = storage,
@@ -349,10 +362,18 @@ fun UniversalVisualChatStudioDialog(
         }
     }
 
-        // 3. 全屏高清图片灯箱覆盖层（支持文件路径与内存切片字节流）
+        // 3. 全屏高清图片灯箱覆盖层（支持文件路径与内存切片字节流，纯滚轮缩放+手绘标注+保存联动）
         if (lightboxImageModel != null) {
             StudioImageLightbox(
                 imageModel = lightboxImageModel!!,
+                projectName = projectName,
+                storage = storage,
+                onSaveAsReference = { annotatedPath ->
+                    // 自动转为当前专属参考底图，并转入本地图片模式，退出其他微调模式
+                    selectedVariantRefImage = null
+                    viewModel.setCustomReferenceImage(annotatedPath)
+                    Toast.show("已将手绘标注图设为当前会话参考图", ToastType.SUCCESS)
+                },
                 onDismiss = { lightboxImageModel = null }
             )
         }
@@ -529,6 +550,40 @@ fun UniversalVisualChatStudioDialog(
                     val path = pendingSlotSelectionImagePath!!
                     pendingSlotSelectionImagePath = null
                     onApplyAssetToSlots?.invoke(path, selectedSlots)
+                }
+            )
+        }
+
+        // 8. 退出防误触与任务安全中止拦截弹窗
+        if (showExitConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showExitConfirmDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(spacing.small))
+                        Text("AI 任务正在运行中", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                },
+                text = {
+                    Text("当前 AI 正在生成图像或处理任务中，强制关闭窗口将自动中止当前任务。确定要退出吗？")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.cancelCurrentGeneration()
+                            showExitConfirmDialog = false
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("强制关闭并终止", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showExitConfirmDialog = false }) {
+                        Text("继续等待")
+                    }
                 }
             )
         }

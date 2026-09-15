@@ -84,6 +84,15 @@ class AppSettingsViewModel(
     }
 
     /**
+     * 保存 AI 底层通信协议架构 (generateContent / Interactions API)
+     */
+    fun saveApiFlavor(flavor: org.gemini.ui.forge.model.app.ApiFlavor) {
+        viewModelScope.launch {
+            configManager.saveKey("API_FLAVOR", flavor.name)
+        }
+    }
+
+    /**
      * 保存编译环境配置
      */
     fun saveCompileConfig(config: org.gemini.ui.forge.model.app.CompileConfig) {

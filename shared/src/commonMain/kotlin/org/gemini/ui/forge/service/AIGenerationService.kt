@@ -126,9 +126,12 @@ class AIGenerationService(
         referenceImageUri: String? = null,
         isVertexAI: Boolean = false,
         generationCount: Int? = null,
+        thinkingConfigJson: kotlinx.serialization.json.JsonObject? = null,
+        previousInteractionId: String? = null,
         onLog: (String) -> Unit = {},
         onImageGenerated: (String) -> Unit = {},
-        onRawTraffic: ((TrafficDirection, String, String) -> Unit)? = null
+        onRawTraffic: ((TrafficDirection, String, String) -> Unit)? = null,
+        onResult: ((org.gemini.ui.forge.service.ai.UnifiedAiResult) -> Unit)? = null
     ): List<String> = coroutineScope {
         // 优先使用传入的会话级数量，若无则从配置中读取总数量，默认为 4
         val configCountStr = configManager.loadKey("IMAGE_GEN_COUNT") ?: "4"
@@ -163,7 +166,9 @@ class AIGenerationService(
                     imageSize = imageSize,
                     style = style,
                     referenceImageUri = referenceImageUri,
-                    isVertexAI = isVertexAI
+                    isVertexAI = isVertexAI,
+                    thinkingConfigJson = thinkingConfigJson,
+                    previousInteractionId = previousInteractionId
                 )
 
                 var lastException: Exception? = null
@@ -178,7 +183,8 @@ class AIGenerationService(
                             params = params,
                             onLog = onLog,
                             onImageGenerated = { onImageGenerated(it) },
-                            onRawTraffic = onRawTraffic
+                            onRawTraffic = onRawTraffic,
+                            onResult = onResult
                         )
                         return@async results
                     } catch (e: Exception) {
@@ -249,18 +255,39 @@ class AIGenerationService(
                 val deferredParts = imageUris.mapIndexed { index, localUri ->
                     async {
                         try {
-                            val bytes = if (localUri.startsWith("http") && !localUri.startsWith("data:")) {
-                                client.get(localUri).readRawBytes()
-                            } else {
-                                org.gemini.ui.forge.utils.readLocalFileBytes(localUri)
+                            val (bytes, mime) = when {
+                                localUri.startsWith("http://", ignoreCase = true) || localUri.startsWith("https://", ignoreCase = true) -> {
+                                    val httpResp = client.get(localUri)
+                                    val fetchedBytes = httpResp.readRawBytes()
+                                    val fetchedMime = httpResp.headers[io.ktor.http.HttpHeaders.ContentType] ?: org.gemini.ui.forge.utils.getMimeType(localUri)
+                                    fetchedBytes to fetchedMime
+                                }
+                                localUri.startsWith("data:image", ignoreCase = true) -> {
+                                    val b64 = if (localUri.contains(",")) localUri.substringAfter(",") else localUri
+                                    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                                    val decoded = kotlin.io.encoding.Base64.decode(b64)
+                                    val inferredMime = if (localUri.contains(";")) localUri.substringBefore(";").removePrefix("data:") else "image/png"
+                                    decoded to inferredMime
+                                }
+                                else -> {
+                                    val fileBytes = org.gemini.ui.forge.utils.readLocalFileBytes(localUri)
+                                    val fileMime = org.gemini.ui.forge.utils.getMimeType(localUri)
+                                    fileBytes to fileMime
+                                }
                             }
+
                             if (bytes == null) {
                                 syncLog("❌ 无法读取图 ${index + 1}", onLog)
                                 return@async null
                             }
-                            val displayName =
-                                localUri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "image_$index.jpg" }
-                            val mime = org.gemini.ui.forge.utils.getMimeType(localUri)
+                            val displayName = when {
+                                localUri.startsWith("data:image", ignoreCase = true) -> "ref_image_$index.png"
+                                localUri.startsWith("http", ignoreCase = true) -> {
+                                    val cleanPath = localUri.substringBefore("?").substringBefore("#")
+                                    cleanPath.substringAfterLast("/").ifEmpty { "web_image_$index.jpg" }
+                                }
+                                else -> localUri.substringAfterLast("/").substringAfterLast("\\").ifEmpty { "image_$index.jpg" }
+                            }
 
                             // 统一调用 CloudAssetManager 的处理逻辑
                             cloudAssetManager.buildGeminiImagePart(displayName, bytes, mime) { msg ->

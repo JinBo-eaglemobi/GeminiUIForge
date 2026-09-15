@@ -82,10 +82,9 @@ fun main(args: Array<String>) {
 
     val configManager = ConfigManager()
 
-    // 检查是否通过 --mcp-server 参数显式指定开启，或本地配置默认开启
-    val isMcpArg = args.contains("--mcp-server")
+    // 状态记忆自启：如果上次启动了 MCP 且用户没有主动关闭，程序启动时自动就绪并拉起 MCP 服务
     val isMcpConfigEnabled = runBlocking { configManager.loadKey("MCP_ENABLED") } == "true"
-    if (isMcpArg || isMcpConfigEnabled) {
+    if (isMcpConfigEnabled) {
         val port = runBlocking { configManager.loadKey("MCP_PORT") }?.toIntOrNull() ?: 18330
         val host = runBlocking { configManager.loadKey("MCP_HOST") } ?: "127.0.0.1"
         org.gemini.ui.forge.service.mcp.McpServerManager.start(host = host, port = port)

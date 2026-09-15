@@ -1,6 +1,8 @@
 package org.gemini.ui.forge.utils
 
 import androidx.compose.ui.graphics.ImageBitmap
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.jetbrains.skia.*
@@ -15,34 +17,48 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  */
 
 /**
- * 将字符串（支持 Base64、HTTP 链接或本地物理文件路径）解码为 [ImageBitmap]。
+ * 跨平台通用图像字节获取函数：无缝兼容 HTTP/HTTPS 网络资源、Base64 Data URI、本地绝对物理路径
+ */
+@OptIn(ExperimentalEncodingApi::class)
+suspend fun fetchImageBytes(source: String): ByteArray? {
+    return try {
+        when {
+            source.startsWith("http://", ignoreCase = true) || source.startsWith("https://", ignoreCase = true) -> {
+                val resp: HttpResponse = org.gemini.ui.forge.data.remote.NetworkClient.shared.get(source)
+                if (resp.status.value == 200) {
+                    resp.readRawBytes()
+                } else null
+            }
+            source.startsWith("data:image", ignoreCase = true) -> {
+                val b64 = if (source.contains(",")) source.substringAfter(",") else source
+                Base64.decode(b64)
+            }
+            else -> readLocalFileBytes(source)
+        }
+    } catch (e: Exception) {
+        AppLogger.w("ImageUtils", "获取图像字节失败 [$source]: ${e.message}")
+        null
+    }
+}
+
+/**
+ * 将字符串（支持 Base64、HTTP/HTTPS 网络链接或本地物理文件路径）解码为 [ImageBitmap]。
  * 
  * @receiver 图像源字符串。
  *           - 若以 "data:image" 开头，则视为 Base64 字符串解码。
- *           - 若以 "http" 开头，目前会跳过同步解码并返回 null。
+ *           - 若以 "http://" 或 "https://" 开头，则发起网络请求下载并解码。
  *           - 否则视为本地物理文件路径。
  * @return 解码后的 [ImageBitmap]，若解码失败或不支持则返回 null。
  */
 @OptIn(ExperimentalEncodingApi::class)
 suspend fun String.decodeBase64ToBitmap(): ImageBitmap? {
     return try {
-        if (this.startsWith("data:image")) {
-            val pureBase64 = if (this.contains(",")) this.substringAfter(",") else this
-            val bytes = Base64.decode(pureBase64)
-            AppLogger.d("ImageUtils", "🖼️ 已从 Base64 解码图片 (${bytes.size / 1024} KB)")
+        val bytes = fetchImageBytes(this)
+        if (bytes != null) {
             bytes.toImageBitmap()
-        } else if (this.startsWith("http")) {
-            AppLogger.d("ImageUtils", "🌐 正在跳过 HTTP 链接的同步解码: $this")
-            null
         } else {
-            val bytes = readLocalFileBytes(this)
-            if (bytes != null) {
-                AppLogger.d("ImageUtils", "📁 已从本地文件加载图片: $this (${bytes.size / 1024} KB)")
-                bytes.toImageBitmap()
-            } else {
-                AppLogger.e("ImageUtils", "❌ 无法读取本地图片文件: $this")
-                null
-            }
+            AppLogger.e("ImageUtils", "❌ 无法获取图片资源: $this")
+            null
         }
     } catch (e: Exception) {
         AppLogger.e("ImageUtils", "❌ 图片解码失败", e)
@@ -536,4 +552,86 @@ suspend fun trimTransparency(imageSource: String): ByteArray? {
     val bounds = getNonTransparentBounds(imageSource) ?: return null
     val size = getImageSize(imageSource) ?: return null
     return cropImage(imageSource, bounds, size.first.toFloat(), size.second.toFloat(), isPng = true)
+}
+
+/** 上行图片转码格式策略 */
+enum class TranscodeFormat { OFF, WEBP, JPEG }
+
+/** 上行图片转码压缩策略实体 */
+data class ImageTranscodePolicy(
+    val format: TranscodeFormat = TranscodeFormat.WEBP,
+    val maxDimension: Int = 1536, // 等比缩放最大边长（768=最省token档 / 1536=均衡高质档）
+    val quality: Int = 82         // 有损压缩质量
+)
+
+/** 转码压缩输出结果 */
+data class TranscodeResult(
+    val bytes: ByteArray,
+    val mimeType: String
+)
+
+/**
+ * 统一上行图片转码压缩管道（发往 Gemini 大模型前调用）。
+ *
+ * 核心机制：
+ * 1. 若策略为 OFF 或数据异常，安全透传原图；
+ * 2. 若超出 maxDimension，执行高品质等比等宽等高下采样缩限，大幅降低 Gemini 图片 token 计算与 Base64 体积；
+ * 3. 优先编码为高压缩比 WebP（带透明通道支持）；若平台编码失败自动优雅降级为 JPEG。
+ */
+suspend fun transcodeForUpload(
+    imageBytes: ByteArray,
+    policy: ImageTranscodePolicy = ImageTranscodePolicy()
+): TranscodeResult {
+    if (policy.format == TranscodeFormat.OFF || imageBytes.isEmpty()) {
+        val mime = if (imageBytes.size > 8 && imageBytes[0] == 0x89.toByte() && imageBytes[1] == 0x50.toByte()) "image/png" else "image/jpeg"
+        return TranscodeResult(imageBytes, mime)
+    }
+
+    return try {
+        val srcImage = Image.makeFromEncoded(imageBytes)
+        val origW = srcImage.width
+        val origH = srcImage.height
+
+        // 计算等比下采样尺寸
+        val maxSide = maxOf(origW, origH)
+        val scale = if (maxSide > policy.maxDimension) policy.maxDimension.toFloat() / maxSide.toFloat() else 1.0f
+
+        val targetW = (origW * scale).toInt().coerceAtLeast(1)
+        val targetH = (origH * scale).toInt().coerceAtLeast(1)
+
+        val finalSurface = Surface.makeRasterN32Premul(targetW, targetH)
+        val canvas = finalSurface.canvas
+        val paint = Paint().apply { isAntiAlias = true }
+        val sampling = SamplingMode.DEFAULT
+
+        canvas.drawImageRect(
+            srcImage,
+            Rect.makeWH(origW.toFloat(), origH.toFloat()),
+            Rect.makeWH(targetW.toFloat(), targetH.toFloat()),
+            paint
+        )
+
+        val snapshot = finalSurface.makeImageSnapshot()
+
+        // 尝试 WebP 编码；若失败降级为 JPEG
+        val webpData = if (policy.format == TranscodeFormat.WEBP) {
+            try {
+                snapshot.encodeToData(EncodedImageFormat.WEBP, policy.quality)
+            } catch (_: Throwable) { null }
+        } else null
+
+        if (webpData != null && webpData.bytes.isNotEmpty()) {
+            TranscodeResult(webpData.bytes, "image/webp")
+        } else {
+            val jpegData = snapshot.encodeToData(EncodedImageFormat.JPEG, policy.quality)
+            if (jpegData != null && jpegData.bytes.isNotEmpty()) {
+                TranscodeResult(jpegData.bytes, "image/jpeg")
+            } else {
+                TranscodeResult(imageBytes, "image/png")
+            }
+        }
+    } catch (e: Exception) {
+        AppLogger.w("ImageUtils", "上行图片转码异常，回退原图: ${e.message}")
+        TranscodeResult(imageBytes, "image/png")
+    }
 }

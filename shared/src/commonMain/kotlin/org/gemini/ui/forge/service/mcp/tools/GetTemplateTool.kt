@@ -2,7 +2,9 @@ package org.gemini.ui.forge.service.mcp.tools
 
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.service.mcp.McpToolAnnotations
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
+import org.gemini.ui.forge.service.mcp.McpToolResult
 import org.gemini.ui.forge.utils.looseJson
 
 /**
@@ -17,6 +19,11 @@ class GetTemplateTool(
     override val description: String =
         "按模板名称获取指定 UI 模板的完整页面与图元树结构（图元坐标、提示词、属性配置等）。"
 
+    override val annotations: McpToolAnnotations = McpToolAnnotations(
+        readOnlyHint = true,
+        idempotentHint = true
+    )
+
     override val inputSchema: JsonObject = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -28,14 +35,19 @@ class GetTemplateTool(
         put("required", buildJsonArray { add("name") })
     }
 
-    override suspend fun execute(arguments: JsonObject): String {
+    override suspend fun execute(
+        arguments: JsonObject,
+        onProgress: ((progress: Float, message: String?) -> Unit)?
+    ): McpToolResult {
         val name = arguments["name"]?.jsonPrimitive?.contentOrNull
-            ?: return buildJsonObject { put("error", "参数 'name' 不能为空") }.toString()
+            ?: return McpToolResult.error("参数 'name' 不能为空")
 
+        onProgress?.invoke(0.3f, "正在从本地工程库加载模板 '$name'...")
         val templates = repository.getTemplates()
         val match = templates.firstOrNull { it.first.equals(name, ignoreCase = true) }
-            ?: return buildJsonObject { put("error", "未找到名称为 '$name' 的模板") }.toString()
+            ?: return McpToolResult.error("未找到名称为 '$name' 的模板")
 
-        return looseJson.encodeToString(match.second)
+        onProgress?.invoke(1.0f, "模板结构读取就绪")
+        return McpToolResult.text(looseJson.encodeToString(match.second))
     }
 }

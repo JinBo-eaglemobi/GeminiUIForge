@@ -14,3 +14,5 @@ actual val runDir: String
     get() = userHomePath
 actual val appDir: String
     get() = userHomePath
+
+actual fun captureActiveScreenShot(): ByteArray? = null

@@ -25,7 +25,13 @@ data class VisualChatMessage(
     val inputImageUris: List<String> = emptyList(),
     val generatedImageUri: String? = null,
     val isCompressed: Boolean = false,
-    val timestamp: Long = 0L
+    val timestamp: Long = 0L,
+    /** 大模型思维链思考推导过程文本（可折叠） */
+    val thought: String? = null,
+    /** Google 官方加密思考签名凭据 (用于多轮对话轻量化状态接力与防篡改) */
+    val thoughtSignature: String? = null,
+    /** Google Interactions API 交互轮次 ID (用于链式多轮会话继承) */
+    val interactionId: String? = null
 )
 
 /**
@@ -36,6 +42,7 @@ data class VisualChatMessage(
  * @param title 会话展示标题
  * @param messages 对话消息时间线列表
  * @param designMemoryContext 提炼后的紧凑设计记忆与约束摘要
+ * @param latestInteractionId 最近一次 Interactions API 交互 ID
  * @param createdAt 创建时间戳
  * @param updatedAt 最后更新时间戳
  */
@@ -46,6 +53,7 @@ data class VisualChatSession(
     val title: String,
     val messages: List<VisualChatMessage> = emptyList(),
     val designMemoryContext: String? = null,
+    val latestInteractionId: String? = null,
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L
 )

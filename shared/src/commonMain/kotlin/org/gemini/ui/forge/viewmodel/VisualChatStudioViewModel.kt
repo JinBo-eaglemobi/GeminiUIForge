@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.manager.SessionCacheManager
 import org.gemini.ui.forge.manager.SessionTrafficStore
 import org.gemini.ui.forge.model.chat.TrafficRecord
@@ -51,7 +52,8 @@ data class VisualChatStudioState(
     val activeReferenceImageUri: String? = null,
     val previewMemoryBytes: ByteArray? = null,
     val pendingCropBounds: SerialRect? = null,
-    val isImageToImageMode: Boolean = true
+    val isImageToImageMode: Boolean = true,
+    val thinkingLevel: org.gemini.ui.forge.model.chat.ThinkingLevel = org.gemini.ui.forge.model.chat.ThinkingLevel.DEFAULT
 ) {
     /** 提取当前会话中生成的所有历史图片集合 */
     val sessionGeneratedImages: List<String>
@@ -116,6 +118,7 @@ class VisualChatStudioViewModel(
 ) : ViewModel() {
 
     private val TAG = "VisualChatStudioVM"
+    private val configManager = ConfigManager()
     val trafficStore = SessionTrafficStore()
     private val compressionEngine = ContextCompressionEngine()
     private var currentGenerationJob: Job? = null
@@ -132,6 +135,23 @@ class VisualChatStudioViewModel(
     init {
         initSession()
         validateInitialReferencePhysicalFile()
+        loadPersistedModel()
+    }
+
+    /**
+     * 自动从本地持久化配置中恢复用户上次选中的生图/多模态模型
+     */
+    private fun loadPersistedModel() {
+        viewModelScope.launch {
+            val savedModelName = configManager.loadKey("STUDIO_SELECTED_MODEL")
+            if (!savedModelName.isNullOrBlank()) {
+                val matchedModel = GeminiModel.entries.firstOrNull { it.modelName == savedModelName }
+                if (matchedModel != null) {
+                    _uiState.update { it.copy(selectedModel = matchedModel) }
+                    AppLogger.d(TAG, "已从本地配置恢复上次选中的模型: ${matchedModel.modelName}")
+                }
+            }
+        }
     }
 
     /**
@@ -209,10 +229,14 @@ class VisualChatStudioViewModel(
     }
 
     /**
-     * 切换当前会话专属生图模型
+     * 切换当前会话专属生图模型并自动持久化，重启应用时自动恢复
      */
     fun updateModel(model: GeminiModel) {
         _uiState.update { it.copy(selectedModel = model) }
+        viewModelScope.launch {
+            configManager.saveKey("STUDIO_SELECTED_MODEL", model.modelName)
+            AppLogger.d(TAG, "已持久化保存选中的模型: ${model.modelName}")
+        }
     }
 
     /**
@@ -394,6 +418,23 @@ class VisualChatStudioViewModel(
         Toast.show("已中止生成任务", ToastType.INFO)
     }
 
+    /** 更新当前思考模式等级配置 */
+    fun updateThinkingLevel(level: org.gemini.ui.forge.model.chat.ThinkingLevel) {
+        _uiState.update { it.copy(thinkingLevel = level) }
+    }
+
+    /** 将外部物理图片设为当前专属参考底图，并切换为以图生图模式 */
+    fun setCustomReferenceImage(filePath: String) {
+        _uiState.update {
+            it.copy(
+                activeReferenceImageUri = filePath,
+                isImageToImageMode = true,
+                previewMemoryBytes = null,
+                pendingCropBounds = null
+            )
+        }
+    }
+
     /**
      * AI 提示词一键优化（全链路支持流式增量生成与网络通信报文捕获）
      */
@@ -533,7 +574,14 @@ class VisualChatStudioViewModel(
                 val targetW = block?.bounds?.width ?: 512f
                 val targetH = block?.bounds?.height ?: 512f
 
-                // 2. 执行多模态图像生成
+                // 依据当前代际模型特征自适应组装思考配置（生图模型安全拦截返回 null）
+                val thinkingJson = _uiState.value.thinkingLevel.toThinkingConfigJson(model)
+
+                var latestInteractionId: String? = null
+                var latestThought: String? = null
+                var latestSignature: String? = null
+
+                // 2. 执行多模态图像生成 (支持基于 previousInteractionId 继承多轮会话)
                 val generatedRawUris = aiService.generateImages(
                     model = model,
                     blockType = block?.type?.name ?: "UI_ELEMENT",
@@ -544,6 +592,8 @@ class VisualChatStudioViewModel(
                     isPng = isPng,
                     generationCount = generationCount,
                     referenceImageUri = finalRefUri,
+                    thinkingConfigJson = thinkingJson,
+                    previousInteractionId = current.latestInteractionId,
                     onLog = { log ->
                         // 纯净的人类可读业务状态才输出给对话界面
                         if (!log.contains("[AI REQUEST]") && !log.contains("URL:") && !log.contains("Body:")) {
@@ -562,6 +612,11 @@ class VisualChatStudioViewModel(
                             )
                             trafficStore.append(record, scopeId, current.id)
                         }
+                    },
+                    onResult = { unifiedResult ->
+                        latestInteractionId = unifiedResult.interactionId
+                        latestThought = unifiedResult.thoughtText
+                        latestSignature = unifiedResult.thoughtSignature
                     }
                 )
 
@@ -612,12 +667,16 @@ class VisualChatStudioViewModel(
                         textZh = if (finalPhysicalFiles.size > 1) "生成方案 ${index + 1}/${finalPhysicalFiles.size}" else "已根据您的指令完成渲染并落盘",
                         textEn = "Generated asset ${index + 1}/${finalPhysicalFiles.size}",
                         generatedImageUri = physicalPath,
+                        thought = latestThought,
+                        thoughtSignature = latestSignature,
+                        interactionId = latestInteractionId,
                         timestamp = getCurrentTimeMillis() + index
                     )
                 }
 
                 val finalSession = interimSession.copy(
                     messages = interimSession.messages + newModelMessages,
+                    latestInteractionId = latestInteractionId ?: interimSession.latestInteractionId,
                     updatedAt = getCurrentTimeMillis(),
                     designMemoryContext = if (compressionEngine.shouldCompress(interimSession)) {
                         compressionEngine.distillDesignMemory(interimSession)

@@ -131,3 +131,8 @@ expect val runDir: String
  * - iOS: 对应 `NSBundle.mainBundle.bundlePath`，即只读的 App Bundle 安装包根目录
  */
 expect val appDir: String
+
+/**
+ * 跨平台捕获当前活动窗口或屏幕画面的 PNG 字节数组（桌面端支持，移动/Web返回 null）
+ */
+expect fun captureActiveScreenShot(): ByteArray?

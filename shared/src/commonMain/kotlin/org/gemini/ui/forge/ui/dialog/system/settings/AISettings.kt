@@ -126,4 +126,35 @@ fun AISettings(
             }
         }
     }
+
+    var apiFlavorExpanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = apiFlavorExpanded,
+        onExpandedChange = { apiFlavorExpanded = !apiFlavorExpanded }
+    ) {
+        val isZh = globalState.languageCode.startsWith("zh")
+        val currentFlavorLabel = if (isZh) globalState.apiFlavor.displayNameZh else globalState.apiFlavor.displayNameEn
+        SelectAllOutlinedTextField(
+            value = currentFlavorLabel,
+            onValueChange = {}, readOnly = true,
+            label = { Text(stringResource(Res.string.settings_api_flavor_title)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(apiFlavorExpanded) },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            shape = AppShapes.medium
+        )
+        ExposedDropdownMenu(expanded = apiFlavorExpanded, onDismissRequest = { apiFlavorExpanded = false }) {
+            ApiFlavor.entries.forEach { flavor ->
+                val label = if (isZh) flavor.displayNameZh else flavor.displayNameEn
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        settingsViewModel.saveApiFlavor(flavor)
+                        appViewModel.updateApiFlavorState(flavor)
+                        apiFlavorExpanded = false
+                    }
+                )
+            }
+        }
+    }
 }

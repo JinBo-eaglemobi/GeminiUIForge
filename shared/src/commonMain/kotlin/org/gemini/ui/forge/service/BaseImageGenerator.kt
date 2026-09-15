@@ -33,7 +33,11 @@ abstract class BaseImageGenerator {
         /** 参考图的 URI 路径 */
         val referenceImageUri: String? = null,
         /** 是否强制走 Vertex AI 路由 */
-        val isVertexAI: Boolean = false
+        val isVertexAI: Boolean = false,
+        /** 可选的思考模式配置节点 (如 thinkingLevel / thinkingBudget) */
+        val thinkingConfigJson: kotlinx.serialization.json.JsonObject? = null,
+        /** 链式继承的上一轮交互 ID (Interactions API 专享) */
+        val previousInteractionId: String? = null
     )
 
     /** 计算最接近的标准比例 */

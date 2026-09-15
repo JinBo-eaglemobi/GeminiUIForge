@@ -126,6 +126,8 @@
     <string name="settings_max_retries_title">请求重试次数</string>
     <string name="settings_image_gen_count_title">AI 生图默认生成数量</string>
     <string name="settings_prompt_language">默认提示词语言</string>
+    <string name="settings_api_flavor_title">AI 通信协议驱动架构</string>
+    <string name="settings_api_flavor_desc">选择使用传统 generateContent 或新一代 Interactions API</string>
     <string name="settings_shortcuts_title">自定义快捷键</string>
     <string name="shortcut_undo">撤销</string>
     <string name="shortcut_redo">重做</string>
@@ -535,4 +537,20 @@
     <string name="mcp_client_config_tip">复制以下 JSON 代码并粘贴到 Gemini CLI 的 settings.json、opencode 或 Claude Desktop 配置文件中即可完成集成：</string>
     <string name="mcp_copy_config">复制配置代码</string>
     <string name="mcp_config_copied">已复制 MCP 客户端配置代码到剪贴板</string>
+
+    <!-- 系统与进程资源监视器 -->
+    <string name="sys_res_monitor_title">系统与进程资源监视器</string>
+    <string name="sys_res_ram_label">内存: %1$s (系统 %2$s%%)</string>
+    <string name="sys_res_cpu_label">CPU: %1$s%% (系统 %2$s%%)</string>
+    <string name="sys_res_process_section">当前程序 (Gemini UI Forge 进程)</string>
+    <string name="sys_res_heap_used">堆内存已用: %1$s / %2$s (上限 %3$s)</string>
+    <string name="sys_res_non_heap">非堆/元空间: %1$s</string>
+    <string name="sys_res_threads">活跃线程: %1$d 个</string>
+    <string name="sys_res_gc_stats">垃圾回收: 累计 %1$d 次 (%2$d ms)</string>
+    <string name="sys_res_host_section">电脑主机系统 (Host OS)</string>
+    <string name="sys_res_system_memory">物理内存占用: %1$s / %2$s (%3$s%%)</string>
+    <string name="sys_res_system_cpu">整机 CPU 负载: %1$s%% (%2$d 逻辑核心)</string>
+    <string name="sys_res_action_gc">立即释放内存 (GC)</string>
+    <string name="sys_res_gc_triggered">已触发垃圾回收清理</string>
+    <string name="sys_res_live_badge">实时采样 (1.5秒)</string>
 </resources>

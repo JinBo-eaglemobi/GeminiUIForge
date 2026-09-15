@@ -116,6 +116,8 @@
     <string name="settings_max_retries_title">API Max Retries</string>
     <string name="settings_image_gen_count_title">Default Image Generation Count</string>
     <string name="settings_prompt_language">Default Prompt Language</string>
+    <string name="settings_api_flavor_title">AI Protocol Architecture</string>
+    <string name="settings_api_flavor_desc">Select between legacy generateContent and next-generation Interactions API</string>
     <string name="settings_shortcuts_title">Custom Shortcuts</string>
     <string name="shortcut_undo">Undo</string>
     <string name="shortcut_redo">Redo</string>
@@ -525,4 +527,20 @@
     <string name="mcp_client_config_tip">Copy and paste the JSON snippet below into your Gemini CLI settings.json, opencode, or Claude Desktop configuration:</string>
     <string name="mcp_copy_config">Copy Configuration</string>
     <string name="mcp_config_copied">MCP configuration copied to clipboard</string>
+
+    <!-- System & Process Resource Monitor -->
+    <string name="sys_res_monitor_title">System &amp; Process Monitor</string>
+    <string name="sys_res_ram_label">RAM: %1$s (%2$s%%)</string>
+    <string name="sys_res_cpu_label">CPU: %1$s%% (%2$s%%)</string>
+    <string name="sys_res_process_section">Gemini UI Forge (Process)</string>
+    <string name="sys_res_heap_used">Heap Used: %1$s / %2$s (Max %3$s)</string>
+    <string name="sys_res_non_heap">Non-Heap: %1$s</string>
+    <string name="sys_res_threads">Active Threads: %1$d</string>
+    <string name="sys_res_gc_stats">GC Stats: %1$d runs (%2$d ms)</string>
+    <string name="sys_res_host_section">Host Machine (OS)</string>
+    <string name="sys_res_system_memory">Physical Memory: %1$s / %2$s (%3$s%%)</string>
+    <string name="sys_res_system_cpu">System CPU: %1$s%% (%2$d Cores)</string>
+    <string name="sys_res_action_gc">Run GC</string>
+    <string name="sys_res_gc_triggered">Garbage collection triggered</string>
+    <string name="sys_res_live_badge">Live (1.5s)</string>
 </resources>

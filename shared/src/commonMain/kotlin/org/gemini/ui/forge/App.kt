@@ -44,6 +44,7 @@ import org.gemini.ui.forge.ui.feature.ProjectWorkspaceScreen
 import org.gemini.ui.forge.ui.feature.TemplateGeneratorScreen
 import org.gemini.ui.forge.ui.feature.gameproject.GameProjectCreateScreen
 import org.gemini.ui.forge.ui.feature.gameproject.GameProjectWorkspaceScreen
+import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.AppSpacing
 import org.gemini.ui.forge.ui.theme.AppTheme
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -51,6 +52,20 @@ import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.ShortcutUtils
 import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.service.mcp.McpController
+import org.gemini.ui.forge.service.mcp.McpTrafficInspector
+import org.gemini.ui.forge.ui.dialog.mcp.McpTrafficInspectorDialog
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Terminal
 import org.gemini.ui.forge.viewmodel.AppEnvViewModel
 import org.gemini.ui.forge.viewmodel.AppSettingsViewModel
 import org.gemini.ui.forge.viewmodel.AppUpdateViewModel
@@ -114,6 +129,33 @@ fun App(typography: Typography? = null) {
                 }
                 appViewModel.syncInitialSettings(settingsViewModel.getConfigManager())
                 updateViewModel.checkForUpdates()
+                // 启动系统与进程性能监控 (1.5秒实时轮询)
+                org.gemini.ui.forge.service.SystemPerformanceMonitor.start()
+            }
+
+            // 监听 MCP 驱动的 UI 界面实时跟随事件
+            LaunchedEffect(Unit) {
+                org.gemini.ui.forge.service.mcp.McpUiBridge.events.collect { event ->
+                    val isFollowNav = configManager.loadKey("MCP_FOLLOW_NAV") == "true"
+                    if (!isFollowNav) return@collect
+
+                    when (event) {
+                        is org.gemini.ui.forge.service.mcp.McpUiEvent.NavigateToProject -> {
+                            val state = event.projectState ?: templateRepo.getTemplates().firstOrNull { it.first.equals(event.projectName, ignoreCase = true) }?.second
+                            if (state != null) {
+                                appViewModel.loadProject(event.projectName, state)
+                                appViewModel.navigateTo(AppScreen.PROJECT_WORKSPACE)
+                                Toast.show("AI 已创建模板并切换至工作区: ${event.projectName}", ToastType.SUCCESS)
+                            }
+                        }
+                        is org.gemini.ui.forge.service.mcp.McpUiEvent.SelectBlock -> {
+                            // 图元更新提示
+                        }
+                        is org.gemini.ui.forge.service.mcp.McpUiEvent.RefreshWorkspace -> {
+                            // 刷新工作区
+                        }
+                    }
+                }
             }
 
             LaunchedEffect(globalState.languageCode) {
@@ -172,6 +214,7 @@ fun App(typography: Typography? = null) {
             var showCloudAssetDialog by remember { mutableStateOf(false) }
             var showSettingsDialog by remember { mutableStateOf(false) }
             var showMcpDialog by remember { mutableStateOf(false) }
+            var showMcpTrafficDialog by remember { mutableStateOf(false) }
             var showCompileDialog by remember { mutableStateOf(false) }
             var showHelpDialog by remember { mutableStateOf(false) }
             var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
@@ -260,6 +303,12 @@ fun App(typography: Typography? = null) {
                         org.gemini.ui.forge.ui.dialog.mcp.McpServerDialog(
                             onDismissRequest = { showMcpDialog = false },
                             configManager = configManager
+                        )
+                    }
+
+                    if (showMcpTrafficDialog) {
+                        McpTrafficInspectorDialog(
+                            onDismissRequest = { showMcpTrafficDialog = false }
                         )
                     }
 
@@ -358,26 +407,102 @@ fun App(typography: Typography? = null) {
                             )
                         },
                         bottomBar = {
+                            val isMcpRunning by McpController.isRunning.collectAsState()
+                            val mcpNodes by McpTrafficInspector.nodes.collectAsState()
+                            val bottomBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+
                             Surface(
-                                modifier = Modifier.fillMaxWidth().height(24.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                tonalElevation = 2.dp
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(30.dp)
+                                    .drawBehind {
+                                        drawLine(
+                                            color = bottomBorderColor,
+                                            start = Offset(0f, 0f),
+                                            end = Offset(size.width, 0f),
+                                            strokeWidth = 1.dp.toPx()
+                                        )
+                                    },
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                                tonalElevation = 1.dp
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text(
-                                        text = statusMessage,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    IconButton(
-                                        onClick = { AppLogger.toggleLogViewer(true) },
-                                        modifier = Modifier.size(24.dp)
+                                    // 左侧：状态消息
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f, fill = false)
                                     ) {
-                                        Icon(Icons.Default.Info, contentDescription = "查看日志", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(
+                                            text = statusMessage,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    // 右侧：系统与进程资源监视胶囊 + MCP 监控胶囊 (仅开启时显示) + 全局系统日志按钮
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        // 1. 系统与进程性能监控微胶囊 (常驻显示实时 RAM/CPU，Hover 展开 Bento 详情面板)
+                                        SystemResourceCapsule()
+
+                                        // 2. 当 MCP 启动运行后动态显现
+                                        if (isMcpRunning) {
+                                            Surface(
+                                                shape = AppShapes.small,
+                                                color = Color(0xFF4CAF50).copy(alpha = 0.12f),
+                                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.35f)),
+                                                modifier = Modifier
+                                                    .clip(AppShapes.small)
+                                                    .clickable { showMcpTrafficDialog = true }
+                                                    .tip("点击查看 MCP 实时通信数据流与连接节点")
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(6.dp)
+                                                            .background(Color(0xFF4CAF50), shape = CircleShape)
+                                                    )
+                                                    Spacer(Modifier.width(6.dp))
+                                                    Icon(
+                                                        imageVector = Icons.Default.Terminal,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF2E7D32),
+                                                        modifier = Modifier.size(13.dp)
+                                                    )
+                                                    Spacer(Modifier.width(4.dp))
+                                                    Text(
+                                                        text = if (mcpNodes.isNotEmpty()) "MCP 通信监控 (${mcpNodes.size} 节点)" else "MCP 通信监控",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color(0xFF2E7D32),
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.sp
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        IconButton(
+                                            onClick = { AppLogger.toggleLogViewer(true) },
+                                            modifier = Modifier.size(24.dp).tip("查看系统运行日志")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Info,
+                                                contentDescription = "查看日志",
+                                                modifier = Modifier.size(15.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                             }

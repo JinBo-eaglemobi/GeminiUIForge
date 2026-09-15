@@ -44,6 +44,7 @@ actual object McpClientConfigManager {
             val exists = file.exists()
             var isConfigured = false
             var configuredUrl: String? = null
+            var isServiceDisabled = false
 
             if (exists) {
                 try {
@@ -54,6 +55,8 @@ actual object McpClientConfigManager {
                         if (urlMatch != null) {
                             isConfigured = true
                             configuredUrl = urlMatch.groupValues[1]
+                            // 探测是否声明了 "enabled": false
+                            isServiceDisabled = Regex(""""gemini-ui-forge"\s*:\s*\{[^}]*"enabled"\s*:\s*false""").containsMatchIn(text)
                         }
                     } else {
                         // 标准 JSON 处理
@@ -63,6 +66,8 @@ actual object McpClientConfigManager {
                         if (ourServer != null) {
                             isConfigured = true
                             configuredUrl = ourServer["url"]?.jsonPrimitive?.contentOrNull
+                            // 探测是否声明了 "disabled": true
+                            isServiceDisabled = ourServer["disabled"]?.jsonPrimitive?.booleanOrNull == true
                         }
                     }
                 } catch (e: Throwable) {
@@ -76,7 +81,8 @@ actual object McpClientConfigManager {
                 configPath = file.absolutePath,
                 isFileExists = exists,
                 isConfigured = isConfigured,
-                configuredUrl = configuredUrl
+                configuredUrl = configuredUrl,
+                isServiceDisabled = isServiceDisabled
             )
         }
     }
@@ -91,7 +97,7 @@ actual object McpClientConfigManager {
             if (clientType == McpClientType.OPEN_CODE) {
                 toggleOpenCodeJsonc(file, enable, serverUrl)
             } else {
-                toggleStandardJson(file, enable, serverUrl)
+                toggleStandardJson(file, clientType, enable, serverUrl)
             }
         } catch (e: Throwable) {
             AppLogger.e("McpConfig", "切换客户端配置失败 [${clientType.displayName}]: ${e.message}", e)
@@ -115,16 +121,16 @@ actual object McpClientConfigManager {
                     "$1$serverUrl$2"
                 )
             } else if (hasMcpKey) {
-                // 有 "mcp": { 则在紧跟着的大括号后插入配置条目
+                // 有 "mcp": { 则在紧跟着的大括号后插入配置条目（OpenCode 官方规范：默认注入 "enabled": false 保持默认不启用）
                 originalText.replaceFirst(
                     Regex("""("mcp"\s*:\s*\{)"""),
-                    "$1\n    \"gemini-ui-forge\": {\n      \"type\": \"remote\",\n      \"url\": \"$serverUrl\"\n    },"
+                    "$1\n    \"gemini-ui-forge\": {\n      \"type\": \"remote\",\n      \"url\": \"$serverUrl\",\n      \"enabled\": false\n    },"
                 )
             } else {
-                // 无 "mcp" 根对象，在外层根结构开头插入
+                // 无 "mcp" 根对象，在外层根结构开头插入（默认注入 "enabled": false 保持默认不启用）
                 originalText.replaceFirst(
                     Regex("""\{\s*"""),
-                    "{\n  \"mcp\": {\n    \"gemini-ui-forge\": {\n      \"type\": \"remote\",\n      \"url\": \"$serverUrl\"\n    }\n  },\n  "
+                    "{\n  \"mcp\": {\n    \"gemini-ui-forge\": {\n      \"type\": \"remote\",\n      \"url\": \"$serverUrl\",\n      \"enabled\": false\n    }\n  },\n  "
                 )
             }
         } else {
@@ -147,7 +153,7 @@ actual object McpClientConfigManager {
     /**
      * 对标准 JSON（Claude Code, Claude Desktop, Gemini CLI, Cursor）进行精准增删改
      */
-    private fun toggleStandardJson(file: File, enable: Boolean, serverUrl: String): Boolean {
+    private fun toggleStandardJson(file: File, clientType: McpClientType, enable: Boolean, serverUrl: String): Boolean {
         val originalContent = if (file.exists()) file.readText() else "{}"
         val rootMap = try {
             prettyJson.parseToJsonElement(originalContent).jsonObject.toMutableMap()
@@ -160,6 +166,10 @@ actual object McpClientConfigManager {
         if (enable) {
             mcpServersMap["gemini-ui-forge"] = buildJsonObject {
                 put("url", serverUrl)
+                // Cursor 官方标准规范：若支持禁用配置，默认注入 "disabled": true 保持默认不启用
+                if (clientType == McpClientType.CURSOR) {
+                    put("disabled", true)
+                }
             }
             rootMap["mcpServers"] = JsonObject(mcpServersMap)
         } else {

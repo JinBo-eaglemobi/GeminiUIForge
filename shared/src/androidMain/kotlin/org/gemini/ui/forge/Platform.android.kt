@@ -56,3 +56,5 @@ actual val runDir: String
 
 actual val appDir: String
     get() = androidContext.applicationInfo.dataDir.replace("\\", "/").trimEnd('/')
+
+actual fun captureActiveScreenShot(): ByteArray? = null

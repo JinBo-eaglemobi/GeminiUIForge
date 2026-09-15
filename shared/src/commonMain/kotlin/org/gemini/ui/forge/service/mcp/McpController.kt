@@ -9,6 +9,6 @@ expect object McpController {
     val isRunning: StateFlow<Boolean>
     val serverUrl: StateFlow<String?>
     val currentPort: StateFlow<Int>
-    fun start(host: String = "127.0.0.1", port: Int = 18330): Boolean
+    fun start(host: String = "127.0.0.1", port: Int = 18330, token: String? = null): Boolean
     fun stop()
 }

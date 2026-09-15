@@ -1,5 +1,6 @@
 package org.gemini.ui.forge.state.app
 
+import org.gemini.ui.forge.model.app.ApiFlavor
 import org.gemini.ui.forge.model.app.AppScreen
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.app.ShortcutAction
@@ -32,5 +33,6 @@ data class AppGlobalState(
     val imageGenCount: Int = 4,
     val shortcuts: Map<ShortcutAction, String> = ShortcutAction.entries.associateWith { it.defaultKey },
     val layoutMode: LayoutMode = LayoutMode.AUTO,
-    val compileConfig: CompileConfig = CompileConfig()
+    val compileConfig: CompileConfig = CompileConfig(),
+    val apiFlavor: ApiFlavor = ApiFlavor.GENERATE_CONTENT
 )

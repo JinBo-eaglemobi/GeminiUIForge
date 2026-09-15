@@ -142,6 +142,13 @@ class AppViewModel(
                 LayoutMode.AUTO
             }
 
+            val apiFlavorStr = configManager.loadKey("API_FLAVOR") ?: "GENERATE_CONTENT"
+            val apiFlavor = try {
+                ApiFlavor.valueOf(apiFlavorStr)
+            } catch (_: Exception) {
+                ApiFlavor.GENERATE_CONTENT
+            }
+
             val compileRootDir = configManager.loadKey("COMPILE_ROOT_DIR") ?: ""
             // 优先加载最新的 COMPILE_PLAY_DIR，降级兼容旧的 COMPILE_ENV_DIR
             val compilePlayDir = configManager.loadKey("COMPILE_PLAY_DIR")
@@ -161,6 +168,7 @@ class AppViewModel(
                         maxRetries = retriesStr.toIntOrNull() ?: 3,
                         imageGenCount = imageGenCountStr.toIntOrNull() ?: 4,
                         layoutMode = layoutMode,
+                        apiFlavor = apiFlavor,
                         compileConfig = CompileConfig(
                             rootDir = compileRootDir,
                             scriptPath = compileScriptPath,
@@ -237,6 +245,11 @@ class AppViewModel(
     fun updateImageGenCountState(count: Int) =
         _state.update {
             it.copy(globalState = it.globalState.copy(imageGenCount = count))
+        }
+
+    fun updateApiFlavorState(flavor: ApiFlavor) =
+        _state.update {
+            it.copy(globalState = it.globalState.copy(apiFlavor = flavor))
         }
 
     fun updateShortcutState(action: ShortcutAction, keyChord: String) {

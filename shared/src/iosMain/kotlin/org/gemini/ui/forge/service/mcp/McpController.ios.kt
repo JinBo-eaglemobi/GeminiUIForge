@@ -8,7 +8,7 @@ actual object McpController {
     actual val serverUrl: StateFlow<String?> = MutableStateFlow(null)
     actual val currentPort: StateFlow<Int> = MutableStateFlow(18330)
 
-    actual fun start(host: String, port: Int): Boolean = false
+    actual fun start(host: String, port: Int, token: String?): Boolean = false
 
     actual fun stop() {}
 }

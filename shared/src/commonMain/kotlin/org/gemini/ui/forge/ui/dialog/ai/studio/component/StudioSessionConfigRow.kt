@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,11 +22,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.ModelStudioGroup
 import org.gemini.ui.forge.model.ModelStudioMeta
 import org.gemini.ui.forge.model.StudioModelResolver
+import org.gemini.ui.forge.model.chat.ThinkingLevel
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -40,6 +43,8 @@ fun StudioSessionConfigRow(
     onModelSelected: (GeminiModel) -> Unit,
     generationCount: Int,
     onCountSelected: (Int) -> Unit,
+    currentThinkingLevel: ThinkingLevel = ThinkingLevel.OFF,
+    onThinkingLevelSelected: (ThinkingLevel) -> Unit = {},
     maxMenuWidth: Dp = 480.dp,
     maxMenuHeight: Dp? = null,
     modifier: Modifier = Modifier
@@ -181,6 +186,117 @@ fun StudioSessionConfigRow(
             }
         }
 
+        // 思考模式切换入口（仅支持思考推理的模型激活展现）
+        if (selectedModel.supportsThinking) {
+            Box {
+                var isThinkingMenuExpanded by remember { mutableStateOf(false) }
+                Surface(
+                    shape = AppShapes.small,
+                    color = if (currentThinkingLevel != ThinkingLevel.OFF) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (currentThinkingLevel != ThinkingLevel.OFF) MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)
+                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    ),
+                    modifier = Modifier
+                        .height(32.dp)
+                        .clip(AppShapes.small)
+                        .clickable { isThinkingMenuExpanded = true }
+                        .tip("调节大模型思考推理模式与深度 (当前: ${currentThinkingLevel.displayName})")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                            tint = if (currentThinkingLevel != ThinkingLevel.OFF) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = currentThinkingLevel.displayName,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (currentThinkingLevel != ThinkingLevel.OFF) FontWeight.Bold else FontWeight.Normal,
+                            color = if (currentThinkingLevel != ThinkingLevel.OFF) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = isThinkingMenuExpanded,
+                    onDismissRequest = { isThinkingMenuExpanded = false },
+                    modifier = Modifier
+                        .widthIn(min = 360.dp, max = 460.dp)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), AppShapes.medium)
+                        .padding(spacing.small)
+                ) {
+                    Text(
+                        text = "🧠 大模型思考推理模式调节",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(bottom = 6.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                    ThinkingLevel.entries.forEach { level ->
+                        val isSelected = currentThinkingLevel == level
+                        Surface(
+                            shape = AppShapes.small,
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else Color.Transparent,
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)) else null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(AppShapes.small)
+                                .clickable {
+                                    onThinkingLevelSelected(level)
+                                    isThinkingMenuExpanded = false
+                                }
+                                .padding(vertical = 2.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = level.displayName,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        text = level.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // 2. 单次生成数量分段单选胶囊 (1 / 2 / 4 张)
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -229,11 +345,45 @@ private fun ModelMenuItemCard(
 ) {
     val spacing = LocalAppSpacing.current
 
+    // 模型特长标签提取
+    val capabilityBadges = remember(meta.model) {
+        buildList {
+            val name = meta.model.modelName.lowercase()
+            if (name.contains("image") || meta.model.displayName.contains("Banana", ignoreCase = true)) {
+                add("🎨 视觉生图")
+                add("🖼️ 以图生图")
+            } else {
+                add("💬 视觉多模态")
+            }
+            if (meta.model.supportsThinking) {
+                add("🧠 深度思考")
+            }
+            if (name.contains("flash") || name.contains("lite")) {
+                add("⚡ 极速低延时")
+            }
+        }
+    }
+
+    // 悬停卡片展示的完整服务端真实数据
+    val hoverCardText = remember(meta.model) {
+        buildString {
+            appendLine("【${meta.model.displayName.ifBlank { meta.model.modelName }}】")
+            if (meta.model.version.isNotBlank()) appendLine("• 版本: ${meta.model.version}")
+            if (meta.model.baseModelId.isNotBlank()) appendLine("• 基座模型: ${meta.model.baseModelId}")
+            if (meta.model.inputTokenLimit > 0 || meta.model.outputTokenLimit > 0) {
+                appendLine("• Token 上限: 输入 ${meta.model.inputTokenLimit} / 输出 ${meta.model.outputTokenLimit}")
+            }
+            appendLine("• 思考推理: ${if (meta.model.supportsThinking) "支持 (Thinking Model)" else "不支持"}")
+            if (meta.model.description.isNotBlank()) append("• 描述: ${meta.model.description}")
+        }.trim()
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(AppShapes.small)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .tip(hoverCardText),
         color = if (isSelected) {
             MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
         } else {
@@ -306,13 +456,35 @@ private fun ModelMenuItemCard(
                 }
             }
 
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(3.dp))
 
-            // 第二行：细腻弱化特性说明
+            // 第二行：模型特长能力标签行（生图、图生图、思维推理等）
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                capabilityBadges.forEach { badge ->
+                    Surface(
+                        shape = AppShapes.extraSmall,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    ) {
+                        Text(
+                            text = badge,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(3.dp))
+
+            // 第三行：细腻弱化官方特性说明
             Text(
                 text = meta.summaryZh,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

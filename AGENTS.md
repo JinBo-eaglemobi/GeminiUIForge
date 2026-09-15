@@ -117,8 +117,18 @@
     3. **内置异常与体验保障**：该扩展自动处理 Windows 剪贴板独占瞬锁异常重试、自动打包跨端 `toClipEntry()` 并弹出成功 Toast 提示。
 - **全局通知与气泡 (Toast Specification)**:
   - 界面全局轻量级提示统一使用单例 `Toast.show(message, type = ToastType.SUCCESS/INFO/ERROR, durationMillis = 3000L)`（来自 `org.gemini.ui.forge.utils.Toast`），严禁手搓独立浮层。
-- **设计系统间距与弹窗规范**:
-  - 统一调用 `LocalAppSpacing.current`（来自 `AppSpacing.kt`），严禁硬编码 dp 数值。
+- **设计系统间距与弹窗规范 (Modal Dialog Width System)**: **【红线规则】**
+  - **严禁随意手写硬编码弹窗宽度**：全项目凡是弹窗（`Dialog` / `AlertDialog` / `Surface` 浮层），一律严禁随意手写非标数值（如 `680.dp`, `760.dp`, `800.dp`, `880.dp` 等）。必须统一严格遵循 `LocalAppSpacing.current` 声明的标准五阶 Tokens 体系：
+    1. `dialogAlertWidth` (440.dp) — 轻量警告、操作二次确认弹窗；
+    2. `dialogConfigWidth` (520.dp) — 基础设置、单列配置表单；
+    3. `dialogMediumWidth` (720.dp) — 中型详情、普通列表弹窗；
+    4. `dialogLargeWidth` (960.dp) — 大型 PC 仪表盘、2 列 Bento、MCP 服务中心与调试控制台；
+    5. `dialogHugeWidth` (1280.dp) — 全景宽屏通信档案、全景对比编辑器。
+- **折叠组件一键全量折叠/展开规范 (One-Click Global Folding Specification)**: **【红线规则】**
+  - 全项目凡是具有 2 个或以上独立可折叠卡片的界面（如 Bento 仪表盘、多模块属性面板、报文流水），**一律强制在顶部 Header 或工具栏配备“一键折叠全部 / 一键展开全部”的全局切换按钮**（使用 `Icons.Default.UnfoldLess` 与 `Icons.Default.UnfoldMore`，并挂载当前状态 Tooltip），彻底消除用户逐卡片点击的操作疲劳。
+- **PC 悬浮提示 Tooltip 视口智能翻转与防遮挡规范 (Tooltip Viewport Specification)**: **【红线规则】**
+  - 所有 PC 桌面端 Tooltip 统一复用 `Modifier.tip(...)` 与全局宿主 `GlobalTooltipHost`；
+  - 宿主内置窗口视口边界碰撞检测：当目标位于屏幕下边缘（如底部状态栏）时，浮层**强制自动向上翻转显示**，严禁强制向下偏移遮挡交互按钮本体；当靠近右边缘时自动向左内缩，确保 100% 完整可见。
 
 ## 代码生成与版本号
 
