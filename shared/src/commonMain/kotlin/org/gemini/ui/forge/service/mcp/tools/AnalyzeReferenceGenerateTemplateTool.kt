@@ -47,6 +47,10 @@ class AnalyzeReferenceGenerateTemplateTool(
                 put("type", "string")
                 put("description", "可选：Gemini API 密钥，缺省时自动从本地配置中读取")
             })
+            put("autoCropReferenceImage", buildJsonObject {
+                put("type", "boolean")
+                put("description", "可选：是否自动从原图切割参考图片并绑定为各模块的 referenceImage。默认 false (仅校正模块物理坐标与大小，不切图)")
+            })
         })
         put("required", buildJsonArray {
             add("projectName")
@@ -103,6 +107,8 @@ class AnalyzeReferenceGenerateTemplateTool(
             emptyList()
         }
 
+        val autoCropRef = arguments["autoCropReferenceImage"]?.jsonPrimitive?.booleanOrNull ?: false
+
         val boundProjectState = generatedProjectState.copy(
             createdAt = org.gemini.ui.forge.getCurrentTimeMillis(),
             styleReferenceUri = archivedFiles.firstOrNull(),
@@ -112,14 +118,70 @@ class AnalyzeReferenceGenerateTemplateTool(
             }
         )
 
-        onProgress?.invoke(0.85f, "正在归档工程与保存图元数据...")
-        repository.saveTemplate(projectName, boundProjectState)
+        onProgress?.invoke(0.80f, "正在执行离线物理边缘梯度吸附与图元坐标纠偏...")
+        val firstRefPath = archivedFiles.firstOrNull()?.getAbsolutePath()
+        val refBytes = if (!firstRefPath.isNullOrBlank()) org.gemini.ui.forge.utils.readLocalFileBytes(firstRefPath) else null
+
+        val calibratedPages = if (refBytes != null && refBytes.isNotEmpty()) {
+            boundProjectState.pages.map { page ->
+                val pageW = page.width
+                val pageH = page.height
+
+                suspend fun calibrateBlock(block: org.gemini.ui.forge.model.ui.UIBlock): org.gemini.ui.forge.model.ui.UIBlock {
+                    val absBounds = block.toAbsoluteBounds()
+                    val snapped = org.gemini.ui.forge.utils.SmartEdgeSnapper.snapBounds(
+                        imageBytes = refBytes,
+                        logicalBounds = absBounds,
+                        canvasWidth = pageW,
+                        canvasHeight = pageH
+                    )
+                    val calibratedBounds = if (snapped != null) {
+                        block.toLocalBounds(snapped.logicalRect)
+                    } else {
+                        block.bounds
+                    }
+
+                    val newRefImage = if (autoCropRef) {
+                        val cropBytes = org.gemini.ui.forge.utils.SmartEdgeSnapper.cropSnappedComponent(
+                            imageBytes = refBytes,
+                            logicalBounds = absBounds,
+                            canvasWidth = pageW,
+                            canvasHeight = pageH
+                        )
+                        if (cropBytes != null) {
+                            repository.saveBlockResource(
+                                templateName = projectName,
+                                blockId = block.id,
+                                fileNamePrefix = "ref_snap",
+                                bytes = cropBytes,
+                                isPng = true
+                            )
+                        } else block.referenceImage
+                    } else {
+                        block.referenceImage
+                    }
+
+                    val calibratedChildren = block.children.map { calibrateBlock(it) }
+                    return block.copy(bounds = calibratedBounds, referenceImage = newRefImage, children = calibratedChildren)
+                }
+
+                val calibratedBlocks = page.blocks.map { calibrateBlock(it) }
+                page.copy(blocks = calibratedBlocks)
+            }
+        } else {
+            boundProjectState.pages
+        }
+
+        val finalSavedState = boundProjectState.copy(pages = calibratedPages)
+
+        onProgress?.invoke(0.88f, "正在归档工程与保存校准图元数据...")
+        repository.saveTemplate(projectName, finalSavedState)
 
         // 触发 UI 界面跟随广播
-        org.gemini.ui.forge.service.mcp.McpUiBridge.notifyTemplateCreated(projectName, boundProjectState)
-        onProgress?.invoke(1.0f, "模板生成成功，已自动绑定参考图背景并同步至工作区")
+        org.gemini.ui.forge.service.mcp.McpUiBridge.notifyTemplateCreated(projectName, finalSavedState)
+        onProgress?.invoke(1.0f, "模板生成成功，已完成物理边缘吸附纠偏并绑定参考图背景")
 
-        val firstPage = boundProjectState.pages.firstOrNull()
+        val firstPage = finalSavedState.pages.firstOrNull()
         val resultJson = buildJsonObject {
             put("success", true)
             put("projectName", projectName)

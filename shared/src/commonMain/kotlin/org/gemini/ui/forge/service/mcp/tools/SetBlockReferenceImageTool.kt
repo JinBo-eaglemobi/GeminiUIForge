@@ -107,8 +107,14 @@ class SetBlockReferenceImageTool(
                 val height = (bottom - top).coerceAtLeast(1)
 
                 val rect = org.gemini.ui.forge.model.ui.SerialRect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
-                onProgress?.invoke(0.4f, "正在执行物理区域精准裁剪 ($left, $top, $width, $height)...")
-                cropImage(
+                onProgress?.invoke(0.4f, "正在执行离线物理边缘梯度吸附与精准裁切 ($left, $top, $width, $height)...")
+                val snappedBytes = org.gemini.ui.forge.utils.SmartEdgeSnapper.cropSnappedComponent(
+                    imageBytes = pageBytes,
+                    logicalBounds = rect,
+                    canvasWidth = page.width,
+                    canvasHeight = page.height
+                )
+                snappedBytes ?: cropImage(
                     imageBytes = pageBytes,
                     bounds = rect,
                     originalWidth = page.width,

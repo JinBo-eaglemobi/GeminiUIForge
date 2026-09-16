@@ -133,31 +133,6 @@ fun App(typography: Typography? = null) {
                 org.gemini.ui.forge.service.SystemPerformanceMonitor.start()
             }
 
-            // 监听 MCP 驱动的 UI 界面实时跟随事件
-            LaunchedEffect(Unit) {
-                org.gemini.ui.forge.service.mcp.McpUiBridge.events.collect { event ->
-                    val isFollowNav = configManager.loadKey("MCP_FOLLOW_NAV") == "true"
-                    if (!isFollowNav) return@collect
-
-                    when (event) {
-                        is org.gemini.ui.forge.service.mcp.McpUiEvent.NavigateToProject -> {
-                            val state = event.projectState ?: templateRepo.getTemplates().firstOrNull { it.first.equals(event.projectName, ignoreCase = true) }?.second
-                            if (state != null) {
-                                appViewModel.loadProject(event.projectName, state)
-                                appViewModel.navigateTo(AppScreen.PROJECT_WORKSPACE)
-                                Toast.show("AI 已创建模板并切换至工作区: ${event.projectName}", ToastType.SUCCESS)
-                            }
-                        }
-                        is org.gemini.ui.forge.service.mcp.McpUiEvent.SelectBlock -> {
-                            // 图元更新提示
-                        }
-                        is org.gemini.ui.forge.service.mcp.McpUiEvent.RefreshWorkspace -> {
-                            // 刷新工作区
-                        }
-                    }
-                }
-            }
-
             LaunchedEffect(globalState.languageCode) {
                 val effectiveLang = if (globalState.languageCode == "auto") {
                     val sysLang = originalSystemLanguage ?: Locale.current.language

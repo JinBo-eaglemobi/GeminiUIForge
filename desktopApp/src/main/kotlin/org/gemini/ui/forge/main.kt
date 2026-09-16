@@ -16,6 +16,15 @@ import java.io.File
 import kotlin.math.abs
 
 fun main(args: Array<String>) {
+    // 0. 注册全局未捕获崩溃异常拦截器，确保任何 EDT/后台协程致命异常均被持久化写入本地日志
+    Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+        org.gemini.ui.forge.utils.AppLogger.e(
+            "CrashHandler",
+            "💥 捕获到未处理的致命崩溃 [Thread: ${thread.name}]: ${throwable.message}",
+            throwable
+        )
+    }
+
     // 1. 尝试实现内存自举拦截 (Trampoline)
     // 检查是否存在用户的 .vmoptions 文件，如果是生产打包环境，并且内存不符合预期，则注入环境变量重启
     val vmOptionsFile = File(userHomePath, ".geminiuiforge/app.vmoptions")

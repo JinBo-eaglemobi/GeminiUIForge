@@ -24,7 +24,6 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * @param delegate 平台默认剪贴板实现，承担实际读写
  */
-@OptIn(ExperimentalComposeUiApi::class)
 class RetryingClipboard(
     private val delegate: Clipboard
 ) : Clipboard {
@@ -49,6 +48,7 @@ class RetryingClipboard(
         delegate.setClipEntry(clipEntry)
     }
 
+    @Deprecated("Use platform-specific extension to get platform reference")
     override val nativeClipboard: NativeClipboard
         get() = delegate.nativeClipboard
 

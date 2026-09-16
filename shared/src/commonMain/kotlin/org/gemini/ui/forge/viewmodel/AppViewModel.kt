@@ -142,11 +142,11 @@ class AppViewModel(
                 LayoutMode.AUTO
             }
 
-            val apiFlavorStr = configManager.loadKey("API_FLAVOR") ?: "GENERATE_CONTENT"
+            val apiFlavorStr = configManager.loadKey("API_FLAVOR") ?: "INTERACTIONS"
             val apiFlavor = try {
                 ApiFlavor.valueOf(apiFlavorStr)
             } catch (_: Exception) {
-                ApiFlavor.GENERATE_CONTENT
+                ApiFlavor.INTERACTIONS
             }
 
             val compileRootDir = configManager.loadKey("COMPILE_ROOT_DIR") ?: ""

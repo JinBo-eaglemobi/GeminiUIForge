@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,18 +35,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.datetime.TimeZone
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.service.mcp.*
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.dialog.mcp.component.CommandDictionaryDialog
+import org.gemini.ui.forge.ui.dialog.mcp.component.TrafficRecordItem
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.utils.looseJson
+import kotlin.time.Instant
 
 /**
  * 现代左右双分栏架构的 MCP 实时连接节点与通信日志全景调试控制台
- * 左侧栏 (280dp): 已连接/历史客户端会话与在线/已断开状态
- * 右侧栏 (自适应 1000dp): 当前选中客户端的专属 1000 条双向 RPC 报文流水详情
+ * 左侧栏 (310dp): 已连接/历史客户端会话与在线/已断开状态 (三行立体卡片)
+ * 右侧栏 (自适应 970dp): 当前选中客户端的专属 1000 条双向 RPC 报文流水详情 (含指令释义与格式化 JSON)
  */
 @Composable
 fun McpTrafficInspectorDialog(
@@ -60,8 +68,8 @@ fun McpTrafficInspectorDialog(
     val isRunning by McpController.isRunning.collectAsState()
 
     var expandedRecordId by remember { mutableStateOf<String?>(null) }
-    // 单选过滤节点 ID (null 表示全量聚合查看)
     var selectedNodeId by remember { mutableStateOf<String?>(null) }
+    var showHelpDictionaryDialog by remember { mutableStateOf(false) }
 
     val filteredLogs = remember(logs, selectedNodeId) {
         if (selectedNodeId == null) {
@@ -162,6 +170,20 @@ fun McpTrafficInspectorDialog(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        // 指令帮助手册入口按钮
+                        OutlinedButton(
+                            onClick = { showHelpDictionaryDialog = true },
+                            shape = AppShapes.small,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(30.dp).tip("查看 MCP 协议交互指令与工具字典速查")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Help, null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("指令说明手册", style = MaterialTheme.typography.labelSmall)
+                        }
+
+                        Spacer(Modifier.width(spacing.small))
+
                         if (expandedRecordId != null) {
                             OutlinedButton(
                                 onClick = { expandedRecordId = null },
@@ -208,11 +230,11 @@ fun McpTrafficInspectorDialog(
                         .clip(RoundedCornerShape(12.dp))
                 ) {
                     // ══════════════════════════════════════════════════════════
-                    // 【左侧栏 (280dp)】已连接/历史客户端会话与状态
+                    // 【左侧栏 (310dp)】已连接/历史客户端会话与状态
                     // ══════════════════════════════════════════════════════════
                     Column(
                         modifier = Modifier
-                            .width(280.dp)
+                            .width(310.dp)
                             .fillMaxHeight()
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
                             .padding(12.dp)
@@ -230,7 +252,7 @@ fun McpTrafficInspectorDialog(
                             )
                         }
 
-                        // "全部客户端" 汇总项
+                        // "全量客户端汇聚" 汇总项
                         val isAllSelected = selectedNodeId == null
                         Surface(
                             shape = AppShapes.small,
@@ -298,7 +320,7 @@ fun McpTrafficInspectorDialog(
                                     .weight(1f)
                                     .fillMaxWidth()
                                     .verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 nodes.forEach { node ->
                                     val isSelected = selectedNodeId == node.id
@@ -329,14 +351,17 @@ fun McpTrafficInspectorDialog(
                                             }
                                             .tip(if (isSelected) "正在查看此客户端 (点击取消筛选)" else "点击单独查看此客户端的交互报文")
                                     ) {
-                                        Column(modifier = Modifier.padding(10.dp)) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                                        ) {
+                                            // 第 1 行：在线/离线指示灯 + 客户端名称 + 状态徽章/断开按钮
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                                    // 在线/离线状态指示灯
                                                     Box(
                                                         modifier = Modifier
                                                             .size(8.dp)
@@ -345,7 +370,7 @@ fun McpTrafficInspectorDialog(
                                                                 shape = CircleShape
                                                             )
                                                     )
-                                                    Spacer(Modifier.width(8.dp))
+                                                    Spacer(Modifier.width(6.dp))
                                                     Text(
                                                         text = node.clientName,
                                                         style = MaterialTheme.typography.bodySmall,
@@ -355,7 +380,6 @@ fun McpTrafficInspectorDialog(
                                                     )
                                                 }
 
-                                                // 状态徽章或断开按钮
                                                 if (node.isActive) {
                                                     IconButton(
                                                         onClick = {
@@ -389,25 +413,57 @@ fun McpTrafficInspectorDialog(
                                                 }
                                             }
 
-                                            Spacer(Modifier.height(4.dp))
+                                            // 第 2 行：真实客户端网络端点 (IP:Port，独占单行，等宽排版，绝不挤压)
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Lan,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(12.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                                )
+                                                Spacer(Modifier.width(4.dp))
+                                                Text(
+                                                    text = node.ip,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
 
+                                            // 第 3 行：左右独立的结构化微徽章 (心跳次数 + 流水条数，绝不竖排折行)
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text(
-                                                    text = "${node.ip} · ${node.requestCount} 次心跳",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontSize = 10.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                                                )
-                                                Text(
-                                                    text = "$nodeLogCount 条流水",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontSize = 10.sp,
-                                                    fontFamily = FontFamily.Monospace,
-                                                    color = if (nodeLogCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                                )
+                                                Surface(
+                                                    shape = AppShapes.small,
+                                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                                ) {
+                                                    Text(
+                                                        text = "${node.requestCount} 次心跳",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontSize = 10.sp,
+                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+
+                                                Surface(
+                                                    shape = AppShapes.small,
+                                                    color = if (nodeLogCount > 0) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                                ) {
+                                                    Text(
+                                                        text = "$nodeLogCount 条流水",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontSize = 10.sp,
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontWeight = if (nodeLogCount > 0) FontWeight.Bold else FontWeight.Normal,
+                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                                        color = if (nodeLogCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -423,7 +479,7 @@ fun McpTrafficInspectorDialog(
                     )
 
                     // ══════════════════════════════════════════════════════════
-                    // 【右侧栏 (自适应 1000dp)】专属双向报文流水详情
+                    // 【右侧栏 (自适应 970dp)】专属双向报文流水详情
                     // ══════════════════════════════════════════════════════════
                     Column(
                         modifier = Modifier
@@ -527,205 +583,8 @@ fun McpTrafficInspectorDialog(
             }
         }
     }
-}
-
-/**
- * 单条通信报文项
- */
-@Composable
-private fun TrafficRecordItem(
-    record: McpTrafficRecord,
-    isExpanded: Boolean,
-    onToggle: () -> Unit,
-    onCopy: () -> Unit
-) {
-    val isInbound = record.direction == McpTrafficDirection.INBOUND
-    val dirColor = if (isInbound) Color(0xFF00ACC1) else Color(0xFF8E24AA)
-
-    val timeStr = remember(record.timestamp) {
-        val dt = java.time.Instant.ofEpochMilli(record.timestamp)
-            .atZone(java.time.ZoneId.systemDefault())
-        dt.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS"))
-    }
-
-    Card(
-        shape = AppShapes.medium,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                color = if (record.isError) MaterialTheme.colorScheme.error.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                shape = AppShapes.medium
-            )
-            .clip(AppShapes.medium)
-            .clickable { onToggle() }
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    // 方向徽章
-                    Surface(
-                        shape = AppShapes.small,
-                        color = dirColor.copy(alpha = 0.15f)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isInbound) Icons.AutoMirrored.Filled.ArrowForward else Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = null,
-                                tint = dirColor,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = if (isInbound) "INBOUND" else "OUTBOUND",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = dirColor,
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.width(10.dp))
-
-                    Text(
-                        text = record.methodOrTool,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    if (record.clientName != null) {
-                        Spacer(Modifier.width(8.dp))
-                        Surface(
-                            shape = AppShapes.small,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ) {
-                            Text(
-                                text = record.clientName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
-
-                    if (record.durationMs != null) {
-                        Spacer(Modifier.width(8.dp))
-                        Surface(
-                            shape = AppShapes.small,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ) {
-                            Text(
-                                text = "${record.durationMs}ms",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = timeStr,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = record.summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (record.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (isExpanded) 10 else 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp)
-                ) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                    Spacer(Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Payload (JSON)",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-
-                        OutlinedButton(
-                            onClick = onCopy,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.height(24.dp).tip("复制完整报文数据")
-                        ) {
-                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(11.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("复制", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
-                        }
-                    }
-
-                    Spacer(Modifier.height(6.dp))
-
-                    Surface(
-                        shape = AppShapes.small,
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        SelectionContainer {
-                            Text(
-                                text = record.payloadJson.ifBlank { "{}" },
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(10.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
+    // 指令说明手册独立对话框
+    if (showHelpDictionaryDialog) {
+        CommandDictionaryDialog(onDismiss = { showHelpDictionaryDialog = false })
     }
 }

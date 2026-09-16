@@ -34,9 +34,11 @@
 
 ## 质量与校验（红线规则）
 
-- 每次代码逻辑或文件结构的改动完成后，如果修改的文件影响项目最终代码编译，**必须**立即执行以下桌面端编译命令进行实证校验：
-  - `./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`
-  - 如果修改的文件不影响项目最终代码编译，那么在修改完成后将不再执行编译验证。
+- **双轨编译校验规范（IDEA MCP 增量优先铁律）**: **【红线规则】**
+  每次代码逻辑或文件结构的改动完成后，如果修改的文件影响项目最终代码编译，**必须**立即执行桌面端编译实证校验。执行通道严格遵循双轨优先级：
+  1. **首选通道 (IntelliJ IDEA MCP 增量编译)**：若当前对话环境中挂载了 IntelliJ IDEA MCP 编译工具（`idea_build_project`），**必须强制优先调用 `idea_build_project(filesToRebuild = [...])`**（针对本次修改的文件执行增量编译），或 `idea_build_project(rebuild = false)` 进行极速校验。IDEA 内部拥有 JPS 内存级增量编译缓存与极速变化感知，通常仅需 **1 ~ 3 秒** 即可精准完成编译与语法分析，大幅提升开发反馈效率；
+  2. **兜底通道 (命令行 Gradle)**：仅当当前环境未接入 IDEA MCP 工具、或处于纯无头 CI/CD 终端环境时，才回退执行命令行编译：`./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`；
+  3. 如果修改的文件不影响项目最终代码编译（如仅修改文档、配置注释），那么在修改完成后将不再执行编译验证。
 - **校验阶段仅校验桌面版（JVM 优先铁律）**: **【红线规则】** 自动化构建与闭环验证阶段**一律且仅执行桌面端 (JVM) 编译校验**。其他平台（Web / Android / iOS）全部交由手动按需校验，严禁在日常迭代后自动触发耗时冗长的多端全量编译，最大化提升开发反馈速度。
 - **物理校验优先 (Physical Check First)**: **【红线规则】** 外部脚本或工具修改文件后，IntelliJ IDEA 的编辑器可能会由于内存缓冲区机制（VFS 缓存）而显示未更新的视图。**切勿单凭编辑器的视觉表现来判断修改成败**。必须始终通过原生 `git diff` 或 `Get-Content` / `cat` 物理读取作为落盘的唯一铁证。若发现 IDE 刷新滞后，可右键文件选择 `Reload from Disk`，或利用 `Synchronize` 和 `ReloadFromFile` 的 IDE Action。
 - **破坏性文件与数据清理强制二次确认 (Mandatory Confirmation for Destructive Actions)**: **【红线规则】** 严禁在任何 UI 交互或按钮逻辑中编写“点击后未经确认直接静默物理删除/清空本地磁盘文件或核心数据”的代码。任何涉及物理删除文件、清空资产历史库、删除项目模板或破坏性重置数据库的操作，**必须强制弹出带有清晰后果警示说明的二次确认弹窗（如 `AppConfirmDialog`）**，且确认操作必须使用警示样式（`isDestructive = true`），只有经用户在弹窗中显式确认授权后方可调用底层物理清理！
@@ -44,7 +46,11 @@
 
 ## 代码规范
 
-- **文件规范与单文件规模控制**: 严格遵循"一文件一类 / 一文件一主组件（One Class/Component Per File）"的原则。禁止将多个类（Class/Interface/Enum 等）声明在同一个物理文件中，除非是私有的匿名内部类、紧密相关的极小数据类或密封类扩展。单个 UI 文件代码量原则上严格控制在 300~500 行以内。严禁在主界面文件中堆砌大量承载独立复杂业务的辅助私有 `@Composable` 函数，必须按功能和职责拆分成独立的物理文件并放入对应的子文件夹中组织，做到"一文件一职责，看文件名即可秒懂实现"。
+- **一文件一 Composable 强制红线 (One Composable Per File Specification)**: **【红线规则】**
+  严格遵循**“一文件一 Composable（One Composable Per File）”**的绝对铁律。
+  1. **严禁同文件内多 Composable 声明**：除合法的内联 Slot 插槽 Lambda（如 `content: @Composable () -> Unit`）外，**绝对禁止在同一个物理 `.kt` 文件中声明 2 个或以上带有独立命名的 `@Composable fun`**（不论其可见性为 `public`、`internal` 还是 `private`）；
+  2. **严禁就地声明私有辅助组件**：严禁在主界面或主弹窗文件中编写如 `private fun CredentialSection`、`private fun LogPanel`、`private fun StepRow` 等局部卡片或行项组件。所有的子卡片、行项（Item/Row）、子面板、弹窗覆层必须按功能职责拆分成独立的物理文件，统一归入对应功能模块的 `component/` 子目录组织；
+  3. **单文件规模严格受控**：单个 UI 文件代码量原则上严格控制在 **100 ~ 300 行** 黄金可维护区间（上限不得超过 400 行）。做到“一文件一职责，看文件名即可秒懂其 UI 渲染结构”。
 - **禁止硬编码数字与尺寸 (Design Tokens & Spacing System)**: **【红线规则】** 严禁在 UI 代码中随意写死硬编码数字（如 `8.dp`, `16.dp`, `440.dp` 等物理常数）。所有的边距、间隙、内边距、组件宽高以及弹窗尺寸等，必须统一使用项目中公用的设计系统配置（Design Tokens，如 `LocalAppSpacing.current` / `AppSpacing.kt` 中声明的语义化属性）来进行赋值。弹窗宽度（如 `dialogConfirmWidth`, `dialogConfigWidth`）与通用组件尺寸必须统一收拢到 `AppSpacing.kt` 或对应的公共维度配置中管理，实现一处修改、全局自动响应。
 - **PC 端交互按钮 Tooltip 规范**: 所有 PC 桌面端的交互型按钮（包括但不限于 `Button`、`IconButton`、`TextButton`、`OutlinedButton` 以及各类可点击的操作图标/胶囊等所有可交互按钮）均必须使用项目内置的轻量单例修饰符 `Modifier.tip(...)`（来自 `AppTooltip.kt`）挂载悬浮提示信息，提示文案必须严格遵循下述 I18n 规范通过 `stringResource(...)` 注入，严禁硬编码文案。
 - **多层树状图元层级坐标系通用规范 (Hierarchical Coordinate System Specification)**: **【红线规则】**

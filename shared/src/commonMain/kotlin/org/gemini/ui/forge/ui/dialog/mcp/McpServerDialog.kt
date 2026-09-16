@@ -42,6 +42,8 @@ import org.gemini.ui.forge.service.mcp.McpController
 import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.dialog.mcp.component.ClientBentoCard
+import org.gemini.ui.forge.ui.dialog.mcp.component.CollapsibleSectionCard
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.userHomePath
@@ -65,7 +67,6 @@ fun McpServerDialog(
 
     var hostInput by remember { mutableStateOf("127.0.0.1") }
     var portInput by remember { mutableStateOf(18330) }
-    var followNav by remember { mutableStateOf(false) }
 
     // 三大核心功能块独立折叠状态
     var isServerConsoleExpanded by remember { mutableStateOf(true) }
@@ -110,8 +111,6 @@ fun McpServerDialog(
         if (!savedHost.isNullOrBlank()) hostInput = savedHost
         val savedPort = configManager.loadKey("MCP_PORT")?.toIntOrNull()
         if (savedPort != null) portInput = savedPort
-        val savedFollowNav = configManager.loadKey("MCP_FOLLOW_NAV") == "true"
-        followNav = savedFollowNav
         refreshClients()
     }
 
@@ -392,35 +391,6 @@ fun McpServerDialog(
                                     )
                                 }
                             }
-
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-                            // 界面执行跟随开关
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "AI 工具执行界面跟随",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = "开启后工具执行完成将自动跳转至对应工作区页面（默认关闭，保持纯后台静默运行）",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Switch(
-                                    checked = followNav,
-                                    onCheckedChange = { isChecked ->
-                                        followNav = isChecked
-                                        scope.launch { configManager.saveKey("MCP_FOLLOW_NAV", isChecked.toString()) }
-                                    }
-                                )
-                            }
                         }
                     }
 
@@ -577,227 +547,6 @@ fun McpServerDialog(
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-/**
- * 现代通用可折叠卡片组件 (带旋转动效与折叠摘要)
- */
-@Composable
-private fun CollapsibleSectionCard(
-    icon: ImageVector,
-    title: String,
-    isExpanded: Boolean,
-    onToggle: () -> Unit,
-    badge: @Composable (() -> Unit)? = null,
-    headerExtra: @Composable (() -> Unit)? = null,
-    content: @Composable () -> Unit
-) {
-    val spacing = LocalAppSpacing.current
-    val arrowRotation by animateFloatAsState(if (isExpanded) 180f else 0f)
-
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-    ) {
-        Column(modifier = Modifier.padding(spacing.medium).fillMaxWidth()) {
-            // 头部栏（整行点击切换展开/折叠）
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(AppShapes.small)
-                    .clickable { onToggle() }
-                    .padding(vertical = 4.dp, horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(spacing.small))
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (badge != null) {
-                        Spacer(Modifier.width(spacing.small))
-                        badge()
-                    }
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (headerExtra != null) {
-                        headerExtra()
-                        Spacer(Modifier.width(spacing.small))
-                    }
-                    IconButton(
-                        onClick = onToggle,
-                        modifier = Modifier.size(28.dp).tip(if (isExpanded) "收起" else "展开")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (isExpanded) "Collapse" else "Expand",
-                            modifier = Modifier.rotate(arrowRotation)
-                        )
-                    }
-                }
-            }
-
-            // 折叠动效区
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                content()
-            }
-        }
-    }
-}
-
-/**
- * 客户端生态 2-Column Bento 单卡
- */
-@Composable
-private fun ClientBentoCard(
-    status: ClientAppConfigStatus,
-    onToggle: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val spacing = LocalAppSpacing.current
-
-    // 图标与品牌配色映射
-    val clientIcon = when (status.clientType) {
-        McpClientType.OPEN_CODE -> Icons.Default.Terminal
-        McpClientType.CLAUDE_CODE -> Icons.Default.SmartToy
-        McpClientType.CLAUDE_DESKTOP -> Icons.Default.Computer
-        McpClientType.GEMINI_CLI -> Icons.Default.AutoAwesome
-        McpClientType.CURSOR -> Icons.Default.NearMe
-    }
-
-    val brandTint = when (status.clientType) {
-        McpClientType.OPEN_CODE -> Color(0xFF00C853)
-        McpClientType.CLAUDE_CODE, McpClientType.CLAUDE_DESKTOP -> Color(0xFFFF9800)
-        McpClientType.GEMINI_CLI -> Color(0xFF2979FF)
-        McpClientType.CURSOR -> Color(0xFF9C27B0)
-    }
-
-    // 将长绝对路径智能缩写为 ~ 开头友好形态展示
-    val simplifiedPath = remember(status.configPath) {
-        if (userHomePath.isNotBlank() && status.configPath.startsWith(userHomePath)) {
-            "~" + status.configPath.substring(userHomePath.length)
-        } else {
-            status.configPath
-        }
-    }
-
-    Card(
-        shape = AppShapes.medium,
-        colors = CardDefaults.cardColors(
-            containerColor = if (status.isConfigured) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-            } else {
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
-            }
-        ),
-        modifier = modifier.border(
-            width = 1.dp,
-            color = if (status.isConfigured) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-            shape = AppShapes.medium
-        )
-    ) {
-        Column(modifier = Modifier.padding(spacing.medium).fillMaxWidth()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = brandTint.copy(alpha = 0.15f),
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = clientIcon,
-                                contentDescription = null,
-                                tint = brandTint,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(spacing.small))
-                    Text(
-                        text = status.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                // 独立开关
-                Switch(
-                    checked = status.isConfigured,
-                    onCheckedChange = onToggle,
-                    modifier = Modifier.height(24.dp)
-                )
-            }
-
-            Spacer(Modifier.height(spacing.small))
-
-            // 状态胶囊与路径
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    color = when {
-                        status.isConfigured && status.isServiceDisabled -> Color(0xFFFF9800).copy(alpha = 0.15f)
-                        status.isConfigured -> Color(0xFF4CAF50).copy(alpha = 0.15f)
-                        status.isFileExists -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                        else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
-                    },
-                    shape = AppShapes.small
-                ) {
-                    Text(
-                        text = when {
-                            status.isConfigured && status.isServiceDisabled -> "已配置 (默认禁用)"
-                            status.isConfigured -> "已接入并启用"
-                            status.isFileExists -> "未配置"
-                            else -> "未检测到配置"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = when {
-                            status.isConfigured && status.isServiceDisabled -> Color(0xFFE65100)
-                            status.isConfigured -> Color(0xFF2E7D32)
-                            status.isFileExists -> MaterialTheme.colorScheme.onSurfaceVariant
-                            else -> MaterialTheme.colorScheme.error
-                        },
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-
-                Spacer(Modifier.width(spacing.small))
-
-                Text(
-                    text = simplifiedPath,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f).tip(status.configPath)
-                )
             }
         }
     }

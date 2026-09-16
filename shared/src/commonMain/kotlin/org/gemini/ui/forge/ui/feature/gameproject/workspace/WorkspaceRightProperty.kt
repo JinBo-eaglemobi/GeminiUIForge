@@ -40,6 +40,7 @@ import geminiuiforge.composeapp.generated.resources.gp_debug_tree_section
 import geminiuiforge.composeapp.generated.resources.gp_ws_right
 import org.gemini.ui.forge.model.gameproject.DebugPropertyRow
 import org.gemini.ui.forge.model.gameproject.DebugTreeNode
+import org.gemini.ui.forge.ui.feature.gameproject.workspace.property.component.*
 import org.gemini.ui.forge.viewmodel.GameProjectViewModel
 import org.jetbrains.compose.resources.stringResource
 
@@ -141,103 +142,6 @@ fun PropertiesPanel(
                 }
             }
         }
-    }
-}
-
-/**
- * 分区小标题。
- */
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-    )
-}
-
-/**
- * 分区空态提示。
- */
-@Composable
-private fun SectionHint(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 16.dp)
-    )
-}
-
-/**
- * 调试树节点行。
- */
-@Composable
-private fun DebugTreeRow(
-    node: DebugTreeNode,
-    depth: Int,
-    selected: Boolean,
-    onToggle: () -> Unit,
-    onSelect: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(24.dp)
-            .clickable { onSelect(); if (node.item.isNotEmpty()) onToggle() }
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                } else {
-                    androidx.compose.ui.graphics.Color.Transparent
-                }
-            )
-            .padding(start = (6 + depth * 12).dp, end = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = node.text,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            }
-        )
-    }
-}
-
-/**
- * 属性行。
- */
-@Composable
-private fun PropRow(row: DebugPropertyRow) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = row.key,
-            style = MaterialTheme.typography.labelSmall,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(96.dp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = row.value,
-            style = MaterialTheme.typography.labelSmall,
-            fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 

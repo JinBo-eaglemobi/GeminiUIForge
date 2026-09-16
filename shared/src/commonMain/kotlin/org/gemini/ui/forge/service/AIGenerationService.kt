@@ -5,6 +5,7 @@ import io.ktor.client.statement.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.put
 import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.data.remote.NetworkClient
@@ -322,14 +323,77 @@ class AIGenerationService(
                 }
             )
 
-            syncLog("UI 框架解析完毕。", onLog)
+            syncLog("UI 框架解析完毕，正在结构化验证并构建工程树...", onLog)
             val finalString = accumulatedText.toString()
             if (finalString.isEmpty()) throw Exception("响应为空")
             val cleanJson = geminiClient.cleanJson(finalString)
-            return looseJson.decodeFromString<ProjectState>(cleanJson)
+
+            val rootElement = looseJson.parseToJsonElement(cleanJson)
+            // 智能穿透解包：彻底攻克大模型外层包裹 "project_state" / "data" / 数组导致的图元丢失缺陷
+            val unwrappedProjectJson = extractProjectStateJson(rootElement)
+            val projectState = looseJson.decodeFromJsonElement(ProjectState.serializer(), unwrappedProjectJson).postProcess()
+
+            val blockCount = projectState.pages.firstOrNull()?.blocks?.size ?: 0
+            syncLog("✅ 成功解析工程树: 项目 [${projectState.projectId}], 页面数 [${projectState.pages.size}], 首页图元数 [$blockCount]", onLog)
+            return projectState
         } catch (e: Exception) {
             AppLogger.e(TAG, "分析异常", e)
             throw e
+        }
+    }
+
+    /**
+     * 智能穿透解包大模型输出的 JSON 结构，自适应消除 "project_state" / "projectState" / "data" / 外层数组包裹
+     */
+    private fun extractProjectStateJson(element: kotlinx.serialization.json.JsonElement): kotlinx.serialization.json.JsonObject {
+        return when (element) {
+            is kotlinx.serialization.json.JsonArray -> {
+                val subObjects = element.mapNotNull { it as? kotlinx.serialization.json.JsonObject }
+                if (subObjects.isEmpty()) throw Exception("大模型返回的 JSON 数组为空")
+                val unwrappedList = subObjects.map { extractProjectStateJson(it) }
+                if (unwrappedList.size == 1) {
+                    unwrappedList.first()
+                } else {
+                    val firstObj = unwrappedList.first().toMutableMap()
+                    val mergedPages = buildJsonArray {
+                        unwrappedList.forEach { obj ->
+                            obj["pages"]?.jsonArray?.forEach { add(it) }
+                        }
+                    }
+                    firstObj["pages"] = mergedPages
+                    kotlinx.serialization.json.JsonObject(firstObj)
+                }
+            }
+            is kotlinx.serialization.json.JsonObject -> {
+                when {
+                    element.containsKey("project_state") && element["project_state"] is kotlinx.serialization.json.JsonObject -> {
+                        extractProjectStateJson(element["project_state"]!!)
+                    }
+                    element.containsKey("projectState") && element["projectState"] is kotlinx.serialization.json.JsonObject -> {
+                        extractProjectStateJson(element["projectState"]!!)
+                    }
+                    element.containsKey("data") && element["data"] is kotlinx.serialization.json.JsonObject -> {
+                        extractProjectStateJson(element["data"]!!)
+                    }
+                    element.containsKey("pages") || element.containsKey("projectId") -> {
+                        element
+                    }
+                    element.containsKey("blocks") -> {
+                        buildJsonObject {
+                            put("pages", buildJsonArray { add(element) })
+                        }
+                    }
+                    else -> {
+                        val candidate = element.values.firstOrNull { it is kotlinx.serialization.json.JsonObject && (it.containsKey("pages") || it.containsKey("blocks")) }
+                        if (candidate is kotlinx.serialization.json.JsonObject) {
+                            extractProjectStateJson(candidate)
+                        } else {
+                            element
+                        }
+                    }
+                }
+            }
+            else -> throw Exception("非预期的 JSON 根节点类型: $element")
         }
     }
 

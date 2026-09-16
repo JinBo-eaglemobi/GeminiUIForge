@@ -34,5 +34,5 @@ data class AppGlobalState(
     val shortcuts: Map<ShortcutAction, String> = ShortcutAction.entries.associateWith { it.defaultKey },
     val layoutMode: LayoutMode = LayoutMode.AUTO,
     val compileConfig: CompileConfig = CompileConfig(),
-    val apiFlavor: ApiFlavor = ApiFlavor.GENERATE_CONTENT
+    val apiFlavor: ApiFlavor = ApiFlavor.INTERACTIONS
 )

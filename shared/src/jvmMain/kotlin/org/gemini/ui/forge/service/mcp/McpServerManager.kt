@@ -194,8 +194,18 @@ object McpServerManager {
                 intercept(ApplicationCallPipeline.Plugins) {
                     val sessionId = call.request.header("Mcp-Session-Id") ?: call.request.header("Session-Id") ?: "session_local"
                     val ua = call.request.header(HttpHeaders.UserAgent) ?: ""
-                    val remoteHost = call.request.local.remoteHost
-                    val resolvedName = McpTrafficInspector.recordClientHeartbeat(sessionId = sessionId, userAgent = ua, ip = remoteHost)
+
+                    // 准确读取真实 IP 与连入端口，拦截 Windows hosts 伪域名反向解析
+                    val remotePort = call.request.local.remotePort
+                    val rawHost = call.request.local.remoteHost
+                    val cleanIp = when {
+                        rawHost.contains("127.0.0.1") || rawHost.contains("localhost") || rawHost.contains("navicat") || rawHost == "::1" -> "127.0.0.1"
+                        rawHost.startsWith("/") -> rawHost.removePrefix("/")
+                        else -> rawHost
+                    }
+                    val clientEndpoint = if (remotePort > 0) "$cleanIp:$remotePort" else cleanIp
+
+                    val resolvedName = McpTrafficInspector.recordClientHeartbeat(sessionId = sessionId, userAgent = ua, ip = clientEndpoint)
                     lastActiveSessionId = sessionId
                     lastActiveClientName = resolvedName
 

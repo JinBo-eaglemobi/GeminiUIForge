@@ -134,6 +134,11 @@ kotlin {
             implementation(libs.coil.network.ktor3)
             implementation(libs.skiko)
             implementation(libs.compose.ui.graphics)
+            // FileKit 跨平台原生文件与目录选择器 (0.16.0)
+            implementation(libs.filekit.core)
+            implementation(libs.filekit.dialogs)
+            implementation(libs.filekit.dialogs.compose)
+            implementation(libs.filekit.coil)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -174,6 +179,7 @@ kotlin {
                     "io.ktor" -> useVersion(libs.versions.ktor.get())
                     "org.jetbrains.skiko"-> {
                         if (name.startsWith("android", true)) useTarget(libs.skiko.android.get())
+                        else useVersion(libs.versions.skiko.get())
                     }
                 }
             }

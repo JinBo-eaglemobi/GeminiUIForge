@@ -604,4 +604,122 @@ class ProjectWorkspaceViewModel(
             }
         }
     }
+
+    /**
+     * 智能吸附校准图元几何尺寸与物理坐标 (支持单模块、多选批量与全量页面图元)
+     *
+     * @param targetBlockIds 目标图元 ID 集合，为 null 时代表校正当前页面的全部图元
+     * @param alsoCropAndBindReference 是否同步从原图物理裁切出切片并绑定为参考图 (默认 false，仅纠偏坐标大小)
+     */
+    fun calibrateBlocks(
+        targetBlockIds: Set<String>? = null,
+        alsoCropAndBindReference: Boolean = false
+    ) {
+        val currentPage = state.value.currentPage ?: return
+        val pageRefFile = currentPage.sourceImageUri
+        val refPath = pageRefFile?.getAbsolutePath()
+        if (refPath.isNullOrBlank()) {
+            org.gemini.ui.forge.utils.Toast.show("当前页面未绑定设计参考原图，无法执行边缘吸附校准", org.gemini.ui.forge.ui.component.ToastType.ERROR)
+            return
+        }
+
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            val refBytes = org.gemini.ui.forge.utils.readLocalFileBytes(refPath)
+            if (refBytes == null || refBytes.isEmpty()) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    org.gemini.ui.forge.utils.Toast.show("未能读取页面参考原图文件: $refPath", org.gemini.ui.forge.ui.component.ToastType.ERROR)
+                }
+                return@launch
+            }
+
+            val pageW = currentPage.width
+            val pageH = currentPage.height
+            var calibratedCount = 0
+            var croppedCount = 0
+
+            suspend fun calibrateRecursive(block: UIBlock): UIBlock {
+                val shouldCalibrate = targetBlockIds == null || targetBlockIds.contains(block.id)
+                val newBlock = if (shouldCalibrate) {
+                    val absBounds = block.toAbsoluteBounds()
+                    val snapRes = org.gemini.ui.forge.utils.SmartEdgeSnapper.snapBounds(
+                        imageBytes = refBytes,
+                        logicalBounds = absBounds,
+                        canvasWidth = pageW,
+                        canvasHeight = pageH
+                    )
+
+                    val newLocalBounds = if (snapRes != null) {
+                        calibratedCount++
+                        block.toLocalBounds(snapRes.logicalRect)
+                    } else {
+                        block.bounds
+                    }
+
+                    val newRefImage = if (alsoCropAndBindReference) {
+                        val cropBytes = org.gemini.ui.forge.utils.SmartEdgeSnapper.cropSnappedComponent(
+                            imageBytes = refBytes,
+                            logicalBounds = absBounds,
+                            canvasWidth = pageW,
+                            canvasHeight = pageH
+                        )
+                        if (cropBytes != null) {
+                            croppedCount++
+                            templateRepo.saveBlockResource(
+                                templateName = state.value.projectName,
+                                blockId = block.id,
+                                fileNamePrefix = "ref_snap",
+                                bytes = cropBytes,
+                                isPng = true
+                            )
+                        } else {
+                            block.referenceImage
+                        }
+                    } else {
+                        block.referenceImage
+                    }
+
+                    block.copy(bounds = newLocalBounds, referenceImage = newRefImage)
+                } else {
+                    block
+                }
+
+                val newChildren = newBlock.children.map { calibrateRecursive(it) }
+                return newBlock.copy(children = newChildren)
+            }
+
+            val newBlocks = currentPage.blocks.map { calibrateRecursive(it) }
+            val updatedPage = currentPage.copy(blocks = newBlocks)
+
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                updateState { s ->
+                    val newPages = s.project.pages.map { p ->
+                        if (p.id == updatedPage.id) updatedPage else p
+                    }
+                    s.copy(project = s.project.copy(pages = newPages))
+                }
+                markDirty()
+                val summaryMsg = if (alsoCropAndBindReference) {
+                    "已校正 $calibratedCount 个模块物理坐标，并同步更新了 $croppedCount 个参考图切片"
+                } else {
+                    "已成功校验并校正 $calibratedCount 个模块的范围与坐标 (未切图)"
+                }
+                org.gemini.ui.forge.utils.Toast.show(summaryMsg, org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
+            }
+        }
+    }
+
+    fun calibrateSelectedBlock(alsoCropAndBindReference: Boolean = false) {
+        val currentId = state.value.selectedBlockId ?: return
+        calibrateBlocks(setOf(currentId), alsoCropAndBindReference)
+    }
+
+    fun calibrateMultiSelectedBlocks(alsoCropAndBindReference: Boolean = false) {
+        val ids = state.value.selectedBlockIds
+        if (ids.isEmpty()) return
+        calibrateBlocks(ids, alsoCropAndBindReference)
+    }
+
+    fun calibrateAllBlocks(alsoCropAndBindReference: Boolean = false) {
+        calibrateBlocks(null, alsoCropAndBindReference)
+    }
 }

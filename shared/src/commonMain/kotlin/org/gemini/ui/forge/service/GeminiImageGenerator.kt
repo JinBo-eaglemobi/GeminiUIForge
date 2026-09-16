@@ -53,11 +53,11 @@ class GeminiImageGenerator(
         onResult: ((UnifiedAiResult) -> Unit)? = null
     ): List<String> {
         val effectiveFlavor = apiFlavorOverride ?: run {
-            val flavorStr = configManager.loadKey("API_FLAVOR") ?: "GENERATE_CONTENT"
+            val flavorStr = configManager.loadKey("API_FLAVOR") ?: "INTERACTIONS"
             try {
                 ApiFlavor.valueOf(flavorStr)
             } catch (_: Exception) {
-                ApiFlavor.GENERATE_CONTENT
+                ApiFlavor.INTERACTIONS
             }
         }
 

@@ -668,7 +668,55 @@ fun LayoutPropertyContent(
                     }
                 }
 
-                // 3. 删除模块
+                // 3. 物理边缘吸附校准 (支持可选同时切图并绑定参考图)
+                var alsoCropAndBind by remember { mutableStateOf(false) }
+                Card(
+                    shape = AppShapes.small,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable { alsoCropAndBind = !alsoCropAndBind }
+                        ) {
+                            Checkbox(
+                                checked = alsoCropAndBind,
+                                onCheckedChange = { alsoCropAndBind = it },
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "同时切片并绑定为参考底图",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { viewModel.calibrateSelectedBlock(alsoCropAndBind) },
+                                modifier = Modifier.weight(1f).tip(if (alsoCropAndBind) "校正当前模块物理边界并切片绑定为参考图" else "仅校正当前模块的大小与物理坐标 (不切图)"),
+                                shape = AppShapes.small
+                            ) {
+                                Icon(Icons.Default.CropFree, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("校准当前模块")
+                            }
+
+                            OutlinedButton(
+                                onClick = { viewModel.calibrateAllBlocks(alsoCropAndBind) },
+                                modifier = Modifier.weight(1f).tip(if (alsoCropAndBind) "一键校准全页面所有模块坐标并全量切片绑定参考图" else "一键校正全页面所有模块的物理坐标范围 (不切图)"),
+                                shape = AppShapes.small
+                            ) {
+                                Icon(Icons.Default.AutoFixHigh, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("全量校准")
+                            }
+                        }
+                    }
+                }
+
+                // 4. 删除模块
                 Button(
                     onClick = { viewModel.showDeleteConfirmation(selectedBlock.id) },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
