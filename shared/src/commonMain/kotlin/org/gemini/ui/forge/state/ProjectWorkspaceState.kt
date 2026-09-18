@@ -8,6 +8,16 @@ import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.utils.findBlockById
 
 /**
+ * 工作区中间渲染区域的视图显示模式
+ */
+enum class WorkspaceViewMode(val displayName: String) {
+    /** 画布舞台图形编辑视图 (默认) */
+    CANVAS("画布舞台"),
+    /** 原生结构化 JSON 源码视图 (支持与图层树联动高亮) */
+    JSON_CODE("JSON 源码")
+}
+
+/**
  * 统一工作区运行时状态
  */
 data class ProjectWorkspaceState(
@@ -136,7 +146,9 @@ data class ProjectWorkspaceState(
     /** 离线几何校准：当前选用的对齐引擎模式 (微观物理吸附/传统CV/端侧AI) */
     val activeAlignmentMode: org.gemini.ui.forge.service.detection.DetectionEngineMode = org.gemini.ui.forge.service.detection.DetectionEngineMode.BASELINE_SNAPPER,
     /** 工作流模式：是否为纯工程物理对齐模式 (为 true 时自适应隐藏提示词等 AI 概念) */
-    val isPureEngineeringMode: Boolean = false
+    val isPureEngineeringMode: Boolean = false,
+    /** 中间渲染区域视图显示模式 (画布舞台 vs JSON 源码) */
+    val workspaceViewMode: WorkspaceViewMode = WorkspaceViewMode.CANVAS
 ) {
     val currentPage get() = project.pages.find { it.id == selectedPageId } ?: project.pages.firstOrNull()
     val selectedBlock: UIBlock?

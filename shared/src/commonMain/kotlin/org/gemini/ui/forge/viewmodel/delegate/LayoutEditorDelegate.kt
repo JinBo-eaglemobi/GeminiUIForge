@@ -291,6 +291,24 @@ class LayoutEditorDelegate(
 
     // --- AI 辅助重构 ---
 
+    /**
+     * 审核通过后，正式将重塑后的新页面结构写回工作区并记录历史快照
+     */
+    fun applyRefinedPages(updatedPages: List<org.gemini.ui.forge.model.ui.UIPage>, historyKey: String, userInstruction: String) {
+        saveSnapshot("应用 AI 视觉区域重塑")
+        val currentState = getState()
+        val history = currentState.chatHistories[historyKey] ?: emptyList()
+        val newHistory = history + org.gemini.ui.forge.model.api.ChatMessage("user", userInstruction) + org.gemini.ui.forge.model.api.ChatMessage("model", "已重塑 UI 结构。")
+        updateState { s ->
+            s.copy(
+                project = s.project.copy(pages = updatedPages),
+                chatHistories = s.chatHistories + (historyKey to newHistory)
+            )
+        }
+        markDirty()
+        Toast.show("已成功应用重塑结构代码", ToastType.SUCCESS)
+    }
+
     fun onRefineArea(
         blockId: String?,
         bounds: SerialRect,

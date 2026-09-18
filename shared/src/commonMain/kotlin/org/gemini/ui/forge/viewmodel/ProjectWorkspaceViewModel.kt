@@ -42,7 +42,7 @@ class ProjectWorkspaceViewModel(
     initialProjectName: String,
     initialLang: PromptLanguage,
     val templateRepo: TemplateRepository,
-    private val cloudAssetManager: CloudAssetManager,
+    val cloudAssetManager: CloudAssetManager,
     val aiService: AIGenerationService,
     private val onDirtyChanged: (Boolean) -> Unit = {}
 ) : ViewModel() {
@@ -645,67 +645,102 @@ class ProjectWorkspaceViewModel(
             var unchangedCount = 0
             var croppedCount = 0
 
+            // 自动展开目标集合：若选中的是复合组，自动将其所有深层子孙节点全部展开纳入待校准集合！
+            val effectiveTargetIds: Set<String>? = if (targetBlockIds != null) {
+                val expanded = mutableSetOf<String>()
+                fun collectDescendants(b: UIBlock) {
+                    expanded.add(b.id)
+                    b.children.forEach { collectDescendants(it) }
+                }
+                boundBlocks.forEach { root ->
+                    fun scan(b: UIBlock) {
+                        if (targetBlockIds.contains(b.id)) {
+                            collectDescendants(b)
+                        } else {
+                            b.children.forEach { scan(it) }
+                        }
+                    }
+                    scan(root)
+                }
+                expanded
+            } else null
+
             suspend fun calibrateRecursive(block: UIBlock): UIBlock {
-                val shouldCalibrate = targetBlockIds == null || targetBlockIds.contains(block.id)
-                val newBlock = if (shouldCalibrate) {
-                    val absBounds = block.toAbsoluteBounds()
-                    val snapRes = aligner.align(
+                // 1. 先自底向上递归校准所有子节点
+                val newChildren = block.children.map { calibrateRecursive(it) }
+                val blockWithCalibratedChildren = block.copy(children = newChildren)
+
+                val shouldCalibrate = effectiveTargetIds == null || effectiveTargetIds.contains(block.id)
+                if (!shouldCalibrate) {
+                    return blockWithCalibratedChildren
+                }
+
+                // 2. 复合组容器模式：若包含子组件，不再作为单体盲目边缘吸附，而是直接触发容器自适应贴合与原点归零！
+                if (blockWithCalibratedChildren.children.isNotEmpty()) {
+                    val normalizedGroup = org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.normalizeContainerAndChildren(blockWithCalibratedChildren)
+                    calibratedCount++
+                    org.gemini.ui.forge.utils.AppLogger.i("Calibrate", "🧩 复合模块组【${block.id}】完成子组件深层物理吸附与容器原点贴合归零 (代数守恒)")
+                    return normalizedGroup
+                }
+
+                // 3. 叶子图元：执行精准物理边缘微观吸附
+                val absBounds = blockWithCalibratedChildren.toAbsoluteBounds()
+                val snapRes = aligner.align(
+                    imageBytes = refBytes,
+                    logicalBounds = absBounds,
+                    blockType = blockWithCalibratedChildren.type,
+                    canvasWidth = pageW,
+                    canvasHeight = pageH
+                )
+
+                val newLocalBounds = if (snapRes != null) {
+                    val local = blockWithCalibratedChildren.toLocalBounds(snapRes.logicalRect)
+                    val isChanged = local != blockWithCalibratedChildren.bounds
+                    if (isChanged) {
+                        calibratedCount++
+                        org.gemini.ui.forge.utils.AppLogger.i(
+                            "Calibrate",
+                            "📐 校准图元 [${block.id}]: 原局部[${block.bounds.left.toInt()}, ${block.bounds.top.toInt()}, ${block.bounds.width.toInt()}x${block.bounds.height.toInt()}] -> 新局部[${local.left.toInt()}, ${local.top.toInt()}, ${local.width.toInt()}x${local.height.toInt()}] (物理偏移: ΔX=${snapRes.deltaX.toInt()}px, ΔY=${snapRes.deltaY.toInt()}px, 尺寸变化: ΔW=${snapRes.deltaW.toInt()}px, ΔH=${snapRes.deltaH.toInt()}px)"
+                        )
+                    } else {
+                        unchangedCount++
+                        org.gemini.ui.forge.utils.AppLogger.d("Calibrate", "图元 [${block.id}] 已吻合物理边缘")
+                    }
+                    local
+                } else {
+                    unchangedCount++
+                    blockWithCalibratedChildren.bounds
+                }
+
+                val newRefImage = if (alsoCropAndBindReference) {
+                    val cropBytes = org.gemini.ui.forge.utils.SmartEdgeSnapper.cropSnappedComponent(
                         imageBytes = refBytes,
                         logicalBounds = absBounds,
-                        blockType = block.type,
                         canvasWidth = pageW,
                         canvasHeight = pageH
                     )
-
-                    val newLocalBounds = if (snapRes != null) {
-                        val local = block.toLocalBounds(snapRes.logicalRect)
-                        val isChanged = local != block.bounds
-                        if (isChanged) {
-                            calibratedCount++
-                            org.gemini.ui.forge.utils.AppLogger.i(
-                                "Calibrate",
-                                "📐 校准图元 [${block.id}]: 原局部[${block.bounds.left.toInt()}, ${block.bounds.top.toInt()}, ${block.bounds.width.toInt()}x${block.bounds.height.toInt()}] -> 新局部[${local.left.toInt()}, ${local.top.toInt()}, ${local.width.toInt()}x${local.height.toInt()}] (物理偏移: ΔX=${snapRes.deltaX.toInt()}px, ΔY=${snapRes.deltaY.toInt()}px, 尺寸变化: ΔW=${snapRes.deltaW.toInt()}px, ΔH=${snapRes.deltaH.toInt()}px)"
-                            )
-                        } else {
-                            unchangedCount++
-                            org.gemini.ui.forge.utils.AppLogger.d("Calibrate", "图元 [${block.id}] 已吻合物理边缘")
-                        }
-                        local
-                    } else {
-                        unchangedCount++
-                        block.bounds
-                    }
-
-                    val newRefImage = if (alsoCropAndBindReference) {
-                        val cropBytes = org.gemini.ui.forge.utils.SmartEdgeSnapper.cropSnappedComponent(
-                            imageBytes = refBytes,
-                            logicalBounds = absBounds,
-                            canvasWidth = pageW,
-                            canvasHeight = pageH
+                    if (cropBytes != null) {
+                        croppedCount++
+                        templateRepo.saveBlockResource(
+                            templateName = state.value.projectName,
+                            blockId = block.id,
+                            fileNamePrefix = "ref_snap",
+                            bytes = cropBytes,
+                            isPng = true
                         )
-                        if (cropBytes != null) {
-                            croppedCount++
-                            templateRepo.saveBlockResource(
-                                templateName = state.value.projectName,
-                                blockId = block.id,
-                                fileNamePrefix = "ref_snap",
-                                bytes = cropBytes,
-                                isPng = true
-                            )
-                        } else {
-                            block.referenceImage
-                        }
                     } else {
                         block.referenceImage
                     }
-
-                    block.copy(bounds = newLocalBounds, referenceImage = newRefImage)
                 } else {
-                    block
+                    block.referenceImage
                 }
 
-                val newChildren = newBlock.children.map { calibrateRecursive(it) }
-                return newBlock.copy(children = newChildren)
+                val updatedCropRect = snapRes?.logicalRect ?: blockWithCalibratedChildren.cropRect ?: blockWithCalibratedChildren.toAbsoluteBounds()
+                return blockWithCalibratedChildren.copy(
+                    bounds = newLocalBounds,
+                    cropRect = updatedCropRect,
+                    referenceImage = newRefImage
+                )
             }
 
             val newBlocks = boundPage.blocks.map { calibrateRecursive(it) }.bindParents()
@@ -761,5 +796,10 @@ class ProjectWorkspaceViewModel(
     /** 切换纯工程物理对齐模式 (为 true 时自适应隐藏提示词等 AI 概念) */
     fun togglePureEngineeringMode() {
         updateState { it.copy(isPureEngineeringMode = !it.isPureEngineeringMode) }
+    }
+
+    /** 切换工作区中间渲染区域的视图显示模式 (画布舞台 vs JSON 源码) */
+    fun setWorkspaceViewMode(mode: org.gemini.ui.forge.state.WorkspaceViewMode) {
+        updateState { it.copy(workspaceViewMode = mode) }
     }
 }

@@ -238,6 +238,7 @@ class CvContourTemplateDetector : ITemplateDetector {
                 id = blockId,
                 type = node.type,
                 bounds = localBounds,
+                cropRect = absRect,
                 children = childBlocks
             )
         }

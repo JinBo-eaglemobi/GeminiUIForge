@@ -114,18 +114,20 @@ data class UIBlock(
     fun postProcess(): UIBlock {
         // 递归处理子级
         val processedChildren = children.map { it.postProcess() }
+        // 默认将初始绝对物理坐标固化为参考区域 cropRect，彻底杜绝画布拖拽位移时的内容透镜漂移
+        val effectiveCropRect = cropRect ?: toAbsoluteBounds()
 
         return if (type == UIBlockType.REEL) {
             // 如果是转轴且包含子级，同步并入 items 属性中，同时完整保留 children 子图层树，绝不清空
             if (processedChildren.isNotEmpty()) {
                 val currentProps = properties as? BlockProperties.ReelProperties ?: BlockProperties.ReelProperties()
                 val updatedProps = currentProps.copy(items = currentProps.items + processedChildren)
-                copy(properties = updatedProps, children = processedChildren)
+                copy(properties = updatedProps, cropRect = effectiveCropRect, children = processedChildren)
             } else {
-                copy(children = processedChildren)
+                copy(cropRect = effectiveCropRect, children = processedChildren)
             }
         } else {
-            copy(children = processedChildren)
+            copy(cropRect = effectiveCropRect, children = processedChildren)
         }
     }
 

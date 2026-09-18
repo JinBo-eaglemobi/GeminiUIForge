@@ -33,6 +33,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import org.gemini.ui.forge.ui.dialog.ai.component.FormattedCodeViewer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.Res
@@ -174,8 +175,30 @@ fun CanvasArea(
             val canvasWeight =
                 if (referenceMode == ReferenceDisplayMode.SPLIT && refBitmap != null) (1f - splitWeight) else 1f
             Box(modifier = Modifier.weight(canvasWeight).fillMaxWidth().clipToBounds()) {
-                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val maxBlockRight = blocks.maxOfOrNull { it.bounds.right } ?: 0f
+                if (state.workspaceViewMode == org.gemini.ui.forge.state.WorkspaceViewMode.JSON_CODE) {
+                    val pageJson = remember(state.currentPage) {
+                        state.currentPage?.let { page ->
+                            try {
+                                val json = kotlinx.serialization.json.Json { prettyPrint = true; prettyPrintIndent = "  " }
+                                json.encodeToString(org.gemini.ui.forge.model.ui.UIPage.serializer(), page)
+                            } catch (_: Exception) {
+                                "{}"
+                            }
+                        } ?: "{}"
+                    }
+                    val targetHighlight = remember(state.selectedBlockId) {
+                        state.selectedBlockId?.let { "\"id\": \"$it\"" }
+                    }
+                    FormattedCodeViewer(
+                        code = pageJson,
+                        highlightKeyword = targetHighlight,
+                        title = "页面 Pretty JSON 源码 (点击左侧图层树联动高亮定位)",
+                        titleContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxSize().padding(12.dp)
+                    )
+                } else {
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        val maxBlockRight = blocks.maxOfOrNull { it.bounds.right } ?: 0f
                     val maxBlockBottom = blocks.maxOfOrNull { it.bounds.bottom } ?: 0f
                     val effectiveWidth = maxOf(pageWidth, maxBlockRight)
                     val effectiveHeight = maxOf(pageHeight, maxBlockBottom)
@@ -424,6 +447,7 @@ fun CanvasArea(
                     }
                 }
             }
+        }
         }
 
         if (editingGroupId != null) {

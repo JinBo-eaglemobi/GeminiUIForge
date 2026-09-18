@@ -61,6 +61,26 @@ fun CanvasFloatingControlBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 视图显示模式切换 (画布舞台 vs JSON 源码)
+            val isCodeMode = state.workspaceViewMode == org.gemini.ui.forge.state.WorkspaceViewMode.JSON_CODE
+            IconToggleButton(
+                checked = isCodeMode,
+                onCheckedChange = {
+                    val target = if (it) org.gemini.ui.forge.state.WorkspaceViewMode.JSON_CODE else org.gemini.ui.forge.state.WorkspaceViewMode.CANVAS
+                    viewModel.setWorkspaceViewMode(target)
+                },
+                modifier = Modifier.size(28.dp).tip(if (isCodeMode) "当前：JSON 源码视图 (点击切回画布舞台)" else "切换至原生 Pretty JSON 源码视图 (支持与图层树联动高亮)")
+            ) {
+                Icon(
+                    imageVector = if (isCodeMode) Icons.Default.Code else Icons.Default.Dashboard,
+                    contentDescription = "视图切换",
+                    modifier = Modifier.size(18.dp),
+                    tint = if (isCodeMode) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                )
+            }
+
+            VerticalDivider(modifier = Modifier.height(16.dp))
+
             // ==========================================
             // 1. 缩放控制区 (Zoom Controls)
             // ==========================================

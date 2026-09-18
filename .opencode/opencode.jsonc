@@ -1,0 +1,18 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "compose-hot-reload": {
+      "type": "local",
+      "enabled": false,
+      "command": [
+        "cmd.exe",
+        "/c",
+        "gradlew.bat",
+        "--no-daemon",
+        "--quiet",
+        "--console=plain",
+        ":desktopApp:hotMcpServer"
+      ]
+    }
+  }
+}

@@ -269,22 +269,24 @@ fun RenderBlock(
                 contentScale = ContentScale.FillBounds
             )
         } else if (hasRefSlice && showReelBg) {
-            // 优先级 3：尚未设置专属参考图时，依据模块当前的全局绝对坐标从全景底图中现场切片呈现
+            // 优先级 3：尚未设置专属参考图时，依据模块固态参考区域 (cropRect) 从全景底图中采样呈现
+            // ★ 二元解耦铁律：取样源点严格绑定固定的初始设计稿区域，绝不随用户在画布上的拖拽位移 (absLeft, absTop) 发生透镜漂移！
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val imgW = refBitmap.width.toFloat()
                 val imgH = refBitmap.height.toFloat()
 
-                val normL = (absLeft / pageWidth).coerceIn(0f, 1f)
-                val normT = (absTop / pageHeight).coerceIn(0f, 1f)
-                val normW = (absWidth / pageWidth).coerceIn(0f, 1f - normL)
-                val normH = (absHeight / pageHeight).coerceIn(0f, 1f - normT)
+                val sampleRect = block.cropRect ?: block.absoluteBounds
+                val normL = (sampleRect.left / pageWidth).coerceIn(0f, 1f)
+                val normT = (sampleRect.top / pageHeight).coerceIn(0f, 1f)
+                val normW = (sampleRect.width / pageWidth).coerceIn(0f, 1f - normL)
+                val normH = (sampleRect.height / pageHeight).coerceIn(0f, 1f - normT)
 
                 val srcX = (normL * imgW).toInt()
                 val srcY = (normT * imgH).toInt()
                 val srcW = max(1, (normW * imgW).toInt())
                 val srcH = max(1, (normH * imgH).toInt())
 
-                // 模块容器比例与切片比例天然完全对齐，直接满格绘制，彻底消灭黑边
+                // 模块容器比例自适应填充，无论模块在画布上被拖动到何处，内部图案永远稳定守恒！
                 drawImage(
                     image = refBitmap,
                     srcOffset = IntOffset(srcX, srcY),

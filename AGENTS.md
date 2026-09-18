@@ -66,12 +66,15 @@
   3. **兜底通道 (命令行 Gradle)**：仅当当前环境未挂载 IDEA MCP 工具、或处于纯无头 CI/CD 终端环境时，才回退执行命令行编译：`./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`；
   4. 如果修改的文件不影响项目最终代码编译（如仅修改文档、配置注释），修改完成后不触发编译验证。
 - **Compose Hot Reload 热重载运行态下的免编译极速重载规范**: **【红线规则】**
-  - **热重载活跃态识别判定**：当通过端口探测（如本地 18330 端口处于 Listen/Established 状态）、或用户告知/日志中包含 `Compose Hot Reload (1.2.0)` / `Running 'org.gemini.ui.forge.MainKt'` 时，即判定应用当前正处于 **Compose Hot Reload 热启动活跃态**；
+  - **热重载活跃态识别判定**：通过调用官方热重载 MCP 工具 `compose-hot-reload_status` 返回 `{"connected": true}`，或本地 18330 端口处于 Listen/Established 状态时，即判定应用当前正处于 **Compose Hot Reload 热启动活跃态**；
   - **免全量编译绝对禁令**：在 Hot Reload 运行期间，代码修改完成后**绝对禁止再次触发耗时的全量编译（如 `compileDesktop` 或全量 Gradle 任务）**，杜绝误杀正在运行的应用进程；
-  - **主动触发热重载 (`reload`) 铁律**：代码逻辑或 UI 结构修改完成后，AI 必须主动调用重载任务将变更注入运行中的应用：
-    1. **优先通道 (IDEA MCP 原生运行配置)**：调用 `idea_execute_run_configuration(configurationName = "reloadHot", projectPath = "<项目绝对根路径>")`（项目根目录已配备标准共享配置 `.run/reloadHot.run.xml`，直接绑定 Gradle 顶级 `reload` 任务）；
-    2. **备用命令行通道**：执行 `./gradlew reload`（实测 1~3 秒内极速完成热替换）；
-  - **轻量语法初筛保障**：热重载前可按需调用 `idea_build_project(filesToRebuild = [...])` 做毫秒级局部语法速查，确认无红线后立即执行 `reloadHot`。
+  - **官方 MCP 热重载原生触发铁律**：代码逻辑或 UI 结构修改完成后，AI **必须优先直接调用官方热重载 MCP 工具 `compose-hot-reload_reload`（或 `compose-hot-reload_await_reload`）**，在 1 秒内完成类重编译与热替换；
+  - **官方原生生命周期控制**：
+    - 查询连接与热重载状态：直接调用 `compose-hot-reload_status`；
+    - 应用程序无感重启：直接调用 `compose-hot-reload_restart`；
+    - 纯净 Compose 窗口内容审查：直接调用 `compose-hot-reload_take_screenshot`；
+    - 彻底告别外部命令行与终端进程轮询！
+  - **轻量语法初筛保障**：热重载前可按需调用 `idea_build_project(filesToRebuild = [...])` 做毫秒级局部语法速查，确认无红线后立即执行 `compose-hot-reload_reload`。
 - **执行指令超时防重杀与防中断规范 (Execution Anti-Interruption Guard)**: **【红线规则】**
   - **超时非终结原则 (Timeout != Process Termination)**：当调用 `idea_execute_run_configuration` 或终端命令由于设置的 `timeout` 窗口到期返回超时通知时，**绝对禁止盲目立即发起同名命令的第二次运行**；
   - **底层机制警示**：IDEA 接收到同名运行配置会被判定为“重新运行（Rerun）”，IDEA 会立刻向后台正在全力编译/运行的旧进程发送 `SIGTERM` 强行杀死，导致前序编译进度尽失、守护进程锁死并陷入恶性循环；

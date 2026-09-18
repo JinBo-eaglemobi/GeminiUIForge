@@ -785,14 +785,22 @@ fun LayoutPropertyContent(
                             )
                         }
 
+                        val isCompositeGroup = selectedBlock.children.isNotEmpty()
                         OutlinedButton(
                             onClick = { viewModel.calibrateSelectedBlock(alsoCropAndBind, state.activeAlignmentMode) },
-                            modifier = Modifier.fillMaxWidth().tip(if (alsoCropAndBind) "校正当前模块物理边界并切片绑定为参考图" else "仅校正当前模块的大小与物理坐标 (不切图)"),
+                            modifier = Modifier.fillMaxWidth().tip(
+                                if (isCompositeGroup) "递归对该组合内所有子图元执行物理吸附，并自动贴合父容器大小与相对原点归零 (代数守恒)"
+                                else if (alsoCropAndBind) "校正当前模块物理边界并切片绑定为参考图"
+                                else "仅校正当前模块的大小与物理坐标 (不切图)"
+                            ),
                             shape = AppShapes.small
                         ) {
                             Icon(Icons.Default.CropFree, null, Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("校准当前模块 (${state.activeAlignmentMode.shortName})")
+                            Text(
+                                if (isCompositeGroup) "校准当前组合及内部子组件 (${state.activeAlignmentMode.shortName})"
+                                else "校准当前模块 (${state.activeAlignmentMode.shortName})"
+                            )
                         }
                     }
                 }
