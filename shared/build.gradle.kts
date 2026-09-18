@@ -155,6 +155,8 @@ kotlin {
             implementation(libs.mcp.kotlin.sdk)
             implementation(libs.ktor.server.cio)
             implementation(libs.ktor.server.cors)
+            // 微软官方跨平台 ONNX Runtime 推理引擎 (用于端侧轻量 UI 目标检测)
+            implementation(libs.onnxruntime)
         }
     }
 

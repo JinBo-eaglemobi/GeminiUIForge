@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.feature
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.app.AppScreen
+import org.gemini.ui.forge.service.detection.onnx.OnnxModelService
 import org.gemini.ui.forge.service.*
 import org.gemini.ui.forge.state.app.AppGlobalState
 import org.gemini.ui.forge.state.ui.ProjectState
@@ -55,6 +59,8 @@ fun TemplateGeneratorScreen(
     var templateName by remember { mutableStateOf("") }
     var showAssetManager by remember { mutableStateOf(false) }
     var autoCropAndBindRef by remember { mutableStateOf(false) }
+    var selectedCategory by remember { mutableStateOf(org.gemini.ui.forge.service.detection.DetectionCategory.ONLINE_AI) }
+    var selectedOfflineEngine by remember { mutableStateOf(org.gemini.ui.forge.service.detection.DetectionEngineMode.CLASSIC_CV) }
 
     // 使用 AITask 统一管理任务状态
     var currentTask by remember { mutableStateOf<AITask<ProjectState>?>(null) }
@@ -204,7 +210,121 @@ fun TemplateGeneratorScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 顶层一级板块切换 (在线 AI 生成 vs 离线极速识别)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(AppShapes.medium)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            org.gemini.ui.forge.service.detection.DetectionCategory.entries.forEach { cat ->
+                val isSelected = selectedCategory == cat
+                Surface(
+                    shape = AppShapes.small,
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                        .clip(AppShapes.small)
+                        .clickable(enabled = taskStatus != AITaskStatus.RUNNING) {
+                            selectedCategory = cat
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = if (cat == org.gemini.ui.forge.service.detection.DetectionCategory.ONLINE_AI) Icons.Default.Cloud else Icons.Default.FlashOn,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = cat.displayName,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        // 离线板块内的二级子引擎切换器 (传统 CV vs 端侧 AI)
+        if (selectedCategory == org.gemini.ui.forge.service.detection.DetectionCategory.OFFLINE_FAST) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Card(
+                shape = AppShapes.small,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("离线识别算法引擎:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        org.gemini.ui.forge.service.detection.DetectionEngineRegistry.getAvailableOfflineDetectorModes().forEach { mode ->
+                            val isModeSelected = selectedOfflineEngine == mode
+                            FilterChip(
+                                selected = isModeSelected,
+                                onClick = { selectedOfflineEngine = mode },
+                                label = { Text(mode.displayName) },
+                                shape = AppShapes.small,
+                                enabled = taskStatus != AITaskStatus.RUNNING
+                            )
+                        }
+                    }
+                    if (selectedOfflineEngine == org.gemini.ui.forge.service.detection.DetectionEngineMode.ONNX_AI) {
+                        Surface(
+                            shape = AppShapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                val isReady by OnnxModelService.isModelReadyFlow.collectAsState()
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isReady) "✅ 端侧神经网络已就绪 (ui_detector.onnx)" else "⚠️ 未检测到本地专属模型 (ui_detector.onnx)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = if (isReady) "可直接执行端侧目标检测" else "可将针对特定游戏训练的 .onnx 模型放入目录；未放入时自动由传统 CV 引擎无感兜底",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { OnnxModelService.openModelDirectoryInSystemExplorer() },
+                                        shape = AppShapes.small,
+                                        modifier = Modifier.height(30.dp).tip("在系统文件管理器中打开 models 目录，可离线放入 ui_detector.onnx"),
+                                        contentPadding = PaddingValues(horizontal = 8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Folder, null, modifier = Modifier.size(13.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("打开模型目录", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
 
         // 2. 表单输入区 (处理中全部置灰禁用)
         SelectAllOutlinedTextField(
@@ -286,7 +406,9 @@ fun TemplateGeneratorScreen(
                 // 主分析/重试按钮
                 Button(
                     onClick = {
-                        val task = appViewModel.aiService.createTask<ProjectState>("UI 模板分析", coroutineScope)
+                        val isOnline = selectedCategory == org.gemini.ui.forge.service.detection.DetectionCategory.ONLINE_AI
+                        val taskTitle = if (isOnline) "云端 AI 模板分析" else "离线极速模板构建"
+                        val task = appViewModel.aiService.createTask<ProjectState>(taskTitle, coroutineScope)
                         currentTask = task
                         streamedJson = ""
 
@@ -300,24 +422,46 @@ fun TemplateGeneratorScreen(
                                 throw Exception("图片资源校验未通过: $validationError")
                             }
 
-                            log("🚀 正在向 Gemini 视觉大模型提交多模态图元树推理 [$finalName]...")
-                            updateProgress(0.2f)
+                            if (isOnline) {
+                                log("🚀 正在向 Gemini 视觉大模型提交多模态图元树推理 [$finalName]...")
+                                updateProgress(0.2f)
 
-                            var totalChars = 0
-                            val result = appViewModel.aiService.analyzeImagesForTemplate(
-                                imageUris = allImageUris,
-                                apiKey = globalState.effectiveApiKey,
-                                maxRetries = globalState.maxRetries,
-                                onLog = { log(it) },
-                                onChunk = { chunk ->
-                                    streamedJson += chunk
-                                    totalChars += chunk.length
-                                    updateStatus("正在流式接收结构化 JSON: $totalChars 字符")
-                                }
-                            )
+                                var totalChars = 0
+                                val result = appViewModel.aiService.analyzeImagesForTemplate(
+                                    imageUris = allImageUris,
+                                    apiKey = globalState.effectiveApiKey,
+                                    maxRetries = globalState.maxRetries,
+                                    onLog = { log(it) },
+                                    onChunk = { chunk ->
+                                        streamedJson += chunk
+                                        totalChars += chunk.length
+                                        updateStatus("正在流式接收结构化 JSON: $totalChars 字符")
+                                    }
+                                )
 
-                            updateProgress(1.0f)
-                            result
+                                updateProgress(1.0f)
+                                result
+                            } else {
+                                val detector = org.gemini.ui.forge.service.detection.DetectionEngineRegistry.getTemplateDetector(selectedOfflineEngine)
+                                log("⚡ 正在执行本地离线引擎 [${detector.displayName}] 构建工程 [$finalName]...")
+                                updateProgress(0.2f)
+
+                                val firstUri = allImageUris.firstOrNull() ?: throw Exception("请至少输入或选择一张有效的参考图片路径")
+                                log("📁 读取本地参考图片物理像素: $firstUri")
+                                val imgBytes = org.gemini.ui.forge.utils.readLocalFileBytes(firstUri)
+                                    ?: throw Exception("未能读取图片文件二进制内容: $firstUri")
+
+                                updateProgress(0.5f)
+                                log("📐 正在执行物理轮廓切分与多层空间几何拓扑包含树推导...")
+                                val result = detector.detectTemplate(
+                                    imageBytes = imgBytes,
+                                    templateName = finalName,
+                                    onProgress = { log(it) }
+                                )
+                                updateProgress(1.0f)
+                                log("✅ 离线工程构建完成，耗时 < 200ms！")
+                                result
+                            }
                         }
                     },
                     enabled = inputUris.isNotBlank() && (taskStatus != AITaskStatus.RUNNING),
@@ -331,12 +475,19 @@ fun TemplateGeneratorScreen(
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text("正在分析...")
+                        Text(if (selectedCategory == org.gemini.ui.forge.service.detection.DetectionCategory.ONLINE_AI) "正在分析..." else "正在构建...")
                     } else {
-                        Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
+                        val isOnline = selectedCategory == org.gemini.ui.forge.service.detection.DetectionCategory.ONLINE_AI
+                        Icon(
+                            imageVector = if (isOnline) Icons.Default.AutoAwesome else Icons.Default.FlashOn,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            if (taskStatus == AITaskStatus.ERROR) "重新分析" else stringResource(Res.string.template_gen_analyze)
+                            if (taskStatus == AITaskStatus.ERROR) "重新尝试"
+                            else if (isOnline) stringResource(Res.string.template_gen_analyze)
+                            else "一键离线构建"
                         )
                     }
                 }

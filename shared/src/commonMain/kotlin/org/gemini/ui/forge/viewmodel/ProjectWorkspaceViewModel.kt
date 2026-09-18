@@ -613,7 +613,8 @@ class ProjectWorkspaceViewModel(
      */
     fun calibrateBlocks(
         targetBlockIds: Set<String>? = null,
-        alsoCropAndBindReference: Boolean = false
+        alsoCropAndBindReference: Boolean = false,
+        engineMode: org.gemini.ui.forge.service.detection.DetectionEngineMode? = null
     ) {
         val currentPage = state.value.currentPage ?: return
         val pageRefFile = currentPage.sourceImageUri
@@ -632,26 +633,46 @@ class ProjectWorkspaceViewModel(
                 return@launch
             }
 
-            val pageW = currentPage.width
-            val pageH = currentPage.height
+            // ★ 核心铁律：强制先执行 bindParents()，打通所有嵌套子图元的父级引用链条，确保 toAbsoluteBounds() 绝对正确！
+            val boundBlocks = currentPage.blocks.bindParents()
+            val boundPage = currentPage.copy(blocks = boundBlocks)
+
+            val pageW = boundPage.width
+            val pageH = boundPage.height
+            val alignMode = engineMode ?: state.value.activeAlignmentMode
+            val aligner = org.gemini.ui.forge.service.detection.DetectionEngineRegistry.getAligner(alignMode)
             var calibratedCount = 0
+            var unchangedCount = 0
             var croppedCount = 0
 
             suspend fun calibrateRecursive(block: UIBlock): UIBlock {
                 val shouldCalibrate = targetBlockIds == null || targetBlockIds.contains(block.id)
                 val newBlock = if (shouldCalibrate) {
                     val absBounds = block.toAbsoluteBounds()
-                    val snapRes = org.gemini.ui.forge.utils.SmartEdgeSnapper.snapBounds(
+                    val snapRes = aligner.align(
                         imageBytes = refBytes,
                         logicalBounds = absBounds,
+                        blockType = block.type,
                         canvasWidth = pageW,
                         canvasHeight = pageH
                     )
 
                     val newLocalBounds = if (snapRes != null) {
-                        calibratedCount++
-                        block.toLocalBounds(snapRes.logicalRect)
+                        val local = block.toLocalBounds(snapRes.logicalRect)
+                        val isChanged = local != block.bounds
+                        if (isChanged) {
+                            calibratedCount++
+                            org.gemini.ui.forge.utils.AppLogger.i(
+                                "Calibrate",
+                                "📐 校准图元 [${block.id}]: 原局部[${block.bounds.left.toInt()}, ${block.bounds.top.toInt()}, ${block.bounds.width.toInt()}x${block.bounds.height.toInt()}] -> 新局部[${local.left.toInt()}, ${local.top.toInt()}, ${local.width.toInt()}x${local.height.toInt()}] (物理偏移: ΔX=${snapRes.deltaX.toInt()}px, ΔY=${snapRes.deltaY.toInt()}px, 尺寸变化: ΔW=${snapRes.deltaW.toInt()}px, ΔH=${snapRes.deltaH.toInt()}px)"
+                            )
+                        } else {
+                            unchangedCount++
+                            org.gemini.ui.forge.utils.AppLogger.d("Calibrate", "图元 [${block.id}] 已吻合物理边缘")
+                        }
+                        local
                     } else {
+                        unchangedCount++
                         block.bounds
                     }
 
@@ -687,8 +708,8 @@ class ProjectWorkspaceViewModel(
                 return newBlock.copy(children = newChildren)
             }
 
-            val newBlocks = currentPage.blocks.map { calibrateRecursive(it) }
-            val updatedPage = currentPage.copy(blocks = newBlocks)
+            val newBlocks = boundPage.blocks.map { calibrateRecursive(it) }.bindParents()
+            val updatedPage = boundPage.copy(blocks = newBlocks)
 
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                 updateState { s ->
@@ -699,27 +720,46 @@ class ProjectWorkspaceViewModel(
                 }
                 markDirty()
                 val summaryMsg = if (alsoCropAndBindReference) {
-                    "已校正 $calibratedCount 个模块物理坐标，并同步更新了 $croppedCount 个参考图切片"
+                    "已校准 $calibratedCount 个图元坐标 (已吻合 $unchangedCount 个)，并同步切片更新了 $croppedCount 个参考图"
                 } else {
-                    "已成功校验并校正 $calibratedCount 个模块的范围与坐标 (未切图)"
+                    "已成功校验并校准 $calibratedCount 个图元物理范围与坐标 (已吻合 $unchangedCount 个，未切图)"
                 }
                 org.gemini.ui.forge.utils.Toast.show(summaryMsg, org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
             }
         }
     }
 
-    fun calibrateSelectedBlock(alsoCropAndBindReference: Boolean = false) {
+    fun calibrateSelectedBlock(
+        alsoCropAndBindReference: Boolean = false,
+        engineMode: org.gemini.ui.forge.service.detection.DetectionEngineMode? = null
+    ) {
         val currentId = state.value.selectedBlockId ?: return
-        calibrateBlocks(setOf(currentId), alsoCropAndBindReference)
+        calibrateBlocks(setOf(currentId), alsoCropAndBindReference, engineMode)
     }
 
-    fun calibrateMultiSelectedBlocks(alsoCropAndBindReference: Boolean = false) {
+    fun calibrateMultiSelectedBlocks(
+        alsoCropAndBindReference: Boolean = false,
+        engineMode: org.gemini.ui.forge.service.detection.DetectionEngineMode? = null
+    ) {
         val ids = state.value.selectedBlockIds
         if (ids.isEmpty()) return
-        calibrateBlocks(ids, alsoCropAndBindReference)
+        calibrateBlocks(ids, alsoCropAndBindReference, engineMode)
     }
 
-    fun calibrateAllBlocks(alsoCropAndBindReference: Boolean = false) {
-        calibrateBlocks(null, alsoCropAndBindReference)
+    fun calibrateAllBlocks(
+        alsoCropAndBindReference: Boolean = false,
+        engineMode: org.gemini.ui.forge.service.detection.DetectionEngineMode? = null
+    ) {
+        calibrateBlocks(null, alsoCropAndBindReference, engineMode)
+    }
+
+    /** 切换当前的对齐引擎模式 (微观吸附 / 传统CV / 端侧AI) */
+    fun setActiveAlignmentMode(mode: org.gemini.ui.forge.service.detection.DetectionEngineMode) {
+        updateState { it.copy(activeAlignmentMode = mode) }
+    }
+
+    /** 切换纯工程物理对齐模式 (为 true 时自适应隐藏提示词等 AI 概念) */
+    fun togglePureEngineeringMode() {
+        updateState { it.copy(isPureEngineeringMode = !it.isPureEngineeringMode) }
     }
 }

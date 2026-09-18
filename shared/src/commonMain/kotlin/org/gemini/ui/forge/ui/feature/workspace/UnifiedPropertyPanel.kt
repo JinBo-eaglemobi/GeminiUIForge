@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.ui.feature.workspace.property.LayoutPropertyContent
+import org.gemini.ui.forge.ui.feature.workspace.property.component.AlignmentModeSelector
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.jetbrains.compose.resources.stringResource
@@ -119,6 +120,11 @@ fun UnifiedPropertyPanel(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                     // 多选模块批量校准 (支持可选同时切图并绑定参考图)
+                    AlignmentModeSelector(
+                        currentMode = state.activeAlignmentMode,
+                        onModeSelected = { viewModel.setActiveAlignmentMode(it) }
+                    )
+
                     var multiAlsoCrop by remember { mutableStateOf(false) }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -137,13 +143,13 @@ fun UnifiedPropertyPanel(
                     }
 
                     OutlinedButton(
-                        onClick = { viewModel.calibrateMultiSelectedBlocks(multiAlsoCrop) },
+                        onClick = { viewModel.calibrateMultiSelectedBlocks(multiAlsoCrop, state.activeAlignmentMode) },
                         modifier = Modifier.fillMaxWidth().tip(if (multiAlsoCrop) "批量校准选中模块坐标并切片绑定参考图" else "仅批量校准选中模块的范围与物理坐标 (不切图)"),
                         shape = AppShapes.medium
                     ) {
                         Icon(Icons.Default.CropFree, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("批量校准所选模块 (${state.selectedBlockIds.size}个)")
+                        Text("批量校准所选模块 (${state.selectedBlockIds.size}个, ${state.activeAlignmentMode.shortName})")
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

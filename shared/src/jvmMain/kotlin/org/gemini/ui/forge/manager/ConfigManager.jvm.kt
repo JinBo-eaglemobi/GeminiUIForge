@@ -28,17 +28,27 @@ actual open class ConfigManager {
             envFile.createNewFile()
         }
         if (!vmOptionsFile.exists()) {
-            // 动态获取当前运行的 JVM 参数，避免写死默认值
-            val runtime = ManagementFactory.getRuntimeMXBean()
-            val inputArgs = runtime.inputArguments
-            
-            val currentXmx = inputArgs.firstOrNull { it.startsWith("-Xmx") }
-                ?: "-Xmx${formatMemorySize(Runtime.getRuntime().maxMemory())}"
-            
-            val currentXms = inputArgs.firstOrNull { it.startsWith("-Xms") }
-                ?: "-Xms${formatMemorySize(Runtime.getRuntime().totalMemory())}"
-                
-            vmOptionsFile.writeText("$currentXmx\n$currentXms")
+            // 首次创建：直接写入完整的系统必需参数与推荐内存配置
+            val initialLines = org.gemini.ui.forge.utils.JvmOptionsDefaults.getFullDefaultOptions()
+            vmOptionsFile.writeText(initialLines.joinToString("\n"))
+            AppLogger.i("ConfigManager", "✨ 已自动初始化创建标准 JVM 参数配置文件: ${vmOptionsFile.absolutePath}")
+        } else {
+            // 启动自愈同步机制：扫描现有文件，若缺少任何系统必需参数（如 --enable-native-access），自动增量追加写回
+            try {
+                val existingLines = vmOptionsFile.readLines().map { it.trim() }.filter { it.isNotEmpty() }
+                val missingMandatoryArgs = org.gemini.ui.forge.utils.JvmOptionsDefaults.MANDATORY_SYSTEM_ARGS.filter { required ->
+                    existingLines.none { it.equals(required, ignoreCase = false) }
+                }
+
+                if (missingMandatoryArgs.isNotEmpty()) {
+                    val updatedLines = existingLines.toMutableList()
+                    updatedLines.addAll(missingMandatoryArgs)
+                    vmOptionsFile.writeText(updatedLines.joinToString("\n"))
+                    AppLogger.i("ConfigManager", "🔧 已自动增量自愈补齐 ${missingMandatoryArgs.size} 项缺失的系统必需 JVM 参数: ${missingMandatoryArgs.joinToString(", ")}")
+                }
+            } catch (e: Exception) {
+                AppLogger.w("ConfigManager", "检查/自愈 app.vmoptions 时发生异常: ${e.message}")
+            }
         }
     }
 

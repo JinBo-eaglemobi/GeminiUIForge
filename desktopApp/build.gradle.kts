@@ -39,10 +39,27 @@ dependencies {
     implementation(libs.compose.uiToolingPreview)
 }
 
+// 统一解析并合并全生命周期 JVM 启动参数（单一真实数据源，构建、运行、打包、热重载处处生效）
+fun resolveUnifiedJvmArgs(): List<String> {
+    val unifiedArgs = mutableListOf(
+        "--enable-native-access=ALL-UNNAMED"
+    )
+    val userHome = System.getProperty("user.home")
+    val vmOptionsFile = File(userHome, ".geminiuiforge/app.vmoptions")
+    if (vmOptionsFile.exists()) {
+        val customArgs = vmOptionsFile.readLines().map { it.trim() }.filter { it.startsWith("-") }
+        unifiedArgs.addAll(customArgs)
+    } else {
+        unifiedArgs.add("-Xmx1G")
+        unifiedArgs.add("-Xms512M")
+    }
+    return unifiedArgs.distinct()
+}
+
 compose.desktop {
     application {
         mainClass = "org.gemini.ui.forge.MainKt"
-        jvmArgs("-Xmx512M", "-Xms256M")
+        jvmArgs(*resolveUnifiedJvmArgs().toTypedArray())
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Pkg, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageName = "GeminiUIForge"
@@ -58,15 +75,8 @@ compose.desktop {
     }
 }
 
-tasks.withType<JavaExec> {
-    val userHome = System.getProperty("user.home")
-    val vmOptionsFile = File(userHome, ".geminiuiforge/app.vmoptions")
-    if (vmOptionsFile.exists()) {
-        val customArgs = vmOptionsFile.readLines().filter { line: String -> line.isNotBlank() && line.startsWith("-") }
-        jvmArgs(customArgs)
-    } else {
-        jvmArgs("-Xmx512M", "-Xms256M")
-    }
+tasks.withType<JavaExec>().configureEach {
+    jvmArgs(resolveUnifiedJvmArgs())
 
     systemProperties(
         "stdout.encoding" to "utf-8",

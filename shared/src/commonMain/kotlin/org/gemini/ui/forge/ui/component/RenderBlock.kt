@@ -43,6 +43,8 @@ import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.utils.decodeToBitmap
 import org.gemini.ui.forge.utils.shouldDim
+import org.gemini.ui.forge.utils.containsBlock
+import androidx.compose.ui.zIndex
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.max
 import kotlin.math.min
@@ -228,8 +230,11 @@ fun RenderBlock(
 
     // 6. 渲染模块容器：处理位移、大小、背景和边框
     val strokeWidth = if (isSelected) (2.5.dp / zoom).coerceIn(2.dp, 4.dp) else (1.dp / zoom)
+    val isEditingOrDescendant = state.editingGroupId != null && (block.id == state.editingGroupId || block.containsBlock(state.editingGroupId))
+    val currentZIndex = if (isEditingOrDescendant) 100f else 0f
     Box(
         modifier = Modifier
+            .zIndex(currentZIndex)
             .offset(x = currentRenderX.dp, y = currentRenderY.dp)
             .size(width = (block.bounds.width * baseScale).dp, height = (block.bounds.height * baseScale).dp)
             .clip(RoundedCornerShape(2.dp))

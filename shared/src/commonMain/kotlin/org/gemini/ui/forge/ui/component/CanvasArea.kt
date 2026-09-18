@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -374,7 +375,18 @@ fun CanvasArea(
                                     )
                                 }
                         ) {
-                            blocks.forEach { block ->
+                            val (backgroundBlocks, topBlocks) = remember(blocks, editingGroupId) {
+                                if (editingGroupId == null) {
+                                    blocks to emptyList()
+                                } else {
+                                    blocks.partition { block ->
+                                        block.id != editingGroupId && !block.containsBlock(editingGroupId)
+                                    }
+                                }
+                            }
+
+                            // 1. 先绘制底层未激活根模块
+                            backgroundBlocks.forEach { block ->
                                 RenderBlock(
                                     block = block,
                                     parentRenderX = offsetX,
@@ -388,6 +400,25 @@ fun CanvasArea(
                                     pageWidth = pageWidth,
                                     pageHeight = pageHeight
                                 )
+                            }
+
+                            // 2. 后绘制当前进入编辑的模块组链路，并通过 Modifier.zIndex(100f) 实施绝对置顶
+                            topBlocks.forEach { block ->
+                                Box(modifier = Modifier.zIndex(100f)) {
+                                    RenderBlock(
+                                        block = block,
+                                        parentRenderX = offsetX,
+                                        parentRenderY = offsetY,
+                                        parentLogicX = 0f,
+                                        parentLogicY = 0f,
+                                        baseScale = baseScale,
+                                        zoom = zoom,
+                                        state = state,
+                                        refBitmap = refBitmap,
+                                        pageWidth = pageWidth,
+                                        pageHeight = pageHeight
+                                    )
+                                }
                             }
                         }
                     }
@@ -418,7 +449,19 @@ fun CanvasArea(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onPrimary
                     )
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { viewModel.layoutEditor.normalizeGroupBoundsAndZeroOffset(editingGroupId) },
+                        modifier = Modifier.size(26.dp).tip("将父容器与子组件原点贴合，并将内部最左与最顶子组件相对坐标归零 (代数守恒)")
+                    ) {
+                        Icon(
+                            Icons.Default.CropFree,
+                            null,
+                            modifier = Modifier.size(15.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
                     VerticalDivider(
                         modifier = Modifier.height(16.dp),
                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f)

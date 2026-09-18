@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
@@ -232,6 +233,16 @@ fun HierarchyItem(
                         viewModel.onBlockDoubleClicked(block.id)
                     }
                 )
+                if (hasChildren) {
+                    DropdownMenuItem(
+                        text = { Text("原点贴合与坐标归零") },
+                        leadingIcon = { Icon(Icons.Default.CropFree, null, Modifier.size(16.dp)) },
+                        onClick = {
+                            showContextMenu = false
+                            viewModel.layoutEditor.normalizeGroupBoundsAndZeroOffset(block.id)
+                        }
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text(if (block.isVisible) "隐藏图层" else "显示图层") },
                     leadingIcon = { Icon(if (block.isVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility, null, Modifier.size(16.dp)) },

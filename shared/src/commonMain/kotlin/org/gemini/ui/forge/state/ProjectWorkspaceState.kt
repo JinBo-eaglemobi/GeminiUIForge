@@ -131,7 +131,12 @@ data class ProjectWorkspaceState(
     /** 历史记录快照 (Undo)：撤销操作栈 */
     val undoStack: List<org.gemini.ui.forge.model.history.HistoryEntry> = emptyList(),
     /** 历史记录快照 (Redo)：重做操作栈 */
-    val redoStack: List<org.gemini.ui.forge.model.history.HistoryEntry> = emptyList()
+    val redoStack: List<org.gemini.ui.forge.model.history.HistoryEntry> = emptyList(),
+
+    /** 离线几何校准：当前选用的对齐引擎模式 (微观物理吸附/传统CV/端侧AI) */
+    val activeAlignmentMode: org.gemini.ui.forge.service.detection.DetectionEngineMode = org.gemini.ui.forge.service.detection.DetectionEngineMode.BASELINE_SNAPPER,
+    /** 工作流模式：是否为纯工程物理对齐模式 (为 true 时自适应隐藏提示词等 AI 概念) */
+    val isPureEngineeringMode: Boolean = false
 ) {
     val currentPage get() = project.pages.find { it.id == selectedPageId } ?: project.pages.firstOrNull()
     val selectedBlock: UIBlock?

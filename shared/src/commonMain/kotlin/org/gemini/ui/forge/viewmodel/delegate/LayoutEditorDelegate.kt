@@ -260,6 +260,35 @@ class LayoutEditorDelegate(
         Toast.show("已粘贴模块 ${newBlock.id}", ToastType.SUCCESS)
     }
 
+    /**
+     * 对指定模块组进行容器尺寸自适应与子组件局部相对坐标归零 (代数守恒)
+     */
+    fun normalizeGroupBoundsAndZeroOffset(groupId: String) {
+        val page = getState().currentPage ?: return
+        val targetBlock = page.blocks.findBlockById(groupId) ?: return
+        if (targetBlock.children.isEmpty()) {
+            Toast.show("该模块组内无子组件，无需对齐", ToastType.INFO)
+            return
+        }
+
+        saveSnapshot("原点贴合与相对坐标归零: ${targetBlock.id}")
+        val boundBlocks = page.blocks.bindParents()
+        val boundTarget = boundBlocks.findBlockById(groupId) ?: return
+
+        val normalized = org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.normalizeContainerAndChildren(boundTarget)
+
+        updateState { s ->
+            val newPages = s.project.pages.map { p ->
+                if (p.id == page.id) {
+                    p.copy(blocks = p.blocks.updateBlockInList(groupId) { normalized }.bindParents())
+                } else p
+            }
+            s.copy(project = s.project.copy(pages = newPages))
+        }
+        markDirty()
+        Toast.show("已完成容器贴合与子组件相对原点归零", ToastType.SUCCESS)
+    }
+
     // --- AI 辅助重构 ---
 
     fun onRefineArea(

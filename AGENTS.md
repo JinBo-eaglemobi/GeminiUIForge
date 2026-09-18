@@ -34,11 +34,64 @@
 
 ## 质量与校验（红线规则）
 
-- **双轨编译校验规范（IDEA MCP 增量优先铁律）**: **【红线规则】**
-  每次代码逻辑或文件结构的改动完成后，如果修改的文件影响项目最终代码编译，**必须**立即执行桌面端编译实证校验。执行通道严格遵循双轨优先级：
-  1. **首选通道 (IntelliJ IDEA MCP 增量编译)**：若当前对话环境中挂载了 IntelliJ IDEA MCP 编译工具（`idea_build_project`），**必须强制优先调用 `idea_build_project(filesToRebuild = [...])`**（针对本次修改的文件执行增量编译），或 `idea_build_project(rebuild = false)` 进行极速校验。IDEA 内部拥有 JPS 内存级增量编译缓存与极速变化感知，通常仅需 **1 ~ 3 秒** 即可精准完成编译与语法分析，大幅提升开发反馈效率；
-  2. **兜底通道 (命令行 Gradle)**：仅当当前环境未接入 IDEA MCP 工具、或处于纯无头 CI/CD 终端环境时，才回退执行命令行编译：`./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`；
-  3. 如果修改的文件不影响项目最终代码编译（如仅修改文档、配置注释），那么在修改完成后将不再执行编译验证。
+- **IntelliJ IDEA 原生 Gradle 编译校验规范（MCP Run Configuration 优先铁律）**: **【红线规则】**
+  每次代码逻辑或文件结构的改动完成后，如果修改的文件影响项目最终代码编译，**必须**立即执行桌面端真实编译实证校验。执行通道严格遵循以下优先级：
+  1. **首选通道 (IntelliJ IDEA 原生 Gradle 任务调度)**：
+     - **底层机制与创建缘由**：IntelliJ IDEA 内置的 `idea_build_project` 仅调用 JPS 内存语法树速查，**完全不执行 Gradle 任务链，无法验证 Kotlin Multiplatform 与 Compose 编译器插件的真实编译**；而直接在外部命令行运行 `./gradlew` 在 Windows 下容易由于冷启动慢、锁冲突或 120s 终端超时而卡死。因此，最稳定、最高效的方案是通过 IntelliJ IDEA 原生支持的共享运行配置（Shared Run Configuration）由 IDEA 内部的 Gradle 后台引擎托管编译；
+     - **新项目/新 AI 自愈自建规范 (Self-Bootstrap Protocol)**：在新项目、新环境或 `.run/compileDesktop.run.xml` 不存在时，**AI 必须懂得主动探测并在根目录创建该配置文件**，严禁因文件缺失而盲目放弃或直接退回慢速命令行。标准模板如下：
+       ```xml
+       <component name="ProjectRunConfigurationManager">
+         <configuration default="false" name="compileDesktop" type="GradleRunConfiguration" factoryName="Gradle">
+           <ExternalSystemSettings>
+             <option name="executionName" />
+             <option name="externalProjectPath" value="$PROJECT_DIR$" />
+             <option name="externalSystemIdString" value="GRADLE" />
+             <option name="scriptParameters" value="" />
+             <option name="taskDescriptions"><list /></option>
+             <option name="taskNames">
+               <list>
+                 <option value=":shared:compileKotlinJvm" />
+                 <option value=":desktopApp:compileKotlin" />
+               </list>
+             </option>
+             <option name="vmOptions" />
+           </ExternalSystemSettings>
+           <ExternalSystemDebugServerProcess>true</ExternalSystemDebugServerProcess>
+           <ExternalSystemReRunFailedGeneralTasks>true</ExternalSystemReRunFailedGeneralTasks>
+         </configuration>
+       </component>
+       ```
+     - **标准调用范式**：若当前对话环境中挂载了 IntelliJ IDEA MCP 工具，**必须强制优先调用 `idea_execute_run_configuration(configurationName = "compileDesktop", projectPath = "<项目绝对根路径>", timeout = 180000, waitForExit = true)`**。单次改动仅需执行一次完整编译，具备完整的 Compose 编译器插件校验、极速增量缓存与 Configuration Cache 复用，以 `exitCode: 0` 作为桌面端真实编译通过的唯一终审凭证；
+  2. **快速语法初筛 (辅助通道)**：可按需调用 `idea_build_project(filesToRebuild = [...])` 做毫秒级语法与局部引用初步速查，但**不能作为编译通过的唯一终审依据**，最终交付必须由 `compileDesktop` 实证通过；
+  3. **兜底通道 (命令行 Gradle)**：仅当当前环境未挂载 IDEA MCP 工具、或处于纯无头 CI/CD 终端环境时，才回退执行命令行编译：`./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`；
+  4. 如果修改的文件不影响项目最终代码编译（如仅修改文档、配置注释），修改完成后不触发编译验证。
+- **Compose Hot Reload 热重载运行态下的免编译极速重载规范**: **【红线规则】**
+  - **热重载活跃态识别判定**：当通过端口探测（如本地 18330 端口处于 Listen/Established 状态）、或用户告知/日志中包含 `Compose Hot Reload (1.2.0)` / `Running 'org.gemini.ui.forge.MainKt'` 时，即判定应用当前正处于 **Compose Hot Reload 热启动活跃态**；
+  - **免全量编译绝对禁令**：在 Hot Reload 运行期间，代码修改完成后**绝对禁止再次触发耗时的全量编译（如 `compileDesktop` 或全量 Gradle 任务）**，杜绝误杀正在运行的应用进程；
+  - **主动触发热重载 (`reload`) 铁律**：代码逻辑或 UI 结构修改完成后，AI 必须主动调用重载任务将变更注入运行中的应用：
+    1. **优先通道 (IDEA MCP 原生运行配置)**：调用 `idea_execute_run_configuration(configurationName = "reloadHot", projectPath = "<项目绝对根路径>")`（项目根目录已配备标准共享配置 `.run/reloadHot.run.xml`，直接绑定 Gradle 顶级 `reload` 任务）；
+    2. **备用命令行通道**：执行 `./gradlew reload`（实测 1~3 秒内极速完成热替换）；
+  - **轻量语法初筛保障**：热重载前可按需调用 `idea_build_project(filesToRebuild = [...])` 做毫秒级局部语法速查，确认无红线后立即执行 `reloadHot`。
+- **执行指令超时防重杀与防中断规范 (Execution Anti-Interruption Guard)**: **【红线规则】**
+  - **超时非终结原则 (Timeout != Process Termination)**：当调用 `idea_execute_run_configuration` 或终端命令由于设置的 `timeout` 窗口到期返回超时通知时，**绝对禁止盲目立即发起同名命令的第二次运行**；
+  - **底层机制警示**：IDEA 接收到同名运行配置会被判定为“重新运行（Rerun）”，IDEA 会立刻向后台正在全力编译/运行的旧进程发送 `SIGTERM` 强行杀死，导致前序编译进度尽失、守护进程锁死并陷入恶性循环；
+  - **后台活跃态巡检铁律 (Active Process Inspection)**：一旦触发超时，AI 必须优先通过 `Get-Process`、CPU 占用监控或读取输出临时日志（`D:\WorkSpace\Idea\.IntelliJIdea\system\tmp\ij_run__*.log`）的最后追加行，物理检查上一次调用的命令是否仍在后台正常全力运行；
+  - **进程活跃挂起等待**：若后台进程仍在活跃执行，AI 必须**挂起继续等待其自然收口，绝对严禁发起新调用**；
+  - **僵死判定特权**：只有当确凿探测到进程彻底死锁（CPU 长期为 0、无任何日志输出、端口完全无响应的僵尸进程），才允许执行显式终止（如 `./gradlew --stop`），在旧进程完全清除后方可重新发起执行。**在执行编译构建命令的情况下，绝对严禁在命令执行中途发起第二次编译调用！**
+- **三网 MCP 协同作战与阶梯调用优先级规范 (Triple-MCP Hierarchical Pipeline)**: **【红线规则】**
+  - **生效触发门禁**：在执行任何开发与调试任务前，AI 必须进行多通道状态感知与自启动调度；
+  - **前置 hotMcpServer 活体检测与自启动铁律**：执行前若检测到 Compose Hot Reload 官方 MCP 服务未运行，AI **必须主动调用 `.run/hotMcpServer.run.xml`（由 IDEA 后台托管拉起，`waitForExit = false`）** 或执行 `./gradlew --no-daemon --quiet --console=plain :desktopApp:hotMcpServer` 自动拉起；
+  - **严格阶梯调用优先级铁律（代码/运行层优先，业务视觉层后置）**：
+    1. **第一梯队（最高优先级）：IntelliJ IDEA 研发级 MCP (`idea_*`)**：专职于代码语义树分析、文件精准检索、语法速查与 Gradle 运行配置托管；
+    2. **第二梯队：Compose Hot Reload 官方 MCP (`ComposeHotMcpServer`)**：专职于代码层面的热重载触发、运行时重载收口监听与官方热状态探针；
+    3. **第三梯队（程序与视觉后置）：GeminiUIForge 业务级 MCP (`gemini-ui-forge_*`, 18330)**：**【门禁铁律】仅当涉及到程序运行态的视觉效果或图元业务时才调用**！用于现场截取真实桌面窗口（`screenshot_window`）、读取图元 bounds 与 1:1 热力图误差度量。底层代码修改与启动绝对严禁越级直接调业务 MCP；
+  - **激活必提示铁律 (Mandatory Activation Banner)**：一旦判定多通道就绪并激活接管时，AI **必须在向用户输出的第一条消息首行打印显式文字横幅提示**：
+    > 🔥 **[Forge-Loop 专属三网 MCP 自主智能体已激活]**  
+    > ⚡ 已检测到 IntelliJ IDEA MCP、Hot Reload MCP 与 GeminiUIForge 业务 MCP 全链路在线！  
+    > 🚀 阶梯闭环体系全面接管：代码/热重载优先 $\rightarrow$ 业务视觉后置 $\rightarrow$ 实机自审查 $\rightarrow$ 3次熔断保护。  
+  - **无人值守闭环流程**：AI 自主完成需求分析 $\rightarrow$ 自主编码 $\rightarrow$ 毫秒级热重载注入 (`reloadHot`) $\rightarrow$ 实机窗口截图自审查 (`gemini-ui-forge_screenshot_window`) $\rightarrow$ 图元 bounds 与热力图误差度量 (`gemini-ui-forge_compare_with_reference`)，**全程无需人工一步步参与验证、截图确认或说明进度**；遇到底层非 Compose 变更自动重启应用接管；
+  - **动态扩展 MCP 工具自我进化能力**：当遇到程序现有业务 MCP 无法满足的操作时，AI 具备**自主在 `shared/src/commonMain/kotlin/org/gemini/ui/forge/service/mcp/tools/` 编写并注册全新自定义 MCP Tool 的自我扩展能力**，通过热重载或重启注入后直接调用新 Tool；
+  - **3 次失败严格物理熔断 (Circuit Breaker)**：单一问题连续循环修复超 3 次仍未成功，**立即强制硬性物理熔断停止**；深度复盘前 3 次尝试的瓶颈与底层技术矛盾，给出 2~3 个替代方案，并弹出决策卡片向用户移交最终裁决权。
 - **校验阶段仅校验桌面版（JVM 优先铁律）**: **【红线规则】** 自动化构建与闭环验证阶段**一律且仅执行桌面端 (JVM) 编译校验**。其他平台（Web / Android / iOS）全部交由手动按需校验，严禁在日常迭代后自动触发耗时冗长的多端全量编译，最大化提升开发反馈速度。
 - **物理校验优先 (Physical Check First)**: **【红线规则】** 外部脚本或工具修改文件后，IntelliJ IDEA 的编辑器可能会由于内存缓冲区机制（VFS 缓存）而显示未更新的视图。**切勿单凭编辑器的视觉表现来判断修改成败**。必须始终通过原生 `git diff` 或 `Get-Content` / `cat` 物理读取作为落盘的唯一铁证。若发现 IDE 刷新滞后，可右键文件选择 `Reload from Disk`，或利用 `Synchronize` 和 `ReloadFromFile` 的 IDE Action。
 - **破坏性文件与数据清理强制二次确认 (Mandatory Confirmation for Destructive Actions)**: **【红线规则】** 严禁在任何 UI 交互或按钮逻辑中编写“点击后未经确认直接静默物理删除/清空本地磁盘文件或核心数据”的代码。任何涉及物理删除文件、清空资产历史库、删除项目模板或破坏性重置数据库的操作，**必须强制弹出带有清晰后果警示说明的二次确认弹窗（如 `AppConfirmDialog`）**，且确认操作必须使用警示样式（`isDestructive = true`），只有经用户在弹窗中显式确认授权后方可调用底层物理清理！

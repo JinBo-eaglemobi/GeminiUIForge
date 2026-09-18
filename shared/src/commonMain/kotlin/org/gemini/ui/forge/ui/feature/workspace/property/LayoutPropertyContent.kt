@@ -37,6 +37,7 @@ import androidx.compose.ui.geometry.Offset
 import org.gemini.ui.forge.ui.feature.workspace.BlockSpecificProperties
 import org.gemini.ui.forge.ui.feature.workspace.CollapsibleSection
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.ui.feature.workspace.property.component.AlignmentModeSelector
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.ResourceBindingValidator
 import org.gemini.ui.forge.utils.Toast
@@ -184,28 +185,100 @@ fun LayoutPropertyContent(
                     }
                 }
 
-                CollapsibleSection(
-                    title = "AI 辅助高级功能",
-                    expanded = "AI 辅助高级功能" !in collapsedSet,
-                    onToggle = { viewModel.toggleSectionCollapsed("global", "AI 辅助高级功能", !it) }
+                // 页面工作流模式切换卡片 (AI 辅助模式 vs 纯工程物理模式)
+                Card(
+                    shape = AppShapes.small,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    // AI 辅助全局功能
-                    Button(
-                        onClick = { viewModel.showVisualRefine(null) },
-                        modifier = Modifier.fillMaxWidth().tip("基于 AI 视觉识别重构整个页面的布局结构")
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.AutoFixHigh, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("全局区域重塑")
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("纯工程物理模式", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (state.isPureEngineeringMode) "已隐藏 AI 提示词与生图功能，专注于几何尺寸与资源绑定" else "启用 AI 提示词与生图辅助功能",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = state.isPureEngineeringMode,
+                            onCheckedChange = { viewModel.togglePureEngineeringMode() },
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+
+                CollapsibleSection(
+                    title = if (state.isPureEngineeringMode) "工程物理高级功能" else "AI 辅助高级功能",
+                    expanded = (if (state.isPureEngineeringMode) "工程物理高级功能" else "AI 辅助高级功能") !in collapsedSet,
+                    onToggle = { viewModel.toggleSectionCollapsed("global", if (state.isPureEngineeringMode) "工程物理高级功能" else "AI 辅助高级功能", !it) }
+                ) {
+                    if (!state.isPureEngineeringMode) {
+                        // AI 辅助全局功能 (纯工程模式下自适应隐藏)
+                        Button(
+                            onClick = { viewModel.showVisualRefine(null) },
+                            modifier = Modifier.fillMaxWidth().tip("基于 AI 视觉识别重构整个页面的布局结构")
+                        ) {
+                            Icon(Icons.Default.AutoFixHigh, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("全局区域重塑")
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.updateState { it.copy(showBatchGenDialog = true) } },
+                            modifier = Modifier.fillMaxWidth().tip("为页面中所有缺失资源的模块自动生成资源图")
+                        ) {
+                            Icon(Icons.Default.AutoAwesomeMotion, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("一键批量生成")
+                        }
+
+                        Spacer(Modifier.height(6.dp))
                     }
 
-                    OutlinedButton(
-                        onClick = { viewModel.updateState { it.copy(showBatchGenDialog = true) } },
-                        modifier = Modifier.fillMaxWidth().tip("为页面中所有缺失资源的模块自动生成资源图")
+                    // 最初界面展示：全页面所有模块智能吸附校准卡片
+                    var globalAlsoCrop by remember { mutableStateOf(false) }
+                    Card(
+                        shape = AppShapes.small,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.AutoAwesomeMotion, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("一键批量生成")
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AlignmentModeSelector(
+                                currentMode = state.activeAlignmentMode,
+                                onModeSelected = { viewModel.setActiveAlignmentMode(it) }
+                            )
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().clip(AppShapes.small).clickable { globalAlsoCrop = !globalAlsoCrop }
+                            ) {
+                                Checkbox(
+                                    checked = globalAlsoCrop,
+                                    onCheckedChange = { globalAlsoCrop = it },
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "同时切片并绑定为各模块参考图",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+
+                            Button(
+                                onClick = { viewModel.calibrateAllBlocks(globalAlsoCrop, state.activeAlignmentMode) },
+                                modifier = Modifier.fillMaxWidth().tip(if (globalAlsoCrop) "一键校准全页面所有模块物理坐标，并同步从原图裁切绑定参考图" else "一键校准全页面所有模块的物理范围与坐标 (不切图)"),
+                                shape = AppShapes.medium
+                            ) {
+                                Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("校准全页面所有模块 (${state.activeAlignmentMode.shortName})")
+                            }
+                        }
                     }
                 }
             } ?: Text("请选择模块", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -372,7 +445,10 @@ fun LayoutPropertyContent(
                 ) {
                     Icon(Icons.Default.Tune, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(Res.string.action_adjust_bounds_prompt), style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        if (state.isPureEngineeringMode) "调整物理尺寸与视口" else stringResource(Res.string.action_adjust_bounds_prompt),
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
 
                 if (showRefineDialog) {
@@ -630,41 +706,53 @@ fun LayoutPropertyContent(
             }
 
             CollapsibleSection(
-                title = "高级与破坏性操作",
-                expanded = "高级与破坏性操作" !in blockCollapsedSet,
-                onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, "高级与破坏性操作", !it) }
+                title = if (state.isPureEngineeringMode) "工程物理与破坏性操作" else "高级与破坏性操作",
+                expanded = (if (state.isPureEngineeringMode) "工程物理与破坏性操作" else "高级与破坏性操作") !in blockCollapsedSet,
+                onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, if (state.isPureEngineeringMode) "工程物理与破坏性操作" else "高级与破坏性操作", !it) }
             ) {
-                // 1. AI 视觉工作室（零门槛直接打开，支持从零创建新图或基于参考图以图生图）
-                Button(
-                    onClick = { showImg2ImgStudioDialog = true },
-                    modifier = Modifier.fillMaxWidth().height(42.dp).tip("打开 AI 视觉工作室"),
-                    shape = AppShapes.medium,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    enabled = !state.isGenerating
-                ) {
-                    Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("AI 视觉工作室", style = MaterialTheme.typography.labelMedium)
-                }
-
-                // 2. 参考区域与 AI 结构重塑
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { viewModel.showReferenceArea(selectedBlock.id) },
-                        modifier = Modifier.weight(1f).tip("从原图中截取局部区域作为该模块的 AI 生成参考图")
+                if (!state.isPureEngineeringMode) {
+                    // 1. AI 视觉工作室（零门槛直接打开，支持从零创建新图或基于参考图以图生图）
+                    Button(
+                        onClick = { showImg2ImgStudioDialog = true },
+                        modifier = Modifier.fillMaxWidth().height(42.dp).tip("打开 AI 视觉工作室"),
+                        shape = AppShapes.medium,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        enabled = !state.isGenerating
                     ) {
-                        Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("设置参考区域")
+                        Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("AI 视觉工作室", style = MaterialTheme.typography.labelMedium)
                     }
 
+                    // 2. 参考区域与 AI 结构重塑
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { viewModel.showReferenceArea(selectedBlock.id) },
+                            modifier = Modifier.weight(1f).tip("从原图中截取局部区域作为该模块的 AI 生成参考图")
+                        ) {
+                            Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("设置参考区域")
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.showVisualRefine(selectedBlock.id) },
+                            modifier = Modifier.weight(1f).tip("通过 AI 自动分析并重塑该模块的内部层级结构")
+                        ) {
+                            Icon(Icons.Default.Tune, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("区域重塑")
+                        }
+                    }
+                } else {
+                    // 纯工程模式下仅保留设置参考切片区域
                     OutlinedButton(
-                        onClick = { viewModel.showVisualRefine(selectedBlock.id) },
-                        modifier = Modifier.weight(1f).tip("通过 AI 自动分析并重塑该模块的内部层级结构")
+                        onClick = { viewModel.showReferenceArea(selectedBlock.id) },
+                        modifier = Modifier.fillMaxWidth().tip("从原图中截取局部区域作为该模块的独立参考底图")
                     ) {
-                        Icon(Icons.Default.Tune, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("区域重塑")
+                        Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("截取/设置参考切片区域")
                     }
                 }
 
@@ -675,7 +763,12 @@ fun LayoutPropertyContent(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AlignmentModeSelector(
+                            currentMode = state.activeAlignmentMode,
+                            onModeSelected = { viewModel.setActiveAlignmentMode(it) }
+                        )
+
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth().clickable { alsoCropAndBind = !alsoCropAndBind }
@@ -692,26 +785,14 @@ fun LayoutPropertyContent(
                             )
                         }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(
-                                onClick = { viewModel.calibrateSelectedBlock(alsoCropAndBind) },
-                                modifier = Modifier.weight(1f).tip(if (alsoCropAndBind) "校正当前模块物理边界并切片绑定为参考图" else "仅校正当前模块的大小与物理坐标 (不切图)"),
-                                shape = AppShapes.small
-                            ) {
-                                Icon(Icons.Default.CropFree, null, Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("校准当前模块")
-                            }
-
-                            OutlinedButton(
-                                onClick = { viewModel.calibrateAllBlocks(alsoCropAndBind) },
-                                modifier = Modifier.weight(1f).tip(if (alsoCropAndBind) "一键校准全页面所有模块坐标并全量切片绑定参考图" else "一键校正全页面所有模块的物理坐标范围 (不切图)"),
-                                shape = AppShapes.small
-                            ) {
-                                Icon(Icons.Default.AutoFixHigh, null, Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("全量校准")
-                            }
+                        OutlinedButton(
+                            onClick = { viewModel.calibrateSelectedBlock(alsoCropAndBind, state.activeAlignmentMode) },
+                            modifier = Modifier.fillMaxWidth().tip(if (alsoCropAndBind) "校正当前模块物理边界并切片绑定为参考图" else "仅校正当前模块的大小与物理坐标 (不切图)"),
+                            shape = AppShapes.small
+                        ) {
+                            Icon(Icons.Default.CropFree, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("校准当前模块 (${state.activeAlignmentMode.shortName})")
                         }
                     }
                 }
