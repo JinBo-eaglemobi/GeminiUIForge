@@ -295,6 +295,12 @@ class ProjectWorkspaceViewModel(
         saveWorkspaceConfig()
     }
 
+    /** 切换所有从参考图切割显示的资源切片隐藏/显示 */
+    fun toggleHideReferenceSlices() {
+        _state.update { it.copy(isHideReferenceSlices = !it.isHideReferenceSlices) }
+        saveWorkspaceConfig()
+    }
+
     /** 切换参考图模式 */
     fun updateReferenceMode(mode: org.gemini.ui.forge.model.app.ReferenceDisplayMode) {
         _state.update { it.copy(referenceMode = mode) }
@@ -360,9 +366,21 @@ class ProjectWorkspaceViewModel(
     fun updateBlockType(blockId: String, type: UIBlockType) {
         historyManager.saveSnapshot("修改模块类型: $type")
         _state.update { currentState ->
+            val currentPage = currentState.currentPage
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) {
-                    page.copy(blocks = page.blocks.updateBlockInList(blockId) { it.copy(type = type) })
+                    page.copy(blocks = page.blocks.updateBlockInList(blockId) { block ->
+                        if (type == UIBlockType.BACKGROUND && block.parent == null && currentPage != null) {
+                            // ★ 当根模块切换为背景类型时，自动将尺寸贴合为全屏画布大小
+                            block.copy(
+                                type = type,
+                                bounds = SerialRect(0f, 0f, currentPage.width, currentPage.height),
+                                cropRect = block.cropRect ?: SerialRect(0f, 0f, currentPage.width, currentPage.height)
+                            )
+                        } else {
+                            block.copy(type = type)
+                        }
+                    })
                 } else page
             }
             currentState.copy(project = currentState.project.copy(pages = updatedPages))

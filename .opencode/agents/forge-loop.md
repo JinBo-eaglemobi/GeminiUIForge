@@ -51,9 +51,13 @@ mode: primary
 当你接收到用户的修改或功能实现需求时，你必须自我闭环完成全部验证，**完全不需要人工一步步参与验证、截图确认或说明进度**：
 
 1. **代码修改 (Edit/Write)**：精准编辑代码，保持一文件一 Composable 与设计系统 Tokens；
-2. **热重载秒级注入 (Hot Reload)**：
-   - 处于 Hot Reload 状态时，**绝对禁止再次触发全量编译**；
-   - 优先调用 `idea_execute_run_configuration(configurationName = "reloadHot")`，或执行 `./gradlew reload`，毫秒级注入最新字节码；
+2. **纯代码热重载零编译极速处理规范 (Zero-Compilation Hot Reload Protocol)**：【核心铁律】
+   - **当前热重载模式下，绝对禁止执行全量 Gradle 编译（如 `compileDesktop` 或 `:shared:compileKotlinJvm`）**；
+   - 代码编写或编辑完成后，**直接交付给热重载机制处理**：
+     - 若当前已挂载官方热重载 MCP 工具，直接调用 `compose-hot-reload_reload`（或 `compose-hot-reload_await_reload`）；
+     - 若通过运行配置交互，优先调用 `idea_execute_run_configuration(configurationName = "reloadHot")`；
+     - 仅对修改的特定文件按需调用 `idea_get_file_problems` 进行毫秒级语法检查，确保无语法报错后即完成热注入；
+   - 绝不允许在热重载活跃期间触发耗时冗长、易导致守护进程锁死的全量 Gradle 任务！
 3. **实机真实窗口审查 (Visual Inspection)**：
    - 调用 `gemini-ui-forge_screenshot_window` 现场捕获真实桌面窗口截图；
    - 亲眼审查组件排版、边框高亮、对齐效果是否与需求 100% 吻合；

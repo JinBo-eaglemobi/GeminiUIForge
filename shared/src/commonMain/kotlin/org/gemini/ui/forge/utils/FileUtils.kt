@@ -1,5 +1,7 @@
 package org.gemini.ui.forge.utils
 
+import org.gemini.ui.forge.ui.component.ToastType
+
 /**
  * 获取本地文件大小 (字节)
  */
@@ -107,3 +109,29 @@ fun formatSize(bytes: Int): String {
 }
 
 expect suspend fun streamLocalFileLines(filePath: String, onChunk: (List<String>) -> Unit)
+
+/**
+ * 跨平台安全在系统文件管理器中定位文件或其父目录。
+ * 1. 若目标路径存在（文件或目录），直接在资源管理器中打开并高亮选中；
+ * 2. 若目标不存在，尝试提取其父目录；若父目录存在则打开父目录；
+ * 3. 若均不存在，弹出 Toast 友好提示，防止静默无响应。
+ */
+suspend fun openFileOrParentInExplorer(path: String) {
+    if (path.isBlank()) {
+        Toast.show("路径为空，无法打开目录", ToastType.INFO)
+        return
+    }
+    val cleanPath = path.replace("\\", "/")
+    if (isFileExists(cleanPath)) {
+        org.gemini.ui.forge.getPlatform().openInFileExplorer(cleanPath)
+        return
+    }
+    val parent = cleanPath.substringBeforeLast('/', "")
+    if (parent.isNotBlank() && isFileExists(parent)) {
+        org.gemini.ui.forge.getPlatform().openInFileExplorer(parent)
+        Toast.show("原文件已不存在，已为您打开所在目录", ToastType.INFO)
+    } else {
+        Toast.show("文件或目录在本地已不存在", ToastType.ERROR)
+    }
+}
+

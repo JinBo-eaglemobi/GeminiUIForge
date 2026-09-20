@@ -56,13 +56,15 @@ sealed class BlockProperties {
     ) : BlockProperties()
 
     /**
-     * 普通视图或容器组件的属性配置。
+     * 视图容器组件的属性配置。
      *
      * @property backgroundColor 视图的背景颜色，通常采用十六进制字符串格式（例如："#FFFFFF"）。
+     * @property clipOverflow 是否裁剪/隐藏超出视图范围的子内容（overflow: hidden）。默认 false 为显示溢出。
      */
     @Serializable
     data class ViewProperties(
-        val backgroundColor: String = ""
+        val backgroundColor: String = "",
+        val clipOverflow: Boolean = false
     ) : BlockProperties()
 
     /**

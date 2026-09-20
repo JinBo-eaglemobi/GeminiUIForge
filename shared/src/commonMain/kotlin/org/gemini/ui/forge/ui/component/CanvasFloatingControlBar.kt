@@ -62,6 +62,7 @@ fun CanvasFloatingControlBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 视图显示模式切换 (画布舞台 vs JSON 源码)
+            // ★ 图标纠正规范：非代码界面显示 <> (Icons.Default.Code)，进入代码界面后显示画布图标 (Icons.Default.Dashboard)
             val isCodeMode = state.workspaceViewMode == org.gemini.ui.forge.state.WorkspaceViewMode.JSON_CODE
             IconToggleButton(
                 checked = isCodeMode,
@@ -72,7 +73,7 @@ fun CanvasFloatingControlBar(
                 modifier = Modifier.size(28.dp).tip(if (isCodeMode) "当前：JSON 源码视图 (点击切回画布舞台)" else "切换至原生 Pretty JSON 源码视图 (支持与图层树联动高亮)")
             ) {
                 Icon(
-                    imageVector = if (isCodeMode) Icons.Default.Code else Icons.Default.Dashboard,
+                    imageVector = if (isCodeMode) Icons.Default.Dashboard else Icons.Default.Code,
                     contentDescription = "视图切换",
                     modifier = Modifier.size(18.dp),
                     tint = if (isCodeMode) MaterialTheme.colorScheme.primary else LocalContentColor.current
@@ -82,12 +83,13 @@ fun CanvasFloatingControlBar(
             VerticalDivider(modifier = Modifier.height(16.dp))
 
             // ==========================================
-            // 1. 缩放控制区 (Zoom Controls)
+            // 1. 缩放控制区 (Zoom Controls，进入代码界面后禁用)
             // ==========================================
 
             // 缩小按钮 (-20%)
             IconButton(
                 onClick = { updateZoom(zoom - 0.2f, centerOffset) },
+                enabled = !isCodeMode,
                 modifier = Modifier.size(28.dp).tip("缩小视图")
             ) {
                 Icon(Icons.Default.Remove, "缩小", modifier = Modifier.size(16.dp))
@@ -101,13 +103,15 @@ fun CanvasFloatingControlBar(
                 Text(
                     text = "${(zoom * 100).roundToInt()}%",
                     style = MaterialTheme.typography.labelMedium,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    color = if (!isCodeMode) LocalContentColor.current else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                 )
             }
 
             // 放大按钮 (+20%)
             IconButton(
                 onClick = { updateZoom(zoom + 0.2f, centerOffset) },
+                enabled = !isCodeMode,
                 modifier = Modifier.size(28.dp).tip("放大视图")
             ) {
                 Icon(Icons.Default.Add, "放大", modifier = Modifier.size(16.dp))
@@ -116,10 +120,11 @@ fun CanvasFloatingControlBar(
             VerticalDivider(modifier = Modifier.height(16.dp))
 
             // ==========================================
-            // 2. 视角复位区 (Reset View)
+            // 2. 视角复位区 (Reset View，进入代码界面后禁用)
             // ==========================================
             IconButton(
                 onClick = onResetZoom,
+                enabled = !isCodeMode,
                 modifier = Modifier.size(28.dp).tip("重置缩放并居中")
             ) {
                 Icon(Icons.Default.Refresh, "复位画布", modifier = Modifier.size(18.dp))
@@ -128,13 +133,14 @@ fun CanvasFloatingControlBar(
             VerticalDivider(modifier = Modifier.height(16.dp))
 
             // ==========================================
-            // 3. 骨架网格与辅助线开关 (Wireframe Grid Toggle 二合一合并版)
+            // 3. 骨架网格与辅助线开关 (Wireframe Grid Toggle，进入代码界面后禁用)
             // 默认开启（高亮 GridOn），点击后一键隐藏骨架色块与边框线，进入 100% 纯净预览
             // ==========================================
             val isWireframeOn = !(state.isVisualMode && state.isHideOutlines)
             IconToggleButton(
                 checked = isWireframeOn,
                 onCheckedChange = { viewModel.toggleWireframe() },
+                enabled = !isCodeMode,
                 modifier = Modifier.size(28.dp).tip(
                     if (isWireframeOn) "骨架网格已开启，点击进入纯净预览模式"
                     else "当前为纯净预览，点击显示骨架网格与边框"
@@ -144,18 +150,45 @@ fun CanvasFloatingControlBar(
                     imageVector = if (isWireframeOn) Icons.Default.GridOn else Icons.Default.GridOff,
                     contentDescription = "骨架网格与辅助线",
                     modifier = Modifier.size(18.dp),
-                    tint = if (isWireframeOn) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                    tint = if (!isCodeMode && isWireframeOn) MaterialTheme.colorScheme.primary 
+                           else if (!isCodeMode) LocalContentColor.current
+                           else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                 )
             }
 
             // ==========================================
-            // 4. 参考图控制区 (Reference Image Controls)
-            // 仅当存在参考图 (referenceUri != null) 时才渲染此区域
+            // 4. 固定常驻功能：参考图切片预览隐藏/显示开关 (Hide/Show Reference Slices)
+            // 控制所有尚未绑定独立资产的模块从参考底图裁剪显示的临时切片
+            // ==========================================
+            val isSliceVisible = !state.isHideReferenceSlices
+            IconToggleButton(
+                checked = isSliceVisible,
+                onCheckedChange = { viewModel.toggleHideReferenceSlices() },
+                enabled = !isCodeMode,
+                modifier = Modifier.size(28.dp).tip(
+                    if (isSliceVisible) "原图切片预览已显示 (点击隐藏全部临时切片)"
+                    else "原图切片预览已隐藏 (点击显示未绑定模块的原图切片)"
+                )
+            ) {
+                Icon(
+                    imageVector = if (isSliceVisible) Icons.Default.ContentCut else Icons.Default.HideImage,
+                    contentDescription = "参考图切割切片开关",
+                    modifier = Modifier.size(18.dp),
+                    tint = if (!isCodeMode && isSliceVisible) MaterialTheme.colorScheme.primary
+                           else if (!isCodeMode) LocalContentColor.current
+                           else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                )
+            }
+
+            // ==========================================
+            // 5. 参考图控制区 (Reference Image Controls)
+            // 仅当存在参考图 (referenceUri != null) 时渲染此区域，且进入代码界面后禁用
             // ==========================================
             if (referenceUri != null) {
                 VerticalDivider(modifier = Modifier.height(16.dp))
 
                 // 参考图全局开关：判断当前是否是非隐藏状态
+                // ★ 区分优化：使用 Map / ImageSearch 图标替代泛滥的眼睛图标，避免混淆
                 val isRefEnabled = state.referenceMode != ReferenceDisplayMode.HIDDEN
                 IconToggleButton(
                     checked = isRefEnabled,
@@ -163,58 +196,71 @@ fun CanvasFloatingControlBar(
                         // 开启时默认进入分屏模式，关闭时设为隐藏
                         viewModel.updateReferenceMode(if (it) ReferenceDisplayMode.SPLIT else ReferenceDisplayMode.HIDDEN)
                     },
-                    modifier = Modifier.size(28.dp).tip("显示/隐藏参考图")
+                    enabled = !isCodeMode,
+                    modifier = Modifier.size(28.dp).tip(if (isRefEnabled) "关闭参考底图对比" else "开启参考底图对比")
                 ) {
                     Icon(
-                        imageVector = if (isRefEnabled) Icons.Default.Image else Icons.Default.VisibilityOff,
-                        contentDescription = "切换参考图",
+                        imageVector = if (isRefEnabled) Icons.Default.Map else Icons.Default.ImageSearch,
+                        contentDescription = "切换参考底图对比",
                         modifier = Modifier.size(18.dp),
-                        tint = if (isRefEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (!isCodeMode && isRefEnabled) MaterialTheme.colorScheme.primary 
+                               else if (!isCodeMode) MaterialTheme.colorScheme.onSurfaceVariant
+                               else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                     )
                 }
 
-                // 如果参考图已开启，则展示详细的展示模式选择工具
-                if (isRefEnabled) {
-                    VerticalDivider(modifier = Modifier.height(16.dp))
-
-                    // 分屏模式按钮 (SPLIT)
-                    IconToggleButton(
-                        checked = state.referenceMode == ReferenceDisplayMode.SPLIT,
-                        onCheckedChange = { viewModel.updateReferenceMode(ReferenceDisplayMode.SPLIT) },
-                        modifier = Modifier.size(28.dp).tip("分屏对比模式")
+                // 如果参考图已开启且处于非代码模式，展示带有明显视觉区隔的二级悬浮工具胶囊岛
+                if (isRefEnabled && !isCodeMode) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                        modifier = Modifier.padding(start = 2.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.VerticalSplit,
-                            contentDescription = "分屏模式",
-                            modifier = Modifier.size(18.dp),
-                            tint = if (state.referenceMode == ReferenceDisplayMode.SPLIT) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                        )
-                    }
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 分屏模式按钮 (SPLIT)
+                            IconToggleButton(
+                                checked = state.referenceMode == ReferenceDisplayMode.SPLIT,
+                                onCheckedChange = { viewModel.updateReferenceMode(ReferenceDisplayMode.SPLIT) },
+                                modifier = Modifier.size(24.dp).tip("分屏对比模式")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.VerticalSplit,
+                                    contentDescription = "分屏模式",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (state.referenceMode == ReferenceDisplayMode.SPLIT) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                                )
+                            }
 
-                    // 叠加模式按钮 (OVERLAY)
-                    IconToggleButton(
-                        checked = state.referenceMode == ReferenceDisplayMode.OVERLAY,
-                        onCheckedChange = { viewModel.updateReferenceMode(ReferenceDisplayMode.OVERLAY) },
-                        modifier = Modifier.size(28.dp).tip("半透明叠加模式")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Layers,
-                            contentDescription = "叠加模式",
-                            modifier = Modifier.size(18.dp),
-                            tint = if (state.referenceMode == ReferenceDisplayMode.OVERLAY) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                        )
-                    }
+                            // 叠加模式按钮 (OVERLAY)
+                            IconToggleButton(
+                                checked = state.referenceMode == ReferenceDisplayMode.OVERLAY,
+                                onCheckedChange = { viewModel.updateReferenceMode(ReferenceDisplayMode.OVERLAY) },
+                                modifier = Modifier.size(24.dp).tip("半透明叠加模式")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Layers,
+                                    contentDescription = "叠加模式",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (state.referenceMode == ReferenceDisplayMode.OVERLAY) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                                )
+                            }
 
-                    // 当处于叠加模式时，展示透明度调节滑块
-                    if (state.referenceMode == ReferenceDisplayMode.OVERLAY) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Slider(
-                            value = state.referenceOpacity,
-                            onValueChange = { viewModel.updateReferenceOpacity(it) },
-                            modifier = Modifier.width(100.dp).height(24.dp).tip("调节参考图透明度"),
-                            // 透明度限制在 10% 到 100% 之间
-                            valueRange = 0.1f..1f
-                        )
+                            // 当处于叠加模式时，展示透明度调节滑块
+                            if (state.referenceMode == ReferenceDisplayMode.OVERLAY) {
+                                VerticalDivider(modifier = Modifier.height(12.dp))
+                                Slider(
+                                    value = state.referenceOpacity,
+                                    onValueChange = { viewModel.updateReferenceOpacity(it) },
+                                    modifier = Modifier.width(90.dp).height(20.dp).tip("调节参考图叠加透明度"),
+                                    valueRange = 0.1f..1f
+                                )
+                            }
+                        }
                     }
                 }
             }

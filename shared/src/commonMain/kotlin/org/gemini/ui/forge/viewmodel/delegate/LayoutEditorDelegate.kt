@@ -67,9 +67,10 @@ class LayoutEditorDelegate(
         updateState { currentState ->
             val currentPage = currentState.currentPage ?: return@updateState currentState
             val editingGroupId = currentState.editingGroupId
-            val width = 400f; val height = 300f
-            var left = (currentPage.width - width) / 2f
-            var top = (currentPage.height - height) / 2f
+            val width = if (type == UIBlockType.BACKGROUND && editingGroupId == null) currentPage.width else 400f
+            val height = if (type == UIBlockType.BACKGROUND && editingGroupId == null) currentPage.height else 300f
+            var left = if (type == UIBlockType.BACKGROUND && editingGroupId == null) 0f else (currentPage.width - width) / 2f
+            var top = if (type == UIBlockType.BACKGROUND && editingGroupId == null) 0f else (currentPage.height - height) / 2f
 
             if (editingGroupId != null) {
                 currentPage.blocks.findBlockById(editingGroupId)?.let { group ->
@@ -77,7 +78,12 @@ class LayoutEditorDelegate(
                     top = (group.bounds.height - height) / 2f
                 }
             }
-            val newBlock = UIBlock(newBlockId, type, SerialRect(left, top, left + width, top + height))
+            val newBlock = UIBlock(
+                id = newBlockId,
+                type = type,
+                bounds = SerialRect(left, top, left + width, top + height),
+                cropRect = if (type == UIBlockType.BACKGROUND && editingGroupId == null) SerialRect(0f, 0f, currentPage.width, currentPage.height) else null
+            )
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == pageId) {
                     if (editingGroupId != null) {

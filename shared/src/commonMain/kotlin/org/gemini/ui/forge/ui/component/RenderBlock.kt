@@ -20,6 +20,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -200,9 +201,10 @@ fun RenderBlock(
     val absWidth = absBounds.width
     val absHeight = absBounds.height
 
-    // 5. 是否有可用参考图切片（第三级：仅在无成品图且无专属参考图时，由合规类型从底图按全局绝对坐标现场截取呈现）
+    // 5. 是否有可用参考图切片（第三级：仅在无成品图且无专属参考图且未开启全局切片隐藏时，由合规类型从底图按全局绝对坐标现场截取呈现）
     val isPureContainer = block.type == UIBlockType.CONTAINER || block.isPureContainer
     val hasRefSlice = !isPureContainer &&
+            !state.isHideReferenceSlices &&
             block.type.supportsReferenceSlice &&
             !hasBoundAsset &&
             imageBitmap == null &&
@@ -452,20 +454,49 @@ fun RenderBlock(
         }
     }
 
-    // 8. 递归渲染子模块（正确传递累加的屏幕渲染坐标与逻辑绝对坐标）
-    block.children.forEach { child ->
-        RenderBlock(
-            block = child,
-            parentRenderX = currentRenderX,
-            parentRenderY = currentRenderY,
-            parentLogicX = absLeft,
-            parentLogicY = absTop,
-            baseScale = baseScale,
-            zoom = zoom,
-            state = state,
-            refBitmap = refBitmap,
-            pageWidth = pageWidth,
-            pageHeight = pageHeight
-        )
+    // 8. 递归渲染子模块（支持内容溢出隐藏与视口裁剪）
+    val isClipped = block.shouldClipOverflow
+    if (isClipped) {
+        // ★ 核心视口裁剪容器：位于当前父模块 (currentRenderX, currentRenderY)，尺寸与父模块完全一致
+        // 挂载 clipToBounds()，任何超出父模块视口边界的子内容将被 GPU 硬件级安全裁切
+        Box(
+            modifier = Modifier
+                .zIndex(currentZIndex)
+                .offset(x = currentRenderX.dp, y = currentRenderY.dp)
+                .size(width = (block.bounds.width * baseScale).dp, height = (block.bounds.height * baseScale).dp)
+                .clipToBounds()
+        ) {
+            block.children.forEach { child ->
+                RenderBlock(
+                    block = child,
+                    parentRenderX = 0f, // 视口内部相对局部原点归零
+                    parentRenderY = 0f,
+                    parentLogicX = absLeft,
+                    parentLogicY = absTop,
+                    baseScale = baseScale,
+                    zoom = zoom,
+                    state = state,
+                    refBitmap = refBitmap,
+                    pageWidth = pageWidth,
+                    pageHeight = pageHeight
+                )
+            }
+        }
+    } else {
+        block.children.forEach { child ->
+            RenderBlock(
+                block = child,
+                parentRenderX = currentRenderX,
+                parentRenderY = currentRenderY,
+                parentLogicX = absLeft,
+                parentLogicY = absTop,
+                baseScale = baseScale,
+                zoom = zoom,
+                state = state,
+                refBitmap = refBitmap,
+                pageWidth = pageWidth,
+                pageHeight = pageHeight
+            )
+        }
     }
 }

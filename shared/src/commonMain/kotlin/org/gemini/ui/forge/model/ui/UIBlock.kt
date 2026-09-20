@@ -35,10 +35,17 @@ data class UIBlock(
     val properties: BlockProperties? = null, // 新增：不同类型模块的专属属性
     val resourceBindingPath: List<String> = emptyList(), // 新增：资源绑定层级路径
     val isPureContainer: Boolean = false, // 纯容器/占位层：表示该模块没有任何资源生成，仅占位排版或作为组合层
+    val clipOverflow: Boolean = false, // 是否裁剪超出范围的子内容（overflow: hidden），默认 false 为可见
     // ★ 运行时持有直接父级引用，主构造函数声明 + @Transient 阻断 JSON 序列化，copy() 自动继承，永不断裂！
     @Transient
     val parent: UIBlock? = null
 ) : AssetSupport {
+
+    /**
+     * 判断当前模块是否开启了溢出子内容裁剪/隐藏 (overflow: hidden)
+     */
+    val shouldClipOverflow: Boolean
+        get() = clipOverflow || (properties as? BlockProperties.ViewProperties)?.clipOverflow == true
 
     /**
      * 当前模块在页面全景大图上的全局绝对逻辑矩形 (核心只读计算属性)

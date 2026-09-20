@@ -38,7 +38,7 @@ object McpTrafficInspector {
     val nodes: StateFlow<List<McpClientNode>> = _nodes.asStateFlow()
 
     // 按会话隔离的报文缓冲映射 (SessionId -> 专属报文列表)
-    private val sessionLogsMap = mutableMapOf<String, MutableList<McpTrafficRecord>>()
+    private val sessionLogsState = MutableStateFlow<Map<String, List<McpTrafficRecord>>>(emptyMap())
 
     /**
      * 记录或更新客户端心跳 (静默保活，绝不写入报文流水，防止高频刷屏)
@@ -149,14 +149,14 @@ object McpTrafficInspector {
     }
 
     private fun appendRecord(record: McpTrafficRecord) {
-        // 1. 内存：按 SessionId 隔离维护专属 1000 条队列
+        // 1. 内存：按 SessionId 隔离维护专属 1000 条队列 (使用原子 StateFlow.update 确保跨平台并发安全)
         val sid = record.sessionId ?: "global"
-        synchronized(sessionLogsMap) {
-            val sList = sessionLogsMap.getOrPut(sid) { mutableListOf() }
-            sList.add(0, record)
-            if (sList.size > MAX_LOGS_PER_SESSION) {
-                sList.removeAt(sList.size - 1)
+        sessionLogsState.update { map ->
+            val list = map[sid] ?: emptyList()
+            val newList = (listOf(record) + list).let {
+                if (it.size > MAX_LOGS_PER_SESSION) it.take(MAX_LOGS_PER_SESSION) else it
             }
+            map + (sid to newList)
         }
 
         // 2. 全局视图更新
@@ -220,9 +220,7 @@ object McpTrafficInspector {
      * 清空通信日志 (同时清空内存中的单会话缓冲)
      */
     fun clearLogs() {
-        synchronized(sessionLogsMap) {
-            sessionLogsMap.clear()
-        }
+        sessionLogsState.value = emptyMap()
         _logs.value = emptyList()
     }
 

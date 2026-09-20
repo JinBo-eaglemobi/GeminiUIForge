@@ -602,6 +602,40 @@ fun LayoutPropertyContent(
                         enabled = selectedBlock.type != UIBlockType.CONTAINER
                     )
                 }
+
+                // 若包含子图元且非 VIEW 模块，提供通用的内容溢出隐藏开关
+                if (selectedBlock.children.isNotEmpty() && selectedBlock.type != UIBlockType.VIEW) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(AppShapes.medium)
+                            .clickable {
+                                viewModel.assetManager.updateBlock(selectedBlock.copy(clipOverflow = !selectedBlock.clipOverflow))
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(Res.string.prop_view_clip_overflow),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = stringResource(Res.string.prop_view_clip_overflow_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = selectedBlock.shouldClipOverflow,
+                            onCheckedChange = { checked ->
+                                viewModel.assetManager.updateBlock(selectedBlock.copy(clipOverflow = checked))
+                            }
+                        )
+                    }
+                }
             }
 
             // 独立图片资产展示与操作板块（纯容器模式下自适应隐藏）

@@ -14,10 +14,12 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -226,6 +228,7 @@ private fun ModelMessageBubble(
     val applyTip = stringResource(Res.string.ai_studio_btn_apply)
     val variantTip = stringResource(Res.string.ai_studio_btn_variant)
     val isCurrentVariant = message.generatedImageUri != null && message.generatedImageUri == currentVariantImageUri
+    val coroutineScope = rememberCoroutineScope()
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -293,9 +296,13 @@ private fun ModelMessageBubble(
                                     .padding(spacing.small),
                                 horizontalArrangement = Arrangement.spacedBy(spacing.extraSmall)
                             ) {
-                                // 在文件夹中显示按钮
+                                // 在文件夹中显示按钮（安全定位文件或父目录）
                                 IconButton(
-                                    onClick = { getPlatform().openInFileExplorer(imgUri) },
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            org.gemini.ui.forge.utils.openFileOrParentInExplorer(imgUri)
+                                        }
+                                    },
                                     modifier = Modifier.size(28.dp).background(Color.Black.copy(alpha = 0.5f), AppShapes.small).tip("在本地系统资源管理器中定位该图片")
                                 ) {
                                     Icon(Icons.Default.FolderOpen, null, tint = Color.White, modifier = Modifier.size(14.dp))
@@ -339,11 +346,42 @@ private fun ModelMessageBubble(
                                 }
                             }
                         } else {
-                            // 文件丢失破裂图占位
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            // 文件丢失破裂图占位，支持点击应用尝试恢复并重新缓存，或打开目录
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxSize().padding(12.dp)
+                            ) {
                                 Icon(Icons.Default.BrokenImage, contentDescription = "Missing", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(36.dp))
                                 Spacer(Modifier.height(4.dp))
-                                Text("本地文件已移除或丢失", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                Text("本地文件已移除或删除", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                org.gemini.ui.forge.utils.openFileOrParentInExplorer(imgUri)
+                                            }
+                                        },
+                                        modifier = Modifier.height(28.dp).tip("尝试在本地系统资源管理器中定位所在目录"),
+                                        shape = AppShapes.small,
+                                        contentPadding = PaddingValues(horizontal = 8.dp)
+                                    ) {
+                                        Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(12.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("打开所在目录", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    Button(
+                                        onClick = { onApply(imgUri) },
+                                        modifier = Modifier.height(28.dp).tip("尝试从会话通信记录中重新生成本地缓存并应用"),
+                                        shape = AppShapes.small,
+                                        contentPadding = PaddingValues(horizontal = 8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(12.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("重新缓存并应用", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
                             }
                         }
                     }

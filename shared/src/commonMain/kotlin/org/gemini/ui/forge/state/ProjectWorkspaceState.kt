@@ -85,6 +85,8 @@ data class ProjectWorkspaceState(
     val isVisualMode: Boolean = false,
     /** 视觉呈现：是否完全隐藏未选中组件块的灰色/蓝色细虚线定位外轮廓 */
     val isHideOutlines: Boolean = false,
+    /** 视觉呈现：是否全局隐藏所有未绑定资产模块从参考原图切割出来的预览切片 */
+    val isHideReferenceSlices: Boolean = false,
     /** 视觉呈现：参考底图的设计对比显示模式（如隐藏、分栏对比、覆盖等） */
     val referenceMode: org.gemini.ui.forge.model.app.ReferenceDisplayMode = org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN,
     /** 视觉呈现：覆盖显示参考底图时的不透明度 (0.0f - 1.0f) */

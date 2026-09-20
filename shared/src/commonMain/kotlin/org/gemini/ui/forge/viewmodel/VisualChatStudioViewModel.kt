@@ -210,6 +210,62 @@ class VisualChatStudioViewModel(
     }
 
     /**
+     * 针对本地物理缓存可能已被删除的图片，自动从该会话的原始通信档案中恢复并重新写入本地缓存文件。
+     * 若文件在本地依然存在，直接返回其路径；若文件已丢失，回溯读取 RESP 报文提取 Base64 重新落盘。
+     *
+     * @param targetImagePath 原始记录的图片物理路径或 URI
+     * @return 恢复或原本可用的物理文件路径；若无法恢复则原样返回
+     */
+    suspend fun ensureImageCached(targetImagePath: String): String {
+        if (targetImagePath.isBlank() || targetImagePath.startsWith("data:image")) {
+            return targetImagePath
+        }
+        val cleanPath = targetImagePath.replace("\\", "/")
+        if (org.gemini.ui.forge.utils.isFileExists(cleanPath)) {
+            return cleanPath
+        }
+
+        AppLogger.w(TAG, "检测到本地图片已缺失: $cleanPath，尝试从会话历史通信档案恢复...")
+        val current = _uiState.value.currentSession ?: return targetImagePath
+        val records = trafficStore.listRecords(scopeId, current.id)
+        if (records.isEmpty()) {
+            AppLogger.w(TAG, "未查询到会话 ${current.id} 的通信报文，无法自动恢复缓存")
+            return targetImagePath
+        }
+
+        // 从最新的 RESP 响应报文中正则匹配 Base64 数据并尝试恢复
+        val regex = Regex(""""(data|bytesBase64Encoded)"\s*:\s*"([A-Za-z0-9+/=]{128,})"""")
+        for (rec in records.reversed()) {
+            if (rec.direction == org.gemini.ui.forge.model.chat.TrafficDirection.RESP) {
+                val match = regex.find(rec.body)
+                if (match != null) {
+                    val b64 = match.groupValues[2]
+                    try {
+                        @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                        val bytes = kotlin.io.encoding.Base64.decode(b64)
+                        val isPng = cleanPath.endsWith(".png", ignoreCase = true)
+                        val targetBlockId = block?.id?.ifBlank { "chat_gen" } ?: "chat_gen"
+                        val restoredFile = templateRepo.saveBlockResource(
+                            templateName = projectName,
+                            blockId = targetBlockId,
+                            fileNamePrefix = "chat_recovered",
+                            bytes = bytes,
+                            isPng = isPng
+                        )
+                        val restoredAbsPath = restoredFile.getAbsolutePath()
+                        AppLogger.i(TAG, "已成功从原始通信报文恢复图片缓存: $restoredAbsPath")
+                        org.gemini.ui.forge.utils.Toast.show("本地缓存已重新生成", org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
+                        return restoredAbsPath
+                    } catch (e: Exception) {
+                        AppLogger.e(TAG, "解码或保存恢复图片异常", e)
+                    }
+                }
+            }
+        }
+        return targetImagePath
+    }
+
+    /**
      * 加载当前模块在磁盘资产目录下的全量历史生成与切图图片（对齐属性面板历史数据源）
      */
     suspend fun loadModuleHistoricalImages(): List<TemplateFile> {

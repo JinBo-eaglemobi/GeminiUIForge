@@ -260,10 +260,11 @@ fun UniversalVisualChatStudioDialog(
                                 onImageClick = { imgUri -> lightboxImageModel = imgUri },
                                 onApplyImage = { imageUri ->
                                     coroutineScope.launch {
+                                        val validUri = viewModel.ensureImageCached(imageUri)
                                         val targetW = block?.bounds?.width?.toInt() ?: 0
                                         val targetH = block?.bounds?.height?.toInt() ?: 0
                                         val size = try {
-                                            org.gemini.ui.forge.utils.getImageSize(imageUri)
+                                            org.gemini.ui.forge.utils.getImageSize(validUri)
                                         } catch (e: Exception) {
                                             null
                                         }
@@ -271,10 +272,10 @@ fun UniversalVisualChatStudioDialog(
                                         val actualH = size?.second ?: 0
                                         if (targetW > 0 && targetH > 0 && (actualW != targetW || actualH != targetH)) {
                                             // 尺寸不符，弹出切图加工与烘焙界面
-                                            pendingEditorImageUri = imageUri
+                                            pendingEditorImageUri = validUri
                                             Toast.show("图片尺寸 ($actualW×$actualH) 与当前模块 ($targetW×$targetH) 不一致，正在打开切图加工...", ToastType.INFO)
                                         } else {
-                                            handleFinalApplyAsset(imageUri)
+                                            handleFinalApplyAsset(validUri)
                                         }
                                     }
                                 },
