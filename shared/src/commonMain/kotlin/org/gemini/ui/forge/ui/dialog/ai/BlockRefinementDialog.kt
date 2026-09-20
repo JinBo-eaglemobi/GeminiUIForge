@@ -58,9 +58,15 @@ fun BlockRefinementDialog(
     onDismiss: () -> Unit,
     onConfirm: (UIBlock) -> Unit
 ) {
-    // 1. 无参直接获取全局绝对坐标（模块属性自推导）
-    val initialAbsBounds = remember(block) {
-        block.absoluteBounds
+    // 1. 确定初始框选范围
+    // ★ 关键解耦铁律：在设置参考区域模式 (isReferenceAreaOnly) 下，默认打开展示的是该模块当前已经记录的参考图范围大小 (cropRect)！
+    // 参考图已经和模块大小分离开了，修改参考图和模块当前的坐标大小没有任何关联！
+    val initialAbsBounds = remember(block, isReferenceAreaOnly) {
+        if (isReferenceAreaOnly) {
+            block.cropRect ?: block.toAbsoluteBounds()
+        } else {
+            block.toAbsoluteBounds()
+        }
     }
 
     // 2. 当前正在微调的全局绝对物理矩形坐标（支持可空，清除后允许重新划选）
@@ -263,18 +269,20 @@ fun BlockRefinementDialog(
                                 return@Button
                             }
                             // 坐标解耦与逆向换算处理
-                            val finalBounds = if (isReferenceAreaOnly) {
-                                // ★ 设置参考区域模式：裁剪整张页面原图必须使用全景绝对逻辑矩形，严禁逆向扣除 parentOffset
-                                bounds
+                            val updatedBlock = if (isReferenceAreaOnly) {
+                                // ★ 设置参考区域模式：仅将框选的矩形写入 cropRect 并更新参考图，100% 保持原本的显示 bounds 绝对不变！
+                                block.copy(
+                                    cropRect = bounds
+                                )
                             } else {
-                                // ★ 常规模块微调模式：由模块内建无参推导逆向换算回直接父级的局部相对坐标
-                                block.toLocalBounds(bounds)
+                                // 常规模块微调模式：由模块内建无参推导逆向换算回直接父级的局部相对坐标
+                                val localBounds = block.toLocalBounds(bounds)
+                                block.copy(
+                                    bounds = localBounds,
+                                    userPromptZh = promptZh,
+                                    userPromptEn = promptEn
+                                )
                             }
-                            val updatedBlock = block.copy(
-                                bounds = finalBounds,
-                                userPromptZh = promptZh,
-                                userPromptEn = promptEn
-                            )
                             onConfirm(updatedBlock)
                         },
                         colors = if (isModified) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)

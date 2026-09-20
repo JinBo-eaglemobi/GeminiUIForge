@@ -201,14 +201,16 @@ fun RenderBlock(
     val absHeight = absBounds.height
 
     // 5. 是否有可用参考图切片（第三级：仅在无成品图且无专属参考图时，由合规类型从底图按全局绝对坐标现场截取呈现）
-    val hasRefSlice = block.type.supportsReferenceSlice &&
+    val isPureContainer = block.type == UIBlockType.CONTAINER || block.isPureContainer
+    val hasRefSlice = !isPureContainer &&
+            block.type.supportsReferenceSlice &&
             !hasBoundAsset &&
             imageBitmap == null &&
             customRefBitmap == null &&
             refBitmap != null
 
     // 6. 视觉状态判断
-    val hasVisualImage = imageBitmap != null || customRefBitmap != null || hasRefSlice
+    val hasVisualImage = !isPureContainer && (imageBitmap != null || customRefBitmap != null || hasRefSlice)
     val hidePlaceholder = isVisualMode && hasVisualImage
     val selectionColor = Color(0xFF00E5FF) // 高亮鲜明电光蓝，深浅背景均 100% 夺目
 
@@ -252,7 +254,7 @@ fun RenderBlock(
         val reelProps = if (block.type == UIBlockType.REEL) block.properties as? BlockProperties.ReelProperties else null
         val showReelBg = reelProps?.showBackground != false
 
-        if (imageBitmap != null && showReelBg) {
+        if (!isPureContainer && imageBitmap != null && showReelBg) {
             // 优先级 1：已生成的正式 AI 图像成品
             Image(
                 bitmap = imageBitmap,
@@ -260,7 +262,7 @@ fun RenderBlock(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.FillBounds
             )
-        } else if (customRefBitmap != null && showReelBg) {
+        } else if (!isPureContainer && customRefBitmap != null && showReelBg) {
             // 优先级 2：该模块专属设置并保存过的参考切片图（固定专属图，不随模块位移发生原图错位）
             Image(
                 bitmap = customRefBitmap,
@@ -295,7 +297,7 @@ fun RenderBlock(
                     dstSize = IntSize(size.width.toInt(), size.height.toInt())
                 )
             }
-        } else if (block.currentImageUri != null && showReelBg) {
+        } else if (!isPureContainer && block.currentImageUri != null && showReelBg) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.dp)
         } else if (block.type == UIBlockType.SYMBOL) {
             val fallbackText = block.userPromptZh.ifBlank { block.userPromptEn }.ifBlank { "Symbol" }

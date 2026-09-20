@@ -383,7 +383,7 @@ fun ProjectWorkspaceScreen(
                     val blockId = state.referenceAreaTargetId
                     viewModel.hideReferenceArea()
                     if (blockId != null) {
-                        viewModel.layoutEditor.onSetReferenceArea(blockId, updatedBlock.bounds)
+                        viewModel.layoutEditor.onSetReferenceArea(blockId, updatedBlock.cropRect ?: updatedBlock.toAbsoluteBounds())
                     }
                 }
             )

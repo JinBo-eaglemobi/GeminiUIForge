@@ -15,6 +15,9 @@
     <string name="block_symbol">Symbol</string>
     <string name="block_button">Button</string>
     <string name="block_view">View</string>
+    <string name="block_container">Container</string>
+    <string name="prop_pure_container">Pure Container / Layout Group</string>
+    <string name="prop_pure_container_desc">Layout placeholder only, generates no asset</string>
     <string name="block_header">Header</string>
     <string name="block_footer">Footer</string>
     <string name="block_text">Text</string>

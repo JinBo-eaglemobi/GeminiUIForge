@@ -26,6 +26,7 @@ import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
@@ -71,9 +72,13 @@ fun BatchAssetGenDialog(
     onStartGen: (List<UIBlock>) -> Unit,
     onUpdateBlock: (UIBlock) -> Unit = {}
 ) {
+    // ★ 过滤掉所有的纯容器/占位模块（无论是 UIBlockType.CONTAINER 还是 isPureContainer 为 true，不参与任何图片资源生成）
+    val eligibleBlocks = remember(blocks) {
+        blocks.filter { it.type != UIBlockType.CONTAINER && !it.isPureContainer }
+    }
     // 1. 内部维护 blocks 状态，支持在细化编辑后局部实时刷新
-    var currentBlocks by remember(blocks) { mutableStateOf(blocks) }
-    var selectedIds by remember(blocks) { mutableStateOf(blocks.map { it.id }.toSet()) }
+    var currentBlocks by remember(eligibleBlocks) { mutableStateOf(eligibleBlocks) }
+    var selectedIds by remember(eligibleBlocks) { mutableStateOf(eligibleBlocks.map { it.id }.toSet()) }
     val groupedBlocks = remember(currentBlocks) { currentBlocks.groupBy { it.type } }
 
     // 2. 分类折叠状态：记录哪些类型处于展开状态（默认全展开）

@@ -34,6 +34,7 @@ data class UIBlock(
     val isVisible: Boolean = true, // 新增：图层是否可见
     val properties: BlockProperties? = null, // 新增：不同类型模块的专属属性
     val resourceBindingPath: List<String> = emptyList(), // 新增：资源绑定层级路径
+    val isPureContainer: Boolean = false, // 纯容器/占位层：表示该模块没有任何资源生成，仅占位排版或作为组合层
     // ★ 运行时持有直接父级引用，主构造函数声明 + @Transient 阻断 JSON 序列化，copy() 自动继承，永不断裂！
     @Transient
     val parent: UIBlock? = null

@@ -30,6 +30,7 @@ fun UIBlockType.getDisplayNameRes(): StringResource {
         UIBlockType.SCROLL_BAR -> Res.string.block_scroll_bar
         UIBlockType.SLIDER -> Res.string.block_slider
         UIBlockType.INPUT -> Res.string.block_input
+        UIBlockType.CONTAINER -> Res.string.block_container
     }
 }
 
@@ -53,5 +54,6 @@ fun UIBlockType.getIcon(): ImageVector {
         UIBlockType.SCROLL_BAR -> Icons.Default.FormatLineSpacing
         UIBlockType.SLIDER -> Icons.Default.Tune
         UIBlockType.INPUT -> Icons.AutoMirrored.Filled.Input
+        UIBlockType.CONTAINER -> Icons.Default.Layers
     }
 }

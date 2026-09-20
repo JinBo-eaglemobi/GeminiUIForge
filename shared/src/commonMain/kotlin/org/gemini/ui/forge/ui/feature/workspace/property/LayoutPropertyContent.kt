@@ -568,15 +568,51 @@ fun LayoutPropertyContent(
                         }
                     }
                 }
+
+                // 纯容器/占位层标记开关
+                val isPureContainer = selectedBlock.type == UIBlockType.CONTAINER || selectedBlock.isPureContainer
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(AppShapes.medium)
+                        .clickable(enabled = selectedBlock.type != UIBlockType.CONTAINER) {
+                            viewModel.assetManager.updateBlock(selectedBlock.copy(isPureContainer = !selectedBlock.isPureContainer))
+                        }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(Res.string.prop_pure_container),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = stringResource(Res.string.prop_pure_container_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isPureContainer,
+                        onCheckedChange = { checked ->
+                            viewModel.assetManager.updateBlock(selectedBlock.copy(isPureContainer = checked))
+                        },
+                        enabled = selectedBlock.type != UIBlockType.CONTAINER
+                    )
+                }
             }
 
-            // 独立图片资产展示与操作板块
+            // 独立图片资产展示与操作板块（纯容器模式下自适应隐藏）
+            val isPureContainer = selectedBlock.type == UIBlockType.CONTAINER || selectedBlock.isPureContainer
             val currentBoundFile = selectedBlock.currentImageUri
-            CollapsibleSection(
-                title = "已绑定图片资产",
-                expanded = "已绑定图片资产" !in blockCollapsedSet,
-                onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, "已绑定图片资产", !it) }
-            ) {
+            if (!isPureContainer) {
+                CollapsibleSection(
+                    title = "已绑定图片资产",
+                    expanded = "已绑定图片资产" !in blockCollapsedSet,
+                    onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, "已绑定图片资产", !it) }
+                ) {
                 Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     // 1. 独立图片预览显示区域（点击图片本身直接进入九宫格切图与物理加工界面）
                     Surface(
@@ -689,9 +725,10 @@ fun LayoutPropertyContent(
                     }
                 )
             }
+            }
 
             val hasSpecificProps = selectedBlock.type.hasSpecificProperties
-            if (hasSpecificProps) {
+            if (!isPureContainer && hasSpecificProps) {
                 CollapsibleSection(
                     title = "专属属性配置",
                     expanded = "专属属性配置" !in blockCollapsedSet,
@@ -711,48 +748,62 @@ fun LayoutPropertyContent(
                 onToggle = { viewModel.toggleSectionCollapsed(selectedBlock.id, if (state.isPureEngineeringMode) "工程物理与破坏性操作" else "高级与破坏性操作", !it) }
             ) {
                 if (!state.isPureEngineeringMode) {
-                    // 1. AI 视觉工作室（零门槛直接打开，支持从零创建新图或基于参考图以图生图）
-                    Button(
-                        onClick = { showImg2ImgStudioDialog = true },
-                        modifier = Modifier.fillMaxWidth().height(42.dp).tip("打开 AI 视觉工作室"),
-                        shape = AppShapes.medium,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        enabled = !state.isGenerating
-                    ) {
-                        Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("AI 视觉工作室", style = MaterialTheme.typography.labelMedium)
-                    }
-
-                    // 2. 参考区域与 AI 结构重塑
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { viewModel.showReferenceArea(selectedBlock.id) },
-                            modifier = Modifier.weight(1f).tip("从原图中截取局部区域作为该模块的 AI 生成参考图")
+                    if (!isPureContainer) {
+                        // 1. AI 视觉工作室（零门槛直接打开，支持从零创建新图或基于参考图以图生图）
+                        Button(
+                            onClick = { showImg2ImgStudioDialog = true },
+                            modifier = Modifier.fillMaxWidth().height(42.dp).tip("打开 AI 视觉工作室"),
+                            shape = AppShapes.medium,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            enabled = !state.isGenerating
                         ) {
-                            Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("设置参考区域")
+                            Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("AI 视觉工作室", style = MaterialTheme.typography.labelMedium)
                         }
 
+                        // 2. 参考区域与 AI 结构重塑
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { viewModel.showReferenceArea(selectedBlock.id) },
+                                modifier = Modifier.weight(1f).tip("从原图中截取局部区域作为该模块的 AI 生成参考图")
+                            ) {
+                                Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("设置参考区域")
+                            }
+
+                            OutlinedButton(
+                                onClick = { viewModel.showVisualRefine(selectedBlock.id) },
+                                modifier = Modifier.weight(1f).tip("通过 AI 自动分析并重塑该模块的内部层级结构")
+                            ) {
+                                Icon(Icons.Default.Tune, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("区域重塑")
+                            }
+                        }
+                    } else {
+                        // 纯容器/组合层：无需生图与参考图，直接提供区域重塑入口
                         OutlinedButton(
                             onClick = { viewModel.showVisualRefine(selectedBlock.id) },
-                            modifier = Modifier.weight(1f).tip("通过 AI 自动分析并重塑该模块的内部层级结构")
+                            modifier = Modifier.fillMaxWidth().tip("通过 AI 自动分析并重塑该容器内部的子组件层级结构")
                         ) {
                             Icon(Icons.Default.Tune, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("区域重塑")
+                            Spacer(Modifier.width(8.dp))
+                            Text("容器内部区域重塑")
                         }
                     }
                 } else {
-                    // 纯工程模式下仅保留设置参考切片区域
-                    OutlinedButton(
-                        onClick = { viewModel.showReferenceArea(selectedBlock.id) },
-                        modifier = Modifier.fillMaxWidth().tip("从原图中截取局部区域作为该模块的独立参考底图")
-                    ) {
-                        Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("截取/设置参考切片区域")
+                    if (!isPureContainer) {
+                        // 纯工程模式下仅保留设置参考切片区域
+                        OutlinedButton(
+                            onClick = { viewModel.showReferenceArea(selectedBlock.id) },
+                            modifier = Modifier.fillMaxWidth().tip("从原图中截取局部区域作为该模块的独立参考底图")
+                        ) {
+                            Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("截取/设置参考切片区域")
+                        }
                     }
                 }
 

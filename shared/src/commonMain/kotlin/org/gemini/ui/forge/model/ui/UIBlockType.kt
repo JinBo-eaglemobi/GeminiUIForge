@@ -46,7 +46,9 @@ enum class UIBlockType(val defaultPrompt: String) {
     /** 滑块：用于数值调节的交互组件 */
     SLIDER("Interactive slider, adjustment knob, range selector UI element"),
     /** 输入框：用于文本输入的编辑框 */
-    INPUT("Text input field, editable text box, entry area with cursor hint");
+    INPUT("Text input field, editable text box, entry area with cursor hint"),
+    /** 纯容器/占位层：仅用于占位排版或承载组合子组件，不参与任何图片资源生成 */
+    CONTAINER("Pure layout container or group holder, no asset generated");
 
     /**
      * 核心特性标识：该类型组件是否拥有专属的属性配置面板
@@ -56,9 +58,9 @@ enum class UIBlockType(val defaultPrompt: String) {
 
     /**
      * 核心特性标识：该类型组件是否支持在未绑定正式图片时，从底图对应全局坐标中提取切片定位渲染。
-     * 排除黑名单：转轴网格(REEL)、顶部导航栏(HEADER)、底部状态栏(FOOTER)、文本(TEXT)、输入框(INPUT)。
+     * 排除黑名单：转轴网格(REEL)、顶部导航栏(HEADER)、底部状态栏(FOOTER)、文本(TEXT)、输入框(INPUT)、纯容器(CONTAINER)。
      * 其余所有类型一律支持并保持原图切片定位展示。
      */
     val supportsReferenceSlice: Boolean
-        get() = this !in listOf(REEL, HEADER, FOOTER, TEXT, INPUT)
+        get() = this !in listOf(REEL, HEADER, FOOTER, TEXT, INPUT, CONTAINER)
 }

@@ -446,7 +446,7 @@ class LayoutEditorDelegate(
 
     fun onSetReferenceArea(
         blockId: String,
-        bounds: SerialRect
+        referenceAreaRect: SerialRect
     ) {
         val currentState = getState()
         val currentPage = currentState.currentPage
@@ -457,7 +457,7 @@ class LayoutEditorDelegate(
                 AppLogger.d("LayoutEditor", "✂️ 正在提取并保存模块 $blockId 的局部参考图...")
                 val croppedBytes = cropImage(
                     imageSource = originalImage.getAbsolutePath(),
-                    bounds = bounds,
+                    bounds = referenceAreaRect,
                     logicalWidth = currentPage.width,
                     logicalHeight = currentPage.height
                 ) ?: throw Exception("裁剪局部参考图失败")
@@ -475,7 +475,11 @@ class LayoutEditorDelegate(
                         if (page.id == currentPage.id) {
                             page.copy(
                                 blocks = page.blocks.updateBlockInList(blockId) { block ->
-                                    block.copy(referenceImage = savedFile)
+                                    // ★ 关键解耦：仅更新局部参考图与参考区域矩形 cropRect，绝对不修改模块自身的显示 bounds
+                                    block.copy(
+                                        referenceImage = savedFile,
+                                        cropRect = referenceAreaRect
+                                    )
                                 }
                             )
                         } else page
