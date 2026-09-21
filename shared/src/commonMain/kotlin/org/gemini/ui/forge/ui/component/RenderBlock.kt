@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.platform.testTag
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.TextStyled
 import org.gemini.ui.forge.model.ui.NinePatchConfig
@@ -238,6 +239,8 @@ fun RenderBlock(
     val currentZIndex = if (isEditingOrDescendant) 100f else 0f
     Box(
         modifier = Modifier
+            // 标准 Compose testTag：供 MCP 精确定位与区域截图 (targetNodeId=block_xxx)
+            .testTag("block_${block.id}")
             .zIndex(currentZIndex)
             .offset(x = currentRenderX.dp, y = currentRenderY.dp)
             .size(width = (block.bounds.width * baseScale).dp, height = (block.bounds.height * baseScale).dp)

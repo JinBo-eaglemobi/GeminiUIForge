@@ -697,7 +697,7 @@ class ProjectWorkspaceViewModel(
                 if (blockWithCalibratedChildren.children.isNotEmpty()) {
                     val normalizedGroup = org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.normalizeContainerAndChildren(blockWithCalibratedChildren)
                     calibratedCount++
-                    org.gemini.ui.forge.utils.AppLogger.i("Calibrate", "🧩 复合模块组【${block.id}】完成子组件深层物理吸附与容器原点贴合归零 (代数守恒)")
+                    org.gemini.ui.forge.utils.AppLogger.i("Calibrate", "🧩 复合模块组【${block.id}】完成子组件深层物理吸附与容器原点贴合归零 (纯容器状态: ${normalizedGroup.isPureContainer})")
                     return normalizedGroup
                 }
 

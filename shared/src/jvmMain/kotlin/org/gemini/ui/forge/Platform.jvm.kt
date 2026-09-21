@@ -182,6 +182,9 @@ private fun findProjectRootInDev(startFile: java.io.File): java.io.File? {
 }
 
 actual fun captureActiveScreenShot(): ByteArray? {
+    // 优先截取应用自身窗口 (离屏重绘，最小化/被遮挡/后台运行均可获取完整应用画面)
+    AppWindowHolder.captureWindowBytes(null)?.let { return it }
+    // 兜底：窗口未就绪时降级为物理屏幕抓取 (Robot)
     return try {
         val ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
         val defaultScreen = ge.defaultScreenDevice

@@ -39,6 +39,7 @@ import org.gemini.ui.forge.service.mcp.ClientAppConfigStatus
 import org.gemini.ui.forge.service.mcp.McpClientConfigManager
 import org.gemini.ui.forge.service.mcp.McpClientType
 import org.gemini.ui.forge.service.mcp.McpController
+import org.gemini.ui.forge.service.mcp.UiRoadmapRegistry
 import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
@@ -64,6 +65,7 @@ fun McpServerDialog(
 
     val isRunning by McpController.isRunning.collectAsState()
     val activeUrl by McpController.serverUrl.collectAsState()
+    val isUiFollowEnabled by UiRoadmapRegistry.isUiFollowEnabled.collectAsState()
 
     var hostInput by remember { mutableStateOf("127.0.0.1") }
     var portInput by remember { mutableStateOf(18330) }
@@ -111,6 +113,10 @@ fun McpServerDialog(
         if (!savedHost.isNullOrBlank()) hostInput = savedHost
         val savedPort = configManager.loadKey("MCP_PORT")?.toIntOrNull()
         if (savedPort != null) portInput = savedPort
+        val savedFollow = configManager.loadKey("MCP_UI_FOLLOW_ENABLED")
+        if (savedFollow != null) {
+            UiRoadmapRegistry.setUiFollowEnabled(savedFollow.toBoolean())
+        }
         refreshClients()
     }
 
@@ -388,6 +394,67 @@ fun McpServerDialog(
                                         label = { Text("绑定地址") },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+
+                            // AI 前台视觉跟随模式开关卡片
+                            Card(
+                                shape = AppShapes.medium,
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isUiFollowEnabled) {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                                    }
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(horizontal = spacing.medium, vertical = spacing.small)
+                                        .fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f).padding(end = spacing.small)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Visibility,
+                                            contentDescription = null,
+                                            tint = if (isUiFollowEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(Modifier.width(spacing.small))
+                                        Column {
+                                            Text(
+                                                text = stringResource(Res.string.mcp_follow_nav_title),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = stringResource(Res.string.mcp_follow_nav_desc),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    Switch(
+                                        checked = isUiFollowEnabled,
+                                        onCheckedChange = { isChecked ->
+                                            UiRoadmapRegistry.setUiFollowEnabled(isChecked)
+                                            scope.launch {
+                                                configManager.saveKey("MCP_UI_FOLLOW_ENABLED", isChecked.toString())
+                                            }
+                                        },
+                                        modifier = Modifier.tip(
+                                            if (isUiFollowEnabled) "已开启前台视觉跟随：AI 操作将在当前界面实时展现"
+                                            else "已关闭前台视觉跟随：AI 任务将在后台静默执行"
+                                        )
                                     )
                                 }
                             }

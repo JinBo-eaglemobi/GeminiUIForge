@@ -359,8 +359,18 @@ fun CanvasArea(
                                                 val curDensity = currentDensityState
                                                 val lx = (offset.x / curDensity.density - currentOffsetXState) / currentBaseScaleState
                                                 val ly = (offset.y / curDensity.density - currentOffsetYState) / currentBaseScaleState
-                                                val hitBlock =
+                                                
+                                                // ★ 优先判断当前已选中的模块是否包含点击点，防止在已选中模块上拖拽时因微弱重叠穿透到背景或其它模块
+                                                val selectedHit = currentSelectedBlockIdsState.firstOrNull { selId ->
+                                                    val bounds = currentBlocksState.calculateBlockAbsoluteBounds(selId)
+                                                    bounds != null && lx in bounds.left..bounds.right && ly in bounds.top..bounds.bottom
+                                                }
+                                                val hitBlock = if (selectedHit != null) {
+                                                    currentBlocksState.findBlockById(selectedHit)
+                                                } else {
                                                     currentBlocksState.findHitBlock(lx, ly, 0f, 0f, currentEditingGroupState)
+                                                }
+
                                                 if (hitBlock != null) {
                                                     dragTargetId = hitBlock.id
                                                     isPanningStage = false

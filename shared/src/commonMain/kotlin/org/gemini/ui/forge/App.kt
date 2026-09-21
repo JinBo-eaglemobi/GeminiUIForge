@@ -121,6 +121,129 @@ fun App(typography: Typography? = null) {
 
             val globalState = appState.globalState
 
+            var showCloudAssetDialog by remember { mutableStateOf(false) }
+            var showSettingsDialog by remember { mutableStateOf(false) }
+            var showMcpDialog by remember { mutableStateOf(false) }
+            var showMcpTrafficDialog by remember { mutableStateOf(false) }
+            var showCompileDialog by remember { mutableStateOf(false) }
+            var showHelpDialog by remember { mutableStateOf(false) }
+            var showExitConfirmDialog by remember { mutableStateOf(false) }
+            var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
+
+            // 同步当前屏幕与未保存状态到 MCP UI 路线图注册中心
+            LaunchedEffect(globalState.currentScreen, appState.projectName, appState.isDirty) {
+                val screenType = when (globalState.currentScreen) {
+                    AppScreen.HOME -> org.gemini.ui.forge.service.mcp.ScreenType.TEMPLATE_LIST
+                    AppScreen.PROJECT_WORKSPACE -> org.gemini.ui.forge.service.mcp.ScreenType.PROJECT_WORKSPACE
+                    AppScreen.TEMPLATE_GENERATOR -> org.gemini.ui.forge.service.mcp.ScreenType.VISUAL_CHAT_STUDIO
+                    else -> org.gemini.ui.forge.service.mcp.ScreenType.TEMPLATE_LIST
+                }
+                org.gemini.ui.forge.service.mcp.UiRoadmapRegistry.updateCurrentScreen(screenType, appState.projectName)
+                org.gemini.ui.forge.service.mcp.UiRoadmapRegistry.setUnsavedWorkspaceChanges(appState.isDirty)
+            }
+
+            // 同步弹窗状态到 MCP 路线图
+            LaunchedEffect(showExitConfirmDialog) {
+                if (showExitConfirmDialog) {
+                    org.gemini.ui.forge.service.mcp.UiRoadmapRegistry.pushDialog(
+                        org.gemini.ui.forge.service.mcp.DialogDescriptor(
+                            id = "dialog_unsaved_changes",
+                            title = "未保存修改警告弹窗",
+                            description = "离开工作区前存在未保存脏数据，必须点击保存并退出或不保存退出",
+                            dismissActionNodeId = "btn_cancel_leave",
+                            confirmActionNodeId = "btn_save_and_leave",
+                            hasUnsavedRisk = true
+                        )
+                    )
+                } else {
+                    org.gemini.ui.forge.service.mcp.UiRoadmapRegistry.removeDialog("dialog_unsaved_changes")
+                }
+            }
+
+            // 注册全局 UI 节点动作执行器 (用于 MCP 真实点击与输入流转)
+            DisposableEffect(Unit) {
+                org.gemini.ui.forge.service.mcp.UiRoadmapRegistry.setActionHandler(object : org.gemini.ui.forge.service.mcp.UiNodeActionHandler {
+                    override suspend fun clickNode(nodeId: String): Boolean {
+                        return when (nodeId) {
+                            "btn_back_home" -> {
+                                if (appState.isDirty) {
+                                    showExitConfirmDialog = true
+                                } else {
+                                    appViewModel.navigateTo(AppScreen.HOME)
+                                }
+                                true
+                            }
+                            "btn_save_and_leave" -> {
+                                if (showExitConfirmDialog) {
+                                    appViewModel.dispatchSaveEvent()
+                                    showExitConfirmDialog = false
+                                    appViewModel.navigateTo(AppScreen.HOME)
+                                    true
+                                } else false
+                            }
+                            "btn_discard_and_leave" -> {
+                                if (showExitConfirmDialog) {
+                                    appViewModel.setDirty(false)
+                                    showExitConfirmDialog = false
+                                    appViewModel.navigateTo(AppScreen.HOME)
+                                    true
+                                } else false
+                            }
+                            "btn_cancel_leave" -> {
+                                if (showExitConfirmDialog) {
+                                    showExitConfirmDialog = false
+                                    true
+                                } else false
+                            }
+                            "btn_open_mcp_console" -> {
+                                showMcpTrafficDialog = true
+                                true
+                            }
+                            "btn_close_mcp_console" -> {
+                                showMcpTrafficDialog = false
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+
+                    override suspend fun setInputText(nodeId: String, text: String): Boolean {
+                        // 预留全局输入槽位扩展
+                        return false
+                    }
+                })
+                onDispose {
+                    org.gemini.ui.forge.service.mcp.UiRoadmapRegistry.setActionHandler(null)
+                }
+            }
+
+            // 监听 MCP UI 联动事件 (仅当开启前台视觉跟随时自动响应导航流转)
+            LaunchedEffect(Unit) {
+                val savedFollow = configManager.loadKey("MCP_UI_FOLLOW_ENABLED")
+                if (savedFollow != null) {
+                    org.gemini.ui.forge.service.mcp.UiRoadmapRegistry.setUiFollowEnabled(savedFollow.toBoolean())
+                }
+
+                org.gemini.ui.forge.service.mcp.McpUiBridge.events.collect { event ->
+                    if (!org.gemini.ui.forge.service.mcp.UiRoadmapRegistry.isUiFollowEnabled.value) {
+                        return@collect // 未开启视觉跟随时，后台静默执行，不干扰当前视图
+                    }
+                    when (event) {
+                        is org.gemini.ui.forge.service.mcp.McpUiEvent.NavigateToProject -> {
+                            val state = event.projectState ?: templateRepo.getTemplates().find { it.first == event.projectName }?.second
+                            if (state != null) {
+                                appViewModel.loadProject(event.projectName, state)
+                                appViewModel.navigateTo(AppScreen.PROJECT_WORKSPACE)
+                            }
+                        }
+                        is org.gemini.ui.forge.service.mcp.McpUiEvent.RefreshWorkspace -> {
+                            // 刷新当前工程状态
+                        }
+                        else -> {}
+                    }
+                }
+            }
+
             LaunchedEffect(Unit) {
                 delay(100.milliseconds)
                 try {
@@ -186,14 +309,6 @@ fun App(typography: Typography? = null) {
                 }
             }
 
-            var showCloudAssetDialog by remember { mutableStateOf(false) }
-            var showSettingsDialog by remember { mutableStateOf(false) }
-            var showMcpDialog by remember { mutableStateOf(false) }
-            var showMcpTrafficDialog by remember { mutableStateOf(false) }
-            var showCompileDialog by remember { mutableStateOf(false) }
-            var showHelpDialog by remember { mutableStateOf(false) }
-            var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
-
             AppTheme(
                 themeMode = globalState.themeMode,
                 layoutMode = globalState.layoutMode,
@@ -201,7 +316,6 @@ fun App(typography: Typography? = null) {
             ) {
                 val coroutineScope = rememberCoroutineScope()
                 val toastData by Toast.toastData.collectAsState()
-                var showExitConfirmDialog by remember { mutableStateOf(false) }
 
                 Box(
                     modifier = Modifier.fillMaxSize()
@@ -536,6 +650,9 @@ fun App(typography: Typography? = null) {
 
                     // 挂载全局提示宿主 (Tooltip)
                     GlobalTooltipHost()
+
+                    // 挂载 MCP 外部 AI 助手人机交互弹窗与通知宿主
+                    org.gemini.ui.forge.ui.dialog.system.McpInteractionHost()
                 }
             }
         }

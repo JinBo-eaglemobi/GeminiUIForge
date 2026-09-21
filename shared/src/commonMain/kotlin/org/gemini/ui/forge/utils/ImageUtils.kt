@@ -91,7 +91,17 @@ fun ByteArray.toImageBitmap(): ImageBitmap {
  * @return 包含 (宽度, 高度) 的 [Pair]，若读取失败则返回 null。
  */
 suspend fun getImageSize(uri: String): Pair<Int, Int>? {
-    val bytes = readLocalFileBytes(uri) ?: return null
+    val bytes = if (uri.startsWith("data:image")) {
+        val b64 = if (uri.contains(",")) uri.substringAfter(",") else uri
+        try {
+            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+            kotlin.io.encoding.Base64.decode(b64)
+        } catch (e: Exception) {
+            null
+        }
+    } else {
+        readLocalFileBytes(uri)
+    } ?: return null
     return try {
         val image = Image.makeFromEncoded(bytes)
         Pair(image.width, image.height)
@@ -634,4 +644,73 @@ suspend fun transcodeForUpload(
         AppLogger.w("ImageUtils", "上行图片转码异常，回退原图: ${e.message}")
         TranscodeResult(imageBytes, "image/png")
     }
+}
+
+/**
+ * 通用压缩编码结果载体（字节 + MIME 类型 + 文件扩展名三位一体）。
+ * 与 [TranscodeResult] 的区别：面向本地磁盘缓存与通用分发场景，额外携带文件扩展名。
+ */
+data class CompactImage(
+    val bytes: ByteArray,
+    val mimeType: String,
+    val extension: String
+)
+
+/**
+ * 通用有损压缩转换中枢（全项目统一入口，MCP 截图 / 报告导出等场景共用）。
+ *
+ * 核心策略：WEBP(quality) 优先 → JPEG(quality) 降级 → 原始 PNG 兜底，
+ * 任何一级编码失败均优雅降级，绝不让调用方因编码问题中断业务。
+ *
+ * @param sourceBytes 原始图片字节（通常为体积较大的 PNG 截图）
+ * @param quality 压缩质量（0~100），默认 88（体积与画质均衡点）
+ */
+suspend fun compressToCompactImage(sourceBytes: ByteArray, quality: Int = 88): CompactImage {
+    if (sourceBytes.isEmpty()) return CompactImage(sourceBytes, "image/png", "png")
+    return try {
+        val srcImage = Image.makeFromEncoded(sourceBytes)
+        compressImageInternal(srcImage, quality, fallbackBytes = sourceBytes)
+    } catch (e: Exception) {
+        AppLogger.w("ImageUtils", "通用图片压缩异常，回退原图: ${e.message}")
+        CompactImage(sourceBytes, "image/png", "png")
+    }
+}
+
+/**
+ * 已持有 Skia [Image] 的调用方专用重载，直接在像面层面编码，避免多一次 PNG 中转。
+ */
+suspend fun compressToCompactImage(image: Image, quality: Int = 88): CompactImage =
+    compressImageInternal(image, quality, fallbackBytes = null)
+
+/**
+ * 私有共用编码管线：WEBP → JPEG → PNG 三级降级。
+ */
+private fun compressImageInternal(image: Image, quality: Int, fallbackBytes: ByteArray?): CompactImage {
+    // 第一优先：WEBP（高压缩比，控制返回数据体积的主力格式）
+    val webpData = try {
+        image.encodeToData(EncodedImageFormat.WEBP, quality)
+    } catch (_: Throwable) {
+        null
+    }
+    if (webpData != null && webpData.bytes.isNotEmpty()) {
+        return CompactImage(webpData.bytes, "image/webp", "webp")
+    }
+
+    // 第一降级：JPEG（截图类场景无透明通道需求）
+    val jpegData = try {
+        image.encodeToData(EncodedImageFormat.JPEG, quality)
+    } catch (_: Throwable) {
+        null
+    }
+    if (jpegData != null && jpegData.bytes.isNotEmpty()) {
+        return CompactImage(jpegData.bytes, "image/jpeg", "jpg")
+    }
+
+    // 最终兜底：优先透传原始字节，其次无损 PNG 重编码
+    val pngBytes = fallbackBytes ?: try {
+        image.encodeToData(EncodedImageFormat.PNG)?.bytes
+    } catch (_: Throwable) {
+        null
+    }
+    return CompactImage(pngBytes ?: ByteArray(0), "image/png", "png")
 }

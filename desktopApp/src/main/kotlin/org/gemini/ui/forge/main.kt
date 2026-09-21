@@ -136,6 +136,8 @@ fun main(args: Array<String>) {
             state = windowState,
             icon = painterResource(Res.drawable.app_icon)
         ) {
+            // 持有主窗口引用：供 MCP 应用窗口离屏截图与坐标真实事件注入使用 (最小化/后台均可用)
+            AppWindowHolder.holdWindow(window)
             App()
         }
     }

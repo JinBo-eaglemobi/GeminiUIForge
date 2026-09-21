@@ -7,6 +7,8 @@ import org.gemini.ui.forge.service.mcp.McpToolAnnotations
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
 import org.gemini.ui.forge.service.mcp.McpToolResult
 import org.gemini.ui.forge.utils.LocalFileStorage
+import org.gemini.ui.forge.utils.ImageCacheManager
+import org.gemini.ui.forge.utils.compressToCompactImage
 import org.gemini.ui.forge.utils.readLocalFileBytes
 import org.jetbrains.skia.*
 import kotlin.io.encoding.Base64
@@ -119,23 +121,20 @@ class ComposePageScreenshotTool(
             }
         }
 
-        onProgress?.invoke(0.8f, "正在编码整页 PNG 图像...")
+        onProgress?.invoke(0.8f, "正在压缩编码整页图像 (WEBP 优先)...")
         val imageSnapshot = surface.makeImageSnapshot()
-        val pngData = imageSnapshot.encodeToData(EncodedImageFormat.PNG)
-            ?: return McpToolResult.error("Skia 图像编码 PNG 失败")
+        // 统一走公共工具压缩中枢：已持有 Skia Image 直接走重载，避免 PNG 中转编码
+        val compact = compressToCompactImage(imageSnapshot, 90)
+        val cachedPath = ImageCacheManager.saveCache("compose_${projectName}", compact)
 
-        val bytes = pngData.bytes
         @OptIn(ExperimentalEncodingApi::class)
-        val base64 = Base64.encode(bytes)
-
-        // 落盘缓存
-        val outTFile = repository.saveCacheImage(projectName, "compose_screenshot", bytes)
+        val base64 = Base64.encode(compact.bytes)
 
         onProgress?.invoke(1.0f, "整页拼装截图完成")
         return McpToolResult.image(
             base64Data = base64,
-            mimeType = "image/png",
-            message = "✅ 页面 [${page.id}] Skia 离屏拼装完成，已落盘物理缓存: ${outTFile.getAbsolutePath()}"
+            mimeType = compact.mimeType,
+            message = "✅ 页面 [${page.id}] Skia 离屏拼装完成 (${compact.extension.uppercase()} 压缩, ${compact.bytes.size / 1024}KB)，已落盘物理缓存: $cachedPath"
         )
     }
 }

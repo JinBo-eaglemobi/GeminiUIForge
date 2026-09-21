@@ -41,6 +41,7 @@ import kotlinx.serialization.json.JsonElement
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.service.mcp.*
 import org.gemini.ui.forge.ui.component.ToastType
+import androidx.compose.ui.platform.testTag
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.mcp.component.CommandDictionaryDialog
 import org.gemini.ui.forge.ui.dialog.mcp.component.TrafficRecordItem
@@ -67,7 +68,8 @@ fun McpTrafficInspectorDialog(
     val activeUrl by McpController.serverUrl.collectAsState()
     val isRunning by McpController.isRunning.collectAsState()
 
-    var expandedRecordId by remember { mutableStateOf<String?>(null) }
+    // 支持多项/全量展开的响应式集合
+    var expandedRecordIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selectedNodeId by remember { mutableStateOf<String?>(null) }
     var showHelpDictionaryDialog by remember { mutableStateOf(false) }
 
@@ -77,6 +79,10 @@ fun McpTrafficInspectorDialog(
         } else {
             logs.filter { it.sessionId == selectedNodeId }
         }
+    }
+
+    val isAllExpanded = remember(filteredLogs, expandedRecordIds) {
+        filteredLogs.isNotEmpty() && filteredLogs.all { expandedRecordIds.contains(it.id) }
     }
 
     val selectedNode = remember(nodes, selectedNodeId) {
@@ -105,13 +111,16 @@ fun McpTrafficInspectorDialog(
                     .fillMaxSize()
                     .padding(spacing.large)
             ) {
-                // 1. 顶部 Header
+                // 1. 顶部 Header (左侧标题行与右侧操作按钮严格同一水平基线对齐，杜绝因多行描述下沉)
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = spacing.medium),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier.weight(1f).padding(end = spacing.medium)
+                    ) {
                         Surface(
                             shape = AppShapes.medium,
                             color = Color(0xFF00ACC1).copy(alpha = 0.15f),
@@ -128,7 +137,10 @@ fun McpTrafficInspectorDialog(
                         }
                         Spacer(Modifier.width(spacing.medium))
                         Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.height(38.dp) // 与左侧图标 38.dp 同高，确保标题基线完全居中
+                            ) {
                                 Text(
                                     text = "MCP 通信流水与连接节点监控",
                                     style = MaterialTheme.typography.titleMedium,
@@ -161,6 +173,7 @@ fun McpTrafficInspectorDialog(
                                     }
                                 }
                             }
+                            Spacer(Modifier.height(2.dp))
                             Text(
                                 text = "实时捕获外部 AI 客户端 (OpenCode, Cursor 等) 的实质性 RPC 双向报文数据 (单连接保留上限 1000 条，已自动异步持久化刷盘)",
                                 style = MaterialTheme.typography.bodySmall,
@@ -169,13 +182,19 @@ fun McpTrafficInspectorDialog(
                         }
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 右侧工具操作区：高度限制在 38.dp 内，与左侧首行标题基线严格水平对其，关闭按钮位置常驻固定
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.height(38.dp)
+                    ) {
                         // 指令帮助手册入口按钮
                         OutlinedButton(
                             onClick = { showHelpDictionaryDialog = true },
                             shape = AppShapes.small,
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            modifier = Modifier.height(30.dp).tip("查看 MCP 协议交互指令与工具字典速查")
+                            modifier = Modifier
+                                .testTag("btn_open_cmd_dict")
+                                .height(30.dp).tip("查看 MCP 协议交互指令与工具字典速查")
                         ) {
                             Icon(Icons.AutoMirrored.Filled.Help, null, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(4.dp))
@@ -184,16 +203,32 @@ fun McpTrafficInspectorDialog(
 
                         Spacer(Modifier.width(spacing.small))
 
-                        if (expandedRecordId != null) {
+                        // 一键全量展开/全量收起双向切换按钮 (遵循 One-Click Global Folding 规范)
+                        if (filteredLogs.isNotEmpty()) {
                             OutlinedButton(
-                                onClick = { expandedRecordId = null },
+                                onClick = {
+                                    expandedRecordIds = if (isAllExpanded || expandedRecordIds.isNotEmpty()) {
+                                        emptySet() // 全量收起
+                                    } else {
+                                        filteredLogs.map { it.id }.toSet() // 全量展开
+                                    }
+                                },
                                 shape = AppShapes.small,
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                modifier = Modifier.height(30.dp).tip("一键收起所有已展开的报文详情")
+                                modifier = Modifier.height(30.dp).tip(
+                                    if (isAllExpanded || expandedRecordIds.isNotEmpty()) "一键收起所有已展开的报文详情" else "一键展开当前全部报文详情"
+                                )
                             ) {
-                                Icon(Icons.Default.UnfoldLess, null, modifier = Modifier.size(14.dp))
+                                Icon(
+                                    imageVector = if (isAllExpanded || expandedRecordIds.isNotEmpty()) Icons.Default.UnfoldLess else Icons.Default.UnfoldMore,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
                                 Spacer(Modifier.width(4.dp))
-                                Text("一键收起报文", style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    text = if (isAllExpanded || expandedRecordIds.isNotEmpty()) "一键收起" else "一键展开",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
                             }
                             Spacer(Modifier.width(spacing.small))
                         }
@@ -212,6 +247,7 @@ fun McpTrafficInspectorDialog(
                             Spacer(Modifier.width(spacing.small))
                         }
 
+                        // 常驻关闭按钮，尺寸 32.dp 垂直居中对齐，绝对不受前方按钮动态伸缩影响
                         IconButton(
                             onClick = onDismissRequest,
                             modifier = Modifier.size(32.dp).tip("关闭窗口")
@@ -566,12 +602,16 @@ fun McpTrafficInspectorDialog(
                                 verticalArrangement = Arrangement.spacedBy(spacing.small)
                             ) {
                                 items(filteredLogs, key = { it.id }) { record ->
-                                    val isExpanded = expandedRecordId == record.id
+                                    val isExpanded = expandedRecordIds.contains(record.id)
                                     TrafficRecordItem(
                                         record = record,
                                         isExpanded = isExpanded,
                                         onToggle = {
-                                            expandedRecordId = if (isExpanded) null else record.id
+                                            expandedRecordIds = if (isExpanded) {
+                                                expandedRecordIds - record.id
+                                            } else {
+                                                expandedRecordIds + record.id
+                                            }
                                         },
                                         onCopy = { copyAction(record.payloadJson, "已复制报文 JSON") }
                                     )

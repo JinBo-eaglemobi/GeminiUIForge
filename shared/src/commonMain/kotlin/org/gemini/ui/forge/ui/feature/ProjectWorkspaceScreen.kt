@@ -82,6 +82,13 @@ fun ProjectWorkspaceScreen(
     var isCtrlPressed by remember { mutableStateOf(false) }
 
     // 生命周期与全局事件监听
+    androidx.compose.runtime.DisposableEffect(viewModel) {
+        org.gemini.ui.forge.service.mcp.McpUiActionPipeline.registerActiveViewModel(viewModel)
+        onDispose {
+            org.gemini.ui.forge.service.mcp.McpUiActionPipeline.unregisterActiveViewModel(viewModel)
+        }
+    }
+
     LaunchedEffect(appState.project, appState.projectName) {
         viewModel.reload(appState.project)
     }

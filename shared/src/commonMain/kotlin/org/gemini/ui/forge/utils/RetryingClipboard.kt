@@ -48,6 +48,7 @@ class RetryingClipboard(
         delegate.setClipEntry(clipEntry)
     }
 
+    @OptIn(ExperimentalComposeUiApi::class)
     @Deprecated("Use platform-specific extension to get platform reference")
     override val nativeClipboard: NativeClipboard
         get() = delegate.nativeClipboard

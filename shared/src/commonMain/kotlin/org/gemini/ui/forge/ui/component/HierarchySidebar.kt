@@ -124,6 +124,7 @@ fun HierarchySidebar(
     Box(modifier = modifier.fillMaxHeight()) {
         val currentBlocksState by rememberUpdatedState(blocks)
         val currentIsReadOnlyState by rememberUpdatedState(isReadOnly)
+        val currentSelectedIdState by rememberUpdatedState(selectedBlockId)
 
         Column(
             modifier = Modifier
@@ -132,26 +133,29 @@ fun HierarchySidebar(
                 .onGloballyPositioned { listCoordinates = it }
                 .pointerInput(Unit) {
                     if (currentIsReadOnlyState) return@pointerInput
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        val windowOffset = listCoordinates?.localToWindow(down.position) ?: down.position
-                        val allIds = mutableSetOf<String>()
-                        fun walk(l: List<UIBlock>) {
-                            l.forEach { walk(it.children); allIds.add(it.id) }
-                        }
-                        walk(currentBlocksState)
-                        val hit = itemBounds.entries.toList().asReversed()
-                            .filter { it.key in allIds }
-                            .find { it.value.contains(windowOffset) }
-                        pressedBlockId = hit?.key
-                    }
-                }
-                .pointerInput(Unit) {
-                    if (currentIsReadOnlyState) return@pointerInput
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
-                            val sourceId = pressedBlockId
+                            val windowOffset = listCoordinates?.localToWindow(offset) ?: offset
+                            val allIds = mutableSetOf<String>()
+                            fun walk(l: List<UIBlock>) {
+                                l.forEach { walk(it.children); allIds.add(it.id) }
+                            }
+                            walk(currentBlocksState)
+
+                            // 1. 若当前已选中的模块在按压点命中范围内，优先作为拖拽源
+                            val currentSelected = currentSelectedIdState
+                            val selectedHit = if (currentSelected != null && currentSelected in allIds) {
+                                val b = itemBounds[currentSelected]
+                                if (b != null && b.contains(windowOffset)) currentSelected else null
+                            } else null
+
+                            // 2. 否则按当前存在于拓扑树中的项进行逆序查找命中
+                            val sourceId = selectedHit ?: itemBounds.entries.toList().asReversed()
+                                .filter { it.key in allIds }
+                                .find { it.value.contains(windowOffset) }?.key
+
                             if (sourceId != null) {
+                                pressedBlockId = sourceId
                                 draggedBlockId = sourceId
                                 val blockObj = currentBlocksState.findBlockById(sourceId)
                                 if (blockObj != null) {
@@ -165,7 +169,14 @@ fun HierarchySidebar(
                             change.consume()
                             dragPosition = change.position
                             val windowOffset = listCoordinates?.localToWindow(change.position) ?: change.position
-                            val hit = itemBounds.entries.toList().asReversed().find { it.value.contains(windowOffset) }    
+                            val allIds = mutableSetOf<String>()
+                            fun walk(l: List<UIBlock>) {
+                                l.forEach { walk(it.children); allIds.add(it.id) }
+                            }
+                            walk(currentBlocksState)
+                            val hit = itemBounds.entries.toList().asReversed()
+                                .filter { it.key in allIds }
+                                .find { it.value.contains(windowOffset) }
                             if (hit != null) {
                                 hoveredBlockId = hit.key
                                 val rect = hit.value

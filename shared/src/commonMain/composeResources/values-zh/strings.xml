@@ -558,4 +558,17 @@
     <string name="sys_res_action_gc">立即释放内存 (GC)</string>
     <string name="sys_res_gc_triggered">已触发垃圾回收清理</string>
     <string name="sys_res_live_badge">实时采样 (1.5秒)</string>
+
+    <!-- MCP 人机交互与请求宿主 -->
+    <string name="mcp_interaction_badge">AI 助手请求</string>
+    <string name="mcp_confirm_default_allow">允许执行</string>
+    <string name="mcp_confirm_default_deny">拒绝</string>
+    <string name="mcp_choice_title_default">请选择一个方案</string>
+    <string name="mcp_choice_confirm_btn">确认选择</string>
+    <string name="mcp_choice_cancel_btn">取消</string>
+    <string name="mcp_interaction_countdown">等待操作 (%1$d秒)</string>
+
+    <!-- MCP 前台视觉跟随 -->
+    <string name="mcp_follow_nav_title">AI 执行前台界面视觉跟随</string>
+    <string name="mcp_follow_nav_desc">开启后，AI 识图创建模板或操作将自动切入工作区并模拟动作；关闭时后台静默执行，零干扰当前视图。</string>
 </resources>

@@ -44,7 +44,30 @@ object McpToolRegistry {
             ScreenshotWindowTool(),
             // D 组：会话复盘与通信档案工具
             ListChatSessionsTool(),
-            GetTrafficRecordTool()
+            GetTrafficRecordTool(),
+            // E 组：人机交互与人工授权门禁工具
+            AskUserConfirmationTool(),
+            AskUserChoiceTool(),
+            NotifyUserTool(),
+            // F 组：AI 直调工具
+            InvokeGeminiTextTool(),
+            // G 组：提示词资产与预设管理工具
+            ListPromptsTool(),
+            GetPromptTool(),
+            SavePromptTool(),
+            ResetPromptTool(),
+            ListMattingPresetsTool(),
+            // H 组：运行感知工具
+            GetRuntimeStatusTool(),
+            // I 组：前端真实 UI 动作执行与隔离比对工具
+            ExecuteUiActionSequenceTool(),
+            InspectBlockWithReferenceTool(),
+            // J 组：UI 路线图感知与真实人工交互跟随工具
+            GetUiRoadmapTool(),
+            ClickUiNodeTool(),
+            SetUiInputTextTool(),
+            GetSemanticTreeTool(),
+            TriggerInitialVerificationTool()
         )
         _tools.value = builtin
     }

@@ -5,6 +5,8 @@ import org.gemini.ui.forge.service.mcp.McpToolAnnotations
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
 import org.gemini.ui.forge.service.mcp.McpToolResult
 import org.gemini.ui.forge.utils.LocalFileStorage
+import org.gemini.ui.forge.utils.ImageCacheManager
+import org.gemini.ui.forge.utils.compressToCompactImage
 import org.gemini.ui.forge.utils.fetchImageBytes
 import org.jetbrains.skia.*
 import kotlin.io.encoding.Base64
@@ -125,11 +127,12 @@ class CompareWithReferenceTool(
 
         onProgress?.invoke(0.85f, "生成 1:1 几何对齐叠加检查图...")
         val diffImage = Image.makeFromBitmap(bmpDiff)
-        val diffPng = diffImage.encodeToData(EncodedImageFormat.PNG)
-            ?: return McpToolResult.error("生成比对图失败")
+        // 统一走公共工具压缩中枢（quality 92 兼顾热力对比度的像素级可读性）
+        val compact = compressToCompactImage(diffImage, 92)
+        val cachedPath = ImageCacheManager.saveCache("compare", compact)
 
         @OptIn(ExperimentalEncodingApi::class)
-        val diffBase64 = Base64.encode(diffPng.bytes)
+        val diffBase64 = Base64.encode(compact.bytes)
 
         onProgress?.invoke(1.0f, "1:1 原寸对齐度量分析完成")
         val summaryText = buildJsonObject {
@@ -142,8 +145,8 @@ class CompareWithReferenceTool(
 
         return McpToolResult.image(
             base64Data = diffBase64,
-            mimeType = "image/png",
-            message = "📊 1:1 物理对齐报告: $summaryText"
+            mimeType = compact.mimeType,
+            message = "📊 1:1 物理对齐报告: $summaryText | 热力图 (${compact.extension.uppercase()}) 已缓存: $cachedPath"
         )
     }
 }

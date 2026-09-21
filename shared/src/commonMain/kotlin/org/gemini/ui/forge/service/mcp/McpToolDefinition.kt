@@ -28,6 +28,9 @@ data class McpToolResult(
         fun text(text: String, isError: Boolean = false): McpToolResult =
             McpToolResult(listOf(McpContent.Text(text)), isError)
 
+        fun success(text: String): McpToolResult =
+            text(text, isError = false)
+
         fun image(base64Data: String, mimeType: String = "image/png", message: String? = null): McpToolResult =
             McpToolResult(
                 buildList {

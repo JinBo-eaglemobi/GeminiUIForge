@@ -217,9 +217,49 @@ class VisualChatStudioViewModel(
      * @return 恢复或原本可用的物理文件路径；若无法恢复则原样返回
      */
     suspend fun ensureImageCached(targetImagePath: String): String {
-        if (targetImagePath.isBlank() || targetImagePath.startsWith("data:image")) {
+        if (targetImagePath.isBlank()) {
             return targetImagePath
         }
+
+        // 1. 若为 Base64 Data URI (data:image/...)，自动物理落盘到模块资产目录并同步更新当前会话消息
+        if (targetImagePath.startsWith("data:image")) {
+            val b64 = if (targetImagePath.contains(",")) targetImagePath.substringAfter(",") else targetImagePath
+            return try {
+                @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                val bytes = kotlin.io.encoding.Base64.decode(b64)
+                val isPng = targetImagePath.contains("image/png", ignoreCase = true)
+                val targetBlockId = block?.id?.ifBlank { "chat_gen" } ?: "chat_gen"
+                val savedFile = templateRepo.saveBlockResource(
+                    templateName = projectName,
+                    blockId = targetBlockId,
+                    fileNamePrefix = "chat_gen_${getCurrentTimeMillis()}",
+                    bytes = bytes,
+                    isPng = isPng
+                )
+                val savedAbsPath = savedFile.getAbsolutePath()
+                AppLogger.i(TAG, "已成功将 Data URI 转换为物理资产落盘: $savedAbsPath")
+
+                // 同步回写当前会话消息中的 URI，实现自愈更新与持久化
+                val current = _uiState.value.currentSession
+                if (current != null) {
+                    val updatedMessages = current.messages.map { msg ->
+                        if (msg.generatedImageUri == targetImagePath) {
+                            msg.copy(generatedImageUri = savedAbsPath)
+                        } else {
+                            msg
+                        }
+                    }
+                    val updatedSession = current.copy(messages = updatedMessages, updatedAt = getCurrentTimeMillis())
+                    sessionManager.saveSession(updatedSession)
+                    _uiState.update { it.copy(currentSession = updatedSession) }
+                }
+                savedAbsPath
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "解析或保存 Data URI 图片异常", e)
+                targetImagePath
+            }
+        }
+
         val cleanPath = targetImagePath.replace("\\", "/")
         if (org.gemini.ui.forge.utils.isFileExists(cleanPath)) {
             return cleanPath
@@ -255,6 +295,19 @@ class VisualChatStudioViewModel(
                         val restoredAbsPath = restoredFile.getAbsolutePath()
                         AppLogger.i(TAG, "已成功从原始通信报文恢复图片缓存: $restoredAbsPath")
                         org.gemini.ui.forge.utils.Toast.show("本地缓存已重新生成", org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
+
+                        // 同步更新消息中的路径
+                        val updatedMessages = current.messages.map { msg ->
+                            if (msg.generatedImageUri == targetImagePath || msg.generatedImageUri?.replace("\\", "/") == cleanPath) {
+                                msg.copy(generatedImageUri = restoredAbsPath)
+                            } else {
+                                msg
+                            }
+                        }
+                        val updatedSession = current.copy(messages = updatedMessages, updatedAt = getCurrentTimeMillis())
+                        sessionManager.saveSession(updatedSession)
+                        _uiState.update { it.copy(currentSession = updatedSession) }
+
                         return restoredAbsPath
                     } catch (e: Exception) {
                         AppLogger.e(TAG, "解码或保存恢复图片异常", e)

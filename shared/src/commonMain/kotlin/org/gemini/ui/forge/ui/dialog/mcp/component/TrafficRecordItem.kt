@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -37,6 +38,8 @@ import kotlinx.datetime.format.byUnicodePattern
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import org.gemini.ui.forge.extend.copyOnClick
+
 import org.gemini.ui.forge.service.mcp.McpCommandDictionary
 import org.gemini.ui.forge.service.mcp.McpTrafficDirection
 import org.gemini.ui.forge.service.mcp.McpTrafficRecord
@@ -92,6 +95,21 @@ fun TrafficRecordItem(
         }
     }
 
+    val lines = remember(prettyJson) {
+        prettyJson.lines()
+    }
+
+    val lineCount = lines.size
+    val lineNumWidth = remember(lineCount) {
+        val digits = lineCount.toString().length
+        // 至少 2 位字符宽度，每增加一位多 7.dp
+        maxOf(24.dp, (digits * 7 + 10).dp)
+    }
+
+    val lineNumbersText = remember(lineCount) {
+        (1..lineCount).joinToString("\n")
+    }
+
     Card(
         shape = AppShapes.medium,
         colors = CardDefaults.cardColors(
@@ -107,114 +125,126 @@ fun TrafficRecordItem(
                 shape = AppShapes.medium
             )
             .clip(AppShapes.medium)
-            .clickable { onToggle() }
     ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // 顶栏 Header 区域：仅此区域承担折叠与展开点击手势，与下方 JSON 区域彻底解耦
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(AppShapes.medium)
+                    .clickable { onToggle() }
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    // 方向徽章
-                    Surface(
-                        shape = AppShapes.small,
-                        color = dirColor.copy(alpha = 0.15f)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        // 方向徽章
+                        Surface(
+                            shape = AppShapes.small,
+                            color = dirColor.copy(alpha = 0.15f)
                         ) {
-                            Icon(
-                                imageVector = if (isInbound) Icons.AutoMirrored.Filled.ArrowForward else Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = null,
-                                tint = dirColor,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = if (isInbound) "INBOUND" else "OUTBOUND",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = dirColor,
-                                fontSize = 10.sp
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isInbound) Icons.AutoMirrored.Filled.ArrowForward else Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = null,
+                                    tint = dirColor,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = if (isInbound) "INBOUND" else "OUTBOUND",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = dirColor,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(10.dp))
+
+                        Text(
+                            text = record.methodOrTool,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            // 点击即复制指令名（复用项目剪贴板规范扩展；内层 clickable 优先消费点击，不冒泡触发 Header 折叠）
+                            modifier = Modifier
+                                .copyOnClick(record.methodOrTool, "已复制指令名: ${record.methodOrTool}")
+                                .tip("点击复制指令名")
+                        )
+
+                        if (record.clientName != null) {
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                shape = AppShapes.small,
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ) {
+                                Text(
+                                    text = record.clientName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+
+                        if (record.durationMs != null) {
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                shape = AppShapes.small,
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ) {
+                                Text(
+                                    text = "${record.durationMs}ms",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                    fontSize = 10.sp
+                                )
+                            }
                         }
                     }
-
-                    Spacer(Modifier.width(10.dp))
 
                     Text(
-                        text = record.methodOrTool,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        text = timeStr,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-
-                    if (record.clientName != null) {
-                        Spacer(Modifier.width(8.dp))
-                        Surface(
-                            shape = AppShapes.small,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ) {
-                            Text(
-                                text = record.clientName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
-
-                    if (record.durationMs != null) {
-                        Spacer(Modifier.width(8.dp))
-                        Surface(
-                            shape = AppShapes.small,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ) {
-                            Text(
-                                text = "${record.durationMs}ms",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
                 }
 
-                Text(
-                    text = timeStr,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+                Spacer(Modifier.height(6.dp))
 
-            Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = record.summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (record.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (isExpanded) 10 else 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = record.summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (record.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (isExpanded) 10 else 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
 
             AnimatedVisibility(
@@ -225,7 +255,7 @@ fun TrafficRecordItem(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 10.dp)
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                     Spacer(Modifier.height(8.dp))
@@ -266,7 +296,7 @@ fun TrafficRecordItem(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Payload (格式化 JSON)",
+                            text = "Payload (格式化 JSON · ${lineCount} 行)",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -285,22 +315,54 @@ fun TrafficRecordItem(
 
                     Spacer(Modifier.height(6.dp))
 
-                    // 格式化后的代码块内容 (等宽排版，双空格多行缩进)
+                    // 格式化后的代码块内容 (左侧行号条 + 右侧自由划词选择代码区，零手势冒泡)
                     Surface(
                         shape = AppShapes.small,
                         color = Color(0xFF1E1E1E), // 专用高对比深色代码底板
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        SelectionContainer {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 10.dp)
+                        ) {
+                            // 1. 左侧独立行号列 (Gutter)
                             Text(
-                                text = prettyJson,
+                                text = lineNumbersText,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
-                                lineHeight = 16.sp,
-                                color = Color(0xFFD4D4D4),
-                                modifier = Modifier.padding(12.dp)
+                                lineHeight = 18.sp,
+                                color = Color(0xFF6E7681), // 优雅暗灰行号
+                                modifier = Modifier
+                                    .width(lineNumWidth)
+                                    .padding(end = 8.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End
                             )
+
+                            // 2. 行号与代码垂直分隔线
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .fillMaxHeight()
+                                    .background(Color(0xFF333333))
+                            )
+
+                            // 3. 右侧正文代码区 (纯净 SelectionContainer，单机/双击/拖拽绝不冒泡折叠)
+                            SelectionContainer(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(start = 10.dp, end = 12.dp)
+                            ) {
+                                Text(
+                                    text = prettyJson,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 18.sp,
+                                    color = Color(0xFFD4D4D4)
+                                )
+                            }
                         }
                     }
                 }

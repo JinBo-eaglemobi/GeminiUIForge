@@ -258,27 +258,52 @@ fun UniversalVisualChatStudioDialog(
                                 pendingCount = state.pendingCount,
                                 currentVariantImageUri = selectedVariantRefImage,
                                 onImageClick = { imgUri -> lightboxImageModel = imgUri },
-                                onApplyImage = { imageUri ->
-                                    coroutineScope.launch {
-                                        val validUri = viewModel.ensureImageCached(imageUri)
-                                        val targetW = block?.bounds?.width?.toInt() ?: 0
-                                        val targetH = block?.bounds?.height?.toInt() ?: 0
-                                        val size = try {
-                                            org.gemini.ui.forge.utils.getImageSize(validUri)
-                                        } catch (e: Exception) {
-                                            null
-                                        }
-                                        val actualW = size?.first ?: 0
-                                        val actualH = size?.second ?: 0
-                                        if (targetW > 0 && targetH > 0 && (actualW != targetW || actualH != targetH)) {
-                                            // 尺寸不符，弹出切图加工与烘焙界面
-                                            pendingEditorImageUri = validUri
-                                            Toast.show("图片尺寸 ($actualW×$actualH) 与当前模块 ($targetW×$targetH) 不一致，正在打开切图加工...", ToastType.INFO)
-                                        } else {
-                                            handleFinalApplyAsset(validUri)
-                                        }
-                                    }
-                                },
+                                 onApplyImage = { imageUri ->
+                                     coroutineScope.launch {
+                                         val validUri = viewModel.ensureImageCached(imageUri)
+                                         // 防空拦截：若无法恢复且文件不存在，弹出明确错误提示并拦截，严禁打开空白编辑器
+                                         val isFileExisted = org.gemini.ui.forge.utils.isFileExists(validUri)
+                                         if (!isFileExisted && !validUri.startsWith("data:image")) {
+                                             Toast.show("图片文件不存在且无法恢复", ToastType.ERROR)
+                                             return@launch
+                                         }
+
+                                         val targetW = block?.bounds?.width?.toInt() ?: 0
+                                         val targetH = block?.bounds?.height?.toInt() ?: 0
+                                         val size = try {
+                                             org.gemini.ui.forge.utils.getImageSize(validUri)
+                                         } catch (e: Exception) {
+                                             null
+                                         }
+
+                                         if (size == null) {
+                                             // 无法解析尺寸，若文件存在则直接应用，避免误入空白切图页面
+                                             if (isFileExisted) {
+                                                 handleFinalApplyAsset(validUri)
+                                             } else {
+                                                 Toast.show("无法读取图片尺寸或文件已损坏", ToastType.ERROR)
+                                             }
+                                             return@launch
+                                         }
+
+                                         val actualW = size.first
+                                         val actualH = size.second
+
+                                         // 背景模块特殊保护：若是背景模块且比例近似或尺寸匹配，直接应用；或者尺寸完全一致时直接应用
+                                         val isBackground = block?.type == org.gemini.ui.forge.model.ui.UIBlockType.BACKGROUND
+                                         val isSizeMatch = actualW == targetW && actualH == targetH
+                                         val isRatioMatch = isBackground && targetW > 0 && targetH > 0 && 
+                                                 kotlin.math.abs((actualW.toFloat() / actualH) - (targetW.toFloat() / targetH)) < 0.05f
+
+                                         if (targetW > 0 && targetH > 0 && !isSizeMatch && !isRatioMatch) {
+                                             // 尺寸不符且非等比背景，弹出切图加工与烘焙界面
+                                             pendingEditorImageUri = validUri
+                                             Toast.show("图片尺寸 ($actualW×$actualH) 与当前模块 ($targetW×$targetH) 不一致，正在打开切图加工...", ToastType.INFO)
+                                         } else {
+                                             handleFinalApplyAsset(validUri)
+                                         }
+                                     }
+                                 },
                                 onVariantImage = { imageUri ->
                                     if (selectedVariantRefImage == imageUri || imageUri.isBlank()) {
                                         selectedVariantRefImage = null

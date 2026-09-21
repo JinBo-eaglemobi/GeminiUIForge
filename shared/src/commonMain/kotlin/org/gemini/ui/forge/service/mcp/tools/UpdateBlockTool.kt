@@ -46,6 +46,10 @@ class UpdateBlockTool(
                 put("type", "string")
                 put("description", "可选：图元组件类型（如 BUTTON, IMAGE, TEXT, CONTAINER, REEL 等）")
             })
+            put("isPureContainer", buildJsonObject {
+                put("type", "boolean")
+                put("description", "可选：是否为纯容器/占位层（true 表示仅用于排版，不参与任何 AI 图片资源生成）")
+            })
             put("userPromptZh", buildJsonObject {
                 put("type", "string")
                 put("description", "可选：中文 AI 生图提示词")
@@ -99,6 +103,10 @@ class UpdateBlockTool(
 
                     arguments["userPromptEn"]?.jsonPrimitive?.contentOrNull?.let { en ->
                         updated = updated.copy(userPromptEn = en)
+                    }
+
+                    arguments["isPureContainer"]?.jsonPrimitive?.booleanOrNull?.let { pure ->
+                        updated = updated.copy(isPureContainer = pure)
                     }
 
                     arguments["type"]?.jsonPrimitive?.contentOrNull?.let { typeStr ->

@@ -137,17 +137,27 @@ fun List<UIBlock>.calculateBlockParentOffset(id: String): Offset {
  */
 fun List<UIBlock>.findHitBlock(lx: Float, ly: Float, parentLx: Float = 0f, parentLy: Float = 0f, editingGroupId: String?): UIBlock? {
     if (editingGroupId == null) {
-        // 全局模式下，从上至下（倒序遍历，后绘制的在最上层）检索所有命中的顶层模块
-        for (i in this.indices.reversed()) {
-            val block = this[i]
-            if (!block.isVisible) continue
-            val absL = parentLx + block.bounds.left
-            val absT = parentLy + block.bounds.top
-            val absR = parentLx + block.bounds.right
-            val absB = parentLy + block.bounds.bottom
-            if (lx in absL..absR && ly >= absT && ly <= absB) return block
+        // 全局模式下，递归从上至下（倒序遍历，后绘制在最上层）检索所有可见模块，叶子节点优先
+        fun hitTest(list: List<UIBlock>, pLx: Float, pLy: Float): UIBlock? {
+            for (i in list.indices.reversed()) {
+                val block = list[i]
+                if (!block.isVisible) continue
+                val absL = pLx + block.bounds.left
+                val absT = pLy + block.bounds.top
+                val absR = pLx + block.bounds.right
+                val absB = pLy + block.bounds.bottom
+                if (lx in absL..absR && ly in absT..absB) {
+                    // 若子模块有命中，优先返回命中最深层的子组件
+                    if (block.children.isNotEmpty()) {
+                        val childHit = hitTest(block.children, absL, absT)
+                        if (childHit != null) return childHit
+                    }
+                    return block
+                }
+            }
+            return null
         }
-        return null
+        return hitTest(this, parentLx, parentLy)
     }
     // 隔离编辑模式下：仅在被编辑的隔离组 of 子元素列表中检索命中
     val targetGroup = this.findBlockById(editingGroupId) ?: return null

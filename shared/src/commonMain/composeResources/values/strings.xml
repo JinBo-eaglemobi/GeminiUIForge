@@ -548,4 +548,17 @@
     <string name="sys_res_action_gc">Run GC</string>
     <string name="sys_res_gc_triggered">Garbage collection triggered</string>
     <string name="sys_res_live_badge">Live (1.5s)</string>
+
+    <!-- MCP Human-in-the-Loop Interaction Host -->
+    <string name="mcp_interaction_badge">AI Assistant Request</string>
+    <string name="mcp_confirm_default_allow">Allow &amp; Execute</string>
+    <string name="mcp_confirm_default_deny">Reject</string>
+    <string name="mcp_choice_title_default">Please select an option</string>
+    <string name="mcp_choice_confirm_btn">Confirm</string>
+    <string name="mcp_choice_cancel_btn">Cancel</string>
+    <string name="mcp_interaction_countdown">Awaiting action (%1$ds)</string>
+
+    <!-- MCP Follow Navigation -->
+    <string name="mcp_follow_nav_title">Visual UI Follow Mode</string>
+    <string name="mcp_follow_nav_desc">When enabled, AI automatically navigates and simulates actions in UI. When disabled, tasks run silently in the background without disturbing current view.</string>
 </resources>

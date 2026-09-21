@@ -30,48 +30,48 @@
 ./gradlew :shared:jvmTest                          # 运行 JVM 测试
 ```
 
-构建环境统一使用 **JDK 23**（CI 实证）；toolchain 缺失时由 foojay resolver 自动下载。
+构建环境本地锁定 **JDK 25** (`D:\apps\sdks\java\jbr-25.0.2`，锁定于 `gradle.properties` 与 IDEA 配置)；toolchain 缺失时由 foojay resolver 自动下载。
 
 ## 质量与校验（红线规则）
 
 - **IntelliJ IDEA 原生 Gradle 编译校验规范（MCP Run Configuration 优先铁律）**: **【红线规则】**
-  每次代码逻辑或文件结构的改动完成后，如果修改的文件影响项目最终代码编译，**必须**立即执行桌面端真实编译实证校验。执行通道严格遵循以下优先级：
+  每次非热重载开发模式下的代码改动完成后，如果影响项目代码编译，**必须**执行桌面端真实编译校验：
   1. **首选通道 (IntelliJ IDEA 原生 Gradle 任务调度)**：
-     - **底层机制与创建缘由**：IntelliJ IDEA 内置的 `idea_build_project` 仅调用 JPS 内存语法树速查，**完全不执行 Gradle 任务链，无法验证 Kotlin Multiplatform 与 Compose 编译器插件的真实编译**；而直接在外部命令行运行 `./gradlew` 在 Windows 下容易由于冷启动慢、锁冲突或 120s 终端超时而卡死。因此，最稳定、最高效的方案是通过 IntelliJ IDEA 原生支持的共享运行配置（Shared Run Configuration）由 IDEA 内部的 Gradle 后台引擎托管编译；
-     - **新项目/新 AI 自愈自建规范 (Self-Bootstrap Protocol)**：在新项目、新环境或 `.run/compileDesktop.run.xml` 不存在时，**AI 必须懂得主动探测并在根目录创建该配置文件**，严禁因文件缺失而盲目放弃或直接退回慢速命令行。标准模板如下：
-       ```xml
-       <component name="ProjectRunConfigurationManager">
-         <configuration default="false" name="compileDesktop" type="GradleRunConfiguration" factoryName="Gradle">
-           <ExternalSystemSettings>
-             <option name="executionName" />
-             <option name="externalProjectPath" value="$PROJECT_DIR$" />
-             <option name="externalSystemIdString" value="GRADLE" />
-             <option name="scriptParameters" value="" />
-             <option name="taskDescriptions"><list /></option>
-             <option name="taskNames">
-               <list>
-                 <option value=":shared:compileKotlinJvm" />
-                 <option value=":desktopApp:compileKotlin" />
-               </list>
-             </option>
-             <option name="vmOptions" />
-           </ExternalSystemSettings>
-           <ExternalSystemDebugServerProcess>true</ExternalSystemDebugServerProcess>
-           <ExternalSystemReRunFailedGeneralTasks>true</ExternalSystemReRunFailedGeneralTasks>
-         </configuration>
-       </component>
-       ```
-     - **标准调用范式**：若当前对话环境中挂载了 IntelliJ IDEA MCP 工具，**必须强制优先调用 `idea_execute_run_configuration(configurationName = "compileDesktop", projectPath = "<项目绝对根路径>", timeout = 180000, waitForExit = true)`**。单次改动仅需执行一次完整编译，具备完整的 Compose 编译器插件校验、极速增量缓存与 Configuration Cache 复用，以 `exitCode: 0` 作为桌面端真实编译通过的唯一终审凭证；
-  2. **快速语法初筛 (辅助通道)**：可按需调用 `idea_build_project(filesToRebuild = [...])` 做毫秒级语法与局部引用初步速查，但**不能作为编译通过的唯一终审依据**，最终交付必须由 `compileDesktop` 实证通过；
-  3. **兜底通道 (命令行 Gradle)**：仅当当前环境未挂载 IDEA MCP 工具、或处于纯无头 CI/CD 终端环境时，才回退执行命令行编译：`./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`；
-  4. 如果修改的文件不影响项目最终代码编译（如仅修改文档、配置注释），修改完成后不触发编译验证。
-- **开发调试与热重载协同规范 (Forge-Loop Agent 指引)**:
+     - 若当前挂载了 IDEA MCP 工具，**强制优先调用 `idea_execute_run_configuration(configurationName = "compileDesktop", projectPath = "<项目绝对根路径>", timeout = 180000, waitForExit = true)`**；
+     - 运行配置位于 `.run/compileDesktop.run.xml`，以 `exitCode: 0` 作为桌面端真实编译通过的终审凭证；
+  2. **快速语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 或 `idea_build_project` 做毫秒级局部语法速查；
+  3. **兜底通道 (命令行 Gradle)**：仅当无 IDEA MCP 工具时回退命令行：`./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`；
+  4. 纯文档、注释或非代码修改不触发编译校验。
+- **开发调试与热重载协同规范 (Forge-Loop Agent 指引)**: **【红线规则】**
   - 项目配置了专属全自主研发智能体 **Forge-Loop**（位于 `.opencode/agents/forge-loop.md`）；
-  - 涉及热重载运行态调试、三网 MCP 协同调用、免编译极速热替换、超时防重杀及实机视觉闭环自检等具体机制与操作细节，**统一严格遵循并引导调用 `.opencode/agents/forge-loop.md` 的规范执行**，不在本全局指令中冗余展开。
+  - **当前热重载运行模式下，绝不用执行耗时的全量编译（如 `compileDesktop`），直接交给热重载去处理新编写的代码**；
+  - 涉及热重载运行态调试、三网 MCP 协同调用、免编译极速热替换、超时防重杀及实机视觉闭环自检等具体机制与操作细节，**统一严格遵循并引导调用 `.opencode/agents/forge-loop.md` 的规范执行**，不在本主指令中包含冗余功能约束。
 - **校验阶段仅校验桌面版（JVM 优先铁律）**: **【红线规则】** 自动化构建与闭环验证阶段**一律且仅执行桌面端 (JVM) 编译校验**。其他平台（Web / Android / iOS）全部交由手动按需校验，严禁在日常迭代后自动触发耗时冗长的多端全量编译，最大化提升开发反馈速度。
-- **物理校验优先 (Physical Check First)**: **【红线规则】** 外部脚本或工具修改文件后，IntelliJ IDEA 的编辑器可能会由于内存缓冲区机制（VFS 缓存）而显示未更新的视图。**切勿单凭编辑器的视觉表现来判断修改成败**。必须始终通过原生 `git diff` 或 `Get-Content` / `cat` 物理读取作为落盘的唯一铁证。若发现 IDE 刷新滞后，可右键文件选择 `Reload from Disk`，或利用 `Synchronize` 和 `ReloadFromFile` 的 IDE Action。
-- **破坏性文件与数据清理强制二次确认 (Mandatory Confirmation for Destructive Actions)**: **【红线规则】** 严禁在任何 UI 交互或按钮逻辑中编写“点击后未经确认直接静默物理删除/清空本地磁盘文件或核心数据”的代码。任何涉及物理删除文件、清空资产历史库、删除项目模板或破坏性重置数据库的操作，**必须强制弹出带有清晰后果警示说明的二次确认弹窗（如 `AppConfirmDialog`）**，且确认操作必须使用警示样式（`isDestructive = true`），只有经用户在弹窗中显式确认授权后方可调用底层物理清理！
-- **定位底层具体实现 (Target Direct Implementations)**: 在 JetBrains Compose 等界面开发中，大片 UI 卡片常常被抽取成同文件内的辅助私有组件（如 `private fun CredentialSection`）。编辑前必须使用 `grep` 检索全文，**确保将具体修改落实到承载具体逻辑的辅助函数定义体内，而不是主界面内的调用点**，防止误伤整体调用。
+- **物理校验优先 (Physical Check First)**: **【红线规则】** 外部脚本或工具修改文件后，切勿单凭编辑器的视觉表现来判断修改成败。必须始终通过原生 `git diff` 或 `read` / `Get-Content` 物理读取作为落盘的唯一铁证。
+- **校验阶段人工交互流程优先规范 (Human-like Realistic Workflow for Validation)**: **【红线规则】**
+  在日常校验、问题复现或实机验证阶段，**一律优先走正常的人工操作流程与完整交互链路**（如先选中图层、在界面属性面板正常点击开关或按钮、在图层树真实拖拽定位等）。**严禁为了图省事而频繁执行底层私有命令、修改内存对象或绕过 UI 流程直接打开内部功能**。只有通过完整的真实用户操作链路，才能切实暴露和验证 UI 线程事件分发、状态联动、弹窗时序与手势交互中的真实表现与潜在缺陷。
+- **破坏性文件与数据清理强制二次确认 (Mandatory Confirmation for Destructive Actions)**: **【红线规则】** 严禁编写“未经确认直接物理删除本地磁盘文件或核心数据”的代码。任何涉及物理删除文件、清空资产历史库、删除项目模板或破坏性重置的操作，**必须强制弹出带有清晰后果警示说明的二次确认弹窗（如 `AppConfirmDialog`）**，且确认操作必须使用警示样式（`isDestructive = true`）。
+- **定位底层具体实现 (Target Direct Implementations)**: 在 JetBrains Compose 等界面开发中，大片 UI 卡片常常被抽取成独立组件或同模块下的辅助文件。编辑前必须使用 `grep` 检索全文，**确保将具体修改落实到承载具体逻辑的组件定义体内，而不是主界面内的调用点**。
+
+## 业务架构与模块模型规范
+
+- **全屏游戏背景底图规范 (BACKGROUND Specification)**: **【业务铁律】**
+  - 背景模块（`UIBlockType.BACKGROUND`）默认是游戏整个界面的背景层，**其尺寸必须恒等于全屏画布/屏幕尺寸**；
+  - 在大模型识别、离线模板生成、手动添加模块（`addBlock`）或切换模块类型（`updateBlockType`）时，只要是顶层背景模块，其坐标与尺寸**必须直接初始化为全屏大小 `bounds = SerialRect(0f, 0f, width, height)` 与 `cropRect = SerialRect(0f, 0f, width, height)`**，严禁使用局部或默认小尺寸。
+- **纯容器 / 组合占位层规范 (CONTAINER & isPureContainer)**:
+  - `UIBlockType.CONTAINER` 或标记 `isPureContainer = true` 的模块属于纯占位或组合层，**绝对不参与任何 AI 图片资源生成**；
+  - 批量生图（`BatchAssetGenDialog`）自动过滤排除所有纯容器模块；
+  - 属性面板自适应隐藏已绑定图片资产卡片与生图参考图设置，仅保留几何坐标与“容器内部区域重塑”功能；
+  - 画布渲染（`RenderBlock`）对纯容器不渲染任何背景图片与加载菊花，保持内部嵌套子组件通透可见。
+- **参考图区域与模块显示坐标彻底二元解耦 (Decoupled Reference Area)**:
+  - 模块在画布上的显示大小与坐标（`UIBlock.bounds`）和 AI 生图的局部参考区域（`UIBlock.cropRect` 与切片 `referenceImage`）**完全独立解耦**；
+  - 打开设置参考区域窗口时，初始选区读取 `cropRect ?: toAbsoluteBounds()`（真实反映参考图覆盖范围）；
+  - 调整保存参考区域时，**仅更新 `cropRect` 与切片 `referenceImage`，绝对不修改模块自身的显示 `bounds`**。
+- **聊天生成图片本地存储、自愈恢复与安全定位规范**:
+  - 聊天生成图片落盘路径：`~/.geminiuiforge/templates/{projectName}/assets/{blockId}/`；
+  - 原始通信报文备份路径：`~/.geminiuiforge/sessions/{safeScope}/{sessionId}/traffic/`；
+  - **自动再次缓存**：本地图片文件被删除后，用户在聊天界面点击「应用」时，系统自动回溯读取会话对应的 `RESP.json` 报文，提取 Base64 重新落盘生成本地缓存文件后应用；
+  - **安全定位目录**：点击打开文件目录时，文件存在则高亮文件；文件不存在但父目录存在则打开该空白目录；若均不存在则优雅弹出气泡提示，严禁静默无响应。
 
 ## 代码规范
 
@@ -131,7 +131,7 @@
 - **注释规范**: 所有生成的代码必须包含相关说明与注释，且注释内容必须统一使用**中文**。
 - **界面与多语言规范 (I18n)**:
   - 严禁在任何 UI 组件（`.kt` 界面文件）中硬编码中英文字符串。
-  - 所有新增的界面文案必须通过 `composeApp/src/commonMain/composeResources/values/strings.xml` (默认/英文) 和 `values-zh/strings.xml` (中文) 进行注册和读取。
+  - 所有新增的界面文案必须通过 `shared/src/commonMain/composeResources/values/strings.xml` (默认/英文) 和 `values-zh/strings.xml` (中文) 进行注册和读取。
   - 对于带参数的动态文本，必须使用 Compose/Android 标准的百分号占位符格式（例如：`%1$d`, `%1$s` 或 `%d`, `%s`），并通过 `stringResource(Res.string.XXX, arg1)` 进行赋值传递，**严禁在代码中通过 `.replace()` 手动拼接字符串**。
 
 ## 任务执行原则
@@ -185,7 +185,7 @@
 
 ## 其他注意
 
-- 抠图功能依赖本地 Python 环境（rembg/pillow），脚本位于 `composeApp/src/commonMain/resources/scripts/remove_bg.py`，应用内置环境自检与自动安装。
+- 抠图功能依赖本地 Python 环境（rembg/pillow），脚本位于 `shared/src/commonMain/resources/scripts/remove_bg.py`，应用内置环境自检与自动安装。
 - 桌面端运行时会读取 `~/.geminiuiforge/app.vmoptions` 覆盖 JVM 参数（调试内存问题时注意）。
 - 分支为单 `master`；提交信息遵循 Conventional Commits 且描述用中文，如 `feat(workspace): 重构旋转按钮组件支持双状态独立配置`。
-- 详细文档：`README.md`（功能概览，注意其中 wasm 命令已过时）、`RELEASE_GUIDE.md`（发布流程）、`composeApp/src/commonMain/resources/HELP.md`（用户手册）。
+- 详细文档：`README.md`（功能概览，注意其中 wasm 命令已过时）、`RELEASE_GUIDE.md`（发布流程）、`shared/src/commonMain/resources/HELP.md`（用户手册）。

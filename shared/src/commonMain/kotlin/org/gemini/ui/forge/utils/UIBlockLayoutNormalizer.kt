@@ -28,7 +28,17 @@ object UIBlockLayoutNormalizer {
     }
 
     /**
-     * 对目标父模块进行容器尺寸自适应与相对坐标归零推导
+     * 判断模块在逻辑上是否应被系统自动识别为纯容器。
+     * 条件：包含子组件、自身未绑定独立资产图片、且为视图/容器类型。
+     */
+    fun shouldBePureContainer(block: UIBlock): Boolean {
+        return block.children.isNotEmpty() &&
+                block.currentImageUri == null &&
+                (block.type == UIBlockType.VIEW || block.type == UIBlockType.CONTAINER)
+    }
+
+    /**
+     * 对目标父模块进行容器尺寸自适应与相对坐标归零推导，并在校验时自动推导纯容器属性。
      *
      * @param parentBlock 待处理的父模块（必须包含 children）
      * @return 重新校准后的父模块 UIBlock（含已更新坐标的 children），若无子组件则原样返回
@@ -36,6 +46,12 @@ object UIBlockLayoutNormalizer {
     fun normalizeContainerAndChildren(parentBlock: UIBlock): UIBlock {
         val children = parentBlock.children
         if (children.isEmpty()) return parentBlock
+
+        // 校验阶段自动推导生图资格：若自身无资产且仅作为容器包装子组件，自动标记为纯容器
+        val autoPure = parentBlock.isPureContainer || shouldBePureContainer(parentBlock)
+        if (!parentBlock.isPureContainer && autoPure) {
+            AppLogger.i("Normalizer", "🏷️ 复合容器【${parentBlock.id}】不符合独立生图条件，校验程序已自动标记为纯容器 (isPureContainer = true)")
+        }
 
         // 1. 探查是否存在背景图元
         val bgBlock = children.firstOrNull { isBackgroundBlock(it) }
@@ -56,7 +72,7 @@ object UIBlockLayoutNormalizer {
                 bottom = parentBlock.bounds.top + deltaY + bgAbs.height
             )
 
-            val tempParent = parentBlock.copy(bounds = newParentBounds)
+            val tempParent = parentBlock.copy(bounds = newParentBounds, isPureContainer = autoPure)
 
             val updatedChildren = children.map { child ->
                 if (child.id == bgBlock.id) {
@@ -119,7 +135,7 @@ object UIBlockLayoutNormalizer {
                 )
             }
 
-            parentBlock.copy(bounds = newParentBounds, children = updatedChildren)
+            parentBlock.copy(bounds = newParentBounds, children = updatedChildren, isPureContainer = autoPure)
         }
     }
 }
