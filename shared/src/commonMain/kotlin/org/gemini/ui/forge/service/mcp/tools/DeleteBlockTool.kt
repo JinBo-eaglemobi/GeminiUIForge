@@ -52,8 +52,7 @@ class DeleteBlockTool(
             ?: return McpToolResult.error("参数 'blockId' 不能为空")
 
         onProgress?.invoke(0.2f, "正在加载工程结构...")
-        val templates = repository.getTemplates()
-        val match = templates.firstOrNull { it.first.equals(projectName, ignoreCase = true) }
+        val match = repository.findTemplatePair(projectName)
             ?: return McpToolResult.error("未找到工程 '$projectName'")
 
         val state = match.second

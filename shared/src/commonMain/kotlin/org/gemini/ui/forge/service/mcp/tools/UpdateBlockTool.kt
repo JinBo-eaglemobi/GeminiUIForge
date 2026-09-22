@@ -68,6 +68,18 @@ class UpdateBlockTool(
                     put("bottom", buildJsonObject { put("type", "number") })
                 })
             })
+            put("scaleConfig", buildJsonObject {
+                put("type", "object")
+                put("description", "可选：图片不透明主体缩放与发光对齐配置 { scaleX, scaleY, offsetX, offsetY, enabled, lockAspectRatio }")
+                put("properties", buildJsonObject {
+                    put("scaleX", buildJsonObject { put("type", "number") })
+                    put("scaleY", buildJsonObject { put("type", "number") })
+                    put("offsetX", buildJsonObject { put("type", "number") })
+                    put("offsetY", buildJsonObject { put("type", "number") })
+                    put("enabled", buildJsonObject { put("type", "boolean") })
+                    put("lockAspectRatio", buildJsonObject { put("type", "boolean") })
+                })
+            })
         })
         put("required", buildJsonArray {
             add("projectName")
@@ -85,8 +97,7 @@ class UpdateBlockTool(
             ?: return McpToolResult.error("参数 'blockId' 不能为空")
 
         onProgress?.invoke(0.2f, "正在读取工程结构...")
-        val templates = repository.getTemplates()
-        val match = templates.firstOrNull { it.first.equals(projectName, ignoreCase = true) }
+        val match = repository.findTemplatePair(projectName)
             ?: return McpToolResult.error("未找到工程 '$projectName'")
 
         val state = match.second
@@ -122,6 +133,26 @@ class UpdateBlockTool(
                         val right = bObj["right"]?.jsonPrimitive?.floatOrNull ?: updated.bounds.right
                         val bottom = bObj["bottom"]?.jsonPrimitive?.floatOrNull ?: updated.bounds.bottom
                         updated = updated.copy(bounds = SerialRect(left, top, right, bottom))
+                    }
+
+                    arguments["scaleConfig"]?.let { it as? JsonObject }?.let { scObj ->
+                        val currentSc = updated.scaleConfig
+                        val scaleX = scObj["scaleX"]?.jsonPrimitive?.floatOrNull ?: currentSc.scaleX
+                        val scaleY = scObj["scaleY"]?.jsonPrimitive?.floatOrNull ?: currentSc.scaleY
+                        val offsetX = scObj["offsetX"]?.jsonPrimitive?.floatOrNull ?: currentSc.offsetX
+                        val offsetY = scObj["offsetY"]?.jsonPrimitive?.floatOrNull ?: currentSc.offsetY
+                        val enabled = scObj["enabled"]?.jsonPrimitive?.booleanOrNull ?: currentSc.enabled
+                        val lockAspectRatio = scObj["lockAspectRatio"]?.jsonPrimitive?.booleanOrNull ?: currentSc.lockAspectRatio
+                        updated = updated.copy(
+                            scaleConfig = currentSc.copy(
+                                scaleX = scaleX,
+                                scaleY = scaleY,
+                                offsetX = offsetX,
+                                offsetY = offsetY,
+                                enabled = enabled,
+                                lockAspectRatio = lockAspectRatio
+                            )
+                        )
                     }
 
                     foundBlock = updated

@@ -571,4 +571,17 @@
     <!-- MCP 前台视觉跟随 -->
     <string name="mcp_follow_nav_title">AI 执行前台界面视觉跟随</string>
     <string name="mcp_follow_nav_desc">开启后，AI 识图创建模板或操作将自动切入工作区并模拟动作；关闭时后台静默执行，零干扰当前视图。</string>
+
+    <!-- 透明通道主体缩放与对齐 -->
+    <string name="opaque_align_card_title">主体自适应对齐 (发光溢出)</string>
+    <string name="opaque_align_card_desc">使带透明/外发光图片的真实核心主体与参考图 1:1 对齐，发光自然溢出展示</string>
+    <string name="opaque_align_btn_auto">智能识别并对齐</string>
+    <string name="opaque_align_btn_auto_tip">基于 Alpha 通道扫描核心不透明主体，自动计算最佳缩放与对齐偏置</string>
+    <string name="opaque_align_scale_label">缩放比例: %1$.2fx</string>
+    <string name="opaque_align_offset_x">X 轴偏置: %1$.1fpx</string>
+    <string name="opaque_align_offset_y">Y 轴偏置: %1$.1fpx</string>
+    <string name="opaque_align_lock_ratio">锁定等比缩放</string>
+    <string name="opaque_align_btn_reset">重置</string>
+    <string name="opaque_align_toast_success">已完成主体识别与对齐 (主体尺寸 %1$dx%2$d)</string>
+    <string name="opaque_align_toast_failed">未检测到有效的不透明主体</string>
 </resources>

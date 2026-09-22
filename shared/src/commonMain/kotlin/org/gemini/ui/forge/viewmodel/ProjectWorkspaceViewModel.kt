@@ -12,7 +12,9 @@ import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.manager.CloudAssetManager
+import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.app.PromptLanguage
+import org.gemini.ui.forge.model.app.ReferenceDisplayMode
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
@@ -48,6 +50,7 @@ class ProjectWorkspaceViewModel(
 ) : ViewModel() {
 
     val storage get() = templateRepo.fileStorage
+    private val configManager: ConfigManager = ConfigManager()
 
     private val _state = MutableStateFlow(
         ProjectWorkspaceState(
@@ -141,6 +144,19 @@ class ProjectWorkspaceViewModel(
                 ?: currentProject.referenceImages.firstOrNull()
                 ?: currentProject.pages.firstOrNull()?.sourceImageUri
 
+            // 解析记忆的最近一次生效模式（工程配置优先 -> 全局偏好 -> 默认 OVERLAY）
+            val globalPrefModeStr = configManager.loadKey("PREF_REFERENCE_MODE")
+            val globalPrefMode = when (globalPrefModeStr) {
+                "SPLIT" -> ReferenceDisplayMode.SPLIT
+                "OVERLAY" -> ReferenceDisplayMode.OVERLAY
+                else -> ReferenceDisplayMode.OVERLAY
+            }
+            val resolvedLastActiveMode = wsConfig?.lastActiveReferenceMode
+                ?: (if (wsConfig?.referenceMode != null && wsConfig.referenceMode != ReferenceDisplayMode.HIDDEN) wsConfig.referenceMode else globalPrefMode)
+
+            val resolvedReferenceMode = wsConfig?.referenceMode
+                ?: (if (initialRefUri != null) resolvedLastActiveMode else ReferenceDisplayMode.HIDDEN)
+
             _state.update {
                 it.copy(
                     defaultRefineInstructionUpdate = updateInstruction,
@@ -148,7 +164,8 @@ class ProjectWorkspaceViewModel(
                     collapsedSections = wsConfig?.collapsedSections ?: emptyMap(),
                     isVisualMode = wsConfig?.isVisualMode ?: false,
                     isHideOutlines = wsConfig?.isHideOutlines ?: false,
-                    referenceMode = wsConfig?.referenceMode ?: if (initialRefUri != null) org.gemini.ui.forge.model.app.ReferenceDisplayMode.OVERLAY else org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN,
+                    referenceMode = resolvedReferenceMode,
+                    lastActiveReferenceMode = resolvedLastActiveMode,
                     referenceOpacity = wsConfig?.referenceOpacity ?: 0.4f,
                     referenceImageUri = initialRefUri,
                     resourceConfigPath = wsConfig?.resourceConfigPath
@@ -209,6 +226,18 @@ class ProjectWorkspaceViewModel(
 
         viewModelScope.launch {
             val wsConfig = templateRepo.loadWorkspaceConfig(_state.value.projectName)
+            val globalPrefModeStr = configManager.loadKey("PREF_REFERENCE_MODE")
+            val globalPrefMode = when (globalPrefModeStr) {
+                "SPLIT" -> ReferenceDisplayMode.SPLIT
+                "OVERLAY" -> ReferenceDisplayMode.OVERLAY
+                else -> ReferenceDisplayMode.OVERLAY
+            }
+            val resolvedLastActiveMode = wsConfig?.lastActiveReferenceMode
+                ?: (if (wsConfig?.referenceMode != null && wsConfig.referenceMode != ReferenceDisplayMode.HIDDEN) wsConfig.referenceMode else globalPrefMode)
+
+            val resolvedReferenceMode = wsConfig?.referenceMode 
+                ?: (if (effectiveRefUri != null) resolvedLastActiveMode else ReferenceDisplayMode.HIDDEN)
+
             _state.update { current ->
                 val targetPageId = newProject.pages.find { it.id == current.selectedPageId }?.id
                     ?: newProject.pages.firstOrNull()?.id
@@ -225,7 +254,8 @@ class ProjectWorkspaceViewModel(
                     collapsedSections = wsConfig?.collapsedSections ?: current.collapsedSections,
                     isVisualMode = wsConfig?.isVisualMode ?: current.isVisualMode,
                     isHideOutlines = wsConfig?.isHideOutlines ?: current.isHideOutlines,
-                    referenceMode = wsConfig?.referenceMode ?: if (effectiveRefUri != null) org.gemini.ui.forge.model.app.ReferenceDisplayMode.OVERLAY else org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN,
+                    referenceMode = resolvedReferenceMode,
+                    lastActiveReferenceMode = resolvedLastActiveMode,
                     referenceOpacity = wsConfig?.referenceOpacity ?: current.referenceOpacity,
                     resourceConfigPath = wsConfig?.resourceConfigPath ?: current.resourceConfigPath
                 )
@@ -241,6 +271,7 @@ class ProjectWorkspaceViewModel(
             isVisualMode = currentState.isVisualMode,
             isHideOutlines = currentState.isHideOutlines,
             referenceMode = currentState.referenceMode,
+            lastActiveReferenceMode = currentState.lastActiveReferenceMode ?: ReferenceDisplayMode.OVERLAY,
             referenceOpacity = currentState.referenceOpacity,
             resourceConfigPath = currentState.resourceConfigPath
         )
@@ -301,10 +332,44 @@ class ProjectWorkspaceViewModel(
         saveWorkspaceConfig()
     }
 
-    /** 切换参考图模式 */
+    /** 切换参考图模式并持久化记忆 */
     fun updateReferenceMode(mode: org.gemini.ui.forge.model.app.ReferenceDisplayMode) {
-        _state.update { it.copy(referenceMode = mode) }
+        _state.update { current ->
+            val updatedLastActive = if (mode != org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN) {
+                mode
+            } else {
+                current.lastActiveReferenceMode
+            }
+            current.copy(
+                referenceMode = mode,
+                lastActiveReferenceMode = updatedLastActive
+            )
+        }
         saveWorkspaceConfig()
+        // 同步记录用户选择的全局偏好
+        if (mode != org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN) {
+            viewModelScope.launch {
+                configManager.saveKey("PREF_REFERENCE_MODE", mode.name)
+            }
+        }
+    }
+
+    /**
+     * 智能切换参考图对比开关：
+     * 开启时恢复上一次选择的记忆模式（SPLIT 或 OVERLAY）；
+     * 关闭时设为 HIDDEN，但保持选择模式记忆不丢失。
+     */
+    fun toggleReferenceMode(enabled: Boolean) {
+        if (enabled) {
+            val targetMode = if (_state.value.lastActiveReferenceMode != null && _state.value.lastActiveReferenceMode != org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN) {
+                _state.value.lastActiveReferenceMode ?: org.gemini.ui.forge.model.app.ReferenceDisplayMode.OVERLAY
+            } else {
+                org.gemini.ui.forge.model.app.ReferenceDisplayMode.OVERLAY
+            }
+            updateReferenceMode(targetMode)
+        } else {
+            updateReferenceMode(org.gemini.ui.forge.model.app.ReferenceDisplayMode.HIDDEN)
+        }
     }
 
     /** 更新参考图透明度 */
@@ -693,7 +758,23 @@ class ProjectWorkspaceViewModel(
                     return blockWithCalibratedChildren
                 }
 
-                // 2. 复合组容器模式：若包含子组件，不再作为单体盲目边缘吸附，而是直接触发容器自适应贴合与原点归零！
+                // 2. 顶层背景模块自愈：恒等于全屏画布尺寸
+                if (blockWithCalibratedChildren.type == org.gemini.ui.forge.model.ui.UIBlockType.BACKGROUND && block.parent == null) {
+                    val fullCanvasBounds = org.gemini.ui.forge.model.ui.SerialRect(0f, 0f, pageW, pageH)
+                    val isChanged = blockWithCalibratedChildren.bounds != fullCanvasBounds
+                    if (isChanged) {
+                        calibratedCount++
+                        org.gemini.ui.forge.utils.AppLogger.i("Calibrate", "🖼️ 顶层背景模块【${block.id}】自动校准为全屏画布尺寸 [0, 0, $pageW, $pageH]")
+                    } else {
+                        unchangedCount++
+                    }
+                    return blockWithCalibratedChildren.copy(
+                        bounds = fullCanvasBounds,
+                        cropRect = fullCanvasBounds
+                    )
+                }
+
+                // 3. 复合组容器模式：若包含子组件，不再作为单体盲目边缘吸附，而是直接触发容器自适应贴合与原点归零！
                 if (blockWithCalibratedChildren.children.isNotEmpty()) {
                     val normalizedGroup = org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.normalizeContainerAndChildren(blockWithCalibratedChildren)
                     calibratedCount++

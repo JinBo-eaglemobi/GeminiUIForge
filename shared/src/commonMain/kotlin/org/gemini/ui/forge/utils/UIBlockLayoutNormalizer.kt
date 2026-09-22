@@ -38,6 +38,25 @@ object UIBlockLayoutNormalizer {
     }
 
     /**
+     * 顶层模块列表全局自愈：强制校验顶层背景模块铺满全屏画布
+     */
+    fun normalizePageBlocks(blocks: List<UIBlock>, canvasWidth: Float, canvasHeight: Float): List<UIBlock> {
+        val fullCanvas = SerialRect(0f, 0f, canvasWidth, canvasHeight)
+        return blocks.map { block ->
+            if (block.type == UIBlockType.BACKGROUND && block.parent == null) {
+                if (block.bounds != fullCanvas || block.cropRect != fullCanvas) {
+                    AppLogger.i("Normalizer", "🖼️ 顶层背景模块【${block.id}】自愈纠偏为全屏画布尺寸 [0, 0, $canvasWidth, $canvasHeight]")
+                    block.copy(bounds = fullCanvas, cropRect = fullCanvas)
+                } else {
+                    block
+                }
+            } else {
+                block
+            }
+        }
+    }
+
+    /**
      * 对目标父模块进行容器尺寸自适应与相对坐标归零推导，并在校验时自动推导纯容器属性。
      *
      * @param parentBlock 待处理的父模块（必须包含 children）

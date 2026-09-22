@@ -92,41 +92,16 @@ class CompareWithReferenceTool(
         canvasRef.drawImage(imgRef, 0f, 0f)
         canvasShot.drawImageRect(imgShot, Rect.makeWH(baseW.toFloat(), baseH.toFloat()), paint)
 
-        onProgress?.invoke(0.5f, "正在执行逐像素差值运算与几何重合分析...")
-        val bmpDiff = Bitmap().apply { allocN32Pixels(baseW, baseH) }
-        val canvasDiff = Canvas(bmpDiff)
-        // 底层绘制原始参考大图
-        canvasDiff.drawImage(imgRef, 0f, 0f)
-
-        var totalDiffPixels = 0
-        val totalPixels = baseW * baseH
-
-        val diffHighlightPaint = Paint().apply {
-            color = 0x66FF1744.toInt() // 半透明警示红
-        }
-
-        val step = max(1, baseW / 400) // 步进采样自适应，秒级响应
-        for (y in 0 until baseH step step) {
-            for (x in 0 until baseW step step) {
-                val cShot = bmpShot.getColor(x, y)
-                val cRef = bmpRef.getColor(x, y)
-
-                val rDiff = abs(Color.getR(cShot) - Color.getR(cRef))
-                val gDiff = abs(Color.getG(cShot) - Color.getG(cRef))
-                val bDiff = abs(Color.getB(cShot) - Color.getB(cRef))
-
-                if (rDiff > tolerance || gDiff > tolerance || bDiff > tolerance) {
-                    totalDiffPixels += step * step
-                    canvasDiff.drawRect(Rect.makeXYWH(x.toFloat(), y.toFloat(), step.toFloat(), step.toFloat()), diffHighlightPaint)
-                }
-            }
-        }
-
-        val diffRatio = (totalDiffPixels.toFloat() / totalPixels.toFloat()).coerceIn(0f, 1f)
-        val similarityScore = (1.0f - diffRatio).coerceIn(0f, 1f)
+        onProgress?.invoke(0.5f, "正在执行多维计算机视觉几何与纹理重叠度量 (差值、SSIM、边缘IoU、NCC)...")
+        val evalResult = org.gemini.ui.forge.utils.PatternOverlapEvaluator.evaluate(
+            renderBytes = shotBytes,
+            referenceBytes = refBytes,
+            generateDiffImage = true
+        )
 
         onProgress?.invoke(0.85f, "生成 1:1 几何对齐叠加检查图...")
-        val diffImage = Image.makeFromBitmap(bmpDiff)
+        val diffBytes = evalResult.diffImageBytes ?: shotBytes
+        val diffImage = Image.makeFromEncoded(diffBytes)
         // 统一走公共工具压缩中枢（quality 92 兼顾热力对比度的像素级可读性）
         val compact = compressToCompactImage(diffImage, 92)
         val cachedPath = ImageCacheManager.saveCache("compare", compact)
@@ -134,19 +109,28 @@ class CompareWithReferenceTool(
         @OptIn(ExperimentalEncodingApi::class)
         val diffBase64 = Base64.encode(compact.bytes)
 
-        onProgress?.invoke(1.0f, "1:1 原寸对齐度量分析完成")
+        onProgress?.invoke(1.0f, "1:1 原寸对齐多维度量分析完成")
         val summaryText = buildJsonObject {
-            put("similarityScore", ((similarityScore * 1000).toInt() / 10.0)) // 相似度百分比
-            put("differenceRatio", ((diffRatio * 1000).toInt() / 10.0))
+            put("compositeAlignmentScore", evalResult.compositeAlignmentScore)
+            put("rating", evalResult.rating)
+            put("ssim", evalResult.ssim)
+            put("edgeIoU", evalResult.edgeIoU)
+            put("zeroDiffRate", evalResult.zeroDiffRate)
+            put("meanAbsoluteError", evalResult.meanAbsoluteError)
+            put("nccScore", evalResult.nccScore)
+            putJsonObject("driftVector") {
+                put("dx", evalResult.driftVectorX)
+                put("dy", evalResult.driftVectorY)
+            }
             put("canvasWidth", baseW)
             put("canvasHeight", baseH)
-            put("isAligned", similarityScore >= 0.85f)
+            put("isAligned", evalResult.compositeAlignmentScore >= 0.78f)
         }.toString()
 
         return McpToolResult.image(
             base64Data = diffBase64,
             mimeType = compact.mimeType,
-            message = "📊 1:1 物理对齐报告: $summaryText | 热力图 (${compact.extension.uppercase()}) 已缓存: $cachedPath"
+            message = "📊 1:1 计算机视觉多维对齐报告: $summaryText | 差值热力图 (${compact.extension.uppercase()}) 已缓存: $cachedPath"
         )
     }
 }

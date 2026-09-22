@@ -87,6 +87,8 @@ mode: all
      - 若通过运行配置交互，优先调用 `idea_execute_run_configuration(configurationName = "reloadHot")`；
      - 仅对修改的文件调用 `idea_get_file_problems` 做毫秒级语法检查；
 4. **【核心覆盖】实机物理窗口审查与几何度量 (Visual Inspection & Geometric Precision)**：
+   - **单模块局部截图铁律**：模块校准与审查过程中严禁随意截取全屏大图，必须且仅能截取该模块所在的局部矩形区域（结合外扩 32~48px Padding），直观呈现 1:1 高清对齐细节；
+   - **干扰隔离与半透明对比**：通过 `inspect_block_with_reference` 开启隔离模式（`ISOLATE_BLOCK`），将其它干扰模块隐藏，叠加 0.3~0.5 半透明参考底图对比；
    - 调用 `gemini-ui-forge_screenshot_window` 现场捕获真实桌面窗口物理截图；
    - 亲眼审查组件排版、对齐效果、边框高亮是否与预期 100% 吻合；
    - 调用 `gemini-ui-forge_get_template` 与 `gemini-ui-forge_compare_with_reference` 生成 1:1 叠加热力图，度量物理边缘误差。

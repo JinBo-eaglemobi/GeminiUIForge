@@ -27,8 +27,8 @@ class TriggerInitialVerificationTool : McpToolDefinition {
             ?: return McpToolResult.error("当前未处于模板编辑工作区或工作区尚未初始化，无法触发校验流程")
 
         return try {
-            vm.calibrateSelectedBlock()
-            McpToolResult.text("成功在 UI 工作区触发首次程序化校验与自愈对齐！不符合独立生图条件的复合模块已自动识别并标为纯容器。")
+            vm.calibrateAllBlocks()
+            McpToolResult.text("成功在 UI 工作区触发全量程序化校验与自愈对齐！不符合独立生图条件的复合模块已自动识别并标为纯容器。")
         } catch (e: Exception) {
             McpToolResult.error("触发校验流程异常: ${e.message}")
         }

@@ -190,14 +190,17 @@ fun CanvasFloatingControlBar(
                 // 参考图全局开关：判断当前是否是非隐藏状态
                 // ★ 区分优化：使用 Map / ImageSearch 图标替代泛滥的眼睛图标，避免混淆
                 val isRefEnabled = state.referenceMode != ReferenceDisplayMode.HIDDEN
+                val refTipText = if (isRefEnabled) {
+                    "关闭参考底图对比"
+                } else {
+                    val modeName = if (state.lastActiveReferenceMode == ReferenceDisplayMode.SPLIT) "分屏对照" else "半透明叠加"
+                    "开启参考底图对比 ($modeName)"
+                }
                 IconToggleButton(
                     checked = isRefEnabled,
-                    onCheckedChange = {
-                        // 开启时默认进入分屏模式，关闭时设为隐藏
-                        viewModel.updateReferenceMode(if (it) ReferenceDisplayMode.SPLIT else ReferenceDisplayMode.HIDDEN)
-                    },
+                    onCheckedChange = { viewModel.toggleReferenceMode(it) },
                     enabled = !isCodeMode,
-                    modifier = Modifier.size(28.dp).tip(if (isRefEnabled) "关闭参考底图对比" else "开启参考底图对比")
+                    modifier = Modifier.size(28.dp).tip(refTipText)
                 ) {
                     Icon(
                         imageVector = if (isRefEnabled) Icons.Default.Map else Icons.Default.ImageSearch,

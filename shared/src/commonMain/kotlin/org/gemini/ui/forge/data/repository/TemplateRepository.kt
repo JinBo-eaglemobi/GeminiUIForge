@@ -210,6 +210,50 @@ class TemplateRepository(
         return tFile
     }
 
+    /**
+     * 规范化模板工程名称（消除首尾空格、将空格转换为下划线）
+     */
+    fun sanitizeName(name: String): String = name.trim().replace(" ", "_")
+
+    /**
+     * 根据名称直接精确定位读取单个模板（支持原始下划线名与带空格名称，无需扫描全部目录）
+     */
+    suspend fun getTemplateByName(name: String): ProjectState? {
+        val sanitizedName = sanitizeName(name)
+        val directPath = "$PROJECTS_DIR/$sanitizedName/template.json"
+        val directContent = fileStorage.readFromFile(directPath)
+        if (directContent != null) {
+            try {
+                val state = looseJson.decodeFromString<ProjectState>(directContent)
+                return validateAndCleanMissingReferencesInMemory(state)
+            } catch (e: Exception) {
+                AppLogger.e("TemplateRepository", "❌ 解析直接模板 JSON 失败: $sanitizedName", e)
+            }
+        }
+
+        // 兜底扫描：若直接定位未命中，在已有工程列表中做不区分大小写与下划线/空格的宽容匹配
+        val all = getTemplates()
+        return all.firstOrNull { (title, _) ->
+            sanitizeName(title).equals(sanitizedName, ignoreCase = true)
+        }?.second
+    }
+
+    /**
+     * 查找模板并返回其标准保存标识名与工程状态（彻底解决空格与下划线不匹配导致的查找失败）
+     */
+    suspend fun findTemplatePair(projectName: String): Pair<String, ProjectState>? {
+        val sanitized = sanitizeName(projectName)
+        val direct = getTemplateByName(projectName)
+        if (direct != null) {
+            return sanitized to direct
+        }
+        val all = getTemplates()
+        val match = all.firstOrNull { (title, _) ->
+            sanitizeName(title).equals(sanitized, ignoreCase = true)
+        } ?: return null
+        return sanitizeName(match.first) to match.second
+    }
+
     suspend fun getTemplates(): List<Pair<String, ProjectState>> {
         AppLogger.d("TemplateRepository", "🔍 正在扫描本地模板列表...")
         val dirs = fileStorage.listDirectories(PROJECTS_DIR)

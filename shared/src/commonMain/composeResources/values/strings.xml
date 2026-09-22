@@ -561,4 +561,17 @@
     <!-- MCP Follow Navigation -->
     <string name="mcp_follow_nav_title">Visual UI Follow Mode</string>
     <string name="mcp_follow_nav_desc">When enabled, AI automatically navigates and simulates actions in UI. When disabled, tasks run silently in the background without disturbing current view.</string>
+
+    <!-- Opaque Content Alignment & Scale -->
+    <string name="opaque_align_card_title">Opaque Content Align (Glow Overflow)</string>
+    <string name="opaque_align_card_desc">Align core opaque subject with reference bounds, allowing outer glow to overflow naturally.</string>
+    <string name="opaque_align_btn_auto">Auto Detect &amp; Align</string>
+    <string name="opaque_align_btn_auto_tip">Scan alpha channel to detect core opaque subject and auto-compute optimal scale and offset.</string>
+    <string name="opaque_align_scale_label">Scale: %1$.2fx</string>
+    <string name="opaque_align_offset_x">Offset X: %1$.1fpx</string>
+    <string name="opaque_align_offset_y">Offset Y: %1$.1fpx</string>
+    <string name="opaque_align_lock_ratio">Lock Aspect Ratio</string>
+    <string name="opaque_align_btn_reset">Reset</string>
+    <string name="opaque_align_toast_success">Opaque subject aligned (%1$dx%2$d)</string>
+    <string name="opaque_align_toast_failed">No opaque subject detected</string>
 </resources>

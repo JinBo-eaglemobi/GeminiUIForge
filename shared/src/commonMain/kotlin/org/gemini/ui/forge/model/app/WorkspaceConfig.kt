@@ -16,6 +16,8 @@ data class WorkspaceConfig(
     val isHideOutlines: Boolean = false,
     /** 参考图显示模式 */
     val referenceMode: ReferenceDisplayMode = ReferenceDisplayMode.HIDDEN,
+    /** 记忆的最近一次生效的参考图显示模式（SPLIT 或 OVERLAY，默认 OVERLAY） */
+    val lastActiveReferenceMode: ReferenceDisplayMode = ReferenceDisplayMode.OVERLAY,
     /** 参考图透明度 */
     val referenceOpacity: Float = 0.4f,
     /** 本地资源配置表绝对路径 */

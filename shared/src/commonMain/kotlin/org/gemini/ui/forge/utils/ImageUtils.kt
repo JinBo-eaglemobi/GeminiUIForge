@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import org.gemini.ui.forge.data.TemplateFile
+import org.gemini.ui.forge.model.ui.ImageScaleConfig
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.jetbrains.skia.*
 import kotlin.io.encoding.Base64
@@ -94,9 +95,8 @@ suspend fun getImageSize(uri: String): Pair<Int, Int>? {
     val bytes = if (uri.startsWith("data:image")) {
         val b64 = if (uri.contains(",")) uri.substringAfter(",") else uri
         try {
-            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-            kotlin.io.encoding.Base64.decode(b64)
-        } catch (e: Exception) {
+            Base64.decode(b64)
+        } catch (_: Exception) {
             null
         }
     } else {
@@ -105,7 +105,7 @@ suspend fun getImageSize(uri: String): Pair<Int, Int>? {
     return try {
         val image = Image.makeFromEncoded(bytes)
         Pair(image.width, image.height)
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         null
     }
 }
@@ -713,4 +713,135 @@ private fun compressImageInternal(image: Image, quality: Int, fallbackBytes: Byt
         null
     }
     return CompactImage(pngBytes ?: ByteArray(0), "image/png", "png")
+}
+
+/**
+ * 基于 Alpha 通道扫描图片的核心不透明内容外接矩形 (Opaque Bounding Box)
+ *
+ * @param imageBytes 原始图片字节数据
+ * @param alphaThreshold Alpha 阈值 (0..255)，默认 20，过滤外发光边缘的微弱噪点与透明留白
+ * @return 核心不透明区域在原图中的像素包围盒 [SerialRect]，全透明或失败时返回 null
+ */
+suspend fun detectOpaqueBoundingBox(
+    imageBytes: ByteArray,
+    alphaThreshold: Int = 20
+): SerialRect? {
+    if (imageBytes.isEmpty()) return null
+    return try {
+        val skiaImage = Image.makeFromEncoded(imageBytes)
+        val w = skiaImage.width
+        val h = skiaImage.height
+        if (w <= 0 || h <= 0) return null
+
+        val bitmap = Bitmap().apply { allocN32Pixels(w, h) }
+        val canvas = Canvas(bitmap)
+        canvas.drawImage(skiaImage, 0f, 0f)
+
+        var minX = w
+        var minY = h
+        var maxX = -1
+        var maxY = -1
+
+        // 像素点采样步长：大图适度跳步提速（<= 1200px 逐像素，> 1200px 步长 2）
+        val step = if (w > 1200 || h > 1200) 2 else 1
+
+        for (y in 0 until h step step) {
+            for (x in 0 until w step step) {
+                val color = bitmap.getColor(x, y)
+                val alpha = Color.getA(color)
+                if (alpha >= alphaThreshold) {
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+            }
+        }
+
+        if (maxX >= minX && maxY >= minY) {
+            val left = minX.coerceIn(0, w - 1).toFloat()
+            val top = minY.coerceIn(0, h - 1).toFloat()
+            val right = (maxX + step).coerceIn(1, w).toFloat()
+            val bottom = (maxY + step).coerceIn(1, h).toFloat()
+            SerialRect(left, top, right, bottom)
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        AppLogger.w("ImageUtils", "扫描不透明内容包围盒异常: ${e.message}")
+        null
+    }
+}
+
+/**
+ * 根据图片不透明主体包围盒与模块目标尺寸，计算自适应对齐缩放配置
+ *
+ * @param opaqueBox 不透明主体包围盒 [l, t, r, b]
+ * @param imgWidth 原始图片像素总宽
+ * @param imgHeight 原始图片像素总高
+ * @param targetWidth 模块目标逻辑宽度 (block.bounds.width)
+ * @param targetHeight 模块目标逻辑高度 (block.bounds.height)
+ * @param lockAspectRatio 是否锁定等比缩放，默认 true
+ * @return 计算出的 [ImageScaleConfig]
+ */
+fun calculateOpaqueScaleConfig(
+    opaqueBox: SerialRect,
+    imgWidth: Float,
+    imgHeight: Float,
+    targetWidth: Float,
+    targetHeight: Float,
+    lockAspectRatio: Boolean = true
+): ImageScaleConfig {
+    val opaqueW = opaqueBox.width.coerceAtLeast(1f)
+    val opaqueH = opaqueBox.height.coerceAtLeast(1f)
+
+    val rawScaleX = targetWidth / opaqueW
+    val rawScaleY = targetHeight / opaqueH
+
+    val (scaleX, scaleY) = if (lockAspectRatio) {
+        val s = minOf(rawScaleX, rawScaleY)
+        Pair(s, s)
+    } else {
+        Pair(rawScaleX, rawScaleY)
+    }
+
+    // 居中对齐余量
+    val extraX = (targetWidth - opaqueW * scaleX) / 2f
+    val extraY = (targetHeight - opaqueH * scaleY) / 2f
+
+    val offsetX = extraX - opaqueBox.left * scaleX
+    val offsetY = extraY - opaqueBox.top * scaleY
+
+    return ImageScaleConfig(
+        scaleX = scaleX,
+        scaleY = scaleY,
+        offsetX = offsetX,
+        offsetY = offsetY,
+        lockAspectRatio = lockAspectRatio,
+        enabled = true,
+        opaqueBounds = opaqueBox
+    )
+}
+
+/**
+ * 通用一键计算不透明内容主体缩放配置
+ */
+suspend fun calculateOpaqueContentScaleConfig(
+    imageBytes: ByteArray,
+    targetWidth: Float,
+    targetHeight: Float,
+    lockAspectRatio: Boolean = true,
+    alphaThreshold: Int = 20
+): ImageScaleConfig? {
+    if (imageBytes.isEmpty() || targetWidth <= 0f || targetHeight <= 0f) return null
+    val skiaImage = try { Image.makeFromEncoded(imageBytes) } catch (e: Exception) { null } ?: return null
+    val opaqueBox = detectOpaqueBoundingBox(imageBytes, alphaThreshold) ?: return null
+    return calculateOpaqueScaleConfig(
+        opaqueBox = opaqueBox,
+        imgWidth = skiaImage.width.toFloat(),
+        imgHeight = skiaImage.height.toFloat(),
+        targetWidth = targetWidth,
+        targetHeight = targetHeight,
+        lockAspectRatio = lockAspectRatio
+    )
 }

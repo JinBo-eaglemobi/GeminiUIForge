@@ -734,6 +734,16 @@ fun LayoutPropertyContent(
                             Text("解绑", style = MaterialTheme.typography.labelSmall)
                         }
                     }
+
+                    // 3. 不透明主体自适应缩放与发光溢出微调
+                    if (currentBoundFile != null) {
+                        org.gemini.ui.forge.ui.feature.workspace.property.component.OpaqueAlignCard(
+                            block = selectedBlock,
+                            onUpdateScaleConfig = { newConfig ->
+                                viewModel.assetManager.updateBlock(selectedBlock.copy(scaleConfig = newConfig))
+                            }
+                        )
+                    }
                 }
             }
 

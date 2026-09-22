@@ -42,10 +42,6 @@
   2. **快速语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 或 `idea_build_project` 做毫秒级局部语法速查；
   3. **兜底通道 (命令行 Gradle)**：仅当无 IDEA MCP 工具时回退命令行：`./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`；
   4. 纯文档、注释或非代码修改不触发编译校验。
-- **开发调试与热重载协同规范 (Forge-Loop Agent 指引)**: **【红线规则】**
-  - 项目配置了专属全自主研发智能体 **Forge-Loop**（位于 `.opencode/agents/forge-loop.md`）；
-  - **当前热重载运行模式下，绝不用执行耗时的全量编译（如 `compileDesktop`），直接交给热重载去处理新编写的代码**；
-  - 涉及热重载运行态调试、三网 MCP 协同调用、免编译极速热替换、超时防重杀及实机视觉闭环自检等具体机制与操作细节，**统一严格遵循并引导调用 `.opencode/agents/forge-loop.md` 的规范执行**，不在本主指令中包含冗余功能约束。
 - **校验阶段仅校验桌面版（JVM 优先铁律）**: **【红线规则】** 自动化构建与闭环验证阶段**一律且仅执行桌面端 (JVM) 编译校验**。其他平台（Web / Android / iOS）全部交由手动按需校验，严禁在日常迭代后自动触发耗时冗长的多端全量编译，最大化提升开发反馈速度。
 - **物理校验优先 (Physical Check First)**: **【红线规则】** 外部脚本或工具修改文件后，切勿单凭编辑器的视觉表现来判断修改成败。必须始终通过原生 `git diff` 或 `read` / `Get-Content` 物理读取作为落盘的唯一铁证。
 - **校验阶段人工交互流程优先规范 (Human-like Realistic Workflow for Validation)**: **【红线规则】**
@@ -57,7 +53,8 @@
 
 - **全屏游戏背景底图规范 (BACKGROUND Specification)**: **【业务铁律】**
   - 背景模块（`UIBlockType.BACKGROUND`）默认是游戏整个界面的背景层，**其尺寸必须恒等于全屏画布/屏幕尺寸**；
-  - 在大模型识别、离线模板生成、手动添加模块（`addBlock`）或切换模块类型（`updateBlockType`）时，只要是顶层背景模块，其坐标与尺寸**必须直接初始化为全屏大小 `bounds = SerialRect(0f, 0f, width, height)` 与 `cropRect = SerialRect(0f, 0f, width, height)`**，严禁使用局部或默认小尺寸。
+  - 在大模型识别、离线模板生成、手动添加模块（`addBlock`）或切换模块类型（`updateBlockType`）时，只要是顶层背景模块，其坐标与尺寸**必须直接初始化为全屏大小 `bounds = SerialRect(0f, 0f, width, height)` 与 `cropRect = SerialRect(0f, 0f, width, height)`**，严禁使用局部或默认小尺寸；
+  - **初次大模型生成全屏兜底自愈铁律 (Auto Full-Canvas Guard)**：视觉多模态大模型在初次分析全景图提取背景时，极易根据画面局部视觉草坪或看台推导出带有局部边距的非全屏坐标。在模板生成落盘、模板加载及首次进入校验阶段，**必须在代码层强制执行兜底自愈**，无条件将顶层 BACKGROUND 的 `bounds` 与 `cropRect` 纠偏重置为全屏 `[0, 0, canvasWidth, canvasHeight]`，彻底根绝画布边缘留白与背景错位。
 - **纯容器 / 组合占位层规范 (CONTAINER & isPureContainer)**:
   - `UIBlockType.CONTAINER` 或标记 `isPureContainer = true` 的模块属于纯占位或组合层，**绝对不参与任何 AI 图片资源生成**；
   - 批量生图（`BatchAssetGenDialog`）自动过滤排除所有纯容器模块；
@@ -72,6 +69,35 @@
   - 原始通信报文备份路径：`~/.geminiuiforge/sessions/{safeScope}/{sessionId}/traffic/`；
   - **自动再次缓存**：本地图片文件被删除后，用户在聊天界面点击「应用」时，系统自动回溯读取会话对应的 `RESP.json` 报文，提取 Base64 重新落盘生成本地缓存文件后应用；
   - **安全定位目录**：点击打开文件目录时，文件存在则高亮文件；文件不存在但父目录存在则打开该空白目录；若均不存在则优雅弹出气泡提示，严禁静默无响应。
+- **根据参考图生成 UI 模板工程流程规范 (IMAGE_TO_TEMPLATE Specification)**: **【业务铁律】**
+  - **UI 跟随模式判定分流 (Follow vs Headless Routing)**：
+    首先读取 AI 视觉跟随状态（`UiRoadmapRegistry.isUiFollowEnabled`）：
+    1. **开启跟随（true）**：严格遵循人工操作流程，先通过路线图感知当前界面；若当前不在大厅主页，必须先妥善处理前台弹窗并清除脏数据，模拟人工返回并确保处于大厅主页后，再点击顶部「AI 生成模板」按钮进入生成界面；填入图片路径与工程名称，触发生成；生成成功后自动平滑跳转至工作区；
+    2. **未开启跟随（false，默认）**：直接调用 MCP 接口（`analyze_reference_generate_template`）后台高效完成多模态分析与落盘，并在生成完成后和人工模式完全一致，自动平滑切入工作区。
+  - **大厅归位与脏数据清理前置门禁 (Home Reset & Dirty Clear Guard)**：
+    在跟随模式下，严禁在工作区或其他中间界面直接发起跳转或覆盖状态；必须通过真实点击或放弃未保存弹窗，确保返回大厅主页后再开启生成流程。若工作区存在脏数据（`isDirty = true`），**必须严格执行标准 3 步链路**：
+    1. 点击左上角 `Back` 返回按钮（或分发 `btn_back_home`）；
+    2. 感知前台弹出未保存修改警告弹窗（`hasUnsavedRisk: true`）；
+    3. 精准点击「不保存退出」（`btn_discard_and_leave`）彻底丢弃脏数据归位至大厅主页。
+  - **长耗时大模型生成任务心跳收口门禁 (Long-Running Generation Heartbeat & Status Gate)**：
+    在大厅点击「发送给 Gemini 分析」后，大模型分析全景 Slots 界面提取数十个模块与双语提示词通常耗时 30~60 秒。**绝对禁止盲目发起同名操作的二次点击或强行刷新中断**；AI 必须以 `get_ui_roadmap` 的当前界面状态 `currentScreen == PROJECT_WORKSPACE` 且 `projectName == <目标工程名>` 作为大模型生成完成并切入工作区的唯一客观判定信号，期间周期性心跳感知（建议间隔 3~5 秒），保持幂等静默。
+  - **出厂默认原生参数铁律 (Native Parameter Default)**：
+    初次识图生成时，`autoCropReferenceImage` 必须严格遵循出厂默认 `false`（仅校正模块物理坐标与尺寸，绝不自动强制切图），切片与绑定留给工作区校准阶段按需开启。
+  - **首次进入工作区全量自动自愈校验 (Initial Verification on First Enter)**：
+    模板生成后首次进入工作区，程序必须全自动触发对全量图元的校准与自愈流程（`UIBlockLayoutNormalizer` 自动将未绑定图片的复合容器标记为 `isPureContainer = true`，校准坐标与层级），保证工程首态的 100% 绝对合规与零脏数据。
+- **逐模块独立检验、隔离对比与局部区域截图工作流规范 (MODULAR_CALIBRATION Specification)**: **【业务铁律】**
+  - **禁止点击界面全局按钮，强制底层 MCP 逐图元独立驱动铁律 (MCP Method Invocation Only, No UI Button Clicking)**：
+    在执行模块校验时（无论单个模块校验还是全量模块校验），**绝对严禁 AI 模拟人工去点击属性面板上的“校准全页面所有模块”等全局 UI 按钮**！AI 必须且只能调用 MCP 提供的底层微观校准方法（如 `inspect_block_with_reference` 或 `execute_ui_action_sequence`），按图元层级树递归遍历，对每一个模块分别进行独立的微观吸附、隔离比对、切片截图与视觉识别。
+  - **逐个模块物理遍历检验与校对铁律**：
+    全局校验模块绝不是简单调用一个全局接口或点击一次全局按钮，必须按照图元树结构**一个模块一个模块（逐图元递归）进行独立检验、尺寸校验与微观校准**；
+  - **干扰隔离与参考图对比铁律**：
+    在对某个模块进行检验和校准审查时，**必须开启隔离模式（`ISOLATE_BLOCK`），将其它所有不相干的模块完全隐藏**，只保留当前被校对的模块及其父级骨架；同时开启参考底图半透明叠加（`SET_REFERENCE_MODE = OVERLAY`，透明度 0.3~0.5），清晰透视当前模块与参考原图对应区域的绝对贴合度；
+  - **精准定位局部区域截图铁律 (Strict Crop Region Only vs Zero Full-Screen)**：
+    **切图校验时绝对严禁截取全屏大图**！全屏截图会导致待审模块在画面中被大幅缩小，细节严重丢失且无法看清边缘像素重合度。**所有涉及模块核对与校验的截图，必须且仅能截取该模块所在的局部矩形区域（结合外扩 32~48px Padding）**，根据需求精准定位裁剪，直观呈现 1:1 高清对齐细节；
+  - **统一几何与截图中枢调用铁律 (UiGeometryHelper Specification)**：
+    全项目对于组件逻辑坐标、窗口内部坐标、屏幕物理坐标、系统 DPI 缩放与画布视口矩阵变换（Zoom/Pan）的计算，**必须统一调用单点维护的中枢 `UiGeometryHelper`**，严禁在业务端或 MCP 端散落手写坐标推导，彻底根除漏算 DPI 或混淆 Window/Screen 坐标系导致的切图错乱；
+  - **真实 UI 线程分发闭环**：
+    所有隔离、透明度调节、居中放大与微观吸附动作必须在真实 UI 线程上通过 `inspect_block_with_reference` 或 `execute_ui_action_sequence` 真实分发执行，保证状态机完整响应。
 
 ## 代码规范
 
@@ -164,6 +190,9 @@
 - **PC 悬浮提示 Tooltip 视口智能翻转与防遮挡规范 (Tooltip Viewport Specification)**: **【红线规则】**
   - 所有 PC 桌面端 Tooltip 统一复用 `Modifier.tip(...)` 与全局宿主 `GlobalTooltipHost`；
   - 宿主内置窗口视口边界碰撞检测：当目标位于屏幕下边缘（如底部状态栏）时，浮层**强制自动向上翻转显示**，严禁强制向下偏移遮挡交互按钮本体；当靠近右边缘时自动向左内缩，确保 100% 完整可见。
+- **Compose 运行态原生语义节点动态易失性与感知规范 (Dynamic Semantic Node Volatility Specification)**: **【红线规则】**
+  - **严禁硬编码动态数字 Node ID**：Compose Multiplatform 在界面重组（Recomposition）、导航跳转或列表展开后，数字 ID 是动态重新分配的临时运行时句柄，绝对禁止在脚本或调用中硬编码任何历史 node ID；
+  - **动态语义检索优先**：执行任何模拟人工点击（`click_ui_node`）或文本输入（`set_ui_input_text`）前，**必须先调用 `get_semantic_tree(query = ...)` 动态查询当前生效的节点 ID 并确认动作能力后方可分发**，杜绝因 ID 飘移导致误触或调用失败。
 
 ## 代码生成与版本号
 

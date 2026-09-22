@@ -53,7 +53,8 @@ data class UiRoadmapData(
     val activeDialogs: List<DialogDescriptor>,
     val canDirectNavigate: Boolean,
     val currentContextSummary: String,
-    val screens: List<ScreenDescriptor>
+    val screens: List<ScreenDescriptor>,
+    val isUiFollowEnabled: Boolean = false
 )
 
 /**
@@ -232,7 +233,8 @@ object UiRoadmapRegistry {
                         append(" [当前前台激活弹窗: ").append(active.joinToString { it.title }).append("，注意必须先关闭或处理弹窗再执行后续页面流转]")
                     }
                 },
-                screens = screens
+                screens = screens,
+                isUiFollowEnabled = _isUiFollowEnabled.value
             )
         }
     }

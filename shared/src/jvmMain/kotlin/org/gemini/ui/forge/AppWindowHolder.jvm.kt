@@ -71,37 +71,39 @@ actual object AppWindowHolder {
     /**
      * 区域截图语义：
      * - region == null → 主窗整窗画面；
-     * - region != null (屏幕绝对坐标) → 遍历应用全部窗口，在命中的 Skia 渲染层上裁剪交集区域。
+     * - region != null → 支持窗口内部逻辑坐标或屏幕绝对坐标，自动按 DPI 缩放换算物理像素精准裁剪。
      */
     actual fun captureWindowBytes(region: IntRect?): ByteArray? {
         val frame = windowRef ?: return null
         return try {
+            val mainLayer = findSkiaLayer(frame.contentPane) ?: return null
             if (region == null) {
                 // 主窗整窗：直接快照主窗 Compose 渲染层
-                val layer = findSkiaLayer(frame.contentPane) ?: return null
-                return encodeLayerSnapshot(layer, null)
+                return encodeLayerSnapshot(mainLayer, null)
             }
 
-            // 区域模式：遍历主窗 + 弹窗，定位屏幕区域命中的 Compose 渲染层
-            // 全程物理像素 1:1，region 直接与渲染层屏幕矩形求交
+            // 优先针对主窗口 Compose 渲染层进行逻辑/绝对坐标解析
+            val mainBounds = mainLayer.bounds
+            val mainLocation = try { mainLayer.locationOnScreen } catch (_: Throwable) { null }
+            if (mainLocation != null) {
+                val localRect = resolveToLocalLayerRect(region, mainBounds, mainLocation)
+                if (localRect != null) {
+                    val bytes = encodeLayerSnapshot(mainLayer, localRect)
+                    if (bytes != null) return bytes
+                }
+            }
+
+            // 兜底：若主窗未命中（如特定独立 Dialog 弹窗），遍历其余可见窗口
             for (window in collectVisibleWindows().asReversed()) {
+                if (window === frame) continue
                 val layer = findSkiaLayer(window) ?: continue
+                if (!layer.isShowing) continue
                 val layerBounds = layer.bounds
-                val layerLocation = layer.locationOnScreen.takeIf { layer.isShowing } ?: continue
-                // 渲染层屏幕矩形 (物理像素)
-                val lLeft = layerLocation.x
-                val lTop = layerLocation.y
-                val lRight = lLeft + layerBounds.width
-                val lBottom = lTop + layerBounds.height
-                // 求交集 (物理像素，1:1 即 Bitmap 像素)
-                val cLeft = maxOf(region.left, lLeft)
-                val cTop = maxOf(region.top, lTop)
-                val cRight = minOf(region.right, lRight)
-                val cBottom = minOf(region.bottom, lBottom)
-                if (cRight - cLeft <= 0 || cBottom - cTop <= 0) continue
-                // 交集换算为渲染层本地坐标 (物理 = Bitmap 像素，1:1)
-                val localBitmap = IntRect(cLeft - lLeft, cTop - lTop, cRight - lLeft, cBottom - lTop)
-                return encodeLayerSnapshot(layer, localBitmap)
+                val layerLocation = try { layer.locationOnScreen } catch (_: Throwable) { null } ?: continue
+
+                val localLogicalRect = resolveToLocalLayerRect(region, layerBounds, layerLocation) ?: continue
+                val bytes = encodeLayerSnapshot(layer, localLogicalRect)
+                if (bytes != null) return bytes
             }
             null
         } catch (_: Throwable) {
@@ -109,24 +111,74 @@ actual object AppWindowHolder {
         }
     }
 
+    /**
+     * 智能判定坐标语义并转换为渲染层本地逻辑坐标 (以渲染层左上角 0,0 为基准)
+     */
+    private fun resolveToLocalLayerRect(
+        region: IntRect,
+        layerBounds: java.awt.Rectangle,
+        layerLocation: java.awt.Point
+    ): IntRect? {
+        val lLeft = layerLocation.x
+        val lTop = layerLocation.y
+        val lRight = lLeft + layerBounds.width
+        val lBottom = lTop + layerBounds.height
+
+        // 场景 1：优先按窗口内部逻辑坐标处理：如果矩形在窗口逻辑尺寸范围内，严格视为窗口内部坐标，绝不错误减去屏幕位移
+        if (region.left >= 0 && region.top >= 0 && region.right <= layerBounds.width && region.bottom <= layerBounds.height) {
+            if (region.right - region.left <= 0 || region.bottom - region.top <= 0) return null
+            return region
+        }
+
+        // 场景 2：坐标超出了窗口逻辑尺寸，但落入屏幕全局坐标范围（针对跨屏/屏幕绝对坐标的兼容）
+        val isScreenCoord = region.left >= lLeft && region.top >= lTop && region.left < lRight && region.top < lBottom
+        if (isScreenCoord) {
+            val cLeft = maxOf(region.left, lLeft)
+            val cTop = maxOf(region.top, lTop)
+            val cRight = minOf(region.right, lRight)
+            val cBottom = minOf(region.bottom, lBottom)
+            if (cRight - cLeft <= 0 || cBottom - cTop <= 0) return null
+            return IntRect(cLeft - lLeft, cTop - lTop, cRight - lLeft, cBottom - lTop)
+        }
+
+        // 场景 3：常规窗口内部坐标裁剪保底（Compose 窗口坐标系与 SkiaLayer 物理像素 1:1 对应）
+        val maxW = if (layerBounds.width > 0) layerBounds.width else 1920
+        val maxH = if (layerBounds.height > 0) layerBounds.height else 1080
+        val cLeft = maxOf(region.left, 0)
+        val cTop = maxOf(region.top, 0)
+        val cRight = region.right
+        val cBottom = region.bottom
+        if (cRight - cLeft <= 0 || cBottom - cTop <= 0) return null
+        return IntRect(cLeft, cTop, cRight, cBottom)
+    }
+
     /** Skia 渲染层快照 → (可选本地区域裁剪) → PNG 字节 */
-    private fun encodeLayerSnapshot(layer: SkiaLayer, localRegion: IntRect?): ByteArray? {
+    private fun encodeLayerSnapshot(layer: SkiaLayer, localLogicalRegion: IntRect?): ByteArray? {
         // Skia surface 快照 (软件重绘，不依赖窗口可见性)
         val bitmap: Bitmap = layer.screenshot() ?: return null
+        val bmpWidth = bitmap.width
+        val bmpHeight = bitmap.height
+
+        if (localLogicalRegion == null) {
+            return Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)?.bytes
+        }
+
+        // Compose Desktop 的 boundsInWindow 与 UiGeometryHelper 输出的坐标已处于 Compose 物理像素坐标系下，
+        // 与 SkiaLayer.screenshot() 返回的 Bitmap 尺寸 1:1 绝对吻合。
+        // 直接按 Bitmap 实际物理边界进行安全约束，彻底杜绝重复乘以 DPI scale 导致的严重漂移。
+        val physLeft = localLogicalRegion.left.coerceIn(0, maxOf(0, bmpWidth - 1))
+        val physTop = localLogicalRegion.top.coerceIn(0, maxOf(0, bmpHeight - 1))
+        val physRight = localLogicalRegion.right.coerceIn(physLeft + 1, bmpWidth)
+        val physBottom = localLogicalRegion.bottom.coerceIn(physTop + 1, bmpHeight)
+
+        val cropW = physRight - physLeft
+        val cropH = physBottom - physTop
+        if (cropW <= 0 || cropH <= 0) return null
+
         val pngBytes = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)?.bytes
             ?: return null
-        if (localRegion == null) return pngBytes
-
         val fullImage: BufferedImage = ImageIO.read(pngBytes.inputStream())
-        val width = fullImage.width
-        val height = fullImage.height
-        val left = localRegion.left.coerceIn(0, width)
-        val top = localRegion.top.coerceIn(0, height)
-        val right = localRegion.right.coerceIn(0, width)
-        val bottom = localRegion.bottom.coerceIn(0, height)
-        if (right - left <= 0 || bottom - top <= 0) return null
-
-        val subImage = fullImage.getSubimage(left, top, right - left, bottom - top)
+        val subImage = fullImage.getSubimage(physLeft, physTop, cropW, cropH)
         val baos = ByteArrayOutputStream()
         ImageIO.write(subImage, "png", baos)
         return baos.toByteArray()
@@ -171,7 +223,7 @@ actual object AppWindowHolder {
             //    保证 Robot 系统级点击落到应用自身界面而非遮挡窗口上。
             var pinned = false
             try {
-                hitWindow?.let { w ->
+                hitWindow.let { w ->
                     if (w is java.awt.Frame &&
                         w.extendedState and java.awt.Frame.ICONIFIED != 0
                     ) {
@@ -196,7 +248,7 @@ actual object AppWindowHolder {
             // 点击完成后取消置顶，恢复窗口正常层级
             if (pinned) {
                 try {
-                    hitWindow?.isAlwaysOnTop = false
+                    hitWindow.isAlwaysOnTop = false
                 } catch (_: Throwable) {
                     // 忽略取消置顶异常
                 }

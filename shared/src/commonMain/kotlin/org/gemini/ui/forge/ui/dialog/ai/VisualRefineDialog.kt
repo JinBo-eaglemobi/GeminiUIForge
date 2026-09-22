@@ -4,8 +4,8 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.AutoFixHigh
-import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
@@ -237,7 +237,7 @@ fun VisualRefineDialog(
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                     modifier = Modifier.tip("打开左右对称代码审查窗体，比对原代码与生成的新代码段")
                                 ) {
-                                    Icon(Icons.Default.CompareArrows, null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.AutoMirrored.Filled.CompareArrows, null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
                                     Text("审核并应用代码段")
                                 }

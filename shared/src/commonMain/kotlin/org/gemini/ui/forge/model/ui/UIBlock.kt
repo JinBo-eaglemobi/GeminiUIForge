@@ -27,6 +27,7 @@ data class UIBlock(
     val referenceImage: TemplateFile? = null, // 新增：该模块专用的参考图（裁剪自模板全局参考图）
     val resizeMode: ImageResizeMode = ImageResizeMode.STRETCH, // 新增：应用于该图片的缩放模式
     val ninePatchConfig: NinePatchConfig = NinePatchConfig(),  // 新增：应用于该图片的九宫格配置
+    val scaleConfig: ImageScaleConfig = ImageScaleConfig(), // 新增：应用于图片主体自适应对齐与缩放配置
     val cropRect: SerialRect? = null, // 新增：相对于原始图片的裁剪区域 [0..1] 或绝对像素
     val userPromptEn: String = "",
     val userPromptZh: String = "",

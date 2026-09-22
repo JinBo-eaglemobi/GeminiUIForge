@@ -13,9 +13,7 @@ actual object PlatformSemanticsBridge {
 
         val map = LinkedHashMap<Int, SemanticsNode>()
         for (w in windows) {
-            if (w is Accessible) {
-                collectRootSemanticsNodes(w, 0, map)
-            }
+            collectRootSemanticsNodes(w, 0, map)
         }
         return map.values.toList()
     }

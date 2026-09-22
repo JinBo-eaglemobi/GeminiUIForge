@@ -25,6 +25,10 @@ class ExecuteUiActionSequenceTool : McpToolDefinition {
                 put("type", "boolean")
                 put("description", "可选：执行完全部指令后是否截取当前窗口实机屏幕，默认 true")
             }
+            putJsonObject("screenshotTargetBlockId") {
+                put("type", "string")
+                put("description", "可选：若指定，则仅截取该图元及其周围的局部区域画面，缺省为整窗截图")
+            }
             putJsonObject("actions") {
                 put("type", "array")
                 put("description", "要执行的有序 UI 操作指令列表。支持类型：SELECT_BLOCK (选中图元), ISOLATE_BLOCK (隐藏其他图元仅保留本图元), RESTORE_VISIBILITY (恢复显隐快照), SET_REFERENCE_MODE (SPLIT/OVERLAY/HIDDEN), SET_REFERENCE_OPACITY (0.1~1.0), FOCUS_BLOCK_ON_CANVAS (重置并居中视口), TRIGGER_CALIBRATE (触发校对), TOGGLE_OUTLINES (切换外边框), WAIT_MS (等待微秒)")
@@ -56,6 +60,7 @@ class ExecuteUiActionSequenceTool : McpToolDefinition {
     ): McpToolResult {
         val projectName = arguments["projectName"]?.jsonPrimitive?.contentOrNull
         val captureScreenshot = arguments["captureScreenshot"]?.jsonPrimitive?.booleanOrNull ?: true
+        val screenshotTargetBlockId = arguments["screenshotTargetBlockId"]?.jsonPrimitive?.contentOrNull
         val actionsArray = arguments["actions"]?.jsonArray ?: return McpToolResult.error("缺少必填参数 'actions'")
 
         val actionList = mutableListOf<McpUiAction>()
@@ -86,7 +91,8 @@ class ExecuteUiActionSequenceTool : McpToolDefinition {
         val result = McpUiActionPipeline.executeSequence(
             projectName = projectName,
             actions = actionList,
-            captureScreenshot = captureScreenshot
+            captureScreenshot = captureScreenshot,
+            screenshotTargetBlockId = screenshotTargetBlockId
         )
 
         val responseJson = buildJsonObject {

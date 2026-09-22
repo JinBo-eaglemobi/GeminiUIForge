@@ -32,7 +32,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.platform.LocalDensity
+import org.gemini.ui.forge.utils.UiGeometryHelper
 import org.gemini.ui.forge.ui.dialog.ai.component.FormattedCodeViewer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -197,19 +200,38 @@ fun CanvasArea(
                         modifier = Modifier.fillMaxSize().padding(12.dp)
                     )
                 } else {
-                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxSize().onGloballyPositioned { coordinates ->
+                            UiGeometryHelper.updateViewport(
+                                canvasBoundsInWindow = coordinates.boundsInWindow()
+                            )
+                        }
+                    ) {
                         val maxBlockRight = blocks.maxOfOrNull { it.bounds.right } ?: 0f
-                    val maxBlockBottom = blocks.maxOfOrNull { it.bounds.bottom } ?: 0f
-                    val effectiveWidth = maxOf(pageWidth, maxBlockRight)
-                    val effectiveHeight = maxOf(pageHeight, maxBlockBottom)
+                        val maxBlockBottom = blocks.maxOfOrNull { it.bounds.bottom } ?: 0f
+                        val effectiveWidth = maxOf(pageWidth, maxBlockRight)
+                        val effectiveHeight = maxOf(pageHeight, maxBlockBottom)
 
-                    val baseScale = min(maxWidth.value / effectiveWidth, maxHeight.value / effectiveHeight) * 0.9f
-                    val offsetX =
-                        (maxWidth.value - (effectiveWidth * baseScale)) / 2 + (effectiveWidth - pageWidth) / 2 * baseScale
-                    val offsetY =
-                        (maxHeight.value - (effectiveHeight * baseScale)) / 2 + (effectiveHeight - pageHeight) / 2 * baseScale
+                        val baseScale = min(maxWidth.value / effectiveWidth, maxHeight.value / effectiveHeight) * 0.9f
+                        val offsetX =
+                            (maxWidth.value - (effectiveWidth * baseScale)) / 2 + (effectiveWidth - pageWidth) / 2 * baseScale
+                        val offsetY =
+                            (maxHeight.value - (effectiveHeight * baseScale)) / 2 + (effectiveHeight - pageHeight) / 2 * baseScale
 
-                    var isInteractingWithBlock by remember { mutableStateOf(false) }
+                        SideEffect {
+                            UiGeometryHelper.updateViewport(
+                                pageWidth = pageWidth,
+                                pageHeight = pageHeight,
+                                baseScale = baseScale,
+                                offsetX = offsetX,
+                                offsetY = offsetY,
+                                zoom = zoom,
+                                pan = pan,
+                                density = density.density
+                            )
+                        }
+
+                        var isInteractingWithBlock by remember { mutableStateOf(false) }
 
                     Box(
                         modifier = Modifier.fillMaxSize()

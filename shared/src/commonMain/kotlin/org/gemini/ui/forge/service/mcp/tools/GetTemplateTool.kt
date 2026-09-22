@@ -43,11 +43,10 @@ class GetTemplateTool(
             ?: return McpToolResult.error("参数 'name' 不能为空")
 
         onProgress?.invoke(0.3f, "正在从本地工程库加载模板 '$name'...")
-        val templates = repository.getTemplates()
-        val match = templates.firstOrNull { it.first.equals(name, ignoreCase = true) }
-            ?: return McpToolResult.error("未找到名称为 '$name' 的模板")
+        val template = repository.getTemplateByName(name)
+            ?: return McpToolResult.error("未找到名称为 '$name' 的模板（已检索原始下划线与带空格工程目录）")
 
         onProgress?.invoke(1.0f, "模板结构读取就绪")
-        return McpToolResult.text(looseJson.encodeToString(match.second))
+        return McpToolResult.text(looseJson.encodeToString(template))
     }
 }

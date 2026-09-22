@@ -62,8 +62,7 @@ class MoveBlockTool(
         val insertIndex = arguments["insertIndex"]?.jsonPrimitive?.intOrNull
 
         onProgress?.invoke(0.2f, "正在读取工程树...")
-        val templates = repository.getTemplates()
-        val match = templates.firstOrNull { it.first.equals(projectName, ignoreCase = true) }
+        val match = repository.findTemplatePair(projectName)
             ?: return McpToolResult.error("未找到工程 '$projectName'")
 
         val state = match.second

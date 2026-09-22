@@ -244,7 +244,11 @@ fun RenderBlock(
             .zIndex(currentZIndex)
             .offset(x = currentRenderX.dp, y = currentRenderY.dp)
             .size(width = (block.bounds.width * baseScale).dp, height = (block.bounds.height * baseScale).dp)
-            .clip(RoundedCornerShape(2.dp))
+            .then(
+                if (block.shouldClipOverflow || (!block.scaleConfig.enabled && !isSelected)) {
+                    Modifier.clip(RoundedCornerShape(2.dp))
+                } else Modifier
+            )
             .background(actualBgColor)
             .then(
                 if ((isHideOutlines || hidePlaceholder || viewBgColor != null) && !isSelected) Modifier
@@ -260,13 +264,30 @@ fun RenderBlock(
         val showReelBg = reelProps?.showBackground != false
 
         if (!isPureContainer && imageBitmap != null && showReelBg) {
-            // 优先级 1：已生成的正式 AI 图像成品
-            Image(
-                bitmap = imageBitmap,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.FillBounds
-            )
+            // 优先级 1：已生成的正式 AI 图像成品 (支持不透明核心主体自适应对齐与发光自然溢出)
+            val scaleConfig = block.scaleConfig
+            if (scaleConfig.enabled) {
+                val imgWidthDp = (imageBitmap.width * scaleConfig.scaleX * baseScale).dp
+                val imgHeightDp = (imageBitmap.height * scaleConfig.scaleY * baseScale).dp
+                val offsetXDp = (scaleConfig.offsetX * baseScale).dp
+                val offsetYDp = (scaleConfig.offsetY * baseScale).dp
+                Image(
+                    bitmap = imageBitmap,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .offset(x = offsetXDp, y = offsetYDp)
+                        .size(width = imgWidthDp, height = imgHeightDp),
+                    contentScale = ContentScale.FillBounds
+                )
+            } else {
+                Image(
+                    bitmap = imageBitmap,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.FillBounds
+                )
+            }
         } else if (!isPureContainer && customRefBitmap != null && showReelBg) {
             // 优先级 2：该模块专属设置并保存过的参考切片图（固定专属图，不随模块位移发生原图错位）
             Image(

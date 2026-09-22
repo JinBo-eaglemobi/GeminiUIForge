@@ -9,6 +9,9 @@ import org.gemini.ui.forge.model.app.ReferenceDisplayMode
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.service.detection.DetectionEngineMode
 import org.gemini.ui.forge.utils.ImageCacheManager
+import org.gemini.ui.forge.utils.UiGeometryHelper
+import org.gemini.ui.forge.utils.bindParents
+import org.gemini.ui.forge.utils.findBlockById
 import org.gemini.ui.forge.utils.compressToCompactImage
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import kotlin.io.encoding.Base64
@@ -92,7 +95,9 @@ object McpUiActionPipeline {
     suspend fun executeSequence(
         projectName: String?,
         actions: List<McpUiAction>,
-        captureScreenshot: Boolean = false
+        captureScreenshot: Boolean = false,
+        screenshotTargetBlockId: String? = null,
+        screenshotPadding: Int = 32
     ): McpUiSequenceResult = withContext(Dispatchers.Main) {
         val vm = activeViewModel
         if (vm == null) {
@@ -132,7 +137,9 @@ object McpUiActionPipeline {
                             stepSuccess = false
                             stepMsg = "缺少 blockId"
                         } else {
-                            vm.onBlockClicked(targetId)
+                            if (vm.state.value.selectedBlockId != targetId) {
+                                vm.onBlockClicked(targetId)
+                            }
                             stepMsg = "已选中图元: $targetId"
                         }
                     }
@@ -306,18 +313,33 @@ object McpUiActionPipeline {
             delay(50L)
         }
 
-        // 是否截取执行后的整屏画面
+        // 是否截取执行后的画面 (支持精准局部图元裁剪)
         var screenshot: String? = null
         var screenshotCachedPath: String? = null
         if (captureScreenshot) {
             try {
                 // 等待一小帧渲染落定
-                delay(100L)
-                val bytes = captureActiveScreenShot()
+                delay(120L)
+
+                // 优先通过 UiGeometryHelper 几何中枢计算目标图元的视口逻辑裁剪区域，彻底杜绝 DPI 与视口变换错位
+                val region: androidx.compose.ui.unit.IntRect? = if (!screenshotTargetBlockId.isNullOrBlank()) {
+                    val allBlocks = vm.state.value.currentPage?.blocks?.bindParents() ?: emptyList()
+                    val targetBlock = allBlocks.findBlockById(screenshotTargetBlockId)
+                    if (targetBlock != null) {
+                        val calcRegion = UiGeometryHelper.getBlockCropRegionInWindow(targetBlock, paddingPx = 48)
+                        println("[UiGeometryHelper] targetBlock=${targetBlock.id}, absBounds=${targetBlock.toAbsoluteBounds()}, region=$calcRegion, viewport=${UiGeometryHelper.viewport}")
+                        calcRegion
+                    } else null
+                } else null
+
+                val bytes = org.gemini.ui.forge.AppWindowHolder.captureWindowBytes(region)
+                    ?: (if (region == null) captureActiveScreenShot() else null)
+
                 if (bytes != null && bytes.isNotEmpty()) {
                     // 统一走公共工具压缩中枢：WEBP 优先 → JPEG 降级，并异步落盘缓存
+                    val prefix = if (region != null) "ui_action_${screenshotTargetBlockId}_region" else "ui_action"
                     val compact = compressToCompactImage(bytes)
-                    screenshotCachedPath = ImageCacheManager.saveCache("ui_action", compact)
+                    screenshotCachedPath = ImageCacheManager.saveCache(prefix, compact)
                     @OptIn(ExperimentalEncodingApi::class)
                     screenshot = Base64.encode(compact.bytes)
                 }

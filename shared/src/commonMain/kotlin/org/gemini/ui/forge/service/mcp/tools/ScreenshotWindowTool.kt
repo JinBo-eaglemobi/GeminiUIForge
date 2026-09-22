@@ -10,11 +10,16 @@ import kotlinx.serialization.json.put
 import org.gemini.ui.forge.AppWindowHolder
 import org.gemini.ui.forge.accessibility.ComposeAccessibilityGateway
 import org.gemini.ui.forge.captureActiveScreenShot
+import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.service.mcp.McpToolAnnotations
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
 import org.gemini.ui.forge.service.mcp.McpToolResult
+import org.gemini.ui.forge.service.mcp.McpUiActionPipeline
 import org.gemini.ui.forge.utils.ImageCacheManager
+import org.gemini.ui.forge.utils.UiGeometryHelper
+import org.gemini.ui.forge.utils.bindParents
 import org.gemini.ui.forge.utils.compressToCompactImage
+import org.gemini.ui.forge.utils.findBlockById
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -54,12 +59,25 @@ class ScreenshotWindowTool : McpToolDefinition {
         arguments: JsonObject,
         onProgress: ((progress: Float, message: String?) -> Unit)?
     ): McpToolResult {
-        // 解析裁剪区域：原生语义节点优先，其次显式像素区域，均缺省则整窗
+        // 解析裁剪区域：原生语义节点/图元优先，其次显式像素区域，均缺省则整窗
         val nodeId = arguments["targetNodeId"]?.jsonPrimitive?.contentOrNull
+        var blockFilePrefix: String? = null
         val nodeRegion: Pair<IntRect, String>? = nodeId?.let { id ->
-            ComposeAccessibilityGateway.getNodeBounds(id)?.let { bounds ->
-                IntRect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()) to "语义节点 [$id] 区域 (${bounds.width.toInt()}x${bounds.height.toInt()}px)"
-            } ?: return McpToolResult.error("未找到语义节点: $id (可先调用 get_semantic_tree 查询有效节点清单)")
+            val cleanId = id.removePrefix("block_")
+            val vm = McpUiActionPipeline.getActiveViewModel()
+            val allBlocks = vm?.state?.value?.currentPage?.blocks?.bindParents() ?: emptyList()
+            val targetBlock = allBlocks.findBlockById(cleanId)
+            if (targetBlock != null) {
+                // 携带模块类型与唯一 ID，例如 block_button_btn_spin 或 block_btn_spin
+                blockFilePrefix = "block_${targetBlock.type.name.lowercase()}_$cleanId"
+                val r = UiGeometryHelper.getBlockCropRegionInWindow(targetBlock, paddingPx = 32)
+                r to "图元 [$cleanId] 视口区域 (${r.width}x${r.height}px)"
+            } else {
+                blockFilePrefix = "node_$cleanId"
+                ComposeAccessibilityGateway.getNodeBounds(id)?.let { bounds ->
+                    IntRect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()) to "语义节点 [$id] 区域 (${bounds.width.toInt()}x${bounds.height.toInt()}px)"
+                } ?: return McpToolResult.error("未找到语义节点或图元: $id (可先调用 get_semantic_tree 查询有效节点清单)")
+            }
         }
         val pixelRegion = (arguments["region"] as? JsonObject)?.let { jo ->
             fun field(fieldName: String) = jo[fieldName]?.jsonPrimitive?.doubleOrNull
@@ -76,8 +94,8 @@ class ScreenshotWindowTool : McpToolDefinition {
             ?: return McpToolResult.error("应用窗口未就绪或区域无效，截图失败")
 
         onProgress?.invoke(0.7f, "正在压缩编码 (WEBP 优先) 并缓存到磁盘...")
-        // 统一走公共工具压缩中枢：WEBP 优先 → JPEG 降级 → PNG 兜底，并异步落盘缓存
-        val prefix = if (nodeId != null) "window_node" else if (region != null) "window_region" else "window"
+        // 统一走公共工具压缩中枢：携带图元唯一 ID 与语义化名称，彻底消除无名匿名缓存
+        val prefix = blockFilePrefix ?: if (region != null) "window_region" else "window"
         val compact = compressToCompactImage(shotBytes)
         val cachedPath = ImageCacheManager.saveCache(prefix, compact)
 
