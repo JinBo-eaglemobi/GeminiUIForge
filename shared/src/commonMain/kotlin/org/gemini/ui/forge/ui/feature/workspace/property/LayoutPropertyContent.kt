@@ -37,7 +37,6 @@ import androidx.compose.ui.geometry.Offset
 import org.gemini.ui.forge.ui.feature.workspace.BlockSpecificProperties
 import org.gemini.ui.forge.ui.feature.workspace.CollapsibleSection
 import org.gemini.ui.forge.ui.theme.AppShapes
-import org.gemini.ui.forge.ui.feature.workspace.property.component.AlignmentModeSelector
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.ResourceBindingValidator
 import org.gemini.ui.forge.utils.Toast
@@ -238,47 +237,6 @@ fun LayoutPropertyContent(
                         }
 
                         Spacer(Modifier.height(6.dp))
-                    }
-
-                    // 最初界面展示：全页面所有模块智能吸附校准卡片
-                    var globalAlsoCrop by remember { mutableStateOf(false) }
-                    Card(
-                        shape = AppShapes.small,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            AlignmentModeSelector(
-                                currentMode = state.activeAlignmentMode,
-                                onModeSelected = { viewModel.setActiveAlignmentMode(it) }
-                            )
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth().clip(AppShapes.small).clickable { globalAlsoCrop = !globalAlsoCrop }
-                            ) {
-                                Checkbox(
-                                    checked = globalAlsoCrop,
-                                    onCheckedChange = { globalAlsoCrop = it },
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = "同时切片并绑定为各模块参考图",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-
-                            Button(
-                                onClick = { viewModel.calibrateAllBlocks(globalAlsoCrop, state.activeAlignmentMode) },
-                                modifier = Modifier.fillMaxWidth().tip(if (globalAlsoCrop) "一键校准全页面所有模块物理坐标，并同步从原图裁切绑定参考图" else "一键校准全页面所有模块的物理范围与坐标 (不切图)"),
-                                shape = AppShapes.medium
-                            ) {
-                                Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("校准全页面所有模块 (${state.activeAlignmentMode.shortName})")
-                            }
-                        }
                     }
                 }
             } ?: Text("请选择模块", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -847,55 +805,6 @@ fun LayoutPropertyContent(
                             Icon(Icons.Default.CropRotate, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("截取/设置参考切片区域")
-                        }
-                    }
-                }
-
-                // 3. 物理边缘吸附校准 (支持可选同时切图并绑定参考图)
-                var alsoCropAndBind by remember { mutableStateOf(false) }
-                Card(
-                    shape = AppShapes.small,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AlignmentModeSelector(
-                            currentMode = state.activeAlignmentMode,
-                            onModeSelected = { viewModel.setActiveAlignmentMode(it) }
-                        )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth().clickable { alsoCropAndBind = !alsoCropAndBind }
-                        ) {
-                            Checkbox(
-                                checked = alsoCropAndBind,
-                                onCheckedChange = { alsoCropAndBind = it },
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = "同时切片并绑定为参考底图",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-
-                        val isCompositeGroup = selectedBlock.children.isNotEmpty()
-                        OutlinedButton(
-                            onClick = { viewModel.calibrateSelectedBlock(alsoCropAndBind, state.activeAlignmentMode) },
-                            modifier = Modifier.fillMaxWidth().tip(
-                                if (isCompositeGroup) "递归对该组合内所有子图元执行物理吸附，并自动贴合父容器大小与相对原点归零 (代数守恒)"
-                                else if (alsoCropAndBind) "校正当前模块物理边界并切片绑定为参考图"
-                                else "仅校正当前模块的大小与物理坐标 (不切图)"
-                            ),
-                            shape = AppShapes.small
-                        ) {
-                            Icon(Icons.Default.CropFree, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                if (isCompositeGroup) "校准当前组合及内部子组件 (${state.activeAlignmentMode.shortName})"
-                                else "校准当前模块 (${state.activeAlignmentMode.shortName})"
-                            )
                         }
                     }
                 }

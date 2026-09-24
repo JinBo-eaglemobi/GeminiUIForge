@@ -349,7 +349,7 @@ fun CanvasArea(
                                             val lx = (offset.x / curDensity.density - currentOffsetXState) / currentBaseScaleState
                                             val ly = (offset.y / curDensity.density - currentOffsetYState) / currentBaseScaleState
                                             val hitBlock =
-                                                currentBlocksState.findHitBlock(lx, ly, 0f, 0f, currentEditingGroupState)
+                                                currentBlocksState.findHitBlock(lx, ly, currentEditingGroupState)
                                             if (hitBlock != null) viewModel.onBlockDoubleClicked(hitBlock.id) else if (currentEditingGroupState != null) viewModel.exitGroupEdit() else viewModel.onBlockClicked(
                                                 null,
                                                 false
@@ -361,7 +361,7 @@ fun CanvasArea(
                                             val lx = (offset.x / curDensity.density - currentOffsetXState) / currentBaseScaleState
                                             val ly = (offset.y / curDensity.density - currentOffsetYState) / currentBaseScaleState
                                             val hitBlock =
-                                                currentBlocksState.findHitBlock(lx, ly, 0f, 0f, currentEditingGroupState)
+                                                currentBlocksState.findHitBlock(lx, ly, currentEditingGroupState)
                                             viewModel.onBlockClicked(hitBlock?.id, isMultiSelectActive)
                                         }
                                     )
@@ -390,7 +390,7 @@ fun CanvasArea(
                                                 val hitBlock = if (selectedHit != null) {
                                                     currentBlocksState.findBlockById(selectedHit)
                                                 } else {
-                                                    currentBlocksState.findHitBlock(lx, ly, 0f, 0f, currentEditingGroupState)
+                                                    currentBlocksState.findHitBlock(lx, ly, currentEditingGroupState)
                                                 }
 
                                                 if (hitBlock != null) {

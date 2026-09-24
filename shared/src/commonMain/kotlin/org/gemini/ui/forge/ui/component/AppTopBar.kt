@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Tune
@@ -131,6 +132,17 @@ fun AppTopBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (currentScreen == AppScreen.HOME) {
+                    IconButton(
+                        onClick = { viewModel.dispatchRefreshHomeEvent() },
+                        modifier = Modifier.tip(stringResource(Res.string.home_refresh_tip))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = stringResource(Res.string.home_refresh_tip),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
                     TextButton(
                         onClick = { viewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
                         contentPadding = PaddingValues(horizontal = 8.dp),
@@ -192,8 +204,21 @@ fun AppTopBar(
                         Icon(Icons.Default.Tune, contentDescription = "Project Settings", tint = MaterialTheme.colorScheme.secondary)
                     }
                 }
-                
-                // MCP 服务中心入口（常驻显示）
+
+                // 校验拆分下拉按钮 (功能组分隔线隔开，仅项目工作区显示)
+                if (currentScreen == AppScreen.PROJECT_WORKSPACE) {
+                    VerticalDivider(
+                        modifier = Modifier.height(20.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+                    CalibrateSplitButton()
+                }
+
+                // MCP 服务中心入口（常驻显示，与前置功能组用分隔线区分）
+                VerticalDivider(
+                    modifier = Modifier.height(20.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
                 val isMcpRunning by McpController.isRunning.collectAsState()
                 IconButton(
                     onClick = onMcpClicked,

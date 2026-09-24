@@ -8,6 +8,8 @@ import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.service.mcp.McpToolAnnotations
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
 import org.gemini.ui.forge.service.mcp.McpToolResult
+import org.gemini.ui.forge.service.mcp.McpUiActionPipeline
+import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.looseJson
 
 /**
@@ -61,6 +63,16 @@ class UpdateBlockTool(
             put("bounds", buildJsonObject {
                 put("type", "object")
                 put("description", "可选：局部相对坐标与尺寸对象 { left, top, right, bottom }")
+                put("properties", buildJsonObject {
+                    put("left", buildJsonObject { put("type", "number") })
+                    put("top", buildJsonObject { put("type", "number") })
+                    put("right", buildJsonObject { put("type", "number") })
+                    put("bottom", buildJsonObject { put("type", "number") })
+                })
+            })
+            put("cropRect", buildJsonObject {
+                put("type", "object")
+                put("description", "可选：参考图局部裁切区域坐标 { left, top, right, bottom }")
                 put("properties", buildJsonObject {
                     put("left", buildJsonObject { put("type", "number") })
                     put("top", buildJsonObject { put("type", "number") })
@@ -135,6 +147,14 @@ class UpdateBlockTool(
                         updated = updated.copy(bounds = SerialRect(left, top, right, bottom))
                     }
 
+                    arguments["cropRect"]?.let { it as? JsonObject }?.let { cObj ->
+                        val left = cObj["left"]?.jsonPrimitive?.floatOrNull ?: updated.cropRect?.left ?: updated.bounds.left
+                        val top = cObj["top"]?.jsonPrimitive?.floatOrNull ?: updated.cropRect?.top ?: updated.bounds.top
+                        val right = cObj["right"]?.jsonPrimitive?.floatOrNull ?: updated.cropRect?.right ?: updated.bounds.right
+                        val bottom = cObj["bottom"]?.jsonPrimitive?.floatOrNull ?: updated.cropRect?.bottom ?: updated.bounds.bottom
+                        updated = updated.copy(cropRect = SerialRect(left, top, right, bottom))
+                    }
+
                     arguments["scaleConfig"]?.let { it as? JsonObject }?.let { scObj ->
                         val currentSc = updated.scaleConfig
                         val scaleX = scObj["scaleX"]?.jsonPrimitive?.floatOrNull ?: currentSc.scaleX
@@ -173,7 +193,26 @@ class UpdateBlockTool(
         }
 
         onProgress?.invoke(0.8f, "正在保存模板...")
-        repository.saveTemplate(projectName, state.copy(pages = updatedPages))
+        val updatedProject = state.copy(pages = updatedPages)
+        repository.saveTemplate(projectName, updatedProject)
+
+        // 纯本地离屏渲染更新最新图元标注图并落盘缓存
+        try {
+            org.gemini.ui.forge.service.TemplateOverlayRenderer.renderAndSaveLatest(projectName, updatedProject)
+        } catch (e: Exception) {
+            AppLogger.w("UpdateBlockTool", "更新标注图异常", e)
+        }
+
+        // ★ 同步通知当前活跃工作区刷新内存状态与画布渲染
+        try {
+            val activeVm = McpUiActionPipeline.getActiveViewModel()
+            if (activeVm != null) {
+                activeVm.reload(updatedProject)
+            }
+        } catch (e: Throwable) {
+            AppLogger.w("UpdateBlockTool", "通知活跃工作区刷新失败", e)
+        }
+
         onProgress?.invoke(1.0f, "图元属性已更新")
 
         val resultJson = buildJsonObject {

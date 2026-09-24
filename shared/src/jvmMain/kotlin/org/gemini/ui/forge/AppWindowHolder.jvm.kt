@@ -82,16 +82,12 @@ actual object AppWindowHolder {
                 return encodeLayerSnapshot(mainLayer, null)
             }
 
-            // 优先针对主窗口 Compose 渲染层进行逻辑/绝对坐标解析
-            val mainBounds = mainLayer.bounds
-            val mainLocation = try { mainLayer.locationOnScreen } catch (_: Throwable) { null }
-            if (mainLocation != null) {
-                val localRect = resolveToLocalLayerRect(region, mainBounds, mainLocation)
-                if (localRect != null) {
-                    val bytes = encodeLayerSnapshot(mainLayer, localRect)
-                    if (bytes != null) return bytes
-                }
-            }
+            // 优先针对主窗口 Compose 渲染层直接裁剪：
+            // region 由 UiGeometryHelper 计算，以主窗口渲染层左上角为基准，
+            // 与 mainLayer.screenshot() 返回的 Bitmap 物理像素 1:1 绝对吻合。
+            // 直接传递给 encodeLayerSnapshot，绝不错误减去屏幕位移或受 Swing 逻辑尺寸误导。
+            val mainBytes = encodeLayerSnapshot(mainLayer, region)
+            if (mainBytes != null) return mainBytes
 
             // 兜底：若主窗未命中（如特定独立 Dialog 弹窗），遍历其余可见窗口
             for (window in collectVisibleWindows().asReversed()) {
@@ -173,6 +169,7 @@ actual object AppWindowHolder {
 
         val cropW = physRight - physLeft
         val cropH = physBottom - physTop
+
         if (cropW <= 0 || cropH <= 0) return null
 
         val pngBytes = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)?.bytes

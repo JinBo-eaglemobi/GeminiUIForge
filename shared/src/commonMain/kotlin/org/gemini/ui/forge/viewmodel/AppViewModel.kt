@@ -49,6 +49,18 @@ class AppViewModel(
     private val _globalStyleEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val globalStyleEvent: SharedFlow<Unit> = _globalStyleEvent.asSharedFlow()
 
+    private val _refreshHomeEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val refreshHomeEvent: SharedFlow<Unit> = _refreshHomeEvent.asSharedFlow()
+
+    /**
+     * 派发大厅项目与模板手动刷新事件
+     */
+    fun dispatchRefreshHomeEvent() {
+        viewModelScope.launch {
+            _refreshHomeEvent.emit(Unit)
+        }
+    }
+
     /**
      * 派发全局风格设置弹出事件
      */

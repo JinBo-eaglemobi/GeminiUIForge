@@ -9,6 +9,7 @@ import org.gemini.ui.forge.service.mcp.McpInteractionBridge
 import org.gemini.ui.forge.service.mcp.McpToolAnnotations
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
 import org.gemini.ui.forge.service.mcp.McpToolResult
+import org.gemini.ui.forge.service.mcp.UiRoadmapRegistry
 import org.gemini.ui.forge.utils.LocalFileStorage
 
 /**
@@ -71,6 +72,9 @@ class GetRuntimeStatusTool(
         val resultJson = buildJsonObject {
             put("version", ProjectConfig.VERSION)
             put("uiReachable", McpInteractionBridge.isUiReachable())
+            put("isUiFollowEnabled", UiRoadmapRegistry.isUiFollowEnabled.value)
+            put("isAiExecuting", UiRoadmapRegistry.isAiExecuting.value)
+            put("generatingProjectsCount", UiRoadmapRegistry.generatingProjects.value.size)
             put("templatesCount", templates.size)
             put("customizedPromptsCount", customizedPromptsCount)
             put("totalRegisteredPrompts", promptManager.promptMetas.size)

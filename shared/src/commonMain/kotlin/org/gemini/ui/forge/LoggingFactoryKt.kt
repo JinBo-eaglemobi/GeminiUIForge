@@ -22,7 +22,7 @@ package org.gemini.ui.forge
 // * such as in top-level functions.
 // */
 //fun logger(name: String): KotlinLogger = KotlinLogger(LogManager.getContext(false).getLogger(name))
-//
+
 ///**
 // * Returns normalized context name.
 // * * Execution within a class/object will return the full qualified class/object name,

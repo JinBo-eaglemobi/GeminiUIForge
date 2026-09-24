@@ -20,7 +20,7 @@ class GetUiRoadmapTool : McpToolDefinition {
         put("properties", buildJsonObject {})
     }
 
-    private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
+    private val json = Json { prettyPrint = true; ignoreUnknownKeys = true; encodeDefaults = true }
 
     override suspend fun execute(
         arguments: JsonObject,

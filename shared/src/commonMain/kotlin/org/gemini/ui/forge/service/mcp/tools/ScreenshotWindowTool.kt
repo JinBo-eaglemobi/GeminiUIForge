@@ -70,7 +70,13 @@ class ScreenshotWindowTool : McpToolDefinition {
             if (targetBlock != null) {
                 // 携带模块类型与唯一 ID，例如 block_button_btn_spin 或 block_btn_spin
                 blockFilePrefix = "block_${targetBlock.type.name.lowercase()}_$cleanId"
+                val abs = targetBlock.toAbsoluteBounds()
+                val blockInWindow = UiGeometryHelper.getBlockBoundsInWindow(targetBlock)
                 val r = UiGeometryHelper.getBlockCropRegionInWindow(targetBlock, paddingPx = 32)
+                try {
+                    val logFile = java.io.File("scratch/title_debug.txt")
+                    logFile.writeText("id=$cleanId, bounds=${targetBlock.bounds}, abs=$abs, parent=${targetBlock.parent?.id}, blockInWindow=$blockInWindow, r=$r, vp=${UiGeometryHelper.viewport}")
+                } catch (_: Throwable) {}
                 r to "图元 [$cleanId] 视口区域 (${r.width}x${r.height}px)"
             } else {
                 blockFilePrefix = "node_$cleanId"

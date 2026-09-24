@@ -125,39 +125,24 @@ fun List<UIBlock>.calculateBlockParentOffset(id: String): Offset {
 }
 
 /**
- * 精确查找手势点击位置（逻辑坐标）所命中的最上层 UIBlock（支持多层嵌套检测）。
- * 当处于隔离编辑组（editingGroupId 激活）时，会优先且仅限制于在该隔离组的子模块内部进行碰撞命中检测。
+ * 精确查找手势点击位置（逻辑坐标）所命中的最上层 UIBlock。
+ * 命中范围受编辑上下文严格限制：全局模式仅命中顶层根模块；组编辑模式仅命中该组的直接子模块。
  *
  * @param lx 点击位置的逻辑 X 坐标（已排除画布本身的缩放与绝对物理偏移）
  * @param ly 点击位置的逻辑 Y 坐标
- * @param parentLx 递归调用时，父容器累计的逻辑 X 偏移量
- * @param parentLy 递归调用时，父容器累计的逻辑 Y 偏移量
- * @param editingGroupId 当前激活隔离编辑的组 ID。若为 null，则在全局根节点中进行命中遍历
+ * @param editingGroupId 当前激活隔离编辑的组 ID。若为 null，则仅在顶层根模块中命中
  * @return 命中的 UIBlock 实例。若没有任何图层命中则返回 null
  */
-fun List<UIBlock>.findHitBlock(lx: Float, ly: Float, parentLx: Float = 0f, parentLy: Float = 0f, editingGroupId: String?): UIBlock? {
+fun List<UIBlock>.findHitBlock(lx: Float, ly: Float, editingGroupId: String?): UIBlock? {
     if (editingGroupId == null) {
-        // 全局模式下，递归从上至下（倒序遍历，后绘制在最上层）检索所有可见模块，叶子节点优先
-        fun hitTest(list: List<UIBlock>, pLx: Float, pLy: Float): UIBlock? {
-            for (i in list.indices.reversed()) {
-                val block = list[i]
-                if (!block.isVisible) continue
-                val absL = pLx + block.bounds.left
-                val absT = pLy + block.bounds.top
-                val absR = pLx + block.bounds.right
-                val absB = pLy + block.bounds.bottom
-                if (lx in absL..absR && ly in absT..absB) {
-                    // 若子模块有命中，优先返回命中最深层的子组件
-                    if (block.children.isNotEmpty()) {
-                        val childHit = hitTest(block.children, absL, absT)
-                        if (childHit != null) return childHit
-                    }
-                    return block
-                }
-            }
-            return null
+        // 全局模式：仅检索顶层根模块命中 (根模块父偏移恒为 0，直接用自身 bounds 判定)。
+        // 深层子模块严禁穿透直接选中，必须先双击进入组编辑模式 (editingGroupId) 后方可逐层选中
+        for (i in indices.reversed()) {
+            val block = this[i]
+            if (!block.isVisible) continue
+            if (lx in block.bounds.left..block.bounds.right && ly in block.bounds.top..block.bounds.bottom) return block
         }
-        return hitTest(this, parentLx, parentLy)
+        return null
     }
     // 隔离编辑模式下：仅在被编辑的隔离组 of 子元素列表中检索命中
     val targetGroup = this.findBlockById(editingGroupId) ?: return null

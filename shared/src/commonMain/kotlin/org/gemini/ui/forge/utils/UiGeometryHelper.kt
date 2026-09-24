@@ -5,6 +5,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.IntRect
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
+import kotlin.concurrent.Volatile
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt

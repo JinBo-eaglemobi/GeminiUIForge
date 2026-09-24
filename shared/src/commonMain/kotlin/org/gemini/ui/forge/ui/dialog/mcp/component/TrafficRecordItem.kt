@@ -46,6 +46,7 @@ import org.gemini.ui.forge.service.mcp.McpTrafficRecord
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.looseJson
+import org.gemini.ui.forge.utils.unwrapJsonStringsForDisplay
 import kotlin.time.Instant
 
 /**
@@ -76,19 +77,20 @@ fun TrafficRecordItem(
         McpCommandDictionary.getCommandDescription(record.methodOrTool)
     }
 
-    // 格式化 Pretty Print JSON (2 空格缩进)
+    // 格式化 Pretty Print JSON (2 空格缩进，递归展开嵌套的 JSON 字符串供 UI 呈现)
     val prettyJson = remember(record.payloadJson) {
         try {
             if (record.payloadJson.isBlank() || record.payloadJson == "{}") {
                 "{}"
             } else {
                 val parsed = looseJson.parseToJsonElement(record.payloadJson)
+                val displayElement = unwrapJsonStringsForDisplay(parsed)
                 val prettyPrinter = Json {
                     prettyPrint = true
                     isLenient = true
                     ignoreUnknownKeys = true
                 }
-                prettyPrinter.encodeToString(JsonElement.serializer(), parsed)
+                prettyPrinter.encodeToString(JsonElement.serializer(), displayElement)
             }
         } catch (_: Exception) {
             record.payloadJson

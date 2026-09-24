@@ -641,6 +641,33 @@ fun App(typography: Typography? = null) {
                         }
                     }
 
+                    // AI 自动执行且开启视觉跟随模式时：主界面手势拦截阻断层（仅放行底部 30.dp 状态栏）
+                    val isAiExecuting by org.gemini.ui.forge.service.mcp.UiRoadmapRegistry.isAiExecuting.collectAsState()
+                    val isUiFollowEnabled by org.gemini.ui.forge.service.mcp.UiRoadmapRegistry.isUiFollowEnabled.collectAsState()
+                    if (isAiExecuting && isUiFollowEnabled) {
+                        var lastToastTime by remember { mutableStateOf(0L) }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(bottom = 30.dp)
+                                .pointerInput(Unit) {
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                                            event.changes.forEach { it.consume() }
+                                            if (event.type == PointerEventType.Press) {
+                                                val now = getCurrentTimeMillis()
+                                                if (now - lastToastTime > 2000L) {
+                                                    lastToastTime = now
+                                                    Toast.show("AI 正在自动执行中，界面交互已锁定（底部状态栏可用）", ToastType.INFO)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                        )
+                    }
+
                     // 在所有 UI 的最上层挂载全局 Toast 容器
                     AppToastContainer(
                         toastData = toastData,

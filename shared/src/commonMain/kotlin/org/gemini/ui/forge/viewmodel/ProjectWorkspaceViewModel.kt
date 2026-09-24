@@ -691,12 +691,17 @@ class ProjectWorkspaceViewModel(
     /**
      * 智能吸附校准图元几何尺寸与物理坐标 (支持单模块、多选批量与全量页面图元)
      *
+     * 校验本体 (边缘吸附 + 坐标写回) 恒定执行；两个后处理选项彼此独立：
+     *
      * @param targetBlockIds 目标图元 ID 集合，为 null 时代表校正当前页面的全部图元
-     * @param alsoCropAndBindReference 是否同步从原图物理裁切出切片并绑定为参考图 (默认 false，仅纠偏坐标大小)
+     * @param bindReference  选项 a：校验后参考数据同步模块数据 (按校准结果重切参考图并绑定为模块参考图)
+     * @param saveCropToDisk 选项 b：校验后使用现有参考范围切图并保存到磁盘 (不改变模块绑定)
+     * @param engineMode 对齐检测引擎模式，为 null 时沿用状态机当前引擎
      */
     fun calibrateBlocks(
         targetBlockIds: Set<String>? = null,
-        alsoCropAndBindReference: Boolean = false,
+        bindReference: Boolean = false,
+        saveCropToDisk: Boolean = false,
         engineMode: org.gemini.ui.forge.service.detection.DetectionEngineMode? = null
     ) {
         val currentPage = state.value.currentPage ?: return
@@ -811,27 +816,51 @@ class ProjectWorkspaceViewModel(
                     blockWithCalibratedChildren.bounds
                 }
 
-                val newRefImage = if (alsoCropAndBindReference) {
-                    val cropBytes = org.gemini.ui.forge.utils.SmartEdgeSnapper.cropSnappedComponent(
-                        imageBytes = refBytes,
-                        logicalBounds = absBounds,
-                        canvasWidth = pageW,
-                        canvasHeight = pageH
-                    )
-                    if (cropBytes != null) {
-                        croppedCount++
-                        templateRepo.saveBlockResource(
-                            templateName = state.value.projectName,
-                            blockId = block.id,
-                            fileNamePrefix = "ref_snap",
-                            bytes = cropBytes,
-                            isPng = true
+                val newRefImage = when {
+                    // 选项 a：按校准结果切片并绑定为模块参考图 (保存资源并更新绑定路径)
+                    bindReference -> {
+                        val cropBounds = snapRes?.logicalRect ?: absBounds
+                        val cropBytes = org.gemini.ui.forge.utils.SmartEdgeSnapper.cropSnappedComponent(
+                            imageBytes = refBytes,
+                            logicalBounds = cropBounds,
+                            canvasWidth = pageW,
+                            canvasHeight = pageH
                         )
-                    } else {
+                        if (cropBytes != null) {
+                            croppedCount++
+                            templateRepo.saveBlockResource(
+                                templateName = state.value.projectName,
+                                blockId = block.id,
+                                fileNamePrefix = "ref_snap",
+                                bytes = cropBytes,
+                                isPng = true
+                            )
+                        } else {
+                            block.referenceImage
+                        }
+                    }
+                    // 选项 b：使用现有参考范围切片，仅落盘存档，不改变模块绑定
+                    saveCropToDisk -> {
+                        val cropBounds = blockWithCalibratedChildren.cropRect ?: absBounds
+                        val cropBytes = org.gemini.ui.forge.utils.SmartEdgeSnapper.cropSnappedComponent(
+                            imageBytes = refBytes,
+                            logicalBounds = cropBounds,
+                            canvasWidth = pageW,
+                            canvasHeight = pageH
+                        )
+                        if (cropBytes != null) {
+                            croppedCount++
+                            templateRepo.saveBlockResource(
+                                templateName = state.value.projectName,
+                                blockId = block.id,
+                                fileNamePrefix = "ref_snap",
+                                bytes = cropBytes,
+                                isPng = true
+                            )
+                        }
                         block.referenceImage
                     }
-                } else {
-                    block.referenceImage
+                    else -> block.referenceImage
                 }
 
                 val updatedCropRect = snapRes?.logicalRect ?: blockWithCalibratedChildren.cropRect ?: blockWithCalibratedChildren.toAbsoluteBounds()
@@ -853,10 +882,10 @@ class ProjectWorkspaceViewModel(
                     s.copy(project = s.project.copy(pages = newPages))
                 }
                 markDirty()
-                val summaryMsg = if (alsoCropAndBindReference) {
-                    "已校准 $calibratedCount 个图元坐标 (已吻合 $unchangedCount 个)，并同步切片更新了 $croppedCount 个参考图"
-                } else {
-                    "已成功校验并校准 $calibratedCount 个图元物理范围与坐标 (已吻合 $unchangedCount 个，未切图)"
+                val summaryMsg = when {
+                    bindReference -> "已校准 $calibratedCount 个图元坐标 (已吻合 $unchangedCount 个)，并同步切片绑定了 $croppedCount 个参考图"
+                    saveCropToDisk -> "已校准 $calibratedCount 个图元坐标 (已吻合 $unchangedCount 个)，切图存档 $croppedCount 个至磁盘"
+                    else -> "已成功校验并校准 $calibratedCount 个图元物理范围与坐标 (已吻合 $unchangedCount 个，未切图)"
                 }
                 org.gemini.ui.forge.utils.Toast.show(summaryMsg, org.gemini.ui.forge.ui.component.ToastType.SUCCESS)
             }
@@ -864,27 +893,30 @@ class ProjectWorkspaceViewModel(
     }
 
     fun calibrateSelectedBlock(
-        alsoCropAndBindReference: Boolean = false,
+        bindReference: Boolean = false,
+        saveCropToDisk: Boolean = false,
         engineMode: org.gemini.ui.forge.service.detection.DetectionEngineMode? = null
     ) {
         val currentId = state.value.selectedBlockId ?: return
-        calibrateBlocks(setOf(currentId), alsoCropAndBindReference, engineMode)
+        calibrateBlocks(setOf(currentId), bindReference, saveCropToDisk, engineMode)
     }
 
     fun calibrateMultiSelectedBlocks(
-        alsoCropAndBindReference: Boolean = false,
+        bindReference: Boolean = false,
+        saveCropToDisk: Boolean = false,
         engineMode: org.gemini.ui.forge.service.detection.DetectionEngineMode? = null
     ) {
         val ids = state.value.selectedBlockIds
         if (ids.isEmpty()) return
-        calibrateBlocks(ids, alsoCropAndBindReference, engineMode)
+        calibrateBlocks(ids, bindReference, saveCropToDisk, engineMode)
     }
 
     fun calibrateAllBlocks(
-        alsoCropAndBindReference: Boolean = false,
+        bindReference: Boolean = false,
+        saveCropToDisk: Boolean = false,
         engineMode: org.gemini.ui.forge.service.detection.DetectionEngineMode? = null
     ) {
-        calibrateBlocks(null, alsoCropAndBindReference, engineMode)
+        calibrateBlocks(null, bindReference, saveCropToDisk, engineMode)
     }
 
     /** 切换当前的对齐引擎模式 (微观吸附 / 传统CV / 端侧AI) */

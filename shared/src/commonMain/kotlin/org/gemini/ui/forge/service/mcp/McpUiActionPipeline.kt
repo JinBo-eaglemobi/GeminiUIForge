@@ -1,10 +1,13 @@
 package org.gemini.ui.forge.service.mcp
 
+import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import org.gemini.ui.forge.captureActiveScreenShot
+import org.gemini.ui.forge.manager.CalibrationOptionsManager
 import org.gemini.ui.forge.model.app.ReferenceDisplayMode
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.service.detection.DetectionEngineMode
@@ -267,13 +270,22 @@ object McpUiActionPipeline {
                             "AI", "ONNX_AI" -> DetectionEngineMode.ONNX_AI
                             else -> DetectionEngineMode.BASELINE_SNAPPER
                         }
-                        val alsoCrop = action.alsoCropAndBind ?: false
+                        // 后处理选项裁决：显式 true → 同步+切图 (旧全量语义)；显式 false → 纯校验；未指定(null) → 读全局缓存选项
+                        val (bindRef, saveCrop) = when (action.alsoCropAndBind) {
+                            true -> true to true
+                            false -> false to false
+                            null -> {
+                                // MCP 通道：首次无缓存记录默认启用选项 a，有缓存则完全遵循缓存
+                                CalibrationOptionsManager.loadIfNeeded()
+                                CalibrationOptionsManager.resolveMcpDefaults()
+                            }
+                        }
                         val targetId = action.blockId
                         if (targetId != null && targetId != vm.state.value.selectedBlockId) {
                             vm.onBlockClicked(targetId)
                         }
-                        vm.calibrateSelectedBlock(alsoCropAndBindReference = alsoCrop, engineMode = engine)
-                        stepMsg = "已触发真实校准 (引擎: ${engine.displayName}, 切片: $alsoCrop)"
+                        vm.calibrateSelectedBlock(bindReference = bindRef, saveCropToDisk = saveCrop, engineMode = engine)
+                        stepMsg = "已触发真实校准 (引擎: ${engine.displayName}, 数据同步: $bindRef, 切图落盘: $saveCrop)"
                     }
 
                     "TOGGLE_OUTLINES" -> {
@@ -309,8 +321,8 @@ object McpUiActionPipeline {
             )
             if (stepSuccess) successCount++
 
-            // 每步默认给予轻微 UI 响应缓冲
-            delay(50L)
+            // 每步默认等待真实渲染帧落定 (替代固定 50ms sleep，帧时钟不可用时自动降级)
+            awaitRenderSettled(frames = 2, fallbackDelayMs = 8L)
         }
 
         // 是否截取执行后的画面 (支持精准局部图元裁剪)
@@ -318,8 +330,8 @@ object McpUiActionPipeline {
         var screenshotCachedPath: String? = null
         if (captureScreenshot) {
             try {
-                // 等待一小帧渲染落定
-                delay(120L)
+                // 等待渲染帧彻底落定后再截图 (替代固定 120ms sleep)
+                awaitRenderSettled(frames = 3, fallbackDelayMs = 24L)
 
                 // 优先通过 UiGeometryHelper 几何中枢计算目标图元的视口逻辑裁剪区域，彻底杜绝 DPI 与视口变换错位
                 val region: androidx.compose.ui.unit.IntRect? = if (!screenshotTargetBlockId.isNullOrBlank()) {
@@ -356,5 +368,48 @@ object McpUiActionPipeline {
             screenshotBase64 = screenshot,
             screenshotCachedPath = screenshotCachedPath
         )
+    }
+
+    /** 帧时钟可用性探测结果缓存 (null=未探测, true=可用, false=不可用走降级) */
+    private var frameClockUsable: Boolean? = null
+
+    /**
+     * 等待真实渲染帧落定 (性能优化的帧同步等待，替代固定 sleep)
+     *
+     * 三级安全策略，任何情况下绝不挂起、绝不阻断业务流程：
+     * 1. 正常路径：在 UI 帧时钟上等待 [frames] 个真实渲染帧 (~16.7ms/帧)，
+     *    确保重组与绘制真正完成后才继续，比固定 sleep 更快且更精确；
+     * 2. 帧时钟不可用 (探测失败/窗口关闭等)：降级为 [fallbackDelayMs] 微让出；
+     * 3. 任何异常：整体超时兜底后走降级，绝无死等风险。
+     *
+     * @param frames 要等待的真实渲染帧数
+     * @param fallbackDelayMs 降级路径的微让出时长
+     */
+    private suspend fun awaitRenderSettled(frames: Int, fallbackDelayMs: Long) {
+        // 首次调用先探测帧时钟可用性并缓存结论，避免每次都白白等待超时
+        if (frameClockUsable == null) {
+            frameClockUsable = try {
+                withTimeoutOrNull(200L) {
+                    withContext(Dispatchers.Main) { withFrameNanos { } }
+                } != null
+            } catch (_: Exception) {
+                false
+            }
+        }
+        if (frameClockUsable == false) {
+            delay(fallbackDelayMs)
+            return
+        }
+        // 帧同步等待：总超时按每帧 120ms 余量兜底 (远大于真实 16.7ms，仅作保险)
+        val settled = try {
+            withTimeoutOrNull(120L * frames + 80L) {
+                withContext(Dispatchers.Main) {
+                    repeat(frames) { withFrameNanos { } }
+                }
+            } != null
+        } catch (_: Exception) {
+            false
+        }
+        if (!settled) delay(fallbackDelayMs)
     }
 }

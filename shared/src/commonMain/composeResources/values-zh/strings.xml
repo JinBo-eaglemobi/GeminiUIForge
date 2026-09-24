@@ -584,4 +584,20 @@
     <string name="opaque_align_btn_reset">重置</string>
     <string name="opaque_align_toast_success">已完成主体识别与对齐 (主体尺寸 %1$dx%2$d)</string>
     <string name="opaque_align_toast_failed">未检测到有效的不透明主体</string>
+
+    <!-- 顶部状态栏校验拆分下拉按钮 -->
+    <string name="calibrate_split_tooltip">校验选中模块或全页面 (下拉可配置校验后处理选项)</string>
+    <string name="calibrate_option_sync_data">校验后参考数据同步模块数据</string>
+    <string name="calibrate_option_also_crop">校验后切图并保存到磁盘</string>
+    <string name="calibrate_confirm_title">执行模块校验</string>
+    <string name="calibrate_confirm_target_single">目标：选中模块 %1$s</string>
+    <string name="calibrate_confirm_target_multi">目标：选中的 %1$d 个模块</string>
+    <string name="calibrate_confirm_target_all">目标：全部 %1$d 个图元</string>
+    <string name="calibrate_confirm_options">选项 — 数据同步：%1$s ｜ 切图落盘：%2$s</string>
+    <string name="calibrate_opt_enabled">开启</string>
+    <string name="calibrate_opt_disabled">关闭</string>
+    <string name="calibrate_confirm_execute">执行校验</string>
+    <string name="calibrate_no_workspace">当前未处于模板编辑工作区，无法执行校验</string>
+    <string name="home_refresh_tip">刷新大厅项目与模板列表</string>
+    <string name="home_refresh_success">大厅项目与模板已刷新</string>
 </resources>

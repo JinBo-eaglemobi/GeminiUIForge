@@ -87,7 +87,8 @@ fun HierarchyItem(
     block: UIBlock,
     depth: Int,
     viewModel: org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel,
-    context: HierarchyInteractionContext
+    context: HierarchyInteractionContext,
+    isAncestorHidden: Boolean = false
 ) {
     // --- 内部化解构 Context 属性以实现声明式渲染 ---
     val selectedBlockId = context.selectedBlockId
@@ -272,11 +273,15 @@ fun HierarchyItem(
             } else Spacer(Modifier.width(20.dp))
             Spacer(Modifier.width(4.dp))
 
+            // 隐藏图层整体变暗系数：自身隐藏或任一祖先隐藏时，整行均与点亮层节点形成明显的视觉层级区分
+            val hiddenAlpha = if (block.isVisible && !isAncestorHidden) 1f else 0.4f
             Icon(
                 imageVector = block.type.getIcon(),
                 contentDescription = null,
                 modifier = Modifier.size(14.dp),
-                tint = if (isSelected || isHovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                tint = (if (isSelected || isHovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant).copy(
+                    alpha = hiddenAlpha
+                )
             )
             Spacer(Modifier.width(6.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -284,13 +289,17 @@ fun HierarchyItem(
                     text = stringResource(block.type.getDisplayNameRes()),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                    color = (if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface).copy(
+                        alpha = hiddenAlpha
+                    )
                 )
                 Text(
                     text = block.id,
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = if (block.isVisible && !isAncestorHidden) 0.7f else 0.3f
+                    )
                 )
             }
             // 隐藏/显示眼睛图标，直接对 viewModel 发起行为控制
@@ -306,15 +315,17 @@ fun HierarchyItem(
             }
         }
 
-        // 递归子节点渲染，极简状态透传
+        // 递归子节点渲染，极简状态透传 (父链可见性向下累积：任一祖先隐藏则子节点行同步变暗)
         if (hasChildren && expanded) {
             Column(modifier = Modifier.fillMaxWidth()) {
+                val childAncestorHidden = isAncestorHidden || !block.isVisible
                 block.children.forEach { child ->
                     HierarchyItem(
                         block = child,
                         depth = depth + 1,
                         viewModel = viewModel,
-                        context = context
+                        context = context,
+                        isAncestorHidden = childAncestorHidden
                     )
                 }
             }

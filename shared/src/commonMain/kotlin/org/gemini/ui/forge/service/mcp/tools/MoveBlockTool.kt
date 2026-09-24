@@ -112,7 +112,19 @@ class MoveBlockTool(
         val updatedPage = page.copy(blocks = newBlocks)
 
         onProgress?.invoke(0.8f, "正在保存最新层级树...")
-        repository.saveTemplate(projectName, state.copy(pages = listOf(updatedPage)))
+        val updatedProject = state.copy(pages = listOf(updatedPage))
+        repository.saveTemplate(projectName, updatedProject)
+
+        // ★ 同步通知当前活跃工作区刷新内存状态与画布渲染
+        try {
+            val activeVm = org.gemini.ui.forge.service.mcp.McpUiActionPipeline.getActiveViewModel()
+            if (activeVm != null) {
+                activeVm.reload(updatedProject)
+            }
+        } catch (e: Throwable) {
+            org.gemini.ui.forge.utils.AppLogger.w("MoveBlockTool", "通知活跃工作区刷新失败", e)
+        }
+
         onProgress?.invoke(1.0f, "图元移动完成")
 
         val resultJson = buildJsonObject {

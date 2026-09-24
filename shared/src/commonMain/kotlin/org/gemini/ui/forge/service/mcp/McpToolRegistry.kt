@@ -42,6 +42,7 @@ object McpToolRegistry {
             ComposePageScreenshotTool(),
             CompareWithReferenceTool(),
             ScreenshotWindowTool(),
+            RenderTemplateOverlayTool(),
             // D 组：会话复盘与通信档案工具
             ListChatSessionsTool(),
             GetTrafficRecordTool(),
@@ -67,7 +68,8 @@ object McpToolRegistry {
             ClickUiNodeTool(),
             SetUiInputTextTool(),
             GetSemanticTreeTool(),
-            TriggerInitialVerificationTool()
+            TriggerInitialVerificationTool(),
+            SetProjectGeneratingStatusTool()
         )
         _tools.value = builtin
     }

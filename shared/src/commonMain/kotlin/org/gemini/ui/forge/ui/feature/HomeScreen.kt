@@ -27,6 +27,8 @@ import org.gemini.ui.forge.viewmodel.GameProjectViewModel
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.getPlatform
+import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.ui.component.ToastType
 
 /**
  * 应用主界面（首页）。
@@ -48,10 +50,20 @@ fun HomeScreen(
     val coroutineScope = rememberCoroutineScope()
     var moduleToDelete by remember { mutableStateOf<UIModule?>(null) }
     var projectToDelete by remember { mutableStateOf<GameProjectInfo?>(null) }
+    val refreshSuccessMsg = stringResource(Res.string.home_refresh_success)
 
     // 每次进入大厅时，重新从本地物理磁盘扫描加载最新的模板数据，杜绝脏内存复用
     LaunchedEffect(Unit) {
         templatesList = templateRepo.getTemplates()
+    }
+
+    // 监听顶部导航栏手动刷新大厅事件，重新全量读取模板与项目并提示
+    LaunchedEffect(Unit) {
+        appViewModel.refreshHomeEvent.collect {
+            templatesList = templateRepo.getTemplates()
+            gameProjectViewModel.refreshProjects()
+            Toast.show(refreshSuccessMsg, ToastType.SUCCESS)
+        }
     }
 
     val modules = remember(templatesList) {

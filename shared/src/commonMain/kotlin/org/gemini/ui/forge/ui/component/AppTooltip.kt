@@ -25,37 +25,39 @@ class GlobalTooltipState {
     var text by mutableStateOf<String?>(null)
     var pointerPosition by mutableStateOf(Offset.Zero)
     var isVisible by mutableStateOf(false)
-    private var displayJobCount = 0
+    private var currentOwnerId by mutableStateOf<Any?>(null)
 
     /**
      * 显示提示
+     * @param ownerId 触发显示的持有者唯一令牌
      * @param text 提示文案
      * @param position 鼠标指针在窗口中的位置
      */
-    fun show(text: String, position: Offset) {
+    fun show(ownerId: Any, text: String, position: Offset) {
+        this.currentOwnerId = ownerId
         this.text = text
         this.pointerPosition = position
         this.isVisible = true
-        displayJobCount++
     }
 
     /**
      * 更新鼠标位置
+     * @param ownerId 触发更新的持有者唯一令牌
      */
-    fun updatePosition(position: Offset) {
-        if (isVisible) {
+    fun updatePosition(ownerId: Any, position: Offset) {
+        if (isVisible && currentOwnerId == ownerId) {
             this.pointerPosition = position
         }
     }
 
     /**
      * 隐藏提示
+     * @param ownerId 触发隐藏的持有者凭证；为 null 时强制全局隐藏
      */
-    fun hide() {
-        displayJobCount--
-        if (displayJobCount <= 0) {
+    fun hide(ownerId: Any? = null) {
+        if (ownerId == null || currentOwnerId == ownerId) {
             isVisible = false
-            displayJobCount = 0
+            currentOwnerId = null
             text = null // 清理文案，防止下次显示时闪烁旧内容
         }
     }
@@ -76,33 +78,42 @@ fun Modifier.tip(text: String?): Modifier = composed {
     if (text.isNullOrBlank()) return@composed this
     
     val tooltipState = LocalGlobalTooltip.current
+    val ownerId = remember { Any() }
+    val currentText by rememberUpdatedState(text)
     var componentPosition by remember { mutableStateOf(Offset.Zero) }
+
+    DisposableEffect(ownerId) {
+        onDispose {
+            tooltipState.hide(ownerId)
+        }
+    }
 
     this.onGloballyPositioned {
         componentPosition = it.positionInWindow()
-    }.pointerInput(text) {
-        awaitPointerEventScope {
-            while (true) {
-                val event = awaitPointerEvent()
-                val currentPointer = event.changes.firstOrNull()?.position ?: Offset.Zero
-                // 计算鼠标相对于窗口的绝对坐标
-                val absolutePointer = componentPosition + currentPointer
+    }.pointerInput(ownerId) {
+        try {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val currentPointer = event.changes.firstOrNull()?.position ?: Offset.Zero
+                    // 计算鼠标相对于窗口的绝对坐标
+                    val absolutePointer = componentPosition + currentPointer
 
-                when (event.type) {
-                    PointerEventType.Enter -> {
-                        tooltipState.show(text, absolutePointer)
-                    }
-                    PointerEventType.Move -> {
-                        tooltipState.updatePosition(absolutePointer)
-                    }
-                    PointerEventType.Exit -> {
-                        tooltipState.hide()
-                    }
-                    PointerEventType.Press -> {
-                        tooltipState.hide()
+                    when (event.type) {
+                        PointerEventType.Enter -> {
+                            tooltipState.show(ownerId, currentText, absolutePointer)
+                        }
+                        PointerEventType.Move -> {
+                            tooltipState.updatePosition(ownerId, absolutePointer)
+                        }
+                        PointerEventType.Exit, PointerEventType.Press -> {
+                            tooltipState.hide(ownerId)
+                        }
                     }
                 }
             }
+        } finally {
+            tooltipState.hide(ownerId)
         }
     }
 }

@@ -574,4 +574,20 @@
     <string name="opaque_align_btn_reset">Reset</string>
     <string name="opaque_align_toast_success">Opaque subject aligned (%1$dx%2$d)</string>
     <string name="opaque_align_toast_failed">No opaque subject detected</string>
+
+    <!-- Top bar calibrate split button -->
+    <string name="calibrate_split_tooltip">Calibrate selected block or all blocks (dropdown for post-check options)</string>
+    <string name="calibrate_option_sync_data">Sync reference data to block after check</string>
+    <string name="calibrate_option_also_crop">Crop reference image to disk after check</string>
+    <string name="calibrate_confirm_title">Run Module Calibration</string>
+    <string name="calibrate_confirm_target_single">Target: selected block %1$s</string>
+    <string name="calibrate_confirm_target_multi">Target: %1$d selected blocks</string>
+    <string name="calibrate_confirm_target_all">Target: all %1$d blocks</string>
+    <string name="calibrate_confirm_options">Options — data sync: %1$s | crop &amp; save: %2$s</string>
+    <string name="calibrate_opt_enabled">on</string>
+    <string name="calibrate_opt_disabled">off</string>
+    <string name="calibrate_confirm_execute">Run Calibration</string>
+    <string name="calibrate_no_workspace">Not in a template workspace. Calibration is unavailable here</string>
+    <string name="home_refresh_tip">Refresh home projects and templates</string>
+    <string name="home_refresh_success">Home projects and templates refreshed</string>
 </resources>

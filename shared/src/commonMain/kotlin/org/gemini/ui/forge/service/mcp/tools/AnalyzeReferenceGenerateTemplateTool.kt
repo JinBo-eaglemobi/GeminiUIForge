@@ -8,6 +8,7 @@ import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.mcp.McpToolAnnotations
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
 import org.gemini.ui.forge.service.mcp.McpToolResult
+import org.gemini.ui.forge.service.mcp.UiRoadmapRegistry
 import org.gemini.ui.forge.utils.LocalFileStorage
 
 /**
@@ -87,6 +88,9 @@ class AnalyzeReferenceGenerateTemplateTool(
             return McpToolResult.error("参考图片资源无效: $validateError")
         }
 
+        // 进入大模型分析前，在大厅注册生成中状态，锁定卡片防乱点
+        UiRoadmapRegistry.markProjectGenerating(projectName, "正在由 AI 视觉大模型反向生成图元工程...")
+
         onProgress?.invoke(0.3f, "正在向 Gemini 发起设计图结构化分析请求...")
         val generatedProjectState = try {
             aiService.analyzeImagesForTemplate(
@@ -97,6 +101,7 @@ class AnalyzeReferenceGenerateTemplateTool(
                 }
             )
         } catch (e: Exception) {
+            UiRoadmapRegistry.unmarkProjectGenerating(projectName)
             return McpToolResult.error("视觉大模型分析失败: ${e.message}")
         }
 
@@ -176,6 +181,16 @@ class AnalyzeReferenceGenerateTemplateTool(
 
         onProgress?.invoke(0.88f, "正在归档工程与保存校准图元数据...")
         repository.saveTemplate(projectName, finalSavedState)
+
+        // 纯本地离屏渲染生成初始与最新图元标注图并落盘缓存
+        try {
+            org.gemini.ui.forge.service.TemplateOverlayRenderer.renderAndSaveInitialAndLatest(projectName, finalSavedState)
+        } catch (e: Exception) {
+            println("[AnalyzeReference] 生成标注图异常: ${e.message}")
+        }
+
+        // 保持大厅卡片生成中锁定状态，标识进入微观核验阶段
+        UiRoadmapRegistry.markProjectGenerating(projectName, "图元工程已生成，正在执行微观吸附与实机核验...")
 
         // 触发 UI 界面跟随广播
         org.gemini.ui.forge.service.mcp.McpUiBridge.notifyTemplateCreated(projectName, finalSavedState)

@@ -69,35 +69,22 @@
   - 原始通信报文备份路径：`~/.geminiuiforge/sessions/{safeScope}/{sessionId}/traffic/`；
   - **自动再次缓存**：本地图片文件被删除后，用户在聊天界面点击「应用」时，系统自动回溯读取会话对应的 `RESP.json` 报文，提取 Base64 重新落盘生成本地缓存文件后应用；
   - **安全定位目录**：点击打开文件目录时，文件存在则高亮文件；文件不存在但父目录存在则打开该空白目录；若均不存在则优雅弹出气泡提示，严禁静默无响应。
-- **根据参考图生成 UI 模板工程流程规范 (IMAGE_TO_TEMPLATE Specification)**: **【业务铁律】**
-  - **UI 跟随模式判定分流 (Follow vs Headless Routing)**：
-    首先读取 AI 视觉跟随状态（`UiRoadmapRegistry.isUiFollowEnabled`）：
-    1. **开启跟随（true）**：严格遵循人工操作流程，先通过路线图感知当前界面；若当前不在大厅主页，必须先妥善处理前台弹窗并清除脏数据，模拟人工返回并确保处于大厅主页后，再点击顶部「AI 生成模板」按钮进入生成界面；填入图片路径与工程名称，触发生成；生成成功后自动平滑跳转至工作区；
-    2. **未开启跟随（false，默认）**：直接调用 MCP 接口（`analyze_reference_generate_template`）后台高效完成多模态分析与落盘，并在生成完成后和人工模式完全一致，自动平滑切入工作区。
-  - **大厅归位与脏数据清理前置门禁 (Home Reset & Dirty Clear Guard)**：
-    在跟随模式下，严禁在工作区或其他中间界面直接发起跳转或覆盖状态；必须通过真实点击或放弃未保存弹窗，确保返回大厅主页后再开启生成流程。若工作区存在脏数据（`isDirty = true`），**必须严格执行标准 3 步链路**：
-    1. 点击左上角 `Back` 返回按钮（或分发 `btn_back_home`）；
-    2. 感知前台弹出未保存修改警告弹窗（`hasUnsavedRisk: true`）；
-    3. 精准点击「不保存退出」（`btn_discard_and_leave`）彻底丢弃脏数据归位至大厅主页。
-  - **长耗时大模型生成任务心跳收口门禁 (Long-Running Generation Heartbeat & Status Gate)**：
-    在大厅点击「发送给 Gemini 分析」后，大模型分析全景 Slots 界面提取数十个模块与双语提示词通常耗时 30~60 秒。**绝对禁止盲目发起同名操作的二次点击或强行刷新中断**；AI 必须以 `get_ui_roadmap` 的当前界面状态 `currentScreen == PROJECT_WORKSPACE` 且 `projectName == <目标工程名>` 作为大模型生成完成并切入工作区的唯一客观判定信号，期间周期性心跳感知（建议间隔 3~5 秒），保持幂等静默。
-  - **出厂默认原生参数铁律 (Native Parameter Default)**：
-    初次识图生成时，`autoCropReferenceImage` 必须严格遵循出厂默认 `false`（仅校正模块物理坐标与尺寸，绝不自动强制切图），切片与绑定留给工作区校准阶段按需开启。
-  - **首次进入工作区全量自动自愈校验 (Initial Verification on First Enter)**：
-    模板生成后首次进入工作区，程序必须全自动触发对全量图元的校准与自愈流程（`UIBlockLayoutNormalizer` 自动将未绑定图片的复合容器标记为 `isPureContainer = true`，校准坐标与层级），保证工程首态的 100% 绝对合规与零脏数据。
-- **逐模块独立检验、隔离对比与局部区域截图工作流规范 (MODULAR_CALIBRATION Specification)**: **【业务铁律】**
-  - **禁止点击界面全局按钮，强制底层 MCP 逐图元独立驱动铁律 (MCP Method Invocation Only, No UI Button Clicking)**：
-    在执行模块校验时（无论单个模块校验还是全量模块校验），**绝对严禁 AI 模拟人工去点击属性面板上的“校准全页面所有模块”等全局 UI 按钮**！AI 必须且只能调用 MCP 提供的底层微观校准方法（如 `inspect_block_with_reference` 或 `execute_ui_action_sequence`），按图元层级树递归遍历，对每一个模块分别进行独立的微观吸附、隔离比对、切片截图与视觉识别。
-  - **逐个模块物理遍历检验与校对铁律**：
-    全局校验模块绝不是简单调用一个全局接口或点击一次全局按钮，必须按照图元树结构**一个模块一个模块（逐图元递归）进行独立检验、尺寸校验与微观校准**；
-  - **干扰隔离与参考图对比铁律**：
-    在对某个模块进行检验和校准审查时，**必须开启隔离模式（`ISOLATE_BLOCK`），将其它所有不相干的模块完全隐藏**，只保留当前被校对的模块及其父级骨架；同时开启参考底图半透明叠加（`SET_REFERENCE_MODE = OVERLAY`，透明度 0.3~0.5），清晰透视当前模块与参考原图对应区域的绝对贴合度；
-  - **精准定位局部区域截图铁律 (Strict Crop Region Only vs Zero Full-Screen)**：
-    **切图校验时绝对严禁截取全屏大图**！全屏截图会导致待审模块在画面中被大幅缩小，细节严重丢失且无法看清边缘像素重合度。**所有涉及模块核对与校验的截图，必须且仅能截取该模块所在的局部矩形区域（结合外扩 32~48px Padding）**，根据需求精准定位裁剪，直观呈现 1:1 高清对齐细节；
-  - **统一几何与截图中枢调用铁律 (UiGeometryHelper Specification)**：
-    全项目对于组件逻辑坐标、窗口内部坐标、屏幕物理坐标、系统 DPI 缩放与画布视口矩阵变换（Zoom/Pan）的计算，**必须统一调用单点维护的中枢 `UiGeometryHelper`**，严禁在业务端或 MCP 端散落手写坐标推导，彻底根除漏算 DPI 或混淆 Window/Screen 坐标系导致的切图错乱；
-  - **真实 UI 线程分发闭环**：
-    所有隔离、透明度调节、居中放大与微观吸附动作必须在真实 UI 线程上通过 `inspect_block_with_reference` 或 `execute_ui_action_sequence` 真实分发执行，保证状态机完整响应。
+
+- **画布命中选择的层级门禁规范 (Canvas Hit-Test Hierarchy Gate Specification)**: **【红线规则】**
+  - **二元命中域铁律 (Global vs Group-Edit Scoping)**：
+    画布手势命中检测 (`List<UIBlock>.findHitBlock`) 严格按编辑上下文二元分流：
+    1. **全局模式 (`editingGroupId == null`)**：仅允许命中**顶层根模块**（按渲染列表倒序检索，父偏移恒为 0），严禁任何形式的深度递归穿透——点击父容器内部区域一律返回该顶层容器本身；
+    2. **组编辑模式 (`editingGroupId` 激活)**：仅允许命中**被编辑组的直接子模块列表**（倒序、不递归）；子元素均未命中但点击落在组容器 bounds 内时返回组容器本身，否则返回 null。
+  - **逐层编辑门禁铁律 (Layer-by-Layer Edit Gate)**：
+    深层子模块严禁被画布直接点选，必须遵循标准编辑链路：双击容器进入组编辑模式 → 才能选中该层直接子模块 → 双击叶子自动切入其父组编辑。命中深度永远与 `editingGroupId` 的编辑链深度严格一致；
+  - **单一命中管道铁律 (Single Hit Pipeline)**：
+    画布的单击选中、双击进出组、拖拽命中等所有手势**必须复用同一个 `findHitBlock` 函数**，严禁在业务端散落手写第二套碰撞检测逻辑，杜绝命中规则不一致的分裂行为。
+
+- **层级树祖先隐藏视觉联动规范 (Ancestor Hidden Dimming Specification)**:
+  - **父链隐藏同步变暗铁律**：
+    图层树中任一祖先模块被隐藏时，其整棵子树的行项（类型图标、名称、ID）必须**同步继承变暗状态**（名称/图标透明度 0.4、ID 透明度 0.3），与点亮层节点形成清晰的视觉层级区分；实现上通过递归渲染参数（如 `isAncestorHidden`）向下累积传递（`isAncestorHidden || !block.isVisible`），严禁子节点仅凭自身 `isVisible` 判断视觉状态；
+  - **眼睛开关独立性铁律**：
+    每个节点的隐藏/显示眼睛图标**永远只反映并控制模块自身的 `isVisible` 状态**，不随祖先隐藏状态联动变化——祖先隐藏影响的是视觉呈现（变暗），不篡改子模块自身的显示数据。
 
 ## 代码规范
 

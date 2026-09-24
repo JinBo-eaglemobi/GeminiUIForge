@@ -3,6 +3,7 @@ package org.gemini.ui.forge.service.mcp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -54,7 +55,9 @@ data class UiRoadmapData(
     val canDirectNavigate: Boolean,
     val currentContextSummary: String,
     val screens: List<ScreenDescriptor>,
-    val isUiFollowEnabled: Boolean = false
+    val isUiFollowEnabled: Boolean = false,
+    val isAiExecuting: Boolean = false,
+    val generatingProjects: Map<String, String> = emptyMap()
 )
 
 /**
@@ -84,6 +87,40 @@ object UiRoadmapRegistry {
 
     fun setUiFollowEnabled(enabled: Boolean) {
         _isUiFollowEnabled.value = enabled
+    }
+
+    // AI 自动化任务执行状态 (true 时在前台跟随模式下手势阻断主内容区点击，防误触)
+    private val _isAiExecuting = MutableStateFlow(false)
+    val isAiExecuting: StateFlow<Boolean> = _isAiExecuting.asStateFlow()
+
+    fun setAiExecuting(executing: Boolean) {
+        _isAiExecuting.value = executing
+    }
+
+    // 当前正在由 AI 后台反向生成的模板工程集合 Map<projectName, statusDescription>
+    private val _generatingProjects = MutableStateFlow<Map<String, String>>(emptyMap())
+    val generatingProjects: StateFlow<Map<String, String>> = _generatingProjects.asStateFlow()
+
+    fun markProjectGenerating(projectName: String, status: String = "正在由 AI 逆向生成图元工程...") {
+        _generatingProjects.update { current ->
+            current + (projectName to status)
+        }
+    }
+
+    fun unmarkProjectGenerating(projectName: String) {
+        val normalized = projectName.trim().replace(" ", "_")
+        _generatingProjects.update { current ->
+            current.filterKeys { k ->
+                k != projectName && !k.trim().replace(" ", "_").equals(normalized, ignoreCase = true)
+            }
+        }
+    }
+
+    fun isProjectGenerating(projectName: String): Boolean {
+        val normalized = projectName.trim().replace(" ", "_")
+        return _generatingProjects.value.any { (k, _) ->
+            k == projectName || k.trim().replace(" ", "_").equals(normalized, ignoreCase = true)
+        }
     }
 
     private var currentTemplateId: String? = null
@@ -234,7 +271,9 @@ object UiRoadmapRegistry {
                     }
                 },
                 screens = screens,
-                isUiFollowEnabled = _isUiFollowEnabled.value
+                isUiFollowEnabled = _isUiFollowEnabled.value,
+                isAiExecuting = _isAiExecuting.value,
+                generatingProjects = _generatingProjects.value
             )
         }
     }
