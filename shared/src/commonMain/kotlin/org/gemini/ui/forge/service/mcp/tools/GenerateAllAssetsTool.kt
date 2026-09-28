@@ -4,20 +4,18 @@ import kotlinx.serialization.json.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
-import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.LocalMattingService
 import org.gemini.ui.forge.service.mcp.McpToolAnnotations
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
 import org.gemini.ui.forge.service.mcp.McpToolResult
 import org.gemini.ui.forge.utils.LocalFileStorage
-import org.gemini.ui.forge.utils.readLocalFileBytes
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * 全项目/全页面图元批量并发一键生图工具
+ * 自动过滤纯容器与占位层，接入自动切片校验、非透明主体对齐与缩放实际宽高保存闭环。
  */
 class GenerateAllAssetsTool(
     private val repository: TemplateRepository = TemplateRepository(),
@@ -27,7 +25,8 @@ class GenerateAllAssetsTool(
     override val name: String = "generate_all_assets"
 
     override val description: String =
-        "对指定模板中的所有图元执行一键全量批量生图。可配置是否仅针对尚未绑定图片资产的空白模块（onlyMissing）。"
+        "对指定模板中的所有业务图元执行一键全量批量生图（自动排除纯容器与占位层）。" +
+        "自动执行切片校验兜底、AI生图去背、非透明主体等比对齐并以缩放后的实际宽高物理落盘，实时重载工作区。"
 
     override val annotations: McpToolAnnotations = McpToolAnnotations(
         readOnlyHint = false,
@@ -35,7 +34,7 @@ class GenerateAllAssetsTool(
         openWorldHint = true
     )
 
-    override val timeoutMs: Long = 300_000L // 批量超长任务 5 分钟
+    override val timeoutMs: Long = 600_000L // 批量超长任务 10 分钟
 
     override val inputSchema: JsonObject = buildJsonObject {
         put("type", "object")
@@ -65,7 +64,7 @@ class GenerateAllAssetsTool(
         val onlyMissing = arguments["onlyMissing"]?.jsonPrimitive?.booleanOrNull ?: true
         val modelName = arguments["modelName"]?.jsonPrimitive?.contentOrNull ?: "gemini-2.5-flash-image"
 
-        onProgress?.invoke(0.05f, "正在检索待生成图元清单...")
+        onProgress?.invoke(0.02f, "正在检索待生成图元清单...")
         val templates = repository.getTemplates()
         val match = templates.firstOrNull { it.first.equals(projectName, ignoreCase = true) }
             ?: return McpToolResult.error("未找到工程 '$projectName'")
@@ -80,82 +79,103 @@ class GenerateAllAssetsTool(
         }
         state.pages.forEach { collect(it.blocks) }
 
-        val targetBlocks = if (onlyMissing) allBlocks.filter { it.currentImageUri == null } else allBlocks
+        // 严格过滤纯容器与占位层
+        val eligibleBlocks = allBlocks.filter { block ->
+            !block.isPureContainer && block.type != UIBlockType.CONTAINER
+        }
+
+        val targetBlocks = if (onlyMissing) {
+            eligibleBlocks.filter { it.currentImageUri == null }
+        } else {
+            eligibleBlocks
+        }
+
         if (targetBlocks.isEmpty()) {
-            return McpToolResult.text("✅ 当前模板中没有需要生成的图元 (目标数: 0)")
+            return McpToolResult.text("✅ 当前模板中没有需要生成的业务图元 (纯容器已自动忽略，待生成目标数: 0)")
         }
 
         val configManager = ConfigManager()
         val apiKey = configManager.loadKey("GEMINI_API_KEY")
             ?: configManager.loadGlobalGeminiKey()
-            ?: return McpToolResult.error("未找到 Gemini API Key")
+            ?: return McpToolResult.error("未找到 Gemini API Key，请在桌面端应用设置中配置或通过环境变量提供")
 
         val cloudAssetManager = CloudAssetManager(configManager)
         val aiService = AIGenerationService(storage, cloudAssetManager, configManager)
         val mattingService = LocalMattingService(storage)
-        val selectedModel = GeminiModel.entries.firstOrNull { it.modelName == modelName }
-            ?: GeminiModel.GEMINI_2_5_FLASH_IMAGE
 
         var successCount = 0
         var currentState = state
+        val results = mutableListOf<BlockAssetGenerationResult>()
 
         targetBlocks.forEachIndexed { idx, block ->
-            val progressVal = (idx.toFloat() / targetBlocks.size.toFloat()).coerceIn(0.1f, 0.95f)
-            onProgress?.invoke(progressVal, "正在为图元 [${block.id}] 生图 (${idx + 1}/${targetBlocks.size})...")
+            val blockBaseProgress = idx.toFloat() / targetBlocks.size.toFloat()
+            val blockStepWeight = 1.0f / targetBlocks.size.toFloat()
 
-            val promptToSend = block.userPromptEn.ifBlank { null }
-                ?: block.userPromptZh.ifBlank { null }
-                ?: "Game UI element, high quality"
+            onProgress?.invoke(
+                (blockBaseProgress + 0.01f).coerceIn(0.05f, 0.95f),
+                "正在为图元 [${block.id}] 执行闭环生图 (${idx + 1}/${targetBlocks.size})..."
+            )
 
-            var rawUri: String? = null
-            try {
-                aiService.generateImages(
-                    model = selectedModel,
-                    blockType = block.type.name,
-                    userPrompt = promptToSend,
-                    apiKey = apiKey,
-                    isPng = true,
-                    referenceImageUri = block.referenceImage?.getAbsolutePath(),
-                    generationCount = 1,
-                    onImageGenerated = { rawUri = it }
-                )
-            } catch (_: Throwable) {}
-
-            val finalRaw = rawUri
-            if (finalRaw != null) {
-                @OptIn(ExperimentalEncodingApi::class)
-                val bytes = if (finalRaw.startsWith("data:image")) {
-                    val b64 = if (finalRaw.contains(",")) finalRaw.substringAfter(",") else finalRaw
-                    Base64.decode(b64)
-                } else {
-                    readLocalFileBytes(finalRaw)
+            val (newState, pipelineResult) = GenerateBlockAssetTool.executeBlockPipeline(
+                projectName = projectName,
+                blockId = block.id,
+                customPrompt = null,
+                modelName = modelName,
+                isPng = true,
+                currentState = currentState,
+                repository = repository,
+                storage = storage,
+                configManager = configManager,
+                cloudAssetManager = cloudAssetManager,
+                aiService = aiService,
+                mattingService = mattingService,
+                apiKey = apiKey,
+                onProgress = { p, msg ->
+                    val overallProgress = (blockBaseProgress + p * blockStepWeight).coerceIn(0.05f, 0.98f)
+                    onProgress?.invoke(overallProgress, "图元 [${block.id}] $msg")
                 }
+            )
 
-                if (bytes != null) {
-                    val noBg = try { mattingService.removeBackground(bytes) ?: bytes } catch (_: Throwable) { bytes }
-                    val saved = repository.saveBlockResource(projectName, block.id, "batch", noBg, isPng = true)
-
-                    fun updateBlock(blocks: List<UIBlock>): List<UIBlock> {
-                        return blocks.map { b ->
-                            if (b.id == block.id) b.copy(currentImageUri = saved)
-                            else b.copy(children = updateBlock(b.children))
-                        }
-                    }
-                    val newPages = currentState.pages.map { it.copy(blocks = updateBlock(it.blocks)) }
-                    currentState = currentState.copy(pages = newPages)
-                    successCount++
-                }
+            currentState = newState
+            results.add(pipelineResult)
+            if (pipelineResult.success) {
+                successCount++
             }
         }
 
-        repository.saveTemplate(projectName, currentState)
-        onProgress?.invoke(1.0f, "全量生图流程结束")
+        onProgress?.invoke(1.0f, "全量批量生图与对齐自愈流程全部完成")
 
         val resultJson = buildJsonObject {
-            put("success", true)
+            put("success", successCount > 0)
             put("projectName", projectName)
             put("totalTargetBlocks", targetBlocks.size)
             put("successCount", successCount)
+            put("failedCount", targetBlocks.size - successCount)
+            put("details", buildJsonArray {
+                results.forEach { res ->
+                    add(buildJsonObject {
+                        put("blockId", res.blockId)
+                        put("success", res.success)
+                        if (res.success) {
+                            put("savedPath", res.savedFile?.getAbsolutePath() ?: "")
+                            put("actualWidth", res.finalWidth)
+                            put("actualHeight", res.finalHeight)
+                            res.scaleConfig?.let { sc ->
+                                put("scaleConfig", buildJsonObject {
+                                    put("scaleX", sc.scaleX)
+                                    put("scaleY", sc.scaleY)
+                                    put("offsetX", sc.offsetX)
+                                    put("offsetY", sc.offsetY)
+                                })
+                            }
+                            res.alignmentRating?.let { put("alignmentRating", it) }
+                            res.compositeAlignmentScore?.let { put("alignmentScore", it) }
+                        } else {
+                            put("error", res.errorMessage ?: "未知错误")
+                        }
+                    })
+                }
+            })
         }.toString()
 
         return McpToolResult.text(resultJson)

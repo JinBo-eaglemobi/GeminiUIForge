@@ -242,6 +242,85 @@ suspend fun bakeNinePatchImage(
 }
 
 /**
+ * 将图像按指定的物理目标宽高进行高质量重采样缩放并输出 PNG 字节。
+ * 用于生图校验后按当前缩放大小的实际宽高物理落盘保存图片。
+ *
+ * @param imageBytes 原始图像字节
+ * @param targetWidth 目标物理宽度（像素）
+ * @param targetHeight 目标物理高度（像素）
+ * @return 缩放后的 PNG 字节数组，失败返回 null。
+ */
+fun rescaleImageBytes(
+    imageBytes: ByteArray,
+    targetWidth: Int,
+    targetHeight: Int
+): ByteArray? {
+    if (targetWidth <= 0 || targetHeight <= 0) return null
+    return try {
+        val srcImage = Image.makeFromEncoded(imageBytes)
+        val srcW = srcImage.width
+        val srcH = srcImage.height
+        if (srcW == targetWidth && srcH == targetHeight) return imageBytes
+
+        val paint = Paint().apply { isAntiAlias = true }
+        val filter = FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR)
+        val surface = Surface.makeRasterN32Premul(targetWidth, targetHeight)
+        val canvas = surface.canvas
+        canvas.drawImageRect(
+            srcImage,
+            Rect.makeWH(srcW.toFloat(), srcH.toFloat()),
+            Rect.makeWH(targetWidth.toFloat(), targetHeight.toFloat()),
+            filter,
+            paint,
+            true
+        )
+        surface.makeImageSnapshot().encodeToData(EncodedImageFormat.PNG)?.bytes
+    } catch (e: Exception) {
+        AppLogger.e("ImageUtils", "❌ 缩放图像失败: ${e.message}")
+        null
+    }
+}
+
+/**
+ * 将图像裁剪为仅保留非透明主体（Tight Crop，去除多余空白透明边距）。
+ *
+ * @param imageBytes 原始 PNG 字节数组。
+ * @param alphaThreshold 不透明度判定阈值（0~255）。
+ * @param padding 额外保留的安全边距（像素）。
+ * @return 紧凑裁剪后的 PNG 字节数组，若无可裁剪区域则返回原图。
+ */
+suspend fun cropToOpaqueBounds(
+    imageBytes: ByteArray,
+    alphaThreshold: Int = 20,
+    padding: Int = 2
+): ByteArray {
+    if (imageBytes.isEmpty()) return imageBytes
+    return try {
+        val opaqueBox = detectOpaqueBoundingBox(imageBytes, alphaThreshold) ?: return imageBytes
+        val srcImage = Image.makeFromEncoded(imageBytes)
+        val imgW = srcImage.width.toFloat()
+        val imgH = srcImage.height.toFloat()
+
+        val padL = (opaqueBox.left - padding).coerceAtLeast(0f)
+        val padT = (opaqueBox.top - padding).coerceAtLeast(0f)
+        val padR = (opaqueBox.right + padding).coerceAtMost(imgW)
+        val padB = (opaqueBox.bottom + padding).coerceAtMost(imgH)
+        val cropRect = SerialRect(padL, padT, padR, padB)
+
+        cropImage(
+            imageBytes = imageBytes,
+            bounds = cropRect,
+            originalWidth = imgW,
+            originalHeight = imgH,
+            isPng = true
+        ) ?: imageBytes
+    } catch (e: Exception) {
+        AppLogger.w("ImageUtils", "紧凑裁剪透明边缘异常，回退原图: ${e.message}")
+        imageBytes
+    }
+}
+
+/**
  * 从原图中提取指定边界的子图（仅裁剪，不涉及缩放）。
  * 
  * @param imageBytes 原始图像的字节数组。

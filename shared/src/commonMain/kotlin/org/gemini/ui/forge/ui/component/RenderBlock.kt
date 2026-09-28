@@ -380,6 +380,7 @@ fun RenderBlock(
                         List(rows * cols) { reelProperties.items.random(rnd) }
                     }
 
+                    val hasReelBackground = (imageBitmap != null || customRefBitmap != null || hasRefSlice) && showReelBg
                     androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
                         for (r in 0 until rows) {
                             androidx.compose.foundation.layout.Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -387,7 +388,7 @@ fun RenderBlock(
                                     val item = randomItems[r * cols + c]
                                     Box(
                                         modifier = Modifier.weight(1f).fillMaxHeight()
-                                            .border(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                                            .border(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = if (hasReelBackground) 0.15f else 0.3f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         if (item.currentImageUri != null) {
@@ -397,15 +398,16 @@ fun RenderBlock(
                                                 modifier = Modifier.fillMaxSize(),
                                                 contentScale = ContentScale.Fit
                                             )
-                                        } else {
-                                            val fallbackText = item.userPromptZh.ifBlank { item.userPromptEn }.ifBlank { "Symbol" }
+                                        } else if (!hasReelBackground) {
+                                            // 仅当转轴没有切片/背景时，才渲染轻量级符号名称占位，严禁使用长篇中文提示词污染画面
+                                            val fallbackText = item.id.ifBlank { "Symbol" }
                                             Text(
                                                 text = fallbackText,
                                                 modifier = Modifier.fillMaxWidth().padding(4.dp),
                                                 textAlign = TextAlign.Center,
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                maxLines = 3,
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                                maxLines = 1,
                                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                             )
                                         }
