@@ -303,14 +303,27 @@ fun HierarchyItem(
                 )
             }
             // 隐藏/显示眼睛图标，直接对 viewModel 发起行为控制
-            IconButton(onClick = { viewModel.layoutEditor.toggleBlockVisibility(block.id, !block.isVisible) }, modifier = Modifier.size(24.dp)) {
+            val eyeAlpha = when {
+                !isAncestorHidden && block.isVisible -> 1.0f
+                isAncestorHidden && block.isVisible -> 0.35f
+                !isAncestorHidden && !block.isVisible -> 0.4f
+                else -> 0.2f
+            }
+            val eyeTip = when {
+                !isAncestorHidden && block.isVisible -> "点击隐藏模块"
+                isAncestorHidden && block.isVisible -> "自身已显示 (因父级隐藏而在画布隐形)"
+                !isAncestorHidden && !block.isVisible -> "点击显示模块"
+                else -> "自身已隐藏 (父级亦被隐藏)"
+            }
+            IconButton(
+                onClick = { viewModel.layoutEditor.toggleBlockVisibility(block.id, !block.isVisible) },
+                modifier = Modifier.size(24.dp).tip(eyeTip)
+            ) {
                 Icon(
                     imageVector = if (block.isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                     contentDescription = "Vis",
                     modifier = Modifier.size(16.dp),
-                    tint = if (block.isVisible) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                        alpha = 0.4f
-                    )
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = eyeAlpha)
                 )
             }
         }

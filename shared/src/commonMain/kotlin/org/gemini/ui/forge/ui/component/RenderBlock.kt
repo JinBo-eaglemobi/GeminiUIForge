@@ -234,7 +234,7 @@ fun RenderBlock(
     }
 
     // 6. 渲染模块容器：处理位移、大小、背景和边框
-    val strokeWidth = if (isSelected) (2.5.dp / zoom).coerceIn(2.dp, 4.dp) else (1.dp / zoom)
+    val outlineStrokeWidth = 1.dp / zoom
     val isEditingOrDescendant = state.editingGroupId != null && (block.id == state.editingGroupId || block.containsBlock(state.editingGroupId))
     val currentZIndex = if (isEditingOrDescendant) 100f else 0f
     Box(
@@ -251,11 +251,11 @@ fun RenderBlock(
             )
             .background(actualBgColor)
             .then(
-                if ((isHideOutlines || hidePlaceholder || viewBgColor != null) && !isSelected) Modifier
+                // 选中高亮由顶层独立浮层 BlockSelectionOverlay 统一绘制，此处仅负责未选中状态的常规辅助边框
+                if (isSelected || isHideOutlines || hidePlaceholder || viewBgColor != null) Modifier
                 else Modifier.border(
-                    width = strokeWidth,
-                    color = if (isSelected) selectionColor
-                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                    width = outlineStrokeWidth,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                 )
             ),
         contentAlignment = Alignment.Center

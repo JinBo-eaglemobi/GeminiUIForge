@@ -6,8 +6,6 @@ import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.utils.bindParents
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.utils.AppLogger
-import org.gemini.ui.forge.utils.CompactImage
-import org.gemini.ui.forge.utils.ImageCacheManager
 import org.gemini.ui.forge.utils.fetchImageBytes
 import org.jetbrains.skia.*
 
@@ -214,17 +212,6 @@ object TemplateOverlayRenderer {
         latestFile.writeBytes(pngBytes)
         val latestAbsPath = latestFile.getAbsolutePath()
         AppLogger.i(TAG, "✅ [动态最新] 标注图已落盘: $latestAbsPath")
-
-        // 11. 同步注入内存缓存
-        val compact = CompactImage(
-            bytes = pngBytes,
-            mimeType = "image/png",
-            extension = "png"
-        )
-        ImageCacheManager.saveCache("overlay_latest_$sanitizedName", compact)
-        if (isInitial) {
-            ImageCacheManager.saveCache("overlay_initial_$sanitizedName", compact)
-        }
 
         return RenderResult(
             initialPath = initialAbsPath,

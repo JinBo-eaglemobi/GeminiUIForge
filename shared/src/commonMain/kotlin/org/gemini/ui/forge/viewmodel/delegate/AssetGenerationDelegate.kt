@@ -17,7 +17,6 @@ import org.gemini.ui.forge.utils.formatSize
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
@@ -45,11 +44,11 @@ class AssetGenerationDelegate(
     init {
         // 启动后台结果消费者：负责按顺序驱动 UI 确认弹窗
         scope.launch {
-            for (result in batchResultChannel) {
+            for ((block, candidates) in batchResultChannel) {
                 updateState { 
                     it.copy(
-                        batchPendingConfirmBlock = result.block,
-                        generatedCandidates = result.candidates
+                        batchPendingConfirmBlock = block,
+                        generatedCandidates = candidates
                     ) 
                 }
                 
@@ -72,7 +71,6 @@ class AssetGenerationDelegate(
         updateState { it.copy(isGenerating = false) }
     }
 
-    @OptIn(ExperimentalEncodingApi::class, ExperimentalUuidApi::class)
     fun onRequestGeneration(apiKey: String, customPrompt: String, stateIndex: Int = 0) {
         val currentState = getState()
         val block = currentState.selectedBlock ?: return
@@ -218,7 +216,6 @@ class AssetGenerationDelegate(
                                     onImageGenerated = { base64 ->
                                         launch {
                                             val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
-                                            @OptIn(ExperimentalEncodingApi::class)
                                             val bytes = Base64.decode(pure)
                                             val originalTFile = templateRepo.saveBlockResource(projectName, block.id, "batch_${getCurrentTimeMillis()}", bytes, isPng = false)
                                             
@@ -258,8 +255,7 @@ class AssetGenerationDelegate(
     fun executeButtonStateGen(apiKey: String, target: ButtonGenTarget = ButtonGenTarget.ALL) {
         val currentState = getState()
         val block = currentState.selectedBlock ?: return
-        val baseImageUri = block.currentImageUri?.getAbsolutePath() ?: return
-        
+
         generationJob?.cancel()
         generationJob = scope.launch {
             updateState { it.copy(isButtonGenInProgress = true, showAITaskDialog = true) }
@@ -286,7 +282,7 @@ class AssetGenerationDelegate(
                         isButtonGenInProgress = false
                     ) }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 updateState { it.copy(isButtonGenInProgress = false) }
             }
         }
@@ -314,7 +310,6 @@ class AssetGenerationDelegate(
             onLog = { addLog("[$prefix] $it") },
             onImageGenerated = { base64 ->
                 val pure = if (base64.contains(",")) base64.substringAfter(",") else base64
-                @OptIn(ExperimentalEncodingApi::class)
                 deferredBytes.complete(Base64.decode(pure))
             }
         )

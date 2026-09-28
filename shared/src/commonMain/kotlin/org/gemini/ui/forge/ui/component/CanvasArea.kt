@@ -25,6 +25,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isAltPressed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.key.*
@@ -42,11 +43,15 @@ import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.action_exit
 import geminiuiforge.composeapp.generated.resources.group_editing_indicator_prefix
+import org.gemini.ui.forge.ResizeHorizontalIcon
 import org.gemini.ui.forge.ResizeVerticalIcon
 import org.gemini.ui.forge.model.app.ReferenceDisplayMode
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.ui.component.selector.RegionHandle
+import org.gemini.ui.forge.ui.component.selector.hitTestHandle
+import org.gemini.ui.forge.ui.component.selector.resizeRegionDirectPin
 import org.gemini.ui.forge.utils.*
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.abs
@@ -287,6 +292,10 @@ fun CanvasArea(
                         }
 
                         var isMultiSelectActive by remember { mutableStateOf(false) }
+                        var isAltPressed by remember { mutableStateOf(false) }
+                        var currentCursorIcon by remember { mutableStateOf(PointerIcon.Default) }
+                        var activeResizeHandle by remember { mutableStateOf<RegionHandle?>(null) }
+                        var resizingBlockId by remember { mutableStateOf<String?>(null) }
 
                         // ★ 手势参数动态快照：手势协程一律 pointerInput(Unit) 保持长效保活，
                         // 运行期通过 State 读取最新值，绝不把 blocks 作为 key，彻底杜绝坐标更新导致手势中断卡死！
@@ -299,10 +308,11 @@ fun CanvasArea(
                         val currentIsSpacePressedState by rememberUpdatedState(isSpacePressed)
                         val currentDensityState by rememberUpdatedState(density)
                         val currentSelectedBlockIdsState by rememberUpdatedState(state.selectedBlockIds)
+                        val currentZoomState by rememberUpdatedState(zoom)
 
                         Box(
                             modifier = Modifier.fillMaxSize()
-                                .pointerHoverIcon(if (isSpacePressed || isRightButtonDragging) PointerIcon.Hand else PointerIcon.Default)
+                                .pointerHoverIcon(if (isSpacePressed || isRightButtonDragging) PointerIcon.Hand else currentCursorIcon)
                                 .pointerInput(Unit) {
                                     awaitPointerEventScope {
                                         while (true) {
@@ -310,10 +320,51 @@ fun CanvasArea(
                                             isMultiSelectActive = event.keyboardModifiers.isShiftPressed ||
                                                     event.keyboardModifiers.isCtrlPressed ||
                                                     event.keyboardModifiers.isMetaPressed
+                                            isAltPressed = event.keyboardModifiers.isAltPressed
 
                                             // ★ 遵照用户要求：仅在画布区域鼠标按下时才请求获取焦点，移动时不随意抢焦点
                                             if (event.type == PointerEventType.Press && event.buttons.isPrimaryPressed) {
                                                 runCatching { focusRequester.requestFocus() }
+                                            }
+
+                                            // ★ 悬停光标感知与 8 向拉伸手柄检测
+                                            if (event.type == PointerEventType.Move) {
+                                                val change = event.changes.firstOrNull()
+                                                if (change != null) {
+                                                    if (currentIsSpacePressedState || isRightButtonDragging) {
+                                                        currentCursorIcon = PointerIcon.Hand
+                                                    } else if (activeResizeHandle != null) {
+                                                        currentCursorIcon = when (activeResizeHandle) {
+                                                            RegionHandle.TOP_CENTER, RegionHandle.BOTTOM_CENTER -> ResizeVerticalIcon
+                                                            RegionHandle.CENTER_LEFT, RegionHandle.CENTER_RIGHT -> ResizeHorizontalIcon
+                                                            RegionHandle.TOP_LEFT, RegionHandle.BOTTOM_RIGHT -> ResizeHorizontalIcon
+                                                            RegionHandle.TOP_RIGHT, RegionHandle.BOTTOM_LEFT -> ResizeVerticalIcon
+                                                            null -> PointerIcon.Default
+                                                        }
+                                                    } else if (currentIsReadOnlyState) {
+                                                        currentCursorIcon = PointerIcon.Default
+                                                    } else {
+                                                        val curDensity = currentDensityState
+                                                        val lx = (change.position.x / curDensity.density - currentOffsetXState) / currentBaseScaleState
+                                                        val ly = (change.position.y / curDensity.density - currentOffsetYState) / currentBaseScaleState
+                                                        val singleSelectedId = if (currentSelectedBlockIdsState.size == 1) currentSelectedBlockIdsState.first() else null
+                                                        val selectedAbsBounds = singleSelectedId?.let { currentBlocksState.calculateBlockAbsoluteBounds(it) }
+
+                                                        if (selectedAbsBounds != null) {
+                                                            val handleSlopLogical = (16f / currentZoomState) / currentBaseScaleState
+                                                            val hoveredHandle = hitTestHandle(selectedAbsBounds, lx, ly, handleSlopLogical)
+                                                            currentCursorIcon = when (hoveredHandle) {
+                                                                RegionHandle.TOP_CENTER, RegionHandle.BOTTOM_CENTER -> ResizeVerticalIcon
+                                                                RegionHandle.CENTER_LEFT, RegionHandle.CENTER_RIGHT -> ResizeHorizontalIcon
+                                                                RegionHandle.TOP_LEFT, RegionHandle.BOTTOM_RIGHT -> ResizeHorizontalIcon
+                                                                RegionHandle.TOP_RIGHT, RegionHandle.BOTTOM_LEFT -> ResizeVerticalIcon
+                                                                null -> PointerIcon.Default
+                                                            }
+                                                        } else {
+                                                            currentCursorIcon = PointerIcon.Default
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -375,14 +426,37 @@ fun CanvasArea(
                                             if (currentIsReadOnlyState || isRightButtonDragging) return@detectDragGestures
                                             if (currentIsSpacePressedState) {
                                                 dragTargetId = null
+                                                resizingBlockId = null
+                                                activeResizeHandle = null
                                                 isPanningStage = true
                                                 isInteractingWithBlock = false
                                             } else {
                                                 val curDensity = currentDensityState
                                                 val lx = (offset.x / curDensity.density - currentOffsetXState) / currentBaseScaleState
                                                 val ly = (offset.y / curDensity.density - currentOffsetYState) / currentBaseScaleState
-                                                
-                                                // ★ 优先判断当前已选中的模块是否包含点击点，防止在已选中模块上拖拽时因微弱重叠穿透到背景或其它模块
+
+                                                // ★ 1. 优先判定是否命中了单选模块的 8 向尺寸调整手柄
+                                                val singleSelectedId = if (currentSelectedBlockIdsState.size == 1) currentSelectedBlockIdsState.first() else null
+                                                val selectedAbsBounds = singleSelectedId?.let { currentBlocksState.calculateBlockAbsoluteBounds(it) }
+                                                val handleSlopLogical = (16f / currentZoomState) / currentBaseScaleState
+                                                val hitHandle = if (selectedAbsBounds != null) {
+                                                    hitTestHandle(selectedAbsBounds, lx, ly, handleSlopLogical)
+                                                } else null
+
+                                                if (hitHandle != null && singleSelectedId != null) {
+                                                    resizingBlockId = singleSelectedId
+                                                    activeResizeHandle = hitHandle
+                                                    dragTargetId = null
+                                                    isPanningStage = false
+                                                    isInteractingWithBlock = true
+                                                    viewModel.historyManager.saveSnapshot("调整模块尺寸")
+                                                    return@detectDragGestures
+                                                } else {
+                                                    resizingBlockId = null
+                                                    activeResizeHandle = null
+                                                }
+
+                                                // ★ 2. 优先判断当前已选中的模块是否包含点击点，防止在已选中模块上拖拽时因微弱重叠穿透到背景或其它模块
                                                 val selectedHit = currentSelectedBlockIdsState.firstOrNull { selId ->
                                                     val bounds = currentBlocksState.calculateBlockAbsoluteBounds(selId)
                                                     bounds != null && lx in bounds.left..bounds.right && ly in bounds.top..bounds.bottom
@@ -410,6 +484,37 @@ fun CanvasArea(
                                             change.consume()
                                             if (isPanningStage || currentIsSpacePressedState) {
                                                 pan += dragAmount
+                                            } else if (activeResizeHandle != null && resizingBlockId != null) {
+                                                val handle = activeResizeHandle ?: return@detectDragGestures
+                                                val targetId = resizingBlockId ?: return@detectDragGestures
+                                                // ★ 工业级光标绝对锚定铁律 (Direct Cursor Pinning)：手柄直接锚定在当前鼠标反投影的逻辑绝对坐标上，彻底杜绝增量累加导致的严重失步滞后！
+                                                val curDensity = currentDensityState
+                                                val curLx = (change.position.x / curDensity.density - currentOffsetXState) / currentBaseScaleState
+                                                val curLy = (change.position.y / curDensity.density - currentOffsetYState) / currentBaseScaleState
+                                                val curBlock = currentBlocksState.findBlockById(targetId)
+                                                val curAbsBounds = currentBlocksState.calculateBlockAbsoluteBounds(targetId)
+
+                                                if (curBlock != null && curAbsBounds != null) {
+                                                    val newAbsRect = resizeRegionDirectPin(
+                                                        current = curAbsBounds,
+                                                        handle = handle,
+                                                        cursorPos = Offset(curLx, curLy),
+                                                        isAltCenterResize = isAltPressed,
+                                                        maxW = pageWidth,
+                                                        maxH = pageHeight,
+                                                        minSize = 16f
+                                                    )
+                                                    val parentOffset = currentBlocksState.calculateBlockParentOffset(curBlock.id)
+                                                    val relLeft = newAbsRect.left - parentOffset.x
+                                                    val relTop = newAbsRect.top - parentOffset.y
+                                                    viewModel.updateBlockBounds(
+                                                        blockId = curBlock.id,
+                                                        left = relLeft,
+                                                        top = relTop,
+                                                        right = relLeft + newAbsRect.width,
+                                                        bottom = relTop + newAbsRect.height
+                                                    )
+                                                }
                                             } else if (dragTargetId != null) {
                                                 val curDensity = currentDensityState
                                                 val logicalDx = dragAmount.x / curDensity.density / currentBaseScaleState
@@ -422,10 +527,18 @@ fun CanvasArea(
                                             }
                                         },
                                         onDragEnd = {
-                                            dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false
+                                            dragTargetId = null
+                                            resizingBlockId = null
+                                            activeResizeHandle = null
+                                            isPanningStage = false
+                                            isInteractingWithBlock = false
                                         },
                                         onDragCancel = {
-                                            dragTargetId = null; isPanningStage = false; isInteractingWithBlock = false
+                                            dragTargetId = null
+                                            resizingBlockId = null
+                                            activeResizeHandle = null
+                                            isPanningStage = false
+                                            isInteractingWithBlock = false
                                         }
                                     )
                                 }
@@ -475,6 +588,19 @@ fun CanvasArea(
                                     )
                                 }
                             }
+
+                            // 3. 顶层独立高亮选框与尺寸手柄浮层（绝对置顶 zIndex 1000f，零手势拦截，杜绝子图元与同级兄弟图层遮挡）
+                            BlockSelectionOverlay(
+                                blocks = blocks,
+                                selectedBlockIds = state.selectedBlockIds,
+                                selectedBlock = state.selectedBlock,
+                                parentRenderX = offsetX,
+                                parentRenderY = offsetY,
+                                baseScale = baseScale,
+                                zoom = zoom,
+                                pageWidth = pageWidth,
+                                pageHeight = pageHeight
+                            )
                         }
                     }
                 }

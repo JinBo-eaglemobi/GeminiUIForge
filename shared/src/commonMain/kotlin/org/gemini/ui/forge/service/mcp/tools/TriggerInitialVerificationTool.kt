@@ -142,7 +142,7 @@ class TriggerInitialVerificationTool : McpToolDefinition {
             }
 
             // 2. 复合组容器模式：包含子组件时自适应贴合与原点归零
-            if (blockWithChildren.children.isNotEmpty()) {
+            if (blockWithChildren.children.isNotEmpty() && blockWithChildren.type != UIBlockType.REEL) {
                 val normalized = UIBlockLayoutNormalizer.normalizeContainerAndChildren(blockWithChildren)
                 calibratedCount++
                 containerCount++
