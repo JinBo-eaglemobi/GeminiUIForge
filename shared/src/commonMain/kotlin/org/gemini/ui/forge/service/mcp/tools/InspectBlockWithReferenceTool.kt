@@ -3,6 +3,7 @@ package org.gemini.ui.forge.service.mcp.tools
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.getEffectiveCropBounds
 import org.gemini.ui.forge.utils.bindParents
 import org.gemini.ui.forge.service.detection.DetectionEngineMode
 import org.gemini.ui.forge.service.detection.DetectionEngineRegistry
@@ -88,6 +89,7 @@ class InspectBlockWithReferenceTool : McpToolDefinition {
         val evaluateOverlap = arguments["evaluateOverlap"]?.jsonPrimitive?.booleanOrNull ?: true
 
         val vm = McpUiActionPipeline.getActiveViewModel()
+        val effectiveProjectName = projectName ?: vm?.state?.value?.projectName
         if (vm == null || (projectName != null && vm.state.value.projectName != projectName)) {
             // 离线无头 Skia 渲染与自检分支
             return executeOfflineInspection(
@@ -156,7 +158,7 @@ class InspectBlockWithReferenceTool : McpToolDefinition {
                 if (targetBlock != null && !refLargePath.isNullOrBlank()) {
                     val refLargeBytes = fetchImageBytes(refLargePath)
                     if (refLargeBytes != null) {
-                        val cropBounds = targetBlock.cropRect ?: targetBlock.toAbsoluteBounds()
+                        val cropBounds = targetBlock.getEffectiveCropBounds(page.width, page.height, fallbackPadding = 24f)
                         val refCropBytes = extractImageSubset(
                             refLargeBytes,
                             cropBounds,
@@ -186,7 +188,7 @@ class InspectBlockWithReferenceTool : McpToolDefinition {
                             if (evalResult.diffImageBytes != null) {
                                 val diffImg = Image.makeFromEncoded(evalResult.diffImageBytes)
                                 val compact = compressToCompactImage(diffImg, 90)
-                                diffCachedPath = ImageCacheManager.saveCache("diff_$blockId", compact)
+                                diffCachedPath = ImageCacheManager.saveCache("diff_$blockId", compact, projectName = effectiveProjectName)
                             }
 
                             evalJson = buildJsonObject {
@@ -308,7 +310,7 @@ class InspectBlockWithReferenceTool : McpToolDefinition {
                 val newLocal = targetBlock.toLocalBounds(snapRes.logicalRect)
                 if (newLocal != targetBlock.bounds) {
                     didCalibrate = true
-                    targetBlock = targetBlock.copy(bounds = newLocal, cropRect = targetBlock.cropRect ?: newLocal)
+                    targetBlock = targetBlock.copy(bounds = newLocal)
                     // 更新树并保存
                     fun updateBlockInList(list: List<UIBlock>): List<UIBlock> {
                         return list.map { b ->
@@ -393,14 +395,14 @@ class InspectBlockWithReferenceTool : McpToolDefinition {
         // 压缩并落盘物理缓存文件
         val imageSnapshot = surface.makeImageSnapshot()
         val compact = compressToCompactImage(imageSnapshot, 90)
-        val cachedPath = ImageCacheManager.saveCache("offline_inspect_${blockId}", compact)
+        val cachedPath = ImageCacheManager.saveCache("offline_inspect_${blockId}", compact, projectName = projectName)
         val base64 = Base64.encode(compact.bytes)
 
         // 3. 可选：执行重叠评估
         var evalJson: JsonObject? = null
         if (evaluateOverlap && refBytes != null) {
             try {
-                val cropBounds = targetBlock.cropRect ?: targetBlock.toAbsoluteBounds()
+                val cropBounds = targetBlock.getEffectiveCropBounds(page.width, page.height, fallbackPadding = 24f)
                 val refCropBytes = extractImageSubset(
                     refBytes,
                     cropBounds,
@@ -428,7 +430,7 @@ class InspectBlockWithReferenceTool : McpToolDefinition {
                     if (evalResult.diffImageBytes != null) {
                         val diffImg = Image.makeFromEncoded(evalResult.diffImageBytes)
                         val diffCompact = compressToCompactImage(diffImg, 90)
-                        diffCachedPath = ImageCacheManager.saveCache("diff_$blockId", diffCompact)
+                        diffCachedPath = ImageCacheManager.saveCache("diff_$blockId", diffCompact, projectName = projectName)
                     }
 
                     evalJson = buildJsonObject {

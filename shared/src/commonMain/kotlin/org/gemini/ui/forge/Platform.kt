@@ -2,6 +2,7 @@ package org.gemini.ui.forge
 
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -83,6 +84,41 @@ fun formatTimestamp(timeMillis: Long, format: String = "yyyy-MM-dd HH:mm:ss"): S
  * 获取当前日期的格式化字符串 (yyyy-MM-dd)
  */
 fun getCurrentDate(): String = formatTimestamp(getCurrentTimeMillis(), "yyyy-MM-dd")
+
+/**
+ * 将时间戳格式化为纯数字无符号年月日时分秒 (yyyyMMddHHmmss，共 14 位纯数字)
+ */
+fun formatUnsignedDateTime(timeMillis: Long = getCurrentTimeMillis()): String {
+    if (timeMillis <= 0L) return ""
+    val instant = Instant.fromEpochMilliseconds(timeMillis)
+    val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val year = localDateTime.year.toString().padStart(4, '0')
+    val month = localDateTime.month.number.toString().padStart(2, '0')
+    val day = localDateTime.day.toString().padStart(2, '0')
+    val hour = localDateTime.hour.toString().padStart(2, '0')
+    val minute = localDateTime.minute.toString().padStart(2, '0')
+    val second = localDateTime.second.toString().padStart(2, '0')
+    return "$year$month$day$hour$minute$second"
+}
+
+/**
+ * 将无符号年月日时分秒字符串 (yyyyMMddHHmmss，共 14 位) 解析为本地时间戳毫秒数
+ */
+fun parseUnsignedDateTime(str: String): Long? {
+    if (str.length != 14 || !str.all { it.isDigit() }) return null
+    return try {
+        val year = str.substring(0, 4).toInt()
+        val month = str.substring(4, 6).toInt()
+        val day = str.substring(6, 8).toInt()
+        val hour = str.substring(8, 10).toInt()
+        val minute = str.substring(10, 12).toInt()
+        val second = str.substring(12, 14).toInt()
+        val ldt = kotlinx.datetime.LocalDateTime(year, month, day, hour, minute, second)
+        ldt.toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
+    } catch (_: Exception) {
+        null
+    }
+}
 
 /**
  * 将 Gemini API 返回的 RFC 3339 格式字符串解析并格式化为本地时间

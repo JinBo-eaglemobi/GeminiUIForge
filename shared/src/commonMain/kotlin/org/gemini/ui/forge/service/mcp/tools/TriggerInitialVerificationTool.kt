@@ -166,7 +166,7 @@ class TriggerInitialVerificationTool : McpToolDefinition {
                 }
                 blockWithChildren.copy(
                     bounds = local,
-                    cropRect = blockWithChildren.cropRect ?: local
+                    cropRect = blockWithChildren.cropRect
                 )
             } else {
                 blockWithChildren

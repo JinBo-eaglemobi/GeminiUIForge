@@ -23,6 +23,7 @@ import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.app.ShortcutAction
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.getEffectiveCropBounds
 import org.gemini.ui.forge.utils.calculateBlockParentOffset
 import org.gemini.ui.forge.utils.findBlockById
 import androidx.compose.ui.geometry.Offset
@@ -390,7 +391,14 @@ fun ProjectWorkspaceScreen(
                     val blockId = state.referenceAreaTargetId
                     viewModel.hideReferenceArea()
                     if (blockId != null) {
-                        viewModel.layoutEditor.onSetReferenceArea(blockId, updatedBlock.cropRect ?: updatedBlock.toAbsoluteBounds())
+                        viewModel.layoutEditor.onSetReferenceArea(
+                            blockId,
+                            updatedBlock.cropRect ?: updatedBlock.getEffectiveCropBounds(
+                                state.currentPage!!.width,
+                                state.currentPage!!.height,
+                                fallbackPadding = 24f
+                            )
+                        )
                     }
                 }
             )

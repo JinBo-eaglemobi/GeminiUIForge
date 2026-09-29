@@ -600,4 +600,19 @@
     <string name="calibrate_no_workspace">当前未处于模板编辑工作区，无法执行校验</string>
     <string name="home_refresh_tip">刷新大厅项目与模板列表</string>
     <string name="home_refresh_success">大厅项目与模板已刷新</string>
+
+    <!-- 实时模块分布图预览 (零磁盘 I/O) -->
+    <string name="overlay_preview_title">实时模块分布图预览</string>
+    <string name="overlay_preview_tip">实时离屏绘制当前最新模块分布标注图并查看 (不落盘)</string>
+    <string name="overlay_preview_stats">共 %1$d 个模块 (业务: %2$d, 容器: %3$d) ｜ 画布: %4$dx%5$d</string>
+    <string name="overlay_preview_rendering">正在离屏实时绘制最新模块分布图...</string>
+    <string name="overlay_preview_failed">离屏绘制失败或当前模板页面为空</string>
+    <string name="overlay_preview_zoom_fit">适应窗口</string>
+    <string name="overlay_preview_zoom_reset">1:1 原寸</string>
+    <string name="overlay_preview_legend_business">亮青色：业务图元</string>
+    <string name="overlay_preview_legend_container">鲜橙色：纯容器/占位层</string>
+    <string name="overlay_preview_hide_all">全部隐藏</string>
+    <string name="overlay_preview_show_all">全部显示</string>
+    <string name="overlay_preview_solo">仅看此项</string>
+    <string name="overlay_preview_layer_order">渲染顺序</string>
 </resources>

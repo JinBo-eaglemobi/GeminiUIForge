@@ -18,6 +18,7 @@ import org.gemini.ui.forge.model.app.ReferenceDisplayMode
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.getEffectiveCropBounds
 import org.gemini.ui.forge.utils.bindParents
 import org.gemini.ui.forge.utils.findBlockById
 import org.gemini.ui.forge.utils.findParentBlockId
@@ -841,7 +842,7 @@ class ProjectWorkspaceViewModel(
                     }
                     // 选项 b：使用现有参考范围切片，仅落盘存档，不改变模块绑定
                     saveCropToDisk -> {
-                        val cropBounds = blockWithCalibratedChildren.cropRect ?: absBounds
+                        val cropBounds = blockWithCalibratedChildren.getEffectiveCropBounds(pageW, pageH, fallbackPadding = 24f)
                         val cropBytes = org.gemini.ui.forge.utils.SmartEdgeSnapper.cropSnappedComponent(
                             imageBytes = refBytes,
                             logicalBounds = cropBounds,
@@ -863,7 +864,7 @@ class ProjectWorkspaceViewModel(
                     else -> block.referenceImage
                 }
 
-                val updatedCropRect = snapRes?.logicalRect ?: blockWithCalibratedChildren.cropRect ?: blockWithCalibratedChildren.toAbsoluteBounds()
+                val updatedCropRect = blockWithCalibratedChildren.cropRect
                 return blockWithCalibratedChildren.copy(
                     bounds = newLocalBounds,
                     cropRect = updatedCropRect,

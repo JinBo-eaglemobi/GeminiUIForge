@@ -48,6 +48,8 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.gemini.ui.forge.utils.ImageCacheManager
+import org.gemini.ui.forge.utils.compressToCompactImage
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
@@ -897,11 +899,8 @@ private suspend fun saveMergedAnnotatedImage(
         val pngData = snapshot.encodeToData(EncodedImageFormat.PNG) ?: return@withContext null
         val bytes = pngData.bytes
 
-        val timestamp = getCurrentTimeMillis()
-        val relPath = "cache/wechat_ref_$timestamp.png"
-        storage.saveBytesToFile(relPath, bytes)
-
-        storage.getFilePath(relPath)
+        val compact = compressToCompactImage(bytes)
+        ImageCacheManager.saveCache("wechat_ref", compact)
     } catch (_: Throwable) {
         null
     }

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -56,6 +57,7 @@ fun AppTopBar(
     onCloudAssetManagerClicked: () -> Unit = {},
     onCompileClicked: () -> Unit = {},
     onGlobalStyleClicked: () -> Unit = {},
+    onLiveOverlayPreviewClicked: () -> Unit = {},
     onSettingsClicked: () -> Unit = {},
     onMcpClicked: () -> Unit = {},
     onHelpClicked: () -> Unit = {}
@@ -205,13 +207,24 @@ fun AppTopBar(
                     }
                 }
 
-                // 校验拆分下拉按钮 (功能组分隔线隔开，仅项目工作区显示)
+                // 校验拆分下拉按钮与实时模块分布图预览 (功能组分隔线隔开，仅项目工作区显示)
                 if (currentScreen == AppScreen.PROJECT_WORKSPACE) {
                     VerticalDivider(
                         modifier = Modifier.height(20.dp),
                         color = MaterialTheme.colorScheme.outlineVariant
                     )
                     CalibrateSplitButton()
+
+                    IconButton(
+                        onClick = onLiveOverlayPreviewClicked,
+                        modifier = Modifier.tip(stringResource(Res.string.overlay_preview_tip))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = stringResource(Res.string.overlay_preview_title),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
 
                 // MCP 服务中心入口（常驻显示，与前置功能组用分隔线区分）

@@ -351,7 +351,8 @@ object McpUiActionPipeline {
                     // 统一走公共工具压缩中枢：WEBP 优先 → JPEG 降级，并异步落盘缓存
                     val prefix = if (region != null) "ui_action_${screenshotTargetBlockId}_region" else "ui_action"
                     val compact = compressToCompactImage(bytes)
-                    screenshotCachedPath = ImageCacheManager.saveCache(prefix, compact)
+                    val effectiveProjectName = projectName?.takeIf { it.isNotBlank() } ?: vm.state.value.projectName.takeIf { it.isNotBlank() }
+                    screenshotCachedPath = ImageCacheManager.saveCache(prefix, compact, projectName = effectiveProjectName)
                     @OptIn(ExperimentalEncodingApi::class)
                     screenshot = Base64.encode(compact.bytes)
                 }

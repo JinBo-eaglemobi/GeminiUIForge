@@ -55,6 +55,7 @@ import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.service.mcp.McpController
 import org.gemini.ui.forge.service.mcp.McpTrafficInspector
 import org.gemini.ui.forge.ui.dialog.mcp.McpTrafficInspectorDialog
+import org.gemini.ui.forge.ui.dialog.layer.OverlayPreviewDialog
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
@@ -128,6 +129,7 @@ fun App(typography: Typography? = null) {
             var showCompileDialog by remember { mutableStateOf(false) }
             var showHelpDialog by remember { mutableStateOf(false) }
             var showExitConfirmDialog by remember { mutableStateOf(false) }
+            var showOverlayPreviewDialog by remember { mutableStateOf(false) }
             var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
 
             // 同步当前屏幕与未保存状态到 MCP UI 路线图注册中心
@@ -470,6 +472,13 @@ fun App(typography: Typography? = null) {
                         )
                     }
 
+                    if (showOverlayPreviewDialog) {
+                        OverlayPreviewDialog(
+                            projectState = appState.project,
+                            onDismiss = { showOverlayPreviewDialog = false }
+                        )
+                    }
+
                     Scaffold(
 
                         modifier = Modifier.fillMaxSize(),
@@ -485,9 +494,10 @@ fun App(typography: Typography? = null) {
                                     }
                                 },
                                 onCloudAssetManagerClicked = { showCloudAssetDialog = true },
-                                onCompileClicked = { showCompileDialog = true },
-                                onGlobalStyleClicked = { appViewModel.dispatchGlobalStyleEvent() },
-                                onSettingsClicked = {
+                                 onCompileClicked = { showCompileDialog = true },
+                                 onGlobalStyleClicked = { appViewModel.dispatchGlobalStyleEvent() },
+                                 onLiveOverlayPreviewClicked = { showOverlayPreviewDialog = true },
+                                 onSettingsClicked = {
                                     settingsInitialCategory = SettingCategory.GENERAL
                                     showSettingsDialog = true
                                 },

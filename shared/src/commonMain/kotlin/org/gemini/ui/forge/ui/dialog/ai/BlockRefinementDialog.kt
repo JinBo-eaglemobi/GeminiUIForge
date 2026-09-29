@@ -21,6 +21,7 @@ import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.getEffectiveCropBounds
 import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.dialog.ai.component.BilingualPromptEditor
 import org.gemini.ui.forge.ui.component.selector.RegionImageSource
@@ -63,7 +64,7 @@ fun BlockRefinementDialog(
     // 参考图已经和模块大小分离开了，修改参考图和模块当前的坐标大小没有任何关联！
     val initialAbsBounds = remember(block, isReferenceAreaOnly) {
         if (isReferenceAreaOnly) {
-            block.cropRect ?: block.toAbsoluteBounds()
+            block.getEffectiveCropBounds(pageWidth, pageHeight, fallbackPadding = 24f)
         } else {
             block.toAbsoluteBounds()
         }

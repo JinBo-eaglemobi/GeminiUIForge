@@ -10,6 +10,7 @@ import org.gemini.ui.forge.model.ui.ImageScaleConfig
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
+import org.gemini.ui.forge.model.ui.getEffectiveCropBounds
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.LocalMattingService
 import org.gemini.ui.forge.service.mcp.McpToolAnnotations
@@ -227,7 +228,7 @@ class GenerateBlockAssetTool(
                 val masterBytes = if (!masterRefPath.isNullOrBlank()) readLocalFileBytes(masterRefPath) else null
 
                 if (masterBytes != null && masterBytes.isNotEmpty()) {
-                    val cropBounds = block.cropRect ?: block.toAbsoluteBounds()
+                    val cropBounds = block.getEffectiveCropBounds(page.width, page.height, fallbackPadding = 24f)
                     val snappedBytes = SmartEdgeSnapper.cropSnappedComponent(
                         imageBytes = masterBytes,
                         logicalBounds = cropBounds,

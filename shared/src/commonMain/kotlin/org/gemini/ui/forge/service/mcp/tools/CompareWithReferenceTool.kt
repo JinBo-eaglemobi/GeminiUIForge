@@ -4,6 +4,7 @@ import kotlinx.serialization.json.*
 import org.gemini.ui.forge.service.mcp.McpToolAnnotations
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
 import org.gemini.ui.forge.service.mcp.McpToolResult
+import org.gemini.ui.forge.service.mcp.McpUiActionPipeline
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.ImageCacheManager
 import org.gemini.ui.forge.utils.compressToCompactImage
@@ -104,7 +105,8 @@ class CompareWithReferenceTool(
         val diffImage = Image.makeFromEncoded(diffBytes)
         // 统一走公共工具压缩中枢（quality 92 兼顾热力对比度的像素级可读性）
         val compact = compressToCompactImage(diffImage, 92)
-        val cachedPath = ImageCacheManager.saveCache("compare", compact)
+        val currentProjectName = McpUiActionPipeline.getActiveViewModel()?.state?.value?.projectName?.takeIf { it.isNotBlank() }
+        val cachedPath = ImageCacheManager.saveCache("compare", compact, projectName = currentProjectName)
 
         @OptIn(ExperimentalEncodingApi::class)
         val diffBase64 = Base64.encode(compact.bytes)

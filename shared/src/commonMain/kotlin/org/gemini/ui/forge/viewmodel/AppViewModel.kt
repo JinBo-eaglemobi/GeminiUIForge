@@ -46,6 +46,9 @@ class AppViewModel(
     private val _projectSettingsEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val projectSettingsEvent: SharedFlow<Unit> = _projectSettingsEvent.asSharedFlow()
 
+    private val _liveOverlayPreviewEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val liveOverlayPreviewEvent: SharedFlow<Unit> = _liveOverlayPreviewEvent.asSharedFlow()
+
     private val _globalStyleEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val globalStyleEvent: SharedFlow<Unit> = _globalStyleEvent.asSharedFlow()
 
@@ -76,6 +79,15 @@ class AppViewModel(
     fun dispatchProjectSettingsEvent() {
         viewModelScope.launch {
             _projectSettingsEvent.emit(Unit)
+        }
+    }
+
+    /**
+     * 派发实时模块分布图纯内存预览事件
+     */
+    fun dispatchLiveOverlayPreviewEvent() {
+        viewModelScope.launch {
+            _liveOverlayPreviewEvent.emit(Unit)
         }
     }
 

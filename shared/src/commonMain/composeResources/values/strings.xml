@@ -590,4 +590,19 @@
     <string name="calibrate_no_workspace">Not in a template workspace. Calibration is unavailable here</string>
     <string name="home_refresh_tip">Refresh home projects and templates</string>
     <string name="home_refresh_success">Home projects and templates refreshed</string>
+
+    <!-- Overlay Live Preview -->
+    <string name="overlay_preview_title">Live Layout Overlay Preview</string>
+    <string name="overlay_preview_tip">Render and preview live layout overlay without saving to disk</string>
+    <string name="overlay_preview_stats">Total %1$d blocks (%2$d business, %3$d containers) | Canvas: %4$dx%5$d</string>
+    <string name="overlay_preview_rendering">Rendering live overlay preview...</string>
+    <string name="overlay_preview_failed">Failed to render overlay preview or page is empty</string>
+    <string name="overlay_preview_zoom_fit">Fit Window</string>
+    <string name="overlay_preview_zoom_reset">1:1 Original</string>
+    <string name="overlay_preview_legend_business">Cyan: Business</string>
+    <string name="overlay_preview_legend_container">Orange: Containers</string>
+    <string name="overlay_preview_hide_all">Hide All</string>
+    <string name="overlay_preview_show_all">Show All</string>
+    <string name="overlay_preview_solo">Solo</string>
+    <string name="overlay_preview_layer_order">Render Order</string>
 </resources>

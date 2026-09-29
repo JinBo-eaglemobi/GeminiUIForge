@@ -73,10 +73,6 @@ class ScreenshotWindowTool : McpToolDefinition {
                 val abs = targetBlock.toAbsoluteBounds()
                 val blockInWindow = UiGeometryHelper.getBlockBoundsInWindow(targetBlock)
                 val r = UiGeometryHelper.getBlockCropRegionInWindow(targetBlock, paddingPx = 32)
-                try {
-                    val logFile = java.io.File("scratch/title_debug.txt")
-                    logFile.writeText("id=$cleanId, bounds=${targetBlock.bounds}, abs=$abs, parent=${targetBlock.parent?.id}, blockInWindow=$blockInWindow, r=$r, vp=${UiGeometryHelper.viewport}")
-                } catch (_: Throwable) {}
                 r to "图元 [$cleanId] 视口区域 (${r.width}x${r.height}px)"
             } else {
                 blockFilePrefix = "node_$cleanId"
@@ -103,7 +99,9 @@ class ScreenshotWindowTool : McpToolDefinition {
         // 统一走公共工具压缩中枢：携带图元唯一 ID 与语义化名称，彻底消除无名匿名缓存
         val prefix = blockFilePrefix ?: if (region != null) "window_region" else "window"
         val compact = compressToCompactImage(shotBytes)
-        val cachedPath = ImageCacheManager.saveCache(prefix, compact)
+        val vm = McpUiActionPipeline.getActiveViewModel()
+        val currentProjectName = vm?.state?.value?.projectName?.takeIf { it.isNotBlank() }
+        val cachedPath = ImageCacheManager.saveCache(prefix, compact, projectName = currentProjectName)
 
         val b64 = Base64.encode(compact.bytes)
         onProgress?.invoke(1.0f, "应用窗口画面捕获就绪")

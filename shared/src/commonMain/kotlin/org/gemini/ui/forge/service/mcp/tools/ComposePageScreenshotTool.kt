@@ -125,7 +125,7 @@ class ComposePageScreenshotTool(
         val imageSnapshot = surface.makeImageSnapshot()
         // 统一走公共工具压缩中枢：已持有 Skia Image 直接走重载，避免 PNG 中转编码
         val compact = compressToCompactImage(imageSnapshot, 90)
-        val cachedPath = ImageCacheManager.saveCache("compose_${projectName}", compact)
+        val cachedPath = ImageCacheManager.saveCache("compose_page", compact, projectName = projectName)
 
         @OptIn(ExperimentalEncodingApi::class)
         val base64 = Base64.encode(compact.bytes)

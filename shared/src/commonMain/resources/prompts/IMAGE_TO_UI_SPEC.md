@@ -44,13 +44,16 @@
 - **单行多列 / 极简拉霸 (SINGLE_ROW)**：如 $1 \times 3$、$1 \times 4$、$1 \times 5$ 单行转轴，或位于 Megaways 顶部的横向附加滚动轴（`TOP_EXTRA`）；行数固定为 1；
 - **非对称 / 菱形金字塔 / 变长轴 (ASYMMETRIC)**：如 $3-4-5-4-3$ 菱形、阶梯网格等。大模型需观察每列的符号数量，通过 `columnRowCounts` 数组准确记录每列行数（例如 `[3, 4, 5, 4, 3]`）。
 
-### 2. 符号集 (SYMBOL) 强制模块化识别铁律
-- 当识别到 `REEL` 转轴网格时，**必须仔细观察转轴内可见的游戏符号**，将每一个独特的符号项作为该 REEL 容器的子图层 `UIBlock(type = SYMBOL)` 完整输出在其 `children` 数组中！
-- **符号排版解耦准则**：
-  - 符号作为图元模板项，**不需要在网格中相对排列的坐标**！
-  - 符号的 `bounds` 仅用于定义自身物理长宽尺寸：`SerialRect(0f, 0f, width, height)`；
-  - 单个符号的基础推荐宽高根据转轴总尺寸自适应推导：
-    $$\text{DefaultWidth} = \frac{\text{ReelWidth}}{\text{Columns}}, \quad \text{DefaultHeight} = \frac{\text{ReelHeight}}{\text{Rows}}$$
+### 2. 转轴网格单元 (SYMBOL) 100% 全量识别与网格对齐铁律
+- **可见网格全量覆盖原则（绝不去重漏格）**：
+  当识别到 `REEL` 转轴网格（例如 5 列 $\times$ 3 行 = 15 格）时，**必须 100% 完整提取当前画面中全部可见的网格符号单元（例如 5 列 $\times$ 3 行必须完整输出全部 15 个 SYMBOL 图元子节点）**！
+  - 🚨 **绝对禁止**以“仅识别独特符号种类”为由遗漏重复出现的符号！
+  - 若同一个符号在转轴中多处出现（例如 R1C1 与 R2C2 均为同一足球图标），**每一个网格位置必须声明为独立的子图元**，赋予唯一 ID（例如 `symbol_football_r1_c1` 与 `symbol_football_r2_c2`）；
+- **行列规整相对坐标与绝对选区铁律**：
+  - 每一个符号图元的 `bounds` **必须是相对于该 REEL 容器左上角的精确网格相对矩形**：
+    $$\text{CellWidth} = \frac{\text{ReelWidth}}{\text{Columns}}, \quad \text{CellHeight} = \frac{\text{ReelHeight}}{\text{Rows}}$$
+    $$\text{bounds} = \text{SerialRect}(\text{col} \times \text{CellWidth}, \text{row} \times \text{CellHeight}, (\text{col} + 1) \times \text{CellWidth}, (\text{row} + 1) \times \text{CellHeight})$$
+  - 每一个符号图元必须提供在全景参考图上的绝对像素裁切选区 `cropRect`，确保切片采样 1:1 绝对贴合，严禁所有符号堆叠在 (0, 0) 导致画布渲染重影！
 
 ---
 
@@ -63,3 +66,20 @@
    - 对单体交互组件与符号，要求置于平整纯色高对比度背景上，以便无损提取 Alpha 透明通道；
 2. **`userPromptZh`（中文意图与业务描述）**：
    - 清晰阐述组件在游戏或页面中的设计意图、功能交互与视觉特征。
+
+---
+
+## 五、 图元底座完整性、几何形态与纯容器判别铁律 (Geometry Integrity & Baseplate Specification)
+
+### 1. 底座与外壳边界完整性守恒准则 (Baseplate & Outer Hull Integrity)
+- 复合图元或容器的外包矩形（`bounds` 与 `cropRect`）必须以其最外层物理实体结构为基准，必须完整覆盖其承载的物理底座、外壳框架、边缘高光、端头耳翼及依附的立体装饰微标；
+- 严禁将外包边界仅局限于内部局部反光板、内容可视区域或文本字符，严禁破坏承载底座的视觉一体性。
+
+### 2. 正圆与对称几何形态约束 (Aspect Ratio & Circular Form Guard)
+- 凡视觉轮廓设计为正圆形态的交互组件，其逻辑外包矩形的宽高比必须恒等于 1:1（允许物理像素误差 $\le 1\text{px}$）；
+- 外包矩形的四条边必须严格与最外层发光轮廓、控制外环或光晕极点相切，绝对禁止压缩形变为非对称椭圆或长方形。
+
+### 3. 实体复合底座与纯容器判别边界 (Physical Composite Base vs Pure Container)
+- 凡具备独立材质纹理（金属、渐变、立体厚度、光效外框或浮雕造型）的结构底座，属于独立视觉资产图元，严禁标记为纯容器（`isPureContainer` 必须为 `false`）；
+- `isPureContainer = true` 仅且必须保留给纯粹用于相对定位排版、自身 100% 透明无任何底图材质或装饰边框的虚节点。
+

@@ -1,5 +1,6 @@
 package org.gemini.ui.forge.service
 
+import androidx.compose.ui.graphics.ImageBitmap
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
@@ -7,6 +8,7 @@ import org.gemini.ui.forge.utils.bindParents
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.fetchImageBytes
+import org.gemini.ui.forge.utils.toComposeImageBitmap
 import org.jetbrains.skia.*
 
 /**
@@ -19,7 +21,8 @@ import org.jetbrains.skia.*
  * 4. 双时态落盘支持：
  *    - 初次生成全景快照: overlay_initial.png
  *    - 随时反映当前最新排版: overlay_latest.png
- * 5. 自动注册至 ImageCacheManager，支持界面与外部工具快速调用。
+ * 5. 支持纯内存实时渲染 ([renderOverlayMemory])，供界面直接查看，零磁盘 I/O。
+ * 6. 自动注册至 ImageCacheManager，支持界面与外部工具快速调用。
  */
 object TemplateOverlayRenderer {
 
@@ -35,52 +38,82 @@ object TemplateOverlayRenderer {
         val businessCount: Int
     )
 
+    data class RenderMemoryResult(
+        val imageBitmap: ImageBitmap,
+        val pngBytes: ByteArray,
+        val totalBlocks: Int,
+        val containerCount: Int,
+        val businessCount: Int,
+        val canvasWidth: Int,
+        val canvasHeight: Int
+    )
+
     /**
-     * 渲染模板全景标注图并持久化落盘
-     *
-     * @param projectName 模板工程名称
-     * @param projectState 模板当前状态
-     * @param isInitial 是否为初始生成阶段（若 true，同时落盘 overlay_initial.png 与 overlay_latest.png）
+     * 预先解码参考底图为 Skia [Image] 并驻留内存，供实时预览高频重绘复用。
      */
-    suspend fun renderAndSave(
-        projectName: String,
+    suspend fun loadBaseImage(projectState: ProjectState): Image? {
+        val page = projectState.pages.firstOrNull() ?: return null
+        val refLargePath = page.sourceImageUri?.getAbsolutePath()
+            ?: projectState.referenceImages.firstOrNull()?.getAbsolutePath()
+        if (refLargePath.isNullOrBlank()) return null
+        return try {
+            val bytes = fetchImageBytes(refLargePath) ?: return null
+            Image.makeFromEncoded(bytes)
+        } catch (e: Throwable) {
+            AppLogger.w(TAG, "加载预解码参考底图异常: $refLargePath, 原因: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * 纯内存离屏渲染模板图元标注图（零磁盘 I/O，不落盘）
+     *
+     * 与 [renderAndSave] 保持 100% 相同绘制算法与样式规范。
+     * 支持 [baseImage] 预解码复用（若传入，彻底跳过磁盘 I/O 与图片解码，毫秒级出图）。
+     * 支持 [hiddenBlockIds] 纯内存过滤，跳过指定图元的框线绘制。
+     * 支持 [encodePng] 是否执行昂贵的 PNG 编码压缩（实时交互预览置 false，纯内存秒出 ImageBitmap；落盘置 true）。
+     */
+    suspend fun renderOverlayMemory(
         projectState: ProjectState,
-        isInitial: Boolean = false
-    ): RenderResult? {
+        hiddenBlockIds: Set<String> = emptySet(),
+        baseImage: Image? = null,
+        encodePng: Boolean = false
+    ): RenderMemoryResult? {
         val page = projectState.pages.firstOrNull() ?: run {
-            AppLogger.w(TAG, "工程 '$projectName' 无有效页面，跳过标注图渲染")
+            AppLogger.w(TAG, "项目状态无有效页面，跳过标注图内存渲染")
             return null
         }
 
         val canvasW = page.width.toInt().coerceAtLeast(100)
         val canvasH = page.height.toInt().coerceAtLeast(100)
 
-        // 1. 获取参考原图字节
-        val refLargePath = page.sourceImageUri?.getAbsolutePath()
-            ?: projectState.referenceImages.firstOrNull()?.getAbsolutePath()
-        val refBytes = if (!refLargePath.isNullOrBlank()) {
-            try {
-                fetchImageBytes(refLargePath)
-            } catch (e: Throwable) {
-                AppLogger.w(TAG, "加载参考底图失败: $refLargePath, 原因: ${e.message}")
-                null
-            }
-        } else null
-
-        // 2. 初始化 Skia 离屏画布
+        // 1. 初始化 Skia 离屏画布
         val surface = Surface.makeRasterN32Premul(canvasW, canvasH)
         val canvas = surface.canvas
 
-        // 3. 绘制底图
-        if (refBytes != null) {
+        // 2. 解析并绘制底图（优先复用已预解码的 baseImage，避免重复磁盘 I/O 与 CPU 解码）
+        val resolvedImg: Image? = baseImage ?: run {
+            val refLargePath = page.sourceImageUri?.getAbsolutePath()
+                ?: projectState.referenceImages.firstOrNull()?.getAbsolutePath()
+            if (!refLargePath.isNullOrBlank()) {
+                try {
+                    val refBytes = fetchImageBytes(refLargePath)
+                    if (refBytes != null) Image.makeFromEncoded(refBytes) else null
+                } catch (e: Throwable) {
+                    AppLogger.w(TAG, "解码并绘制参考底图异常: ${e.message}")
+                    null
+                }
+            } else null
+        }
+
+        if (resolvedImg != null) {
             try {
-                val refImg = Image.makeFromEncoded(refBytes)
-                val srcRect = Rect.makeWH(refImg.width.toFloat(), refImg.height.toFloat())
+                val srcRect = Rect.makeWH(resolvedImg.width.toFloat(), resolvedImg.height.toFloat())
                 val dstRect = Rect.makeWH(canvasW.toFloat(), canvasH.toFloat())
                 val paint = Paint().apply { isAntiAlias = true }
-                canvas.drawImageRect(refImg, srcRect, dstRect, paint)
+                canvas.drawImageRect(resolvedImg, srcRect, dstRect, paint)
             } catch (e: Throwable) {
-                AppLogger.w(TAG, "解码并绘制参考底图异常: ${e.message}")
+                AppLogger.w(TAG, "绘制参考底图失败: ${e.message}")
                 val bgPaint = Paint().apply { color = 0xFF1E1E24.toInt() }
                 canvas.drawRect(Rect.makeWH(canvasW.toFloat(), canvasH.toFloat()), bgPaint)
             }
@@ -162,6 +195,7 @@ object TemplateOverlayRenderer {
 
         // 7. 先绘制容器（下层纯细线框，无任何半透明遮罩与药丸色块）
         for (block in containerBlocks) {
+            if (block.id in hiddenBlockIds) continue
             val abs = block.absoluteBounds
             val rect = Rect.makeXYWH(abs.left, abs.top, abs.width, abs.height)
             canvas.drawRect(rect, containerStrokePaint)
@@ -177,6 +211,7 @@ object TemplateOverlayRenderer {
 
         // 8. 后绘制业务图元（上层亮青色纯细线框）
         for (block in businessBlocks) {
+            if (block.id in hiddenBlockIds) continue
             val abs = block.absoluteBounds
             val rect = Rect.makeXYWH(abs.left, abs.top, abs.width, abs.height)
             canvas.drawRect(rect, businessStrokePaint)
@@ -190,10 +225,42 @@ object TemplateOverlayRenderer {
             canvas.drawString(label, tx, ty, font, businessTextPaint)
         }
 
-        // 9. 导出 PNG 字节
+        // 9. 导出 ImageBitmap 与可选 PNG 字节（若不落盘则跳过昂贵的 PNG 压缩）
         val snapshot = surface.makeImageSnapshot()
-        val pngData = snapshot.encodeToData(EncodedImageFormat.PNG)
-        val pngBytes = pngData?.bytes ?: run {
+        val imageBitmap = snapshot.toComposeImageBitmap()
+        val pngBytes = if (encodePng) {
+            val pngData = snapshot.encodeToData(EncodedImageFormat.PNG)
+            pngData?.bytes ?: ByteArray(0)
+        } else {
+            ByteArray(0)
+        }
+
+        return RenderMemoryResult(
+            imageBitmap = imageBitmap,
+            pngBytes = pngBytes,
+            totalBlocks = containerBlocks.size + businessBlocks.size,
+            containerCount = containerBlocks.size,
+            businessCount = businessBlocks.size,
+            canvasWidth = canvasW,
+            canvasHeight = canvasH
+        )
+    }
+
+    /**
+     * 渲染模板全景标注图并持久化落盘
+     *
+     * @param projectName 模板工程名称
+     * @param projectState 模板当前状态
+     * @param isInitial 是否为初始生成阶段（若 true，同时落盘 overlay_initial.png 与 overlay_latest.png）
+     */
+    suspend fun renderAndSave(
+        projectName: String,
+        projectState: ProjectState,
+        isInitial: Boolean = false
+    ): RenderResult? {
+        val memResult = renderOverlayMemory(projectState, encodePng = true) ?: return null
+        val pngBytes = memResult.pngBytes
+        if (pngBytes.isEmpty()) {
             AppLogger.e(TAG, "Skia 离屏编码 PNG 字节失败")
             return null
         }
@@ -217,9 +284,9 @@ object TemplateOverlayRenderer {
             initialPath = initialAbsPath,
             latestPath = latestAbsPath,
             bytes = pngBytes,
-            totalBlocks = containerBlocks.size + businessBlocks.size,
-            containerCount = containerBlocks.size,
-            businessCount = businessBlocks.size
+            totalBlocks = memResult.totalBlocks,
+            containerCount = memResult.containerCount,
+            businessCount = memResult.businessCount
         )
     }
 

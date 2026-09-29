@@ -123,20 +123,18 @@ data class UIBlock(
     fun postProcess(): UIBlock {
         // 递归处理子级
         val processedChildren = children.map { it.postProcess() }
-        // 默认将初始绝对物理坐标固化为参考区域 cropRect，彻底杜绝画布拖拽位移时的内容透镜漂移
-        val effectiveCropRect = cropRect ?: toAbsoluteBounds()
 
         return if (type == UIBlockType.REEL) {
             // 如果是转轴且包含子级，同步并入 items 属性中，同时完整保留 children 子图层树，绝不清空
             if (processedChildren.isNotEmpty()) {
                 val currentProps = properties as? BlockProperties.ReelProperties ?: BlockProperties.ReelProperties()
                 val updatedProps = currentProps.copy(items = currentProps.items + processedChildren)
-                copy(properties = updatedProps, cropRect = effectiveCropRect, children = processedChildren)
+                copy(properties = updatedProps, cropRect = cropRect, children = processedChildren)
             } else {
-                copy(cropRect = effectiveCropRect, children = processedChildren)
+                copy(cropRect = cropRect, children = processedChildren)
             }
         } else {
-            copy(cropRect = effectiveCropRect, children = processedChildren)
+            copy(cropRect = cropRect, children = processedChildren)
         }
     }
 
@@ -322,4 +320,27 @@ data class AssetState(
     val name: String,
     val historicalIdSuffix: String
 )
+
+/**
+ * 获取用于切片、采样或参考区域核验的有效边界矩形（遵循无损回退与安全 Padding 规范）。
+ * 1. 若图元已显式指定专属 cropRect，则尊重并直接返回 cropRect（不附加额外 padding）；
+ * 2. 若 cropRect 为 null（缺失）：兼容回退使用该图元的全局绝对 bounds，并自动向四周外扩 [fallbackPadding] 安全边距，
+ *    同时自动约束在画布视口 [0, 0, canvasWidth, canvasHeight] 物理范围内，确保发光边框、立体外壳与边缘阴影完整不被截断。
+ */
+fun UIBlock.getEffectiveCropBounds(
+    canvasWidth: Float = Float.MAX_VALUE,
+    canvasHeight: Float = Float.MAX_VALUE,
+    fallbackPadding: Float = 24f
+): SerialRect {
+    val explicit = this.cropRect
+    if (explicit != null) {
+        return explicit
+    }
+    val abs = this.toAbsoluteBounds()
+    val paddedLeft = (abs.left - fallbackPadding).coerceAtLeast(0f)
+    val paddedTop = (abs.top - fallbackPadding).coerceAtLeast(0f)
+    val paddedRight = (abs.right + fallbackPadding).coerceAtMost(canvasWidth)
+    val paddedBottom = (abs.bottom + fallbackPadding).coerceAtMost(canvasHeight)
+    return SerialRect(paddedLeft, paddedTop, paddedRight, paddedBottom)
+}
 

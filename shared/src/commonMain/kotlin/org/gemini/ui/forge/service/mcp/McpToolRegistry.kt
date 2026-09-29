@@ -28,6 +28,7 @@ object McpToolRegistry {
             // A 组：模板生成与编辑工具
             AnalyzeReferenceGenerateTemplateTool(),
             CreateTemplateTool(),
+            AddBlockTool(),
             UpdateBlockTool(),
             MoveBlockTool(),
             DeleteBlockTool(),
