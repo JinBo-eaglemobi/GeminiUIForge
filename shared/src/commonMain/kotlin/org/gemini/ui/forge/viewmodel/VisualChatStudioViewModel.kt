@@ -36,6 +36,23 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * 视觉工作室 UI 状态数据类
+ *
+ * @property scopeId 当前视觉工作室绑定的图元/业务作用域唯一标识 ID
+ * @property currentSession 当前处于激活状态的对话与生图会话实例
+ * @property historySessions 该图元历史已保存的所有会话概要列表
+ * @property isGenerating 是否正在进行生图、改图或流式模型推理
+ * @property isOptimizingPrompt 是否正在请求后台执行生图提示词 AI 智能优化
+ * @property statusLog 当前后台任务执行进度的实时日志或状态提示文案
+ * @property streamingText 大模型回复的流式文本实时缓冲区
+ * @property pendingCount 队列中排队等待处理的生图任务数
+ * @property hasCompressedContext 当前会话上下文是否已满足自动压缩触发条件
+ * @property selectedModel 当前选中的 Gemini 大模型（生图/多模态/文本推理）
+ * @property generationCount 单次批量生成的图片数量
+ * @property activeReferenceImageUri 当前激活绑定的垫图/参考图物理绝对路径
+ * @property previewMemoryBytes 离线生成的参考图内存切片字节数组（用于未落盘前的预览）
+ * @property pendingCropBounds 待生效的参考图局部裁切区域坐标
+ * @property isImageToImageMode 是否开启以图生图（垫图）模式
+ * @property thinkingLevel 模型的深度思考等级（默认/关闭/中度/深度）
  */
 data class VisualChatStudioState(
     val scopeId: String = "",

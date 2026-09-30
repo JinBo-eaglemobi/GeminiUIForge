@@ -14,6 +14,7 @@ import org.gemini.ui.forge.model.ui.UIPage
  * @property globalTheme 整个项目的宏观主题风格（大模型分析得出）
  * @property referenceImages 参与模板分析的所有原始参考图的本地归档路径列表
  * @property pages 该项目内部包含的不同游戏/展示页面集合
+ * @property createdAt 模板创建时间戳（毫秒）
  */
 @Serializable
 data class ProjectState(
@@ -25,6 +26,7 @@ data class ProjectState(
     val styleReferenceUri: TemplateFile? = null,
     val referenceImages: List<TemplateFile> = emptyList(), // 多参考图路径列表
     val pages: List<UIPage> = emptyList(),
+    /** 模板创建时间戳（毫秒） */
     val createdAt: Long = 0L
 ) {
 

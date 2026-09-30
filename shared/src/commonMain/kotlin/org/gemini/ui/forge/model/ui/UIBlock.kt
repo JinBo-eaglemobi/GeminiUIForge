@@ -10,12 +10,25 @@ import org.gemini.ui.forge.model.app.PromptLanguage
 /**
  * 最小生成单元模型：UI 功能块 (UIBlock)
  * 描述页面上的一个绝对独立和可重新生成的图层。
+ *
  * @property id 该模块的全局唯一标识符
  * @property type 该模块所属的功能分类
- * @property bounds 该模块在页面设计稿上的绝对坐标系（由大模型推断）
+ * @property bounds 该模块相对于其直接父容器的局部相对坐标矩形（持久化保存此值）
  * @property currentImageUri 当前选定加载的本地图片路径或远程 URL
+ * @property referenceImage 该模块专用的参考底图（裁剪自模板全局参考大图）
+ * @property resizeMode 应用于该图片的拉伸缩放模式（如 STRETCH, NINE_PATCH 等）
+ * @property ninePatchConfig 应用于该图片的九宫格拉伸安全边距配置
+ * @property scaleConfig 应用于图片不透明主体自适应对齐与缩放的微调配置
+ * @property cropRect 相对于原始图片的局部裁切区域坐标
  * @property userPromptEn 详细的英文提示词 (High-quality English prompt for image generation, including style, material, and lighting)
  * @property userPromptZh 详细的中文提示词 (对应的详尽中文描述，包含组件功能、设计意图和视觉特征)
+ * @property children 嵌套在其内部的子图元列表
+ * @property isVisible 图层当前是否在画布和预览中可见
+ * @property properties 不同组件分类的专属附加属性（如 ButtonProperties, SpinProperties 等）
+ * @property resourceBindingPath 资源绑定与导出的层级结构路径
+ * @property isPureContainer 纯容器/占位层标记：true 表示该模块仅用于排版或组合，不参与任何 AI 图片资源生成
+ * @property clipOverflow 是否裁剪超出范围的子内容（overflow: hidden），默认 false 为可见
+ * @property parent 运行时持有的直接父级引用（@Transient 阻断序列化，copy() 自动继承）
  */
 @Stable
 @Serializable
@@ -119,7 +132,13 @@ data class UIBlock(
     val userPrompt: String
         get() = userPromptZh.ifBlank { userPromptEn }
 
-
+    /**
+     * 对图元树执行后置整理与自愈（如转轴 Reel 组件子级结构重塑）
+     *
+     * 递归遍历所有子模块，并将 REEL 特殊容器的子图元同步挂入 properties.items 列表。
+     *
+     * @return 后置处理完毕后的全新 [UIBlock] 副本
+     */
     fun postProcess(): UIBlock {
         // 递归处理子级
         val processedChildren = children.map { it.postProcess() }
@@ -314,7 +333,10 @@ interface AssetSupport {
 }
 
 /**
- * 资产状态配置信息数据类。
+ * 资产状态配置信息数据类
+ *
+ * @property name 状态友好显示名称（如"默认状态"、"按下状态"、"禁用状态"）
+ * @property historicalIdSuffix 生成资产历史库与报文归档时使用的路径标识后缀
  */
 data class AssetState(
     val name: String,

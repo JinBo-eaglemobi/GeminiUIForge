@@ -25,6 +25,9 @@ object McpToolRegistry {
             ListTemplatesTool(),
             GetTemplateTool(),
             CheckEnvTool(),
+            // 异步任务与长轮询调度工具
+            GetJobStatusTool(),
+            CancelJobTool(),
             // A 组：模板生成与编辑工具
             AnalyzeReferenceGenerateTemplateTool(),
             CreateTemplateTool(),

@@ -60,6 +60,11 @@ class LayoutEditorDelegate(
         markDirty()
     }
 
+    /**
+     * 添加指定类型的图元模块到当前页面或当前编辑的组容器中
+     *
+     * @param type 图元组件类型（如 BUTTON, IMAGE, BACKGROUND 等）
+     */
     fun addBlock(type: UIBlockType) {
         saveSnapshot("添加模块: $type")
         val pageId = getState().selectedPageId ?: return
@@ -100,6 +105,11 @@ class LayoutEditorDelegate(
         markDirty()
     }
 
+    /**
+     * 递归删除指定 ID 的图元模块及其所有子节点
+     *
+     * @param blockId 目标模块 ID
+     */
     fun deleteBlock(blockId: String) {
         saveSnapshot("删除模块: $blockId")
         val pageId = getState().selectedPageId ?: return
@@ -118,6 +128,12 @@ class LayoutEditorDelegate(
         Toast.show("已删除模块 $blockId", ToastType.INFO)
     }
 
+    /**
+     * 切换指定图元模块的显示/隐藏状态
+     *
+     * @param blockId 目标模块 ID
+     * @param isVisible 是否可见
+     */
     fun toggleBlockVisibility(blockId: String, isVisible: Boolean) {
         val pageId = getState().selectedPageId ?: return
         updateState { currentState ->
@@ -131,6 +147,11 @@ class LayoutEditorDelegate(
         markDirty()
     }
 
+    /**
+     * 一键全量切换当前页面所有图元模块的显示/隐藏状态
+     *
+     * @param isVisible 是否全部可见
+     */
     fun toggleAllBlocksVisibility(isVisible: Boolean) {
         val pageId = getState().selectedPageId ?: return
         
@@ -147,6 +168,13 @@ class LayoutEditorDelegate(
         markDirty()
     }
 
+    /**
+     * 移动图元模块的层级或兄弟顺序，自动重算跨容器局部相对坐标保持物理位置不变
+     *
+     * @param draggedBlockId 被拖动的模块 ID
+     * @param targetId 目标目标图元 ID（为 null 时移动至页面根层级）
+     * @param dropPosition 放置位置（内部 INSIDE、之前 BEFORE、之后 AFTER）
+     */
     fun moveBlock(draggedBlockId: String, targetId: String?, dropPosition: DropPosition = DropPosition.INSIDE) {
         if (draggedBlockId == targetId) return
         val pageId = getState().selectedPageId ?: return
@@ -181,10 +209,24 @@ class LayoutEditorDelegate(
         markDirty()
     }
 
+    /**
+     * 平移单个图元模块的相对坐标
+     *
+     * @param blockId 目标模块 ID
+     * @param dx X 轴像素偏移量
+     * @param dy Y 轴像素偏移量
+     */
     fun moveBlockBy(blockId: String, dx: Float, dy: Float) {
         moveBlocksBy(setOf(blockId), dx, dy)
     }
 
+    /**
+     * 批量平移一组图元模块的相对坐标
+     *
+     * @param blockIds 模块 ID 集合
+     * @param dx X 轴像素偏移量
+     * @param dy Y 轴像素偏移量
+     */
     fun moveBlocksBy(blockIds: Set<String>, dx: Float, dy: Float) {
         if (blockIds.isEmpty()) return
         val pageId = getState().selectedPageId ?: return
@@ -209,8 +251,36 @@ class LayoutEditorDelegate(
         markDirty()
     }
 
+    /**
+     * 重设模块的绝对坐标与尺寸（resizeBlock）
+     * 自动通过 block.toLocalBounds(newAbsoluteBounds) 逆向转换为局部坐标写入
+     * 满足全局-局部双向变换可逆铁律
+     */
+    fun resizeBlock(blockId: String, newAbsoluteBounds: SerialRect) {
+        val pageId = getState().selectedPageId ?: return
+        updateState { currentState ->
+            val updatedPages = currentState.project.pages.map { page ->
+                if (page.id == pageId) {
+                    val targetBlock = page.blocks.findBlockById(blockId)
+                    if (targetBlock != null) {
+                        val newLocalBounds = targetBlock.toLocalBounds(newAbsoluteBounds)
+                        val updatedBlocks = page.blocks.updateBlockInList(blockId) { block ->
+                            block.copy(bounds = newLocalBounds)
+                        }.bindParents()
+                        page.copy(blocks = updatedBlocks)
+                    } else page
+                } else page
+            }
+            currentState.copy(project = currentState.project.copy(pages = updatedPages))
+        }
+        markDirty()
+    }
+
     // --- 剪切板 ---
 
+    /**
+     * 将当前选中的图元模块复制到剪贴板缓存中
+     */
     fun copy() {
         val selectedId = getState().selectedBlockId ?: return
         val block = getState().currentPage?.blocks?.findBlockById(selectedId)
@@ -220,6 +290,9 @@ class LayoutEditorDelegate(
         }
     }
 
+    /**
+     * 将当前选中的图元模块剪切（复制并删除）到剪贴板缓存中
+     */
     fun cut() {
         val selectedId = getState().selectedBlockId ?: return
         val block = getState().currentPage?.blocks?.findBlockById(selectedId)
@@ -230,6 +303,9 @@ class LayoutEditorDelegate(
         }
     }
 
+    /**
+     * 将剪贴板中的图元模块深拷贝并粘贴到当前页面或编辑组容器中
+     */
     fun paste() {
         val source = clipboardBlock ?: return
         saveSnapshot("粘贴模块: ${source.id}")
@@ -315,6 +391,16 @@ class LayoutEditorDelegate(
         Toast.show("已成功应用重塑结构代码", ToastType.SUCCESS)
     }
 
+    /**
+     * 对当前画面的指定选区进行 AI 视觉重塑与子结构重构
+     *
+     * @param blockId 关联的目标图元 ID（若为全局重塑则为 null）
+     * @param bounds 重塑目标选区绝对物理坐标
+     * @param userInstruction 用户输入的结构修改提示词
+     * @param apiKey Gemini API Key
+     * @param useChatContext 是否携带历史对话上下文
+     * @param onComplete 完成回调，返回是否重塑成功
+     */
     fun onRefineArea(
         blockId: String?,
         bounds: SerialRect,
@@ -377,6 +463,14 @@ class LayoutEditorDelegate(
         }
     }
 
+    /**
+     * 调用 AI 智能优化指定图元模块的生图提示词
+     *
+     * @param blockId 目标模块 ID
+     * @param apiKey Gemini API Key
+     * @param lang 目标语言类型（ZH 中文 / EN 英文）
+     * @param useChatContext 是否携带历史上下文
+     */
     fun optimizePrompt(blockId: String, apiKey: String, lang: PromptLanguage, useChatContext: Boolean = false) {
         val block = getState().project.pages.flatMap { it.blocks }.findBlockById(blockId) ?: return
         val textToOptimize = if (lang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
@@ -435,12 +529,18 @@ class LayoutEditorDelegate(
     }
     // --- 快捷键动作触发接口 ---
 
+    /**
+     * 触发重命名当前选中的模块（弹出输入框）
+     */
     fun triggerRename() {
         if (getState().selectedBlockId != null) {
             onRequestRename()
         }
     }
 
+    /**
+     * 删除当前选中的模块（若未选中则气泡提示）
+     */
     fun deleteSelectedBlock() {
         val selectedId = getState().selectedBlockId
         if (selectedId != null) {
@@ -450,6 +550,12 @@ class LayoutEditorDelegate(
         }
     }
 
+    /**
+     * 从原图大图中精准裁切局部区域并绑定为指定模块的专属参考底图
+     *
+     * @param blockId 目标模块 ID
+     * @param referenceAreaRect 裁剪选区矩形坐标
+     */
     fun onSetReferenceArea(
         blockId: String,
         referenceAreaRect: SerialRect

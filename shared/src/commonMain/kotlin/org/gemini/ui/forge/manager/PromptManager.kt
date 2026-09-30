@@ -46,6 +46,7 @@ class PromptManager(private val storage: LocalFileStorage) {
         PromptMeta("optimize_instruction_en", "英文生图提示词优化指令", "针对英文生图意图的高清材质与渲染风格系统约束指令"),
         PromptMeta("refine_instruction_update", "模块局部修改默认指令", "在局部重塑时，针对已有模块进行修改的默认指令模板"),
         PromptMeta("refine_instruction_new", "模块新增生成默认指令", "在局部重塑时，针对新选区生成新模块的默认指令模板"),
+        PromptMeta("audit_visual_diff", "通用全景视觉对账与几何差分审计", "用于 Gemini 视觉大模型对比参考原图与全景标注图，自动识别漏框、底座截断与虚框，生成增删改纠偏建议"),
         PromptMeta("image_gen_transparent", "透明背景生图引导指令", "指导视觉模型直接生成纯白/纯黑/可抠图背景的引导提示词"),
         PromptMeta("gemini_image_gen", "Gemini 图像生成组装模板", "调用 Gemini 视觉模型生成单体 UI 图像时的顶层提示词组装结构")
     )

@@ -14,6 +14,10 @@ import org.gemini.ui.forge.utils.looseJson
  * 避免频繁创建和销毁带来的巨大性能开销（连接池重建、线程池分配等）。
  */
 object NetworkClient {
+    /**
+     * 全局单例的 [HttpClient] 实例。
+     * 配置了 JSON 序列化、超时重试（最长 120s 适用于大模型视觉分析）、以及详细的调试日志。
+     */
     val shared: HttpClient by lazy {
         HttpClient {
             install(ContentNegotiation) {

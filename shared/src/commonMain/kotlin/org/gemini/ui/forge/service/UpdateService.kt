@@ -31,6 +31,8 @@ import org.jetbrains.skiko.hostOs
 /**
  * 软件更新服务
  * 负责直接与 GitHub API 进行交互，处理版本检测和文件下载
+ *
+ * @param currentVersion 当前正在运行的客户端版本号
  */
 class UpdateService(private val currentVersion: String) {
     private val client = HttpClient {

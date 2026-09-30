@@ -9,9 +9,13 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
+import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
 import org.gemini.ui.forge.service.mcp.McpToolResult
 import org.gemini.ui.forge.service.mcp.UiRoadmapRegistry
+import org.gemini.ui.forge.utils.bindParents
+import org.gemini.ui.forge.utils.geometry.GeometricHealthValidator
+import org.gemini.ui.forge.utils.geometry.GeometricIssueLevel
 
 /**
  * 设置或解除大厅模板工程的 AI 生成中锁定状态工具。
@@ -35,6 +39,10 @@ class SetProjectGeneratingStatusTool : McpToolDefinition {
                 put("type", "string")
                 put("description", "可选：卡片上显示的生成状态提示文案（缺省为系统默认提示）")
             }
+            putJsonObject("force") {
+                put("type", "boolean")
+                put("description", "可选：是否跳过几何健康度门禁强制解除锁定，默认 false")
+            }
         }
         put("required", buildJsonArray {
             add("projectName")
@@ -51,11 +59,27 @@ class SetProjectGeneratingStatusTool : McpToolDefinition {
         val isGenerating = arguments["isGenerating"]?.jsonPrimitive?.booleanOrNull
             ?: return McpToolResult.error("参数 'isGenerating' 不能为空")
         val status = arguments["status"]?.jsonPrimitive?.contentOrNull
+        val force = arguments["force"]?.jsonPrimitive?.booleanOrNull ?: false
 
         if (isGenerating) {
             val statusMsg = status ?: "正在由 AI 逆向生成图元工程..."
             UiRoadmapRegistry.markProjectGenerating(projectName, statusMsg)
         } else {
+            if (!force) {
+                val template = TemplateRepository().getTemplateByName(projectName)
+                val page = template?.pages?.firstOrNull()
+                if (page != null) {
+                    val issues = GeometricHealthValidator.validate(page.blocks.bindParents(), page.width, page.height)
+                    val blockers = issues.filter { it.level == GeometricIssueLevel.BLOCKER }
+                    if (blockers.isNotEmpty()) {
+                        return McpToolResult.error(
+                            "⚠️ 拒绝解除锁定！项目 '$projectName' 存在 ${blockers.size} 处阻断级几何缺陷：\n" +
+                                blockers.joinToString("\n") { "• ${it.description}" } +
+                                "\n👉 必须先调用 update_block / delete_block / add_block 完成坐标纠偏，方可解除锁定！（如确需强制解锁请传入 force=true）"
+                        )
+                    }
+                }
+            }
             UiRoadmapRegistry.unmarkProjectGenerating(projectName)
         }
 

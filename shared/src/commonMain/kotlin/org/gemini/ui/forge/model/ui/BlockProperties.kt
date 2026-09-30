@@ -7,14 +7,23 @@ import org.gemini.ui.forge.data.TemplateFile
  * 具有文本排版和渲染样式特征的组件属性接口。
  */
 interface TextStyled {
+    /** 文本字符串内容 */
     val text: String
+    /** 十六进制文本颜色代码（如 "#FFFFFF"） */
     val textColor: String
+    /** 字体大小（sp/pt） */
     val textSize: Int
+    /** 是否加粗 */
     val isBold: Boolean
+    /** 是否倾斜 */
     val isItalic: Boolean
+    /** 水平对齐方式（LEFT, CENTER, RIGHT） */
     val horizontalAlign: String
+    /** 垂直对齐方式（TOP, CENTER, BOTTOM） */
     val verticalAlign: String
+    /** 文字外描边颜色（如 "#000000"，空表示无描边） */
     val strokeColor: String
+    /** 文字外描边宽度（像素） */
     val strokeWidth: Float
 }
 
@@ -44,6 +53,8 @@ sealed class BlockProperties {
      * @property isMultiState 指示是否为按钮生成多种状态（如：正常、按下、禁用）的图片。
      * @property pressedUri 按钮处于按下状态（Pressed）时的图片资源路径。
      * @property disabledUri 按钮处于禁用状态（Disabled）时的图片资源路径。
+     * @property pressedPrompt 按下状态（Pressed）的独立生图提示词。
+     * @property disabledPrompt 禁用状态（Disabled）的独立生图提示词。
      */
     @Serializable
     data class ButtonProperties(
@@ -74,11 +85,11 @@ sealed class BlockProperties {
      * @property textColor 文本的字体颜色，采用十六进制字符串格式（例如："#000000"）。
      * @property textSize 文本的字体大小（单位通常为 sp 或像素，取决于平台实现）。
      * @property isBold 是否加粗
-     * @param isItalic 是否倾斜
-     * @param horizontalAlign 水平对齐方式: LEFT, CENTER, RIGHT
-     * @param verticalAlign 垂直对齐方式: TOP, CENTER, BOTTOM
-     * @param strokeColor 描边颜色
-     * @param strokeWidth 描边宽度
+     * @property isItalic 是否倾斜
+     * @property horizontalAlign 水平对齐方式: LEFT, CENTER, RIGHT
+     * @property verticalAlign 垂直对齐方式: TOP, CENTER, BOTTOM
+     * @property strokeColor 描边颜色
+     * @property strokeWidth 描边宽度
      */
     @Serializable
     data class TextProperties(
@@ -100,12 +111,12 @@ sealed class BlockProperties {
      * @property textColor 输入文本的字体颜色。
      * @property textSize 输入文本的字体大小。
      * @property maxLength 允许输入的最大字符长度，设置为 -1 表示不限制长度。
-     * @param isBold 是否加粗
-     * @param isItalic 是否倾斜
-     * @param horizontalAlign 水平对齐方式: LEFT, CENTER, RIGHT
-     * @param verticalAlign 垂直对齐方式: TOP, CENTER, BOTTOM
-     * @param strokeColor 描边颜色
-     * @param strokeWidth 描边宽度
+     * @property isBold 是否加粗
+     * @property isItalic 是否倾斜
+     * @property horizontalAlign 水平对齐方式: LEFT, CENTER, RIGHT
+     * @property verticalAlign 垂直对齐方式: TOP, CENTER, BOTTOM
+     * @property strokeColor 描边颜色
+     * @property strokeWidth 描边宽度
      */
     @Serializable
     data class InputProperties(
@@ -133,6 +144,7 @@ sealed class BlockProperties {
      * @property reelLayoutType 转轴排版形态：STANDARD(标准规则矩阵), SINGLE_ROW(单行多列), ASYMMETRIC(异形/金字塔), TOP_EXTRA(顶部附加轴)。
      * @property items 转轴中包含的可选元素集。每一个元素都是一个完整的 UIBlock。
      * @property showBackground 是否显示转轴背景板。
+     * @property rollSeed 滚动渲染随机种子，用于生成伪随机图案展示。
      */
     @Serializable
     data class ReelProperties(
@@ -151,6 +163,8 @@ sealed class BlockProperties {
      * @property stopUri 停止状态（Stop）时的图片资源路径。
      * @property stopPromptZh 停止状态（Stop）的中文生成 Prompt。
      * @property stopPromptEn 停止状态（Stop）的英文生成 Prompt。
+     * @property spinResourceBindingPath Spin 状态导出的资源绑定结构路径。
+     * @property stopResourceBindingPath Stop 状态导出的资源绑定结构路径。
      */
     @Serializable
     data class SpinButtonProperties(

@@ -50,6 +50,9 @@ class AppSettingsViewModel(
         }
     }
 
+    /**
+     * 保存排版布局模式偏好持久化（自动/触控/紧凑）
+     */
     fun saveLayoutMode(mode: org.gemini.ui.forge.model.app.LayoutMode) {
         viewModelScope.launch {
             configManager.saveKey("APP_LAYOUT_MODE", mode.name)

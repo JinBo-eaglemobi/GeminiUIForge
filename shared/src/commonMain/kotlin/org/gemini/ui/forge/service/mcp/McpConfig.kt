@@ -16,5 +16,8 @@ data class McpConfig(
     val port: Int = 18330,
     val host: String = "127.0.0.1",
     val token: String? = null,
-    val followNavigation: Boolean = false
+    val followNavigation: Boolean = false,
+    val defaultJobWaitSeconds: Int = 25,
+    val maxJobWaitSeconds: Int = 45,
+    val jobRetentionMinutes: Long = 30L
 )

@@ -18,8 +18,11 @@ import org.gemini.ui.forge.model.app.CompileConfig
  * @property effectiveApiKey 实际生效的密钥 (apiKey 或环境变量)
  * @property templateStorageDir 模板数据的存储目录
  * @property maxRetries API 请求的最大重试次数
+ * @property imageGenCount 单次生成候选图片的数量
  * @property shortcuts 快捷键映射表 (Action -> 组合键描述)
+ * @property layoutMode 视口与人机工程学排版模式 (AUTO, TOUCH, COMPACT)
  * @property compileConfig 编译环境配置
+ * @property apiFlavor Gemini API 通信风格 (INTERACTIONS, GENERATE_CONTENT)
  */
 data class AppGlobalState(
     val currentScreen: AppScreen = AppScreen.HOME,

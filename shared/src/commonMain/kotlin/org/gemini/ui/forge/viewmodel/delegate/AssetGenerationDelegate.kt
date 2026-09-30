@@ -21,6 +21,9 @@ import kotlin.uuid.Uuid
 
 /**
  * 批量生成结果封装
+ *
+ * @property block 目标图元组件块
+ * @property candidates AI 生成的图片候选文件列表
  */
 data class WorkspaceBatchResult(val block: UIBlock, val candidates: List<TemplateFile>)
 
@@ -66,11 +69,21 @@ class AssetGenerationDelegate(
         }
     }
 
+    /**
+     * 取消当前正在执行的生图或批量任务
+     */
     fun cancelGeneration() {
         generationJob?.cancel()
         updateState { it.copy(isGenerating = false) }
     }
 
+    /**
+     * 发起单个组件块（或其衍生多态状态）的 AI 图像生成请求
+     *
+     * @param apiKey Gemini API 密钥
+     * @param customPrompt 用户自定义覆盖生图提示词
+     * @param stateIndex 目标组件状态槽位索引（0: 正常/默认态，>0: 衍生按下/停止等状态）
+     */
     fun onRequestGeneration(apiKey: String, customPrompt: String, stateIndex: Int = 0) {
         val currentState = getState()
         val block = currentState.selectedBlock ?: return
@@ -169,6 +182,12 @@ class AssetGenerationDelegate(
         }
     }
 
+    /**
+     * 启动基于 CPU 多核并发信号量控制的批量生图任务流
+     *
+     * @param apiKey Gemini API 密钥
+     * @param selectedBlocks 待批量生成资产的目标图元列表
+     */
     fun startBatchGeneration(apiKey: String, selectedBlocks: List<UIBlock>) {
         if (selectedBlocks.isEmpty()) return
         val currentState = getState()
@@ -342,6 +361,9 @@ class AssetGenerationDelegate(
         }
     }
 
+    /**
+     * 通知后台批量生图队列：当前图元的资产选择或确认交互已完成，放行下一个候选弹窗
+     */
     fun completeConfirmation() {
         confirmationDeferred?.complete(Unit)
     }
@@ -353,5 +375,8 @@ class AssetGenerationDelegate(
         return aiService.optimizePrompt(originalPrompt, apiKey)
     }
 
+    /**
+     * 按钮多态衍生资源批量生成目标枚举
+     */
     enum class ButtonGenTarget { ALL, PRESSED, DISABLED }
 }

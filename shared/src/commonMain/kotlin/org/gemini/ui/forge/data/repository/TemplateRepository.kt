@@ -23,6 +23,7 @@ class TemplateRepository(
     private val httpClient: HttpClient = NetworkClient.shared
 ) {
 
+    /** 模板项目存放在数据根目录下的相对子目录名称 */
     val PROJECTS_DIR = "templates"
 
     /**
@@ -179,6 +180,12 @@ class TemplateRepository(
         }
     }
 
+    /**
+     * 递归清洗图元树中子节点的路径信息。
+     *
+     * @param blocks 待清洗的图元列表
+     * @return 清洗完成后的图元列表
+     */
     private fun cleanBlockPaths(blocks: List<UIBlock>): List<UIBlock> {
         return blocks.map { block ->
             block.copy(
@@ -196,6 +203,14 @@ class TemplateRepository(
         fileStorage.deleteDirectory("$PROJECTS_DIR/$sanitizedName")
     }
 
+    /**
+     * 手动将 Base64 图片数据解码并保存为指定图元的新资产图片。
+     *
+     * @param templateName 模板项目名称
+     * @param blockId 目标图元唯一标识
+     * @param base64Data 图片的 Base64 编码字符串（支持 Data URI 前缀）
+     * @return 保存成功后的 [TemplateFile] 强类型文件句柄
+     */
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun saveResource(templateName: String, blockId: String, base64Data: String): TemplateFile {
         val sanitizedName = templateName.replace(" ", "_")
@@ -254,6 +269,13 @@ class TemplateRepository(
         return sanitizeName(match.first) to match.second
     }
 
+    /**
+     * 扫描本地已保存的所有模板项目，并返回名称与工程状态的配对列表。
+     *
+     * 内部自动执行参考图物理有效性校验，确保丢失文件的模块在内存中置空而不会崩溃。
+     *
+     * @return 包含模板标题与 [ProjectState] 的二元组列表
+     */
     suspend fun getTemplates(): List<Pair<String, ProjectState>> {
         AppLogger.d("TemplateRepository", "🔍 正在扫描本地模板列表...")
         val dirs = fileStorage.listDirectories(PROJECTS_DIR)
@@ -298,14 +320,30 @@ class TemplateRepository(
         return projectState.copy(pages = updatedPages)
     }
 
+    /**
+     * 更新本地持久化数据根目录路径。
+     *
+     * @param newPath 新的数据存储绝对物理路径
+     * @return 迁移/切换成功返回 true，失败返回 false
+     */
     suspend fun updateStorageDir(newPath: String): Boolean {
         return fileStorage.updateDataDir(newPath)
     }
 
+    /**
+     * 获取当前有效的数据存储根目录绝对路径。
+     *
+     * @return 当前数据目录绝对路径
+     */
     suspend fun getDataDir(): String {
         return fileStorage.getDataDir()
     }
 
+    /**
+     * 在操作系统的原生文件资源管理器中打开指定模板工程所在的物理目录。
+     *
+     * @param module 目标 UI 模块或模板工程信息
+     */
     suspend fun openFileDir(module: UIModule) {
         val sanitizedName = module.id.replace(" ", "_")
         val path = fileStorage.getDataDir() + "/$PROJECTS_DIR/$sanitizedName"

@@ -82,6 +82,14 @@ object ResourceBindingValidator {
 
 /**
  * 资源失效校验详细报告数据类
+ *
+ * @property pageId 发生失效的页面 ID
+ * @property pageName 页面显示名称
+ * @property blockId 发生失效的模块 ID
+ * @property blockName 模块显示名称
+ * @property invalidIndex 第一个失效的路径层级索引（从 0 开始）
+ * @property invalidKey 失效的具体键名
+ * @property fullPath 完整的绑定路径层级列表
  */
 data class InvalidBindingReport(
     val pageId: String,

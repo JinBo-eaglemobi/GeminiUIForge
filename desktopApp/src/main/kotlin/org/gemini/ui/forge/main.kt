@@ -15,6 +15,17 @@ import org.jetbrains.skiko.hostOs
 import java.io.File
 import kotlin.math.abs
 
+/**
+ * 桌面端主程序入口函数
+ * 
+ * 职责包含：
+ * 1. 注册全局未捕获崩溃异常拦截器；
+ * 2. 检查并处理 JVM 自定义内存配置自举重启（Trampoline）；
+ * 3. 读取用户持久化视口尺寸与坐标；
+ * 4. 启动 Compose 桌面窗口并分发生命周期。
+ *
+ * @param args 命令行启动入参
+ */
 fun main(args: Array<String>) {
     // 0. 注册全局未捕获崩溃异常拦截器，确保任何 EDT/后台协程致命异常均被持久化写入本地日志
     Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->

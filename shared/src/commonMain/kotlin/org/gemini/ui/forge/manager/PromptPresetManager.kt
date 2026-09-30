@@ -9,6 +9,14 @@ import org.gemini.ui.forge.utils.looseJson
 
 /**
  * 抠图/改图场景预设提示词项
+ *
+ * @property id 预设唯一标识 ID
+ * @property nameZh 中文显示名称
+ * @property descriptionZh 中文场景描述说明
+ * @property promptZh 中文提示词正文
+ * @property nameEn 英文显示名称
+ * @property descriptionEn 英文场景描述说明
+ * @property promptEn 英文提示词正文
  */
 @Serializable
 data class MattingPreset(

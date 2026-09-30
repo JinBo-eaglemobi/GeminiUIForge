@@ -1,5 +1,8 @@
 package org.gemini.ui.forge.ui.component.selector
 
+import org.gemini.ui.forge.utils.geometry.RectTransformHelper
+import org.gemini.ui.forge.utils.geometry.TransformHandle
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -66,13 +69,9 @@ sealed class RegionImageSource {
 }
 
 /**
- * 8 方向手柄枚举
+ * 8 方向手柄类型别名（统一收口至 RectTransformHelper.TransformHandle）
  */
-enum class RegionHandle {
-    TOP_LEFT, TOP_CENTER, TOP_RIGHT,
-    CENTER_LEFT, CENTER_RIGHT,
-    BOTTOM_LEFT, BOTTOM_CENTER, BOTTOM_RIGHT
-}
+typealias RegionHandle = TransformHandle
 
 /**
  * 全局通用高精度图片选区裁切组件 (UniversalImageRegionSelector)
@@ -712,7 +711,7 @@ fun UniversalImageRegionSelector(
 }
 
 /**
- * 8 方向手柄点击命中测试算法
+ * 8 方向手柄点击命中测试算法（委托至 RectTransformHelper）
  */
 fun hitTestHandle(
     rect: SerialRect,
@@ -720,37 +719,13 @@ fun hitTestHandle(
     logicalY: Float,
     touchSlopLogical: Float
 ): RegionHandle? {
-    val l = min(rect.left, rect.right)
-    val r = max(rect.left, rect.right)
-    val t = min(rect.top, rect.bottom)
-    val b = max(rect.top, rect.bottom)
-
-    fun isNear(targetX: Float, targetY: Float): Boolean {
-        val dx = logicalX - targetX
-        val dy = logicalY - targetY
-        return (dx * dx + dy * dy) <= (touchSlopLogical * touchSlopLogical)
-    }
-
-    val cx = (l + r) / 2f
-    val cy = (t + b) / 2f
-
-    return when {
-        isNear(l, t) -> RegionHandle.TOP_LEFT
-        isNear(r, t) -> RegionHandle.TOP_RIGHT
-        isNear(l, b) -> RegionHandle.BOTTOM_LEFT
-        isNear(r, b) -> RegionHandle.BOTTOM_RIGHT
-        isNear(cx, t) -> RegionHandle.TOP_CENTER
-        isNear(cx, b) -> RegionHandle.BOTTOM_CENTER
-        isNear(l, cy) -> RegionHandle.CENTER_LEFT
-        isNear(r, cy) -> RegionHandle.CENTER_RIGHT
-        else -> null
-    }
+    return RectTransformHelper.hitTestHandle(rect, logicalX, logicalY, touchSlopLogical)
 }
 
 /**
  * 选区拉伸尺寸计算：光标绝对坐标直接锚定法 (Direct Cursor Pinning)
  *
- * 彻底废除增量累加，手柄物理位置直接绑定鼠标当前反投影的逻辑点，100% 绝对实时对齐，误差永远为 0。
+ * 委托至 RectTransformHelper.resizeRectDirectPin，100% 绝对实时对齐，误差永远为 0。
  */
 fun resizeRegionDirectPin(
     current: SerialRect,
@@ -761,90 +736,24 @@ fun resizeRegionDirectPin(
     maxH: Float,
     minSize: Float = 8f
 ): SerialRect {
-    var l = min(current.left, current.right)
-    var r = max(current.left, current.right)
-    var t = min(current.top, current.bottom)
-    var b = max(current.top, current.bottom)
-
-    val cx = (l + r) / 2f
-    val cy = (t + b) / 2f
-
-    when (handle) {
-        RegionHandle.TOP_LEFT -> {
-            l = cursorPos.x.coerceIn(0f, (r - minSize).coerceAtLeast(0f))
-            t = cursorPos.y.coerceIn(0f, (b - minSize).coerceAtLeast(0f))
-            if (isAltCenterResize) {
-                val dx = cx - l
-                val dy = cy - t
-                r = (cx + dx).coerceIn((l + minSize).coerceAtMost(maxW), maxW)
-                b = (cy + dy).coerceIn((t + minSize).coerceAtMost(maxH), maxH)
-            }
-        }
-        RegionHandle.TOP_CENTER -> {
-            t = cursorPos.y.coerceIn(0f, (b - minSize).coerceAtLeast(0f))
-            if (isAltCenterResize) {
-                val dy = cy - t
-                b = (cy + dy).coerceIn((t + minSize).coerceAtMost(maxH), maxH)
-            }
-        }
-        RegionHandle.TOP_RIGHT -> {
-            r = cursorPos.x.coerceIn((l + minSize).coerceAtMost(maxW), maxW)
-            t = cursorPos.y.coerceIn(0f, (b - minSize).coerceAtLeast(0f))
-            if (isAltCenterResize) {
-                val dx = r - cx
-                val dy = cy - t
-                l = (cx - dx).coerceIn(0f, (r - minSize).coerceAtLeast(0f))
-                b = (cy + dy).coerceIn((t + minSize).coerceAtMost(maxH), maxH)
-            }
-        }
-        RegionHandle.CENTER_LEFT -> {
-            l = cursorPos.x.coerceIn(0f, (r - minSize).coerceAtLeast(0f))
-            if (isAltCenterResize) {
-                val dx = cx - l
-                r = (cx + dx).coerceIn((l + minSize).coerceAtMost(maxW), maxW)
-            }
-        }
-        RegionHandle.CENTER_RIGHT -> {
-            r = cursorPos.x.coerceIn((l + minSize).coerceAtMost(maxW), maxW)
-            if (isAltCenterResize) {
-                val dx = r - cx
-                l = (cx - dx).coerceIn(0f, (r - minSize).coerceAtLeast(0f))
-            }
-        }
-        RegionHandle.BOTTOM_LEFT -> {
-            l = cursorPos.x.coerceIn(0f, (r - minSize).coerceAtLeast(0f))
-            b = cursorPos.y.coerceIn((t + minSize).coerceAtMost(maxH), maxH)
-            if (isAltCenterResize) {
-                val dx = cx - l
-                val dy = b - cy
-                r = (cx + dx).coerceIn((l + minSize).coerceAtMost(maxW), maxW)
-                t = (cy - dy).coerceIn(0f, (b - minSize).coerceAtLeast(0f))
-            }
-        }
-        RegionHandle.BOTTOM_CENTER -> {
-            b = cursorPos.y.coerceIn((t + minSize).coerceAtMost(maxH), maxH)
-            if (isAltCenterResize) {
-                val dy = b - cy
-                t = (cy - dy).coerceIn(0f, (b - minSize).coerceAtLeast(0f))
-            }
-        }
-        RegionHandle.BOTTOM_RIGHT -> {
-            r = cursorPos.x.coerceIn((l + minSize).coerceAtMost(maxW), maxW)
-            b = cursorPos.y.coerceIn((t + minSize).coerceAtMost(maxH), maxH)
-            if (isAltCenterResize) {
-                val dx = r - cx
-                val dy = b - cy
-                l = (cx - dx).coerceIn(0f, (r - minSize).coerceAtLeast(0f))
-                t = (cy - dy).coerceIn(0f, (b - minSize).coerceAtLeast(0f))
-            }
-        }
-    }
-    return SerialRect(l, t, r, b)
+    return RectTransformHelper.resizeRectDirectPin(
+        current = current,
+        handle = handle,
+        cursorPos = cursorPos,
+        isAltCenterResize = isAltCenterResize,
+        maxW = maxW,
+        maxH = maxH,
+        minSize = minSize
+    )
 }
 
 /**
- * 选区拉伸尺寸计算核心方法（绝对安全防崩溃版）
+ * 选区拉伸尺寸计算核心方法（旧版增量法，已废弃）
  */
+@Deprecated(
+    message = "统一使用基于光标绝对坐标直接锚定的 resizeRegionDirectPin 或 RectTransformHelper.resizeRectDirectPin",
+    replaceWith = ReplaceWith("RectTransformHelper.resizeRectDirectPin(current, handle, cursorPos, isAltCenterResize, maxW, maxH, minSize)")
+)
 fun resizeRegion(
     current: SerialRect,
     handle: RegionHandle,

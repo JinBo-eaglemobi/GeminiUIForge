@@ -49,9 +49,8 @@ import org.gemini.ui.forge.model.app.ReferenceDisplayMode
 import org.gemini.ui.forge.state.ProjectWorkspaceState
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.ui.component.selector.RegionHandle
-import org.gemini.ui.forge.ui.component.selector.hitTestHandle
-import org.gemini.ui.forge.ui.component.selector.resizeRegionDirectPin
+import org.gemini.ui.forge.utils.geometry.RectTransformHelper
+import org.gemini.ui.forge.utils.geometry.TransformHandle
 import org.gemini.ui.forge.utils.*
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.abs
@@ -294,7 +293,7 @@ fun CanvasArea(
                         var isMultiSelectActive by remember { mutableStateOf(false) }
                         var isAltPressed by remember { mutableStateOf(false) }
                         var currentCursorIcon by remember { mutableStateOf(PointerIcon.Default) }
-                        var activeResizeHandle by remember { mutableStateOf<RegionHandle?>(null) }
+                        var activeResizeHandle by remember { mutableStateOf<TransformHandle?>(null) }
                         var resizingBlockId by remember { mutableStateOf<String?>(null) }
 
                         // ★ 手势参数动态快照：手势协程一律 pointerInput(Unit) 保持长效保活，
@@ -335,10 +334,10 @@ fun CanvasArea(
                                                         currentCursorIcon = PointerIcon.Hand
                                                     } else if (activeResizeHandle != null) {
                                                         currentCursorIcon = when (activeResizeHandle) {
-                                                            RegionHandle.TOP_CENTER, RegionHandle.BOTTOM_CENTER -> ResizeVerticalIcon
-                                                            RegionHandle.CENTER_LEFT, RegionHandle.CENTER_RIGHT -> ResizeHorizontalIcon
-                                                            RegionHandle.TOP_LEFT, RegionHandle.BOTTOM_RIGHT -> ResizeHorizontalIcon
-                                                            RegionHandle.TOP_RIGHT, RegionHandle.BOTTOM_LEFT -> ResizeVerticalIcon
+                                                            TransformHandle.TOP_CENTER, TransformHandle.BOTTOM_CENTER -> ResizeVerticalIcon
+                                                            TransformHandle.CENTER_LEFT, TransformHandle.CENTER_RIGHT -> ResizeHorizontalIcon
+                                                            TransformHandle.TOP_LEFT, TransformHandle.BOTTOM_RIGHT -> ResizeHorizontalIcon
+                                                            TransformHandle.TOP_RIGHT, TransformHandle.BOTTOM_LEFT -> ResizeVerticalIcon
                                                             null -> PointerIcon.Default
                                                         }
                                                     } else if (currentIsReadOnlyState) {
@@ -352,12 +351,12 @@ fun CanvasArea(
 
                                                         if (selectedAbsBounds != null) {
                                                             val handleSlopLogical = (16f / currentZoomState) / currentBaseScaleState
-                                                            val hoveredHandle = hitTestHandle(selectedAbsBounds, lx, ly, handleSlopLogical)
+                                                            val hoveredHandle = RectTransformHelper.hitTestHandle(selectedAbsBounds, lx, ly, handleSlopLogical)
                                                             currentCursorIcon = when (hoveredHandle) {
-                                                                RegionHandle.TOP_CENTER, RegionHandle.BOTTOM_CENTER -> ResizeVerticalIcon
-                                                                RegionHandle.CENTER_LEFT, RegionHandle.CENTER_RIGHT -> ResizeHorizontalIcon
-                                                                RegionHandle.TOP_LEFT, RegionHandle.BOTTOM_RIGHT -> ResizeHorizontalIcon
-                                                                RegionHandle.TOP_RIGHT, RegionHandle.BOTTOM_LEFT -> ResizeVerticalIcon
+                                                                TransformHandle.TOP_CENTER, TransformHandle.BOTTOM_CENTER -> ResizeVerticalIcon
+                                                                TransformHandle.CENTER_LEFT, TransformHandle.CENTER_RIGHT -> ResizeHorizontalIcon
+                                                                TransformHandle.TOP_LEFT, TransformHandle.BOTTOM_RIGHT -> ResizeHorizontalIcon
+                                                                TransformHandle.TOP_RIGHT, TransformHandle.BOTTOM_LEFT -> ResizeVerticalIcon
                                                                 null -> PointerIcon.Default
                                                             }
                                                         } else {
@@ -440,7 +439,7 @@ fun CanvasArea(
                                                 val selectedAbsBounds = singleSelectedId?.let { currentBlocksState.calculateBlockAbsoluteBounds(it) }
                                                 val handleSlopLogical = (16f / currentZoomState) / currentBaseScaleState
                                                 val hitHandle = if (selectedAbsBounds != null) {
-                                                    hitTestHandle(selectedAbsBounds, lx, ly, handleSlopLogical)
+                                                    RectTransformHelper.hitTestHandle(selectedAbsBounds, lx, ly, handleSlopLogical)
                                                 } else null
 
                                                 if (hitHandle != null && singleSelectedId != null) {
@@ -495,7 +494,7 @@ fun CanvasArea(
                                                 val curAbsBounds = currentBlocksState.calculateBlockAbsoluteBounds(targetId)
 
                                                 if (curBlock != null && curAbsBounds != null) {
-                                                    val newAbsRect = resizeRegionDirectPin(
+                                                    val newAbsRect = RectTransformHelper.resizeRectDirectPin(
                                                         current = curAbsBounds,
                                                         handle = handle,
                                                         cursorPos = Offset(curLx, curLy),
@@ -504,16 +503,7 @@ fun CanvasArea(
                                                         maxH = pageHeight,
                                                         minSize = 16f
                                                     )
-                                                    val parentOffset = currentBlocksState.calculateBlockParentOffset(curBlock.id)
-                                                    val relLeft = newAbsRect.left - parentOffset.x
-                                                    val relTop = newAbsRect.top - parentOffset.y
-                                                    viewModel.updateBlockBounds(
-                                                        blockId = curBlock.id,
-                                                        left = relLeft,
-                                                        top = relTop,
-                                                        right = relLeft + newAbsRect.width,
-                                                        bottom = relTop + newAbsRect.height
-                                                    )
+                                                    viewModel.resizeBlock(curBlock.id, newAbsRect)
                                                 }
                                             } else if (dragTargetId != null) {
                                                 val curDensity = currentDensityState

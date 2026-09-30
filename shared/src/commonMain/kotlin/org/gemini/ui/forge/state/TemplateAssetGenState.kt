@@ -55,32 +55,50 @@ data class TemplateAssetGenState(
 
     /** 批量生成相关 */
     val showBatchGenDialog: Boolean = false,
-    val batchProgress: Pair<Int, Int>? = null, // (已完成, 总数)
+    /** 批量生图总体进度 (已完成数量 to 总计划任务数) */
+    val batchProgress: Pair<Int, Int>? = null,
+    /** 当前待人工确认或审核的图元实体 */
     val batchPendingConfirmBlock: UIBlock? = null,
-    val currentTaskStatus: String = "", // 实时单行任务状态
-    val activeWorkers: List<WorkerStatus> = emptyList(), // 任务 4 新增：并行工作槽位状态
+    /** 实时单行任务执行状态简述 */
+    val currentTaskStatus: String = "",
+    /** 并行并发工作槽位的实时状态列表 */
+    val activeWorkers: List<WorkerStatus> = emptyList(),
 
     /** 按钮多态生成对话框相关 */
     val showButtonGenDialog: Boolean = false,
+    /** 按钮按下态 (Pressed) 的自定义生图提示词 */
     val buttonPressedPrompt: String = "",
+    /** 按钮禁用态 (Disabled) 的自定义生图提示词 */
     val buttonDisabledPrompt: String = "",
+    /** 生成出的按钮按下态候选图片句柄 */
     val buttonPressedCandidate: TemplateFile? = null,
+    /** 生成出的按钮禁用态候选图片句柄 */
     val buttonDisabledCandidate: TemplateFile? = null,
+    /** 按钮多态批量生图是否正在执行中 */
     val isButtonGenInProgress: Boolean = false
 ) {
+    /** 当前选中的页面实体，若未选中则返回 null */
     val currentPage get() = project.pages.find { it.id == selectedPageId }
+    /** 当前选中的图元实体 */
     val selectedBlock: UIBlock?
         get() = currentPage?.blocks?.findBlockById(selectedBlockId ?: editingGroupId ?: "")
 }
 
 /**
- * 并行工作线程状态模型
+ * 并行工作线程/槽位状态模型 (WorkerStatus)
+ *
+ * @property id 槽位数字索引标识
+ * @property blockId 当前槽位正在处理的图元唯一标识
+ * @property action 当前正在执行的微操作简述 (如：调用大模型生图、执行本地抠图等)
+ * @property info 补充诊断或传输大小信息
+ * @property isBusy 该工作槽位当前是否处于繁忙计算中
+ * @property isCompleted 当前分配的子任务是否已经圆满完成
  */
 data class WorkerStatus(
-    val id: Int,             // 槽位索引
-    val blockId: String = "", // 当前正在处理的模块ID
-    val action: String = "",  // 当前动作 (如：生图中、抠图中)
-    val info: String = "",    // 进度或数据大小信息
+    val id: Int,
+    val blockId: String = "",
+    val action: String = "",
+    val info: String = "",
     val isBusy: Boolean = false,
     val isCompleted: Boolean = false
 )

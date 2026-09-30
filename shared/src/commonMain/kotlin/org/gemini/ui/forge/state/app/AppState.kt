@@ -9,6 +9,7 @@ import org.gemini.ui.forge.state.ui.ProjectState
 data class AppState(
     /** 当前项目的基础数据 */
     val projectName: String = "",
+    /** 当前激活的项目模板工程树状状态 */
     val project: ProjectState = ProjectState(),
 
     /** 应用全局配置状态 (主题、语言、导航等) */

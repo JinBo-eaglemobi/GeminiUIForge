@@ -5,6 +5,17 @@ import kotlin.math.*
 
 /**
  * 图像图案重叠综合评估结果
+ *
+ * @property zeroDiffRate 纯黑差值消隐率 (0.0 ~ 1.0)
+ * @property meanAbsoluteError 平均绝对误差 MAE (0.0 ~ 255.0)
+ * @property ssim 结构相似度 SSIM (0.0 ~ 1.0)
+ * @property edgeIoU Sobel 边缘轮廓交并比 (0.0 ~ 1.0)
+ * @property nccScore 归一化互相关匹配得分 (0.0 ~ 1.0)
+ * @property compositeAlignmentScore 综合对齐评分 CAS (0.0 ~ 1.0)
+ * @property rating 评级：PERFECT (>=0.90), GOOD (0.78~0.89), DEVIATED (<0.78)
+ * @property driftVectorX 推荐自愈平移补偿 Δx (像素)
+ * @property driftVectorY 推荐自愈平移补偿 Δy (像素)
+ * @property diffImageBytes 差值残差高亮可视化图像 (WebP 字节数组)
  */
 data class OverlapEvaluationResult(
     val zeroDiffRate: Float,              // 纯黑差值消隐率 (0.0 ~ 1.0)

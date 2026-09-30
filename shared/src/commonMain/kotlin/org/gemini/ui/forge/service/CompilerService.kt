@@ -12,6 +12,20 @@ import org.gemini.ui.forge.utils.ResourceBindingValidator
 import org.gemini.ui.forge.utils.looseJson
 import kotlin.math.abs
 
+/**
+ * 编译导出后的独立图元节点实体
+ *
+ * @property id 节点唯一标识
+ * @property type 图元类型（如 BUTTON, CONTAINER, IMAGE 等）
+ * @property name 节点可读显示名称
+ * @property x 导出绝对 X 坐标（像素）
+ * @property y 导出绝对 Y 坐标（像素）
+ * @property width 节点像素宽度
+ * @property height 节点像素高度
+ * @property description 节点用途与语义描述
+ * @property imagePath 关联导出的图片资源相对路径（若无贴图则为 null）
+ * @property children 嵌套包含的子图元列表
+ */
 @Serializable
 data class ExportedNode(
     val id: String,
@@ -26,6 +40,15 @@ data class ExportedNode(
     val children: List<ExportedNode> = emptyList()
 )
 
+/**
+ * 编译导出后的页面实体
+ *
+ * @property id 页面唯一标识
+ * @property name 页面名称
+ * @property width 画布设计宽度
+ * @property height 画布设计高度
+ * @property blocks 页面包含的顶层导出图元列表
+ */
 @Serializable
 data class ExportedPage(
     val id: String,
@@ -35,6 +58,12 @@ data class ExportedPage(
     val blocks: List<ExportedNode>
 )
 
+/**
+ * 编译导出的完整工程实体配置（GameConfig.json）
+ *
+ * @property projectName 工程名称
+ * @property pages 工程包含的所有页面列表
+ */
 @Serializable
 data class ExportedProject(
     val projectName: String,

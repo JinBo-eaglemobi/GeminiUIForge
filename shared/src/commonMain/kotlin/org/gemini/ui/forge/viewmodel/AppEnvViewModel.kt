@@ -67,6 +67,9 @@ class AppEnvViewModel(
         }
     }
 
+    /**
+     * 加载本地已安装的 Pip 依赖包列表并异步查询可用更新
+     */
     fun loadPipPackages() {
         viewModelScope.launch {
             _isPipLoading.value = true
@@ -102,6 +105,9 @@ class AppEnvViewModel(
         }
     }
 
+    /**
+     * 分页加载 PyPI 热门扩展包市场列表（支持骨架屏秒开与并发渐进式获取）
+     */
     fun loadMarketPage(pageIndex: Int = 0) {
         viewModelScope.launch {
             _isMarketLoading.value = true
@@ -181,6 +187,9 @@ class AppEnvViewModel(
         }
     }
 
+    /**
+     * 搜索指定的 PyPI 扩展包并拉取最新详情
+     */
     fun searchPipPackage(query: String) {
         if (query.isBlank()) {
             _searchResult.value = null
@@ -196,10 +205,16 @@ class AppEnvViewModel(
         }
     }
 
+    /**
+     * 清空当前搜索结果状态
+     */
     fun clearSearchResult() {
         _searchResult.value = null
     }
 
+    /**
+     * 批量安装或升级指定的 Pip 依赖包（流式收集日志）
+     */
     fun batchInstallPipPackages(names: List<String>) {
         if (names.isEmpty()) return
         viewModelScope.launch {
@@ -214,6 +229,9 @@ class AppEnvViewModel(
         }
     }
 
+    /**
+     * 批量卸载指定的 Pip 依赖包
+     */
     fun batchUninstallPipPackages(names: List<String>) {
         if (names.isEmpty()) return
         viewModelScope.launch {
@@ -228,6 +246,9 @@ class AppEnvViewModel(
         }
     }
 
+    /**
+     * 在默认系统浏览器中打开扩展包的发布日志 (Release Notes) 页面
+     */
     fun openPackageReleaseNotes(packageName: String) {
         viewModelScope.launch {
             val url = envService.fetchPackageUrl(packageName)

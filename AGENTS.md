@@ -48,13 +48,26 @@
 - **校验阶段人工交互流程优先规范 (Human-like Realistic Workflow for Validation)**: **【红线规则】**
   在日常校验、问题复现或实机验证阶段，**一律优先走正常的人工操作流程与完整交互链路**（如先选中图层、在界面属性面板正常点击开关或按钮、在图层树真实拖拽定位等）。**严禁为了图省事而频繁执行底层私有命令、修改内存对象或绕过 UI 流程直接打开内部功能**。只有通过完整的真实用户操作链路，才能切实暴露和验证 UI 线程事件分发、状态联动、弹窗时序与手势交互中的真实表现与潜在缺陷。
 - **破坏性文件与数据清理强制二次确认 (Mandatory Confirmation for Destructive Actions)**: **【红线规则】** 严禁编写“未经确认直接物理删除本地磁盘文件或核心数据”的代码。任何涉及物理删除文件、清空资产历史库、删除项目模板或破坏性重置的操作，**必须强制弹出带有清晰后果警示说明的二次确认弹窗（如 `AppConfirmDialog`）**，且确认操作必须使用警示样式（`isDestructive = true`）。
+- **功能参数可配置性审计规范 (Feature Configurability Audit Specification)**: **【红线规则】**
+  1. **严禁硬编码策略魔法数字 (No Magic Numbers for Policies)**：全项目凡涉及系统超时限制（Timeout）、异步轮询时长（Wait Duration）、重试次数（Retry Count）、批量数量上限（Batch Size）、图像缩放容差、算法阈值等关键业务与时延策略，**绝对严禁在底层函数或工具体内写死硬编码常数**。
+  2. **三级分流可配置架构 (Three-Tier Configuration Model)**：所有关键功能参数必须严格遵循三级解析与覆盖链：
+     - **第一级（调用端显式入参）**：工具/接口入参必须暴露对应参数（例如 `waitSeconds`），允许调用端根据具体的网络状况或客户端超时窗口按需覆盖；
+     - **第二级（系统级持久化配置中心兜底）**：在系统的配置模型（如 `McpConfig`、`WorkspaceConfig`、`CompileConfig` 等）中声明对应的可持久化字段（如 `defaultJobWaitSeconds`），并在配置中心/设置界面向用户开放调节；
+     - **第三级（物理硬边界防呆兜底）**：设定合理的出厂默认值，并在代码层对入参施加物理安全夹具（Clamp），例如长轮询等待上限强制限制为 $\le 45\text{s}$，严密守住外部客户端 60 秒硬超时防线，杜绝误配置引发死锁。
+  3. **新功能自检审计清单 (Mandatory Pre-Commit Checklist)**：凡开发新功能或重构现有模块，必须主动自问并审计：
+     - 当前逻辑是否存在硬编码的 `delay(...)`、`withTimeout(...)` 或循环次数？
+     - 该参数在弱网、高并发或特殊客户端下是否需要动态调整？
+     - 是否已在配置模型中提供可持久化字段与出厂默认值？
 - **定位底层具体实现 (Target Direct Implementations)**: 在 JetBrains Compose 等界面开发中，大片 UI 卡片常常被抽取成独立组件或同模块下的辅助文件。编辑前必须使用 `grep` 检索全文，**确保将具体修改落实到承载具体逻辑的组件定义体内，而不是主界面内的调用点**。
 - **首次交付前几何物理审查与阻断门禁 (Pre-Delivery Geometric Validation Gate)**: **【红线规则】**
   在模板逆向生成、自愈校准与首次交付前，必须执行严格的几何形态与物理外切审查。凡存在以下任一缺陷，强制判定为阻断级不合格（Blocker），必须先完成坐标与属性纠偏，绝对严禁解除大厅锁定或输出交付结论：
-  1. **底座截断**：外包矩形仅框住内部反光片或文本而将外部金属/厚度底座拦腰截断；
-  2. **正圆失真**：视觉正圆组件的宽高比偏离 1:1 或发光外环被切断；
-  3. **实体底座误标纯容器**：带有独立视觉材质的物理底座被错误标记为不生图纯容器；
-  4. **层级文字重叠打架**：子文本与容器标签发生重叠覆盖遮挡。
+  1. **实体漏框阻断**：原图存在明显独立的交互按键、状态栏、展示面板或核心图元实体，但在模板中完全缺失对应线框；
+  2. **位置飞脱与严重错位阻断**：线框与实体区域不重合或偏移超过其自身宽高的 30%，甚至跨区域画到了其它实体或空地上；
+  3. **粗暴打包未拆分阻断**：多个独立的交互按键或控制器被单个大框混装，未拆解定义出独立的子图元；
+  4. **底座截断**：外包矩形仅框住内部反光片或文本而将外部金属/厚度底座拦腰截断；
+  5. **正圆失真**：视觉正圆组件的宽高比偏离 1:1 或发光外环被切断；
+  6. **实体底座误标纯容器**：带有独立视觉材质的物理底座被错误标记为不生图纯容器；
+  7. **层级文字重叠打架**：子文本与容器标签发生重叠覆盖遮挡。
 
 ## 业务架构与模块模型规范
 
@@ -126,6 +139,11 @@
     控制点拉伸坐标**必须统一直接锚定在当前光标反投影到画布的逻辑绝对坐标点（`screenToLogical(cursorPosition)`）**。光标拖到哪个逻辑像素，手柄坐标就直接赋值到该像素，从根本上保证光标与手柄 100% 绝对粘合对齐，误差永远为 0 像素！
   - **手势协程唯一保活原则**：
     所有复杂画布手势修饰器一律使用长效保活的 `.pointerInput(Unit)`，动态视口状态（Scale、Pan、Bounds）一律通过 `rememberUpdatedState` 传入，严禁将动态变化的数据作为 key 传入，杜绝手势中途被打断重启。
+- **统一目标变换架构规范 (Unified Target Transform Architecture Specification)**: **【红线规则】**
+  - **纯数学几何算法统一收口 (Single Source of Truth for Geometry)**：
+    画布图元调整、全屏/局部选区拉伸、8 方向手柄判定与光标绝对坐标锚定计算，**必须 100% 统一复用纯数学几何工具类 `RectTransformHelper`**（位于 `org.gemini.ui.forge.utils.geometry.RectTransformHelper.kt`），其手柄枚举统一使用 `TransformHandle`。严禁在业务 Composable 或 ViewModel 中散落手写 8 方向坐标分支计算，杜绝算法分裂；
+  - **高阶业务语义管道化 (resizeBlock Pipeline)**：
+    修改图元边界时，UI 层**强制调用 `viewModel.resizeBlock(blockId, newAbsoluteBounds)`（或 `layoutEditor.resizeBlock(...)`）**。该方法内部自动通过 `targetBlock.toLocalBounds(newAbsoluteBounds)` 执行代数守恒的逆向局部映射并自动执行 `bindParents()`，**绝对禁止在 UI 层散落手写 `parentOffset.x/y` 的减法**！
 - **提示词编辑界面规范与组件复用 (Prompt UI & BilingualPromptEditor)**: **【红线规则】**
   - **严禁重复手搓 Prompt UI**：全项目凡是涉及或创建"AI 生图提示词 / 提交文案 (Prompt)"的输入与编辑界面（无论是在属性面板、弹窗还是页面中），**一律强制复用标准公共组件 `BilingualPromptEditor`**（位于 `org.gemini.ui.forge.ui.dialog.ai.component.BilingualPromptEditor` 或公共组件库），严禁在业务代码中再次手搓双语切换 Tab、输入框及优化按钮。
   - **组件核心规范与标准使用范式**：

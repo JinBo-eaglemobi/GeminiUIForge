@@ -27,6 +27,7 @@ data class ImageScaleConfig(
     val enabled: Boolean = false,
     val opaqueBounds: SerialRect? = null
 ) {
+    /** 是否处于初始默认配置状态（未启用且缩放为 1.0、偏置为 0） */
     val isDefault: Boolean
         get() = !enabled && scaleX == 1.0f && scaleY == 1.0f && offsetX == 0f && offsetY == 0f
 }

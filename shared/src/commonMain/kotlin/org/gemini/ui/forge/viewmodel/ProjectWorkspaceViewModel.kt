@@ -428,6 +428,11 @@ class ProjectWorkspaceViewModel(
         markDirty()
     }
 
+    /** 重设模块的绝对坐标与尺寸 (委托给 layoutEditor.resizeBlock) */
+    fun resizeBlock(blockId: String, newAbsoluteBounds: SerialRect) {
+        layoutEditor.resizeBlock(blockId, newAbsoluteBounds)
+    }
+
     /** 修改模块类型 */
     fun updateBlockType(blockId: String, type: UIBlockType) {
         historyManager.saveSnapshot("修改模块类型: $type")

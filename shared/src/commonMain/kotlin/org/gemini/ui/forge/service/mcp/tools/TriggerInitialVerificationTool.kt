@@ -21,6 +21,8 @@ import org.gemini.ui.forge.service.mcp.McpUiActionPipeline
 import org.gemini.ui.forge.service.mcp.UiRoadmapRegistry
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.UIBlockLayoutNormalizer
+import org.gemini.ui.forge.utils.geometry.GeometricHealthValidator
+import org.gemini.ui.forge.utils.geometry.GeometricIssueLevel
 import org.gemini.ui.forge.utils.readLocalFileBytes
 
 /**
@@ -62,12 +64,22 @@ class TriggerInitialVerificationTool : McpToolDefinition {
         val unlockWhenDone = arguments["unlockWhenDone"]?.jsonPrimitive?.booleanOrNull ?: false
 
         if (onlyUnlock) {
-            return if (!projectName.isNullOrBlank()) {
-                UiRoadmapRegistry.unmarkProjectGenerating(projectName)
-                McpToolResult.text("已成功解除项目 '$projectName' 在大厅的生成中锁定状态。")
-            } else {
-                McpToolResult.error("未指定 projectName，无法解除锁定状态")
+            if (projectName.isNullOrBlank()) {
+                return McpToolResult.error("未指定 projectName，无法解除锁定状态")
             }
+            val currentTemplate = repository.getTemplateByName(projectName)
+            val firstPage = currentTemplate?.pages?.firstOrNull()
+            if (firstPage != null) {
+                val issues = GeometricHealthValidator.validate(firstPage.blocks.bindParents(), firstPage.width, firstPage.height)
+                val blockers = issues.filter { it.level == GeometricIssueLevel.BLOCKER }
+                if (blockers.isNotEmpty()) {
+                    return McpToolResult.error("⚠️ 拒绝解除锁定！项目 '$projectName' 存在 ${blockers.size} 处阻断级几何缺陷：\n" +
+                        blockers.joinToString("\n") { "• ${it.description}" } +
+                        "\n必须先调用 update_block / delete_block / add_block 完成坐标纠偏，方可解除锁定！")
+                }
+            }
+            UiRoadmapRegistry.unmarkProjectGenerating(projectName)
+            return McpToolResult.text("已成功解除项目 '$projectName' 在大厅的生成中锁定状态。")
         }
 
         val vm = McpUiActionPipeline.getActiveViewModel()
@@ -180,16 +192,41 @@ class TriggerInitialVerificationTool : McpToolDefinition {
         onProgress?.invoke(0.8f, "正在持久化保存离线校对后的模板...")
         repository.saveTemplate(projectName, updatedState)
 
-        // 纯本地离屏渲染更新最新图元标注图并落盘缓存
+        // 纯本地离屏渲染生成初始与最新图元标注图并落盘缓存
+        var overlayPath: String? = null
         try {
-            org.gemini.ui.forge.service.TemplateOverlayRenderer.renderAndSaveLatest(projectName, updatedState)
+            val overlayRes = org.gemini.ui.forge.service.TemplateOverlayRenderer.renderAndSaveInitialAndLatest(projectName, updatedState)
+            overlayPath = overlayRes?.latestPath ?: overlayRes?.initialPath
         } catch (e: Exception) {
             println("[TriggerVerification] 更新标注图异常: ${e.message}")
         }
 
-        UiRoadmapRegistry.unmarkProjectGenerating(projectName)
+        // 执行几何健康度与实体独立性自动化审查门禁
+        val issues = GeometricHealthValidator.validate(calibratedBlocks.bindParents(), pageW, pageH)
+        val blockers = issues.filter { it.level == GeometricIssueLevel.BLOCKER }
 
-        val message = "成功在后台纯离线执行全量自愈与微观吸附！已校准 $calibratedCount 个图元，标记/规范化 $containerCount 个复合容器，数据已自动保存至 template.json。"
+        val unlockResultMsg: String
+        if (blockers.isNotEmpty()) {
+            UiRoadmapRegistry.markProjectGenerating(projectName, "自愈完成，但存在 ${blockers.size} 处几何重叠或飞脱待对账纠偏")
+            unlockResultMsg = "⚠️ 阻断级门禁已拦截锁定解除：检测到 ${blockers.size} 处严重几何缺陷：\n" +
+                blockers.joinToString("\n") { "• ${it.description}" } +
+                "\n👉 请立即查看全景标注图 (stage='initial') 与参考原图，执行全景宏观视觉对账（漏检调用 add_block、大框/飞脱调用 update_block、虚框调用 delete_block）。"
+        } else if (unlockWhenDone) {
+            UiRoadmapRegistry.unmarkProjectGenerating(projectName)
+            unlockResultMsg = "✅ 几何健康度核查 100% 通过（零飞脱、零重叠冲突），已安全解除大厅生成中锁定。"
+        } else {
+            unlockResultMsg = "ℹ️ 大厅保持生成中锁定状态 (unlockWhenDone 为 false)，请继续执行视觉核验。"
+        }
+
+        val message = buildString {
+            appendLine("🎯 后台离线全量自愈与微观吸附完成！")
+            appendLine("• 已校准图元: $calibratedCount 个，标记/规范化复合容器: $containerCount 个")
+            if (overlayPath != null) {
+                appendLine("• 全景标注图已离屏渲染落盘: $overlayPath")
+            }
+            appendLine("• 几何健康度检测结果: ${if (blockers.isEmpty()) "通过 (0 Blocker)" else "发现 ${blockers.size} 项 Blocker"}")
+            appendLine(unlockResultMsg)
+        }
         return McpToolResult.text(message)
     }
 }

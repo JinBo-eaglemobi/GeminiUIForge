@@ -50,6 +50,10 @@ class AskUserConfirmationTool : McpToolDefinition {
                 put("type", "integer")
                 put("description", "等待用户响应的超时秒数，默认 240 秒")
             })
+            put("async", buildJsonObject {
+                put("type", "boolean")
+                put("description", "可选：是否采用异步任务模式执行。默认为 true（立即返回 jobId 并通过 get_job_status 长轮询进度，彻底免疫客户端超时）。传入 false 则保持同步阻塞等待。")
+            })
         })
         put("required", buildJsonArray {
             add("title")
@@ -58,6 +62,26 @@ class AskUserConfirmationTool : McpToolDefinition {
     }
 
     override suspend fun execute(
+        arguments: JsonObject,
+        onProgress: ((progress: Float, message: String?) -> Unit)?
+    ): McpToolResult {
+        val isAsync = arguments["async"]?.jsonPrimitive?.booleanOrNull ?: true
+        if (isAsync) {
+            val jobId = org.gemini.ui.forge.service.mcp.McpJobManager.submitJob(name) { progressReporter ->
+                executeInternal(arguments, progressReporter)
+            }
+            val initialJson = buildJsonObject {
+                put("success", true)
+                put("jobId", jobId)
+                put("status", "PENDING")
+                put("message", "任务已提交至后台异步执行，请调用 'get_job_status' 配合 waitSeconds 参数进行长轮询获取进度与结果")
+            }.toString()
+            return McpToolResult.text(initialJson)
+        }
+        return executeInternal(arguments, onProgress)
+    }
+
+    private suspend fun executeInternal(
         arguments: JsonObject,
         onProgress: ((progress: Float, message: String?) -> Unit)?
     ): McpToolResult {

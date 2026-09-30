@@ -108,7 +108,7 @@ actual class LocalFileStorage {
         target.parentFile.mkdirs()
         target.writeText(content)
         AppLogger.d("LocalFileStorage", "📝 文本已保存: $fileName (${content.length} chars)")
-        return@withContext fileName
+        return@withContext target.absolutePath
     }
 
     actual suspend fun saveBytesToFile(fileName: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
@@ -116,7 +116,7 @@ actual class LocalFileStorage {
         target.parentFile.mkdirs()
         target.writeBytes(bytes)
         AppLogger.d("LocalFileStorage", "🎨 资源已保存: $fileName (${bytes.size / 1024} KB)")
-        return@withContext fileName
+        return@withContext target.absolutePath
     }
 
     actual suspend fun readFromFile(fileName: String): String? = withContext(Dispatchers.IO) {

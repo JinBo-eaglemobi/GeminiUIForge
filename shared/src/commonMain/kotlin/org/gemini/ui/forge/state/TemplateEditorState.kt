@@ -26,8 +26,9 @@ data class TemplateEditorState(
     val aiStatus: String = "",
     /** 是否显示 AI 任务进度对话框 */
     val showAITaskDialog: Boolean = false,
-    /** AI 优化指令模板 */
+    /** AI 优化指令模板 (针对已有图片进行局部微调) */
     val defaultRefineInstructionUpdate: String = "",
+    /** AI 优化指令模板 (针对全新生成图片) */
     val defaultRefineInstructionNew: String = "",
     /** 临时保存的舞台背景颜色 (不持久化到模板中) */
     val stageBackgroundColor: String = "#2D2D2D",
@@ -40,6 +41,8 @@ data class TemplateEditorState(
     /** 待删除的块 ID */
     val pendingDeleteBlockId: String? = null
 ) {
+    /** 当前选中的页面实体，若未选中则返回 null */
     val currentPage get() = project.pages.find { it.id == selectedPageId }
+    /** 当前高亮或选中的图元实体 */
     val selectedBlock: UIBlock? get() = currentPage?.blocks?.findBlockById(selectedBlockId ?: editingGroupId ?: "")
 }

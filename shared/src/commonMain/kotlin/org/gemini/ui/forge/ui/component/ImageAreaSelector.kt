@@ -19,9 +19,13 @@ import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.SerialRect
 
 /**
- * 通用的图片区域选择器组件
- * 支持绘制新选区、拖动已有选区位置，并自动限制在图片边界内
+ * 通用的图片区域选择器组件（旧版已废弃）
+ * 全局统一使用 UniversalImageRegionSelector 或 RectTransformHelper
  */
+@Deprecated(
+    message = "已废弃，全局统一使用 UniversalImageRegionSelector 或 RectTransformHelper",
+    replaceWith = ReplaceWith("UniversalImageRegionSelector")
+)
 @Composable
 fun ImageAreaSelector(
     imageUri: TemplateFile?,

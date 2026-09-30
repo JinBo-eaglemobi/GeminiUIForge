@@ -154,7 +154,9 @@ data class ProjectWorkspaceState(
     /** 中间渲染区域视图显示模式 (画布舞台 vs JSON 源码) */
     val workspaceViewMode: WorkspaceViewMode = WorkspaceViewMode.CANVAS
 ) {
+    /** 当前选中的页面实体，若未选中则回退到第一页 */
     val currentPage get() = project.pages.find { it.id == selectedPageId } ?: project.pages.firstOrNull()
+    /** 当前高亮或选中的图元实体 */
     val selectedBlock: UIBlock?
         get() = currentPage?.blocks?.findBlockById(selectedBlockId ?: editingGroupId ?: "")
 }

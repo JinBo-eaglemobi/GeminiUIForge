@@ -18,6 +18,14 @@ enum class McpClientType(
 
 /**
  * 客户端配置文件的探测与接入状态模型
+ *
+ * @property clientType 目标客户端类型
+ * @property name 客户端显示名称
+ * @property configPath 配置文件宿主机物理绝对路径
+ * @property isFileExists 物理配置文件是否存在
+ * @property isConfigured 是否已写入并接入了本程序的 MCP 服务
+ * @property configuredUrl 配置文件中记录的 MCP 服务 URL
+ * @property isServiceDisabled 是否在配置中显式标记禁用了该 MCP 服务
  */
 data class ClientAppConfigStatus(
     val clientType: McpClientType,
