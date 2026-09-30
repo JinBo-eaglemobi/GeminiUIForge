@@ -41,8 +41,12 @@
      - 若当前挂载了 IDEA MCP 工具，**强制优先调用 `idea_execute_run_configuration(configurationName = "compileDesktop", projectPath = "<项目绝对根路径>", timeout = 180000, waitForExit = true)`**；
      - 运行配置位于 `.run/compileDesktop.run.xml`，以 `exitCode: 0` 作为桌面端真实编译通过的终审凭证；
   2. **快速语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 或 `idea_build_project` 做毫秒级局部语法速查；
-  3. **兜底通道 (命令行 Gradle)**：仅当无 IDEA MCP 工具时回退命令行：`./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`；
-  4. 纯文档、注释或非代码修改不触发编译校验。
+   3. **兜底通道 (命令行 Gradle)**：仅当无 IDEA MCP 工具时回退命令行：`./gradlew :desktopApp:compileKotlin`（严格遵循单一终端原则，严禁并列 `:shared`）；
+   4. 纯文档、注释或非代码修改不触发编译校验。
+- **Gradle 单一终端模块编译调用去重红线 (Single Terminal Task Invocation Redline)**: **【红线规则】**
+  1. **【严厉禁令】严禁并列上游与下游模块任务**：在任何终端命令行执行、脚本调用、文档指引或 AI 自动校验过程中，**绝对严禁**执行形如 `./gradlew :shared:<task> :<appModule>:<task>` 的复合命令（例如严厉禁止 `./gradlew :shared:compileKotlinWasmJs :webApp:compileKotlinWasmJs`，严禁 `./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`）；
+  2. **【单一终端原则】只调度最下游终端模块**：凡涉及 Application 工程的编译验证，**一律且仅指定单一终端模块对应的编译任务**（例如桌面端只需指定 `:desktopApp:compileKotlin`，Web 端只需指定 `:webApp:compileKotlinJs`，Android 端只需指定 `:androidApp:compileDebugKotlin`）。必须充分信任并利用 Gradle 官方原生 DAG 依赖机制自动级联构建上游 `:shared`，彻底杜绝重复执行与冗余任务评估；
+  3. **【独立共享库特例】**：仅当单独对 `:shared` 共享模块本身执行独立单元测试（如 `:shared:jvmTest`）或纯共享库语法初筛且完全不涉及任何应用壳工程时，才允许单独执行 `:shared:compileKotlinJvm`。
 - **校验阶段仅校验桌面版（JVM 优先铁律）**: **【红线规则】** 自动化构建与闭环验证阶段**一律且仅执行桌面端 (JVM) 编译校验**。其他平台（Web / Android / iOS）全部交由手动按需校验，严禁在日常迭代后自动触发耗时冗长的多端全量编译，最大化提升开发反馈速度。
 - **物理校验优先 (Physical Check First)**: **【红线规则】** 外部脚本或工具修改文件后，切勿单凭编辑器的视觉表现来判断修改成败。必须始终通过原生 `git diff` 或 `read` / `Get-Content` 物理读取作为落盘的唯一铁证。
 - **校验阶段人工交互流程优先规范 (Human-like Realistic Workflow for Validation)**: **【红线规则】**
