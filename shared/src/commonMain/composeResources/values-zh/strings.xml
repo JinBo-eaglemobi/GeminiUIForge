@@ -329,6 +329,23 @@
     <!-- 游戏项目管理模块 -->
     <string name="screen_game_project_manager">游戏项目管理</string>
     <string name="screen_game_project_workspace">游戏项目工作台</string>
+    <string name="screen_ui_studio">UI Studio 工作室</string>
+    <string name="gp_create_mode_git">从 Git 远程仓库获取</string>
+    <string name="gp_create_mode_standalone">独立新建 UI 项目（直通 UI Studio）</string>
+    <string name="gp_create_mode_standalone_desc">一键初始化空白 UI 工程，直接进入 UI Studio 工作台</string>
+    <string name="uistudio_canvas_resolution">画布分辨率</string>
+    <string name="uistudio_res_1080p">1920 × 1080 (16:9 横屏标准)</string>
+    <string name="uistudio_res_720p">1280 × 720 (16:9 高清横屏)</string>
+    <string name="uistudio_res_mobile">1080 × 1920 (9:16 移动竖屏)</string>
+    <string name="uistudio_res_custom">自定义尺寸</string>
+    <string name="uistudio_btn_create_and_enter">创建并进入工作室</string>
+    <string name="uistudio_topbar_back_tip">返回大厅 (Esc)</string>
+    <string name="uistudio_topbar_save_tip">保存工程 (Ctrl+S)</string>
+    <string name="uistudio_asset_panel_title">素材库</string>
+    <string name="uistudio_asset_panel_empty">暂无素材，点击上方“+ 添加素材”或导入图集</string>
+    <string name="uistudio_btn_add_asset">添加素材</string>
+    <string name="uistudio_btn_import_sheet">AI 图集导入 (大图+JSON)</string>
+    <string name="uistudio_canvas_tip">滚轮缩放画布 / 按住中键或空格平移</string>
     <string name="gp_card_badge">游戏项目</string>
     <string name="gp_new_card_title">新建游戏项目</string>
     <string name="gp_new_card_hint">从 Git 仓库纳管并管理游戏项目</string>
@@ -615,4 +632,10 @@
     <string name="overlay_preview_show_all">全部显示</string>
     <string name="overlay_preview_solo">仅看此项</string>
     <string name="overlay_preview_layer_order">渲染顺序</string>
+
+    <!-- 项目同名检测与决策 -->
+    <string name="project_duplicate_title">项目名称已存在</string>
+    <string name="project_duplicate_msg">检测到已存在同名项目文件夹“%1$s”。请选择打开已有项目，或返回修改新项目名称后继续创建。</string>
+    <string name="project_duplicate_open_existing">打开已有项目</string>
+    <string name="project_duplicate_rename">修改项目名称</string>
 </resources>

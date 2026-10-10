@@ -319,6 +319,23 @@
     <!-- Game Project Manager -->
     <string name="screen_game_project_manager">Game Project Manager</string>
     <string name="screen_game_project_workspace">Game Project Workspace</string>
+    <string name="screen_ui_studio">UI Studio</string>
+    <string name="gp_create_mode_git">From Git Repository</string>
+    <string name="gp_create_mode_standalone">Standalone UI Project (Direct to UI Studio)</string>
+    <string name="gp_create_mode_standalone_desc">Initialize a blank UI project and enter UI Studio directly</string>
+    <string name="uistudio_canvas_resolution">Canvas Resolution</string>
+    <string name="uistudio_res_1080p">1920 × 1080 (16:9 Landscape Standard)</string>
+    <string name="uistudio_res_720p">1280 × 720 (16:9 HD Landscape)</string>
+    <string name="uistudio_res_mobile">1080 × 1920 (9:16 Portrait)</string>
+    <string name="uistudio_res_custom">Custom</string>
+    <string name="uistudio_btn_create_and_enter">Create and Enter Studio</string>
+    <string name="uistudio_topbar_back_tip">Back to Home (Esc)</string>
+    <string name="uistudio_topbar_save_tip">Save Project (Ctrl+S)</string>
+    <string name="uistudio_asset_panel_title">Asset Library</string>
+    <string name="uistudio_asset_panel_empty">No assets yet. Click "+ Add Asset" or Import Sheet</string>
+    <string name="uistudio_btn_add_asset">Add Asset</string>
+    <string name="uistudio_btn_import_sheet">AI Sheet Import (Image+JSON)</string>
+    <string name="uistudio_canvas_tip">Scroll to zoom / Hold middle mouse or Space to pan</string>
     <string name="gp_card_badge">Game Project</string>
     <string name="gp_new_card_title">New Game Project</string>
     <string name="gp_new_card_hint">Import and manage a game from a Git repository</string>
@@ -605,4 +622,10 @@
     <string name="overlay_preview_show_all">Show All</string>
     <string name="overlay_preview_solo">Solo</string>
     <string name="overlay_preview_layer_order">Render Order</string>
+
+    <!-- Project Duplicate Dialog -->
+    <string name="project_duplicate_title">Project Name Already Exists</string>
+    <string name="project_duplicate_msg">A project folder named \"%1$s\" already exists. Would you like to open the existing project, or change the new project name to continue?</string>
+    <string name="project_duplicate_open_existing">Open Existing Project</string>
+    <string name="project_duplicate_rename">Change Project Name</string>
 </resources>

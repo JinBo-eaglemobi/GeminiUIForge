@@ -48,7 +48,8 @@ class PromptManager(private val storage: LocalFileStorage) {
         PromptMeta("refine_instruction_new", "模块新增生成默认指令", "在局部重塑时，针对新选区生成新模块的默认指令模板"),
         PromptMeta("audit_visual_diff", "通用全景视觉对账与几何差分审计", "用于 Gemini 视觉大模型对比参考原图与全景标注图，自动识别漏框、底座截断与虚框，生成增删改纠偏建议"),
         PromptMeta("image_gen_transparent", "透明背景生图引导指令", "指导视觉模型直接生成纯白/纯黑/可抠图背景的引导提示词"),
-        PromptMeta("gemini_image_gen", "Gemini 图像生成组装模板", "调用 Gemini 视觉模型生成单体 UI 图像时的顶层提示词组装结构")
+        PromptMeta("gemini_image_gen", "Gemini 图像生成组装模板", "调用 Gemini 视觉模型生成单体 UI 图像时的顶层提示词组装结构"),
+        PromptMeta("detect_asset_sheet_coords", "图集 SpriteSheet AI 视觉坐标检测", "用于调用 Gemini 视觉模型深度识别素材图集中的全部独立组件并提取精准外切坐标与类型")
     )
 
     private fun resolveFileName(functionName: String): String {

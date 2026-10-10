@@ -139,16 +139,42 @@ fun GameProjectCreateScreen(
             )
             Spacer(Modifier.height(spacing.medium))
 
-            OutlinedTextField(
-                value = form.name,
-                onValueChange = { value -> viewModel.updateForm { it.copy(name = value) } },
-                label = { Text(stringResource(Res.string.gp_form_name)) },
-                placeholder = { Text(stringResource(Res.string.gp_form_name_placeholder)) },
-                singleLine = true,
-                shape = AppShapes.small,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(spacing.medium))
+            // 创建分支模式切换器：从 Git 仓库克隆 vs 独立新建 UI 项目（直通 UI Studio）
+            var createModeIndex by remember { mutableStateOf(0) }
+
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = createModeIndex == 0,
+                    onClick = { createModeIndex = 0 },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                ) {
+                    Text("从 Git 仓库克隆")
+                }
+                SegmentedButton(
+                    selected = createModeIndex == 1,
+                    onClick = { createModeIndex = 1 },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                ) {
+                    Text("独立新建 UI 项目 (UI Studio)")
+                }
+            }
+            Spacer(Modifier.height(spacing.large))
+
+            if (createModeIndex == 1) {
+                // 分支 2：独立新建 UI 项目（直通 UI Studio）
+                StandaloneUIProjectForm(appViewModel = appViewModel)
+            } else {
+                // 分支 1：从 Git 仓库克隆工程
+                OutlinedTextField(
+                    value = form.name,
+                    onValueChange = { value -> viewModel.updateForm { it.copy(name = value) } },
+                    label = { Text(stringResource(Res.string.gp_form_name)) },
+                    placeholder = { Text(stringResource(Res.string.gp_form_name_placeholder)) },
+                    singleLine = true,
+                    shape = AppShapes.small,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(spacing.medium))
 
             OutlinedTextField(
                 value = form.repoUrl,
@@ -308,6 +334,7 @@ fun GameProjectCreateScreen(
                     color = MaterialTheme.colorScheme.error
                 )
             }
+            } // 结束分支 1 (Git 仓库克隆)
         }
 
         Spacer(Modifier.width(spacing.large))

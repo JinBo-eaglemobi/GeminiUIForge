@@ -1,0 +1,195 @@
+package org.gemini.ui.forge.ui.uistudio
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
+import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.model.app.AppScreen
+import org.gemini.ui.forge.ui.component.VerticalSplitter
+import org.gemini.ui.forge.ui.uistudio.chat.UIProjectAiStudioDialog
+import org.gemini.ui.forge.ui.uistudio.component.*
+import org.gemini.ui.forge.ui.uistudio.dialog.*
+import org.gemini.ui.forge.ui.uistudio.verify.AssetSliceVerifyDialog
+import org.gemini.ui.forge.viewmodel.AppViewModel
+
+/**
+ * 全新独立的 UI Studio 主工作台容器界面。
+ *
+ * 遵循一文件一 Composable 规范，聚合三栏双向自由拖拽工作台布局：
+ * - 顶部 TopBar 控制条
+ * - 左侧复合面板 LeftSidebar（上：视图界面列表 Views | 中：水平手柄 | 下：素材库 Assets）
+ * - 左侧纵向拖拽分割线 VerticalSplitter（支持自由拖拽左侧宽度）
+ * - 中部核心交互画布 CanvasArea（自适应占据剩余空间，默认自适应居中，悬浮 AI Chat 按钮）
+ * - 右侧纵向拖拽分割线 VerticalSplitter（支持自由拖拽右侧宽度）
+ * - 右侧图元属性 Inspector 面板 PropertyPanel
+ */
+@Composable
+fun UIStudioScreen(
+    appViewModel: AppViewModel,
+    templateRepository: TemplateRepository = remember { TemplateRepository() },
+    modifier: Modifier = Modifier
+) {
+    val projectState = appViewModel.state.value.project
+    val viewModel = remember(projectState?.projectId) {
+        UIStudioViewModel()
+    }
+    val state = viewModel.state
+
+    LaunchedEffect(projectState) {
+        viewModel.loadProject(projectState)
+        viewModel.checkDraft()
+    }
+
+    Scaffold(
+        topBar = {
+            UIStudioTopBar(
+                viewModel = viewModel,
+                templateRepo = templateRepository,
+                onBackToHome = {
+                    appViewModel.navigateTo(AppScreen.HOME)
+                }
+            )
+        },
+        modifier = modifier.fillMaxSize()
+    ) { innerPadding ->
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            val density = LocalDensity.current
+
+            // 左侧复合侧栏（上：视图 Views | 下：素材库 Assets，可上下拖拽高度）
+            if (state.isAssetPanelVisible) {
+                UIStudioLeftSidebar(
+                    viewModel = viewModel,
+                    templateRepo = templateRepository,
+                    modifier = Modifier
+                        .width(state.leftPanelWidth)
+                        .fillMaxHeight()
+                )
+
+                // 左侧纵向拖拽分割线
+                VerticalSplitter(
+                    onDrag = { deltaPx ->
+                        val deltaDp = with(density) { deltaPx.toDp() }
+                        viewModel.updateLeftPanelWidth(state.leftPanelWidth + deltaDp)
+                    }
+                )
+            }
+
+            // 中部核心交互画布（自适应占据剩余空间，默认自适应居中）
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            ) {
+                UIStudioCanvasArea(
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // 右侧纵向拖拽分割线
+            VerticalSplitter(
+                onDrag = { deltaPx ->
+                    val deltaDp = with(density) { deltaPx.toDp() }
+                    viewModel.updateRightPanelWidth(state.rightPanelWidth - deltaDp)
+                }
+            )
+
+            // 右侧图元属性面板（可自由拖拽宽度）
+            UIStudioPropertyPanel(
+                viewModel = viewModel,
+                modifier = Modifier
+                    .width(state.rightPanelWidth)
+                    .fillMaxHeight()
+            )
+        }
+
+        // 挂载新建视图界面弹窗
+        if (state.isNewViewDialogVisible) {
+            NewViewDialog(
+                defaultWidth = state.canvasWidth,
+                defaultHeight = state.canvasHeight,
+                onDismiss = { viewModel.closeNewViewDialog() },
+                onConfirm = { name, w, h ->
+                    viewModel.createView(name, w, h, templateRepository)
+                }
+            )
+        }
+
+        // 挂载新建素材文件夹弹窗
+        if (state.isNewFolderDialogVisible) {
+            NewFolderDialog(
+                onDismiss = { viewModel.closeNewFolderDialog() },
+                onConfirm = { name ->
+                    viewModel.createAssetFolder(name)
+                }
+            )
+        }
+
+        // 挂载项目级 AI Studio 智能工作台全景弹窗 (0.92f 视口规格)
+        if (state.isAiChatDialogVisible) {
+            UIProjectAiStudioDialog(
+                viewModel = viewModel,
+                onDismiss = { viewModel.closeAiChatDialog() }
+            )
+        }
+
+        // 挂载未完成切片草稿恢复对话框
+        if (state.isDraftPromptVisible) {
+            val draft = state.importDraft
+            if (draft != null) {
+                AssetImportDraftDialog(
+                    draft = draft,
+                    onResume = { viewModel.resumeDraft() },
+                    onDiscard = { viewModel.discardDraft() }
+                )
+            }
+        }
+
+        // 挂载导入图集配置与解析预览弹窗 (阶段二)
+        if (state.isImportSheetDialogVisible) {
+            ImportAssetSheetDialog(
+                viewModel = viewModel,
+                onProceedToVerify = {
+                    viewModel.proceedToVerifyDialog()
+                }
+            )
+        }
+
+        // 挂载切图前交互式预审与微调弹窗 (阶段三)
+        if (state.isVerifySliceDialogVisible) {
+            AssetSliceVerifyDialog(
+                visible = state.isVerifySliceDialogVisible,
+                imagePath = state.sourceImagePath,
+                initialItems = state.verifySliceItems,
+                autoRemoveBg = state.autoRemoveBgOnSlice,
+                onToggleAutoRemoveBg = { viewModel.updateAutoRemoveBgOnSlice(it) },
+                onDismiss = { viewModel.closeVerifySliceDialog() },
+                onConfirmSlice = { items ->
+                    viewModel.onConfirmSlice(
+                        items = items,
+                        repo = templateRepository,
+                        onProjectUpdated = { updatedProject ->
+                            appViewModel.loadProject(updatedProject.projectId, updatedProject)
+                        }
+                    )
+                },
+                onSaveDraft = { items -> viewModel.saveDraft(items) }
+            )
+        }
+
+        // 挂载切片中全景进度遮罩 (阶段四)
+        if (state.isSlicingAssets) {
+            AssetSlicingProgressOverlay(
+                progress = state.sliceProgress,
+                statusText = state.sliceStatusText
+            )
+        }
+    }
+}

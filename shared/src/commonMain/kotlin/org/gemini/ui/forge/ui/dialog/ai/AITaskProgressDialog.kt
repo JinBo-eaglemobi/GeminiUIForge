@@ -27,6 +27,7 @@ import geminiuiforge.composeapp.generated.resources.log_title
 import geminiuiforge.composeapp.generated.resources.toast_log_copied
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -67,8 +68,9 @@ fun AITaskProgressDialog(
             usePlatformDefaultWidth = false
         )
     ) {
+        val spacing = LocalAppSpacing.current
         Surface(
-            modifier = Modifier.fillMaxWidth(0.85f).heightIn(min = 400.dp, max = 700.dp),
+            modifier = Modifier.width(spacing.dialogMediumWidth).heightIn(min = 400.dp, max = 700.dp),
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 8.dp

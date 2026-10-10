@@ -47,7 +47,7 @@ fun StudioReferenceSourceDialog(
     ) {
         Surface(
             modifier = Modifier
-                .widthIn(min = 460.dp, max = 560.dp)
+                .width(spacing.dialogConfigWidth)
                 .wrapContentHeight()
                 .padding(spacing.medium),
             shape = AppShapes.large,

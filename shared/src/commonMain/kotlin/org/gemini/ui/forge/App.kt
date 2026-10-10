@@ -72,6 +72,7 @@ import org.gemini.ui.forge.viewmodel.AppSettingsViewModel
 import org.gemini.ui.forge.viewmodel.AppUpdateViewModel
 import org.gemini.ui.forge.viewmodel.AppViewModel
 import org.gemini.ui.forge.viewmodel.GameProjectViewModel
+import org.gemini.ui.forge.ui.uistudio.UIStudioScreen
 import kotlin.time.Duration.Companion.milliseconds
 
 private var originalSystemLanguage: String? = null
@@ -137,6 +138,7 @@ fun App(typography: Typography? = null) {
                 val screenType = when (globalState.currentScreen) {
                     AppScreen.HOME -> org.gemini.ui.forge.service.mcp.ScreenType.TEMPLATE_LIST
                     AppScreen.PROJECT_WORKSPACE -> org.gemini.ui.forge.service.mcp.ScreenType.PROJECT_WORKSPACE
+                    AppScreen.UI_STUDIO -> org.gemini.ui.forge.service.mcp.ScreenType.PROJECT_WORKSPACE
                     AppScreen.TEMPLATE_GENERATOR -> org.gemini.ui.forge.service.mcp.ScreenType.VISUAL_CHAT_STUDIO
                     else -> org.gemini.ui.forge.service.mcp.ScreenType.TEMPLATE_LIST
                 }
@@ -646,6 +648,13 @@ fun App(typography: Typography? = null) {
 
                                 AppScreen.GAME_PROJECT_WORKSPACE -> {
                                     GameProjectWorkspaceScreen(viewModel = gameProjectViewModel)
+                                }
+
+                                AppScreen.UI_STUDIO -> {
+                                    UIStudioScreen(
+                                        appViewModel = appViewModel,
+                                        templateRepository = templateRepo
+                                    )
                                 }
                             }
                         }

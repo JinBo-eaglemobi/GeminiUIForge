@@ -52,7 +52,7 @@ fun ButtonStateGenDialog(
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp,
             modifier = Modifier
-                .widthIn(min = 640.dp, max = spacing.dialogMediumWidth)
+                .width(spacing.dialogMediumWidth)
                 .padding(spacing.medium)
         ) {
             Column(modifier = Modifier.padding(24.dp)) {

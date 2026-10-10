@@ -26,12 +26,32 @@ object CalibrationOptionsManager {
     /** 持久化键名：选项 b (切图落盘) */
     private const val KEY_ALSO_CROP = "CALIBRATE_ALSO_CROP"
 
+    /** 持久化键名：智能吸附多轮自适应收敛最大迭代次数 */
+    private const val KEY_SNAP_MAX_ITERATIONS = "SNAP_MAX_ITERATIONS"
+
+    /** 持久化键名：智能吸附自适应收敛容差阈值 (像素) */
+    private const val KEY_SNAP_CONVERGENCE_THRESHOLD = "SNAP_CONVERGENCE_THRESHOLD"
+
+    /** 出厂默认值：智能吸附最大迭代次数 */
+    const val DEFAULT_SNAP_MAX_ITERATIONS = 4
+
+    /** 出厂默认值：智能吸附收敛位移阈值 (像素) */
+    const val DEFAULT_SNAP_CONVERGENCE_THRESHOLD = 0.5f
+
     /** 选项 a：校验后参考数据同步模块数据 (UI 默认未勾选，用户显式切换后遵循缓存) */
     var syncData: Boolean = false
         private set
 
     /** 选项 b：校验后切图并保存到磁盘 */
     var alsoCrop: Boolean = false
+        private set
+
+    /** 智能吸附多轮自适应收敛最大迭代次数 (可配置，受 1..10 物理夹具保护) */
+    var snapMaxIterations: Int = DEFAULT_SNAP_MAX_ITERATIONS
+        private set
+
+    /** 智能吸附自适应收敛容差阈值 (可配置，受 0.1f..5.0f 物理夹具保护) */
+    var snapConvergenceThreshold: Float = DEFAULT_SNAP_CONVERGENCE_THRESHOLD
         private set
 
     /** 用户是否曾经显式切换过选项 (存在持久化缓存记录) */
@@ -55,10 +75,16 @@ object CalibrationOptionsManager {
         try {
             val sync = configManager.loadKey(KEY_SYNC_DATA)?.toBooleanStrictOrNull()
             val crop = configManager.loadKey(KEY_ALSO_CROP)?.toBooleanStrictOrNull()
+            val snapIter = configManager.loadKey(KEY_SNAP_MAX_ITERATIONS)?.toIntOrNull()
+            val snapThresh = configManager.loadKey(KEY_SNAP_CONVERGENCE_THRESHOLD)?.toFloatOrNull()
+
             if (sync != null) syncData = sync
             if (crop != null) alsoCrop = crop
+            if (snapIter != null) snapMaxIterations = snapIter.coerceIn(1, 10)
+            if (snapThresh != null) snapConvergenceThreshold = snapThresh.coerceIn(0.1f, 5.0f)
+
             // 只要存在任意持久化记录，即视为用户曾经显式设置过
-            hasCachedRecord = sync != null || crop != null
+            hasCachedRecord = sync != null || crop != null || snapIter != null || snapThresh != null
         } catch (e: Exception) {
             AppLogger.w("CalibrationOptions", "读取校验选项缓存失败: ${e.message}")
         } finally {
@@ -94,6 +120,28 @@ object CalibrationOptionsManager {
                 configManager.saveKey(KEY_ALSO_CROP, newAlsoCrop.toString())
             } catch (e: Exception) {
                 AppLogger.w("CalibrationOptions", "持久化校验选项失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 更新智能吸附迭代配置并异步持久化到 config.conf
+     *
+     * @param maxIterations 最大迭代次数 (受 1..10 夹具保护)
+     * @param threshold 收敛位移阈值 (像素，受 0.1f..5.0f 夹具保护)
+     */
+    fun updateSnapConfig(maxIterations: Int, threshold: Float = DEFAULT_SNAP_CONVERGENCE_THRESHOLD) {
+        val clampedIter = maxIterations.coerceIn(1, 10)
+        val clampedThresh = threshold.coerceIn(0.1f, 5.0f)
+        snapMaxIterations = clampedIter
+        snapConvergenceThreshold = clampedThresh
+        hasCachedRecord = true
+        ioScope.launch {
+            try {
+                configManager.saveKey(KEY_SNAP_MAX_ITERATIONS, clampedIter.toString())
+                configManager.saveKey(KEY_SNAP_CONVERGENCE_THRESHOLD, clampedThresh.toString())
+            } catch (e: Exception) {
+                AppLogger.w("CalibrationOptions", "持久化智能吸附配置失败: ${e.message}")
             }
         }
     }

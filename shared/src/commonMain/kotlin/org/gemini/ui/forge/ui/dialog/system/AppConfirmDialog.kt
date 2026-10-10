@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.window.DialogProperties
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -34,6 +35,7 @@ fun AppConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
         // 引入标准弹窗黄金宽度 Design Token（440.dp），横向拉撑，杜绝硬编码，使微型确认框在 0.7 密度下依旧舒展大气
         modifier = Modifier.width(LocalAppSpacing.current.dialogConfirmWidth),
         title = {

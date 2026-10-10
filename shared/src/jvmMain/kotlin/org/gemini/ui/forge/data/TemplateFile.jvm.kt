@@ -32,8 +32,12 @@ actual suspend fun isFileExistsInternal(absPath: String): Boolean = withContext(
 }
 
 actual suspend fun readBytesInternal(absPath: String): ByteArray? = withContext(Dispatchers.IO) {
-    val file = File(absPath)
-    if (file.exists()) file.readBytes() else null
+    try {
+        val file = File(absPath)
+        if (file.exists() && file.isFile) file.readBytes() else null
+    } catch (_: Exception) {
+        null
+    }
 }
 
 actual suspend fun writeBytesInternal(absPath: String, data: ByteArray): Boolean = withContext(Dispatchers.IO) {
@@ -49,18 +53,21 @@ actual suspend fun writeBytesInternal(absPath: String, data: ByteArray): Boolean
 
 actual fun readStreamInternal(absPath: String, chunkSize: Int): Flow<ByteArray> = flow {
     val file = File(absPath)
-    if (!file.exists()) return@flow
+    if (!file.exists() || !file.isFile) return@flow
     
-    file.inputStream().use { input ->
-        val buffer = ByteArray(chunkSize)
-        var bytesRead: Int
-        while (input.read(buffer).also { bytesRead = it } != -1) {
-            if (bytesRead == chunkSize) {
-                emit(buffer.copyOf())
-            } else {
-                emit(buffer.copyOfRange(0, bytesRead))
+    try {
+        file.inputStream().use { input ->
+            val buffer = ByteArray(chunkSize)
+            var bytesRead: Int
+            while (input.read(buffer).also { bytesRead = it } != -1) {
+                if (bytesRead == chunkSize) {
+                    emit(buffer.copyOf())
+                } else {
+                    emit(buffer.copyOfRange(0, bytesRead))
+                }
             }
         }
+    } catch (_: Exception) {
     }
 }
 

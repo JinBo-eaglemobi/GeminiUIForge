@@ -127,7 +127,13 @@ fun HomeScreen(
                                         targetName,
                                         freshState
                                     )
-                                    appViewModel.navigateTo(AppScreen.PROJECT_WORKSPACE)
+                                    // 自适应路由：无参考图的工程自动流转至 UI Studio，传统带参考图的工程进入原有模板工作区
+                                    val targetScreen = if (freshState.isUiStudioProject) {
+                                        AppScreen.UI_STUDIO
+                                    } else {
+                                        AppScreen.PROJECT_WORKSPACE
+                                    }
+                                    appViewModel.navigateTo(targetScreen)
                                 }
                             },
                             onOpenFileDir = {

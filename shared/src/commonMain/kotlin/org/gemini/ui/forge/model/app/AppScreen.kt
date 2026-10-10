@@ -12,5 +12,7 @@ enum class AppScreen {
     /** 游戏项目管理：创建向导（表单 / 凭据 / 环境检测） */
     GAME_PROJECT_MANAGER,
     /** 游戏项目专属工作台：资源树 / HTML 预览 / 调试面板 */
-    GAME_PROJECT_WORKSPACE
+    GAME_PROJECT_WORKSPACE,
+    /** 全新独立 UI 编辑工作室：素材驱动排版 / 智能拼凑 / 画布编辑 */
+    UI_STUDIO
 }

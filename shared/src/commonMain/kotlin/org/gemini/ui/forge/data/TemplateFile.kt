@@ -45,7 +45,7 @@ class TemplateFile(
         val normalized = path.replace("\\", "/").trim('/')
 
         relativePath = when {
-            // 情况 1: 已经是相对于 root 的路径
+            // 情况 1: 已经是绝对路径
             !isAbsoluteInternal(normalized) -> normalized
 
             // 情况 2: 是绝对路径且位于 root 目录下
@@ -134,7 +134,10 @@ class TemplateFile(
      *
      * @return 读取成功返回字节数组；文件不存在或读取失败返回 null
      */
-    suspend fun readBytes(): ByteArray? = readBytesInternal(getAbsolutePath())
+    suspend fun readBytes(): ByteArray? {
+        if (relativePath.isBlank()) return null
+        return readBytesInternal(getAbsolutePath())
+    }
 
     /**
      * 将字节数组覆写写入当前文件（文件不存在时自动创建，父目录需已存在或先调 [createParentDirs]）。
@@ -142,7 +145,10 @@ class TemplateFile(
      * @param data 待写入的完整字节数据
      * @return 写入成功返回 true；IO 失败返回 false
      */
-    suspend fun writeBytes(data: ByteArray): Boolean = writeBytesInternal(getAbsolutePath(), data)
+    suspend fun writeBytes(data: ByteArray): Boolean {
+        if (relativePath.isBlank()) return false
+        return writeBytesInternal(getAbsolutePath(), data)
+    }
 
     /**
      * 以流式分块读取当前文件内容，适用于大文件场景（避免一次性载入内存）。
@@ -150,7 +156,10 @@ class TemplateFile(
      * @param chunkSize 每个数据块的字节大小，默认 8192 (8KB)
      * @return 按顺序发射各数据块的冷流；流关闭由收集方控制
      */
-    fun readStream(chunkSize: Int = 8192): Flow<ByteArray> = readStreamInternal(getAbsolutePath(), chunkSize)
+    fun readStream(chunkSize: Int = 8192): Flow<ByteArray> {
+        if (relativePath.isBlank()) return kotlinx.coroutines.flow.emptyFlow()
+        return readStreamInternal(getAbsolutePath(), chunkSize)
+    }
 
     /**
      * 递归创建当前文件的全部缺失父目录。

@@ -31,6 +31,13 @@ data class ProjectState(
 ) {
 
     /**
+     * 是否为独立 UI Studio 工作台工程。
+     * 天然特征：独立 UI Studio 工程由空白创建或图集切图导入构成，无全景设计参考图（referenceImages 为空）。
+     */
+    val isUiStudioProject: Boolean
+        get() = referenceImages.isEmpty()
+
+    /**
      * 模板解析后处理逻辑。
      * 针对特定的复杂组件（如 REEL）进行二次结构化调整。
      */

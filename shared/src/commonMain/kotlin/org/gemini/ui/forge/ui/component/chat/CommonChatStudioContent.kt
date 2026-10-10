@@ -1,0 +1,256 @@
+package org.gemini.ui.forge.ui.component.chat
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import org.gemini.ui.forge.model.GeminiModel
+import org.gemini.ui.forge.model.app.ApiFlavor
+import org.gemini.ui.forge.model.chat.VisualChatMessage
+import org.gemini.ui.forge.model.chat.VisualChatSession
+import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+
+/**
+ * 全场景通用 AI 对话工作室响应式纯净内容容器
+ *
+ * 核心架构特性：
+ * 1. 彻底解耦 Dialog，纯 Composable 容器，可在全屏页面、侧边栏、局部卡片或弹窗中自由嵌入；
+ * 2. 响应式自适应布局：根据宿主可用宽度 [BoxWithConstraints] 智能分流：
+ *    - 宽屏模式 (>= 640dp)：左右双栏并列（左侧会话侧栏 + 右侧主对话区）；
+ *    - 窄屏/侧栏模式 (< 640dp)：会话侧栏自动折叠为覆盖层切换，主对话区独占 100% 宽度，杜绝侧栏被挤压；
+ * 3. 完整插槽可定制化：开放 [topBarActions]、[messageActions]、[inputLeadingActions]、[inputTrailingActions] 插槽。
+ *
+ * @param sessions 全部会话列表
+ * @param currentSessionId 当前选中的会话 ID
+ * @param onSessionSelected 会话选择回调
+ * @param onNewSession 新建会话回调
+ * @param onDeleteSession 删除会话回调
+ * @param messages 当前活跃会话的消息列表
+ * @param isGenerating 是否正在生成中
+ * @param streamingText 实时流式打字文本
+ * @param selectedModel 当前选中的 Gemini 模型
+ * @param onModelSelected 模型选择回调
+ * @param selectedApiFlavor 当前选中的通信协议
+ * @param onApiFlavorSelected 协议选择回调
+ * @param onSendMessage 触发发送消息回调 (text, attachments)
+ * @param config 通用配置参数
+ * @param onImageClick 点击图片放大回调
+ * @param topBarActions 顶部导航栏右侧自定义动作插槽（如人设指令、状态指示等）
+ * @param messageActions 每条 AI 消息气泡底部的自定义动作插槽（如应用到图元、保存至素材库等）
+ * @param inputLeadingActions 输入控制栏前置自定义动作插槽
+ * @param inputTrailingActions 输入控制栏后置自定义动作插槽
+ * @param modifier 修饰符
+ */
+@Composable
+fun CommonChatStudioContent(
+    sessions: List<VisualChatSession>,
+    currentSessionId: String?,
+    onSessionSelected: (String) -> Unit,
+    onNewSession: () -> Unit,
+    onDeleteSession: (String) -> Unit,
+    messages: List<VisualChatMessage>,
+    isGenerating: Boolean,
+    streamingText: String = "",
+    selectedModel: GeminiModel,
+    onModelSelected: (GeminiModel) -> Unit,
+    selectedApiFlavor: ApiFlavor,
+    onApiFlavorSelected: (ApiFlavor) -> Unit,
+    onSendMessage: (text: String, attachments: List<CommonChatAttachment>) -> Unit,
+    modifier: Modifier = Modifier,
+    config: CommonChatStudioConfig = CommonChatStudioConfig(),
+    onImageClick: ((String) -> Unit)? = null,
+    topBarActions: @Composable RowScope.() -> Unit = {},
+    messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
+    inputLeadingActions: @Composable RowScope.() -> Unit = {},
+    inputTrailingActions: @Composable RowScope.() -> Unit = {}
+) {
+    val spacing = LocalAppSpacing.current
+    val currentSession = remember(sessions, currentSessionId) {
+        sessions.find { it.id == currentSessionId }
+    }
+
+    // 窄屏抽屉式会话覆盖层控制
+    var isNarrowSessionDrawerOpen by remember { mutableStateOf(false) }
+
+    BoxWithConstraints(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        val isNarrowMode = config.enableNarrowModeAutoFold && maxWidth < config.narrowBreakpointDp.dp
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            // 宽屏模式：左侧固定会话侧栏 (240dp)
+            if (!isNarrowMode) {
+                CommonChatSessionSidebar(
+                    sessions = sessions,
+                    currentSessionId = currentSessionId,
+                    onSessionSelected = onSessionSelected,
+                    onNewSession = onNewSession,
+                    onDeleteSession = onDeleteSession,
+                    config = config,
+                    modifier = Modifier.width(240.dp)
+                )
+
+                VerticalDivider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+            }
+
+            // 主对话区（独占整宽或自适应右半区）
+            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // 1. 顶部标题栏
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 1.dp,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxSize().padding(horizontal = spacing.medium),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(spacing.small)
+                            ) {
+                                // 窄屏模式下的会话历史抽屉切换入口
+                                if (isNarrowMode) {
+                                    IconButton(
+                                        onClick = { isNarrowSessionDrawerOpen = !isNarrowSessionDrawerOpen },
+                                        modifier = Modifier.size(32.dp).tip("切换历史会话")
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Menu,
+                                            contentDescription = "会话菜单",
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = config.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                currentSession?.let { sess ->
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant
+                                    ) {
+                                        Text(
+                                            text = sess.title,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 顶部自定义动作插槽
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(spacing.small)
+                            ) {
+                                topBarActions()
+                            }
+                        }
+                    }
+
+                    // 2. 中间消息气泡流
+                    CommonChatMessageList(
+                        messages = messages,
+                        isGenerating = isGenerating,
+                        streamingText = streamingText,
+                        emptyTipText = config.emptyTipText,
+                        onImageClick = onImageClick,
+                        messageActions = messageActions,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    // 3. 底部多模态输入控制栏
+                    CommonChatInputBar(
+                        isGenerating = isGenerating,
+                        selectedModel = selectedModel,
+                        onModelSelected = onModelSelected,
+                        selectedApiFlavor = selectedApiFlavor,
+                        onApiFlavorSelected = onApiFlavorSelected,
+                        onSendMessage = onSendMessage,
+                        config = config,
+                        leadingActions = inputLeadingActions,
+                        trailingActions = inputTrailingActions
+                    )
+                }
+
+                // 窄屏模式下弹出的会话覆盖层抽屉
+                if (isNarrowMode && isNarrowSessionDrawerOpen) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.45f))
+                            .clickable { isNarrowSessionDrawerOpen = false }
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .widthIn(min = 260.dp, max = 320.dp)
+                                .clickable(enabled = false) {}
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(spacing.small),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    IconButton(
+                                        onClick = { isNarrowSessionDrawerOpen = false },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "关闭抽屉", modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                                CommonChatSessionSidebar(
+                                    sessions = sessions,
+                                    currentSessionId = currentSessionId,
+                                    onSessionSelected = {
+                                        onSessionSelected(it)
+                                        isNarrowSessionDrawerOpen = false
+                                    },
+                                    onNewSession = {
+                                        onNewSession()
+                                        isNarrowSessionDrawerOpen = false
+                                    },
+                                    onDeleteSession = onDeleteSession,
+                                    config = config,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

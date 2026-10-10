@@ -30,6 +30,7 @@ object McpToolRegistry {
             CancelJobTool(),
             // A 组：模板生成与编辑工具
             AnalyzeReferenceGenerateTemplateTool(),
+            ImportAssetSheetPipelineTool(),
             CreateTemplateTool(),
             AddBlockTool(),
             UpdateBlockTool(),

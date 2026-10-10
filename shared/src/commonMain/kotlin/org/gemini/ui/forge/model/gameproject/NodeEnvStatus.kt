@@ -20,7 +20,31 @@ data class NodeEnvStatus(
     /** pnpm 是否已安装 */
     val pnpmInstalled: Boolean = false,
     /** pnpm 版本号，未安装时为 null */
-    val pnpmVersion: String? = null
+    val pnpmVersion: String? = null,
+
+    /** Git 是否已安装 */
+    val gitInstalled: Boolean = false,
+    /** Git 版本号，未安装时为 null */
+    val gitVersion: String? = null,
+
+    /** Python 是否已安装 */
+    val pythonInstalled: Boolean = false,
+    /** Python 版本号，未安装时为 null */
+    val pythonVersion: String? = null,
+    /** pip 是否已安装 */
+    val pipInstalled: Boolean = false,
+    /** pip 版本号，未安装时为 null */
+    val pipVersion: String? = null,
+
+    /** Java/JDK 是否已安装 */
+    val javaInstalled: Boolean = false,
+    /** Java 版本号，未安装时为 null */
+    val javaVersion: String? = null,
+
+    /** Gradle 是否已安装 */
+    val gradleInstalled: Boolean = false,
+    /** Gradle 版本号，未安装时为 null */
+    val gradleVersion: String? = null
 ) {
     /**
      * nodejs 未安装视为硬性阻断：后续创建流程的确认按钮必须禁用，
