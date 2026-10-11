@@ -7,10 +7,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ViewQuilt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +27,7 @@ import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
+import org.gemini.ui.forge.utils.findBlockById
 
 /**
  * UI Studio 右侧属性检查器面板组件。
@@ -65,13 +68,22 @@ fun UIStudioPropertyPanel(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(
-                    imageVector = if (selectedAsset != null && selectedId == null) Icons.Default.Collections else Icons.Default.Tune,
+                    imageVector = when {
+                        selectedAsset != null && selectedId == null -> Icons.Default.Collections
+                        selectedId != null -> Icons.Default.Tune
+                        else -> Icons.Default.ViewQuilt
+                    },
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
-                    text = if (selectedAsset != null && selectedId == null) "素材详情 (Asset Inspector)" else "图元属性 (Inspector)",
+                    text = when {
+                        selectedAsset != null && selectedId == null -> "素材详情"
+                        selectedId != null -> "组件属性"
+                        state.currentView != null -> "视图页面属性"
+                        else -> "工作台属性"
+                    },
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -160,40 +172,46 @@ fun UIStudioPropertyPanel(
                     }
                 }
             } else if (selectedId == null) {
-                // 未选中图元或素材时的空状态占位
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .background(
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            shape = RoundedCornerShape(spacing.small)
-                        )
-                        .padding(spacing.medium),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(spacing.small)
+                // 默认展示主视图（页面）信息卡片；当未打开任何页面时显示空状态
+                val currentView = state.currentView
+                if (currentView != null) {
+                    UIStudioMainViewInspector(
+                        view = currentView,
+                        viewModel = viewModel,
+                        templateRepo = templateRepo,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Text(
-                            text = "未选中任何图元，点击画布中的图元以动态编辑坐标、尺寸与类型",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                            color = MaterialTheme.colorScheme.outline
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(spacing.extraSmall)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ViewQuilt,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Text(
+                                text = "未打开任何视图界面",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
                     }
                 }
             } else {
-                // 已选中图元：动态编辑属性（参考模块编辑模式）
-                val currentView = state.project?.pages?.find { it.id == state.currentViewId }
-                    ?: state.project?.pages?.firstOrNull()
-                val selectedBlock = currentView?.blocks?.find { it.id == selectedId }
+                // 已选中组件：动态编辑属性（尺寸、坐标、类型、名称）
+                val currentView = state.currentView
+                val selectedBlock = currentView?.blocks?.findBlockById(selectedId)
 
                 if (selectedBlock != null) {
                     val scrollState = rememberScrollState()
@@ -204,26 +222,68 @@ fun UIStudioPropertyPanel(
                             .verticalScroll(scrollState),
                         verticalArrangement = Arrangement.spacedBy(spacing.medium)
                     ) {
-                        // 1. 基础信息卡片 (ID & 纯容器开关)
+                        // 1. 基础信息卡片 (ID & 名称重命名 & 容器开关)
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(spacing.small)) {
+                            Column(
+                                modifier = Modifier.padding(spacing.small),
+                                verticalArrangement = Arrangement.spacedBy(spacing.extraSmall)
+                            ) {
                                 Text(
-                                    text = "图元 ID: ${selectedBlock.id}",
+                                    text = "组件 ID: ${selectedBlock.id}",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     fontFamily = FontFamily.Monospace
                                 )
-                                Spacer(modifier = Modifier.height(spacing.extraSmall))
+
+                                // 直接重命名组件名称 (ID)
+                                var nameText by remember(selectedBlock.id) {
+                                    mutableStateOf(selectedBlock.id)
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(spacing.small),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    OutlinedTextField(
+                                        value = nameText,
+                                        onValueChange = { nameText = it },
+                                        label = { Text("重命名组件", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        textStyle = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                        )
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            val trimmed = nameText.trim()
+                                            if (trimmed.isNotBlank() && trimmed != selectedBlock.id) {
+                                                viewModel.renameBlock(selectedBlock.id, trimmed, templateRepo)
+                                            }
+                                        },
+                                        enabled = nameText.isNotBlank() && nameText != selectedBlock.id,
+                                        modifier = Modifier.size(36.dp).tip("保存新名称")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "确认修改",
+                                            tint = if (nameText.isNotBlank() && nameText != selectedBlock.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text("纯容器 (不参与生图)", style = MaterialTheme.typography.bodySmall)
+                                    Text("纯容器占位组件", style = MaterialTheme.typography.bodySmall)
                                     Switch(
                                         checked = selectedBlock.isPureContainer,
                                         onCheckedChange = { isPure ->
@@ -236,7 +296,7 @@ fun UIStudioPropertyPanel(
                         }
 
                         // 2. 几何坐标与尺寸 (X, Y, W, H 动态修改)
-                        Text("几何变换 (Geometry)", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.outline)
+                        Text("几何变换", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.outline)
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(spacing.small),
                             modifier = Modifier.fillMaxWidth()
@@ -313,7 +373,7 @@ fun UIStudioPropertyPanel(
                                         )
                                     }
                                 },
-                                label = { Text("W (宽)", fontSize = 11.sp) },
+                                label = { Text("宽 W (px)", fontSize = 11.sp) },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
@@ -337,14 +397,14 @@ fun UIStudioPropertyPanel(
                                         )
                                     }
                                 },
-                                label = { Text("H (高)", fontSize = 11.sp) },
+                                label = { Text("高 H (px)", fontSize = 11.sp) },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
                         }
 
                         // 3. 组件类型动态切换 (UIBlockType)
-                        Text("图元类型 (Block Type)", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.outline)
+                        Text("组件类型", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.outline)
                         var typeExpanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
                             expanded = typeExpanded,
@@ -374,39 +434,11 @@ fun UIStudioPropertyPanel(
                             }
                         }
 
-                        // 4. 提示词与名称
-                        Text("生图提示词与描述", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.outline)
-                        var promptZhText by remember(selectedBlock.id, selectedBlock.userPromptZh) {
-                            mutableStateOf(selectedBlock.userPromptZh)
-                        }
-                        OutlinedTextField(
-                            value = promptZhText,
-                            onValueChange = {
-                                promptZhText = it
-                                viewModel.updateBlockPrompts(selectedBlock.id, it, selectedBlock.userPromptEn, templateRepo)
-                            },
-                            label = { Text("中文描述/提示词") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        var promptEnText by remember(selectedBlock.id, selectedBlock.userPromptEn) {
-                            mutableStateOf(selectedBlock.userPromptEn)
-                        }
-                        OutlinedTextField(
-                            value = promptEnText,
-                            onValueChange = {
-                                promptEnText = it
-                                viewModel.updateBlockPrompts(selectedBlock.id, selectedBlock.userPromptZh, it, templateRepo)
-                            },
-                            label = { Text("英文描述 (Prompt EN)") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
                         Spacer(modifier = Modifier.height(spacing.small))
 
-                        // 5. 危险操作：删除当前图元
+                        // 4. 危险操作：删除当前组件
                         OutlinedButton(
-                            onClick = { viewModel.deleteSelectedBlock(selectedBlock.id, templateRepo) },
+                            onClick = { viewModel.requestDeleteBlock(selectedBlock.id, templateRepo) },
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = MaterialTheme.colorScheme.error
                             ),
@@ -415,7 +447,7 @@ fun UIStudioPropertyPanel(
                         ) {
                             Icon(Icons.Default.DeleteOutline, contentDescription = "Delete Block", modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(spacing.extraSmall))
-                            Text("删除此图元 (Delete)")
+                            Text("删除此组件")
                         }
                     }
                 }

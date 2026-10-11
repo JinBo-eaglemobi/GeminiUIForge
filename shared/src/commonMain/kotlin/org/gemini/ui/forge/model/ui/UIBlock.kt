@@ -46,6 +46,7 @@ data class UIBlock(
     val userPromptZh: String = "",
     val children: List<UIBlock> = emptyList(),
     val isVisible: Boolean = true, // 新增：图层是否可见
+    val isLocked: Boolean = false, // 新增：图层是否锁定（锁定后在画布上禁止选中和拖动）
     val properties: BlockProperties? = null, // 新增：不同类型模块的专属属性
     val resourceBindingPath: List<String> = emptyList(), // 新增：资源绑定层级路径
     val isPureContainer: Boolean = false, // 纯容器/占位层：表示该模块没有任何资源生成，仅占位排版或作为组合层

@@ -43,7 +43,7 @@ fun UIProjectAiStudioDialog(
     } ?: GeminiModel.GEMINI_3_8_FLASH
 
     val studioConfig = CommonChatStudioConfig(
-        title = "UI Studio 智能排版助手",
+        title = "UI Studio 智能设计助理",
         emptyTipText = "我是当前工程专属 AI 架构师，向我提问页面布局、样式规划或组件生成建议...",
         defaultModel = currentModel,
         defaultApiFlavor = state.projectAgentConfig.apiFlavor

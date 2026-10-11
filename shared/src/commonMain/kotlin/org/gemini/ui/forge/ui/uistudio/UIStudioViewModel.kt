@@ -21,6 +21,7 @@ import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.assetsheet.AssetImportDraft
 import org.gemini.ui.forge.model.assetsheet.NormalizedAssetItem
+import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.ui.UIBlock
@@ -44,8 +45,13 @@ import org.gemini.ui.forge.ui.uistudio.model.ProjectAgentConfig
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.utils.bindParents
+import org.gemini.ui.forge.utils.calculateBlockAbsoluteBounds
 import org.gemini.ui.forge.utils.cropImage
+import org.gemini.ui.forge.utils.findBlockById
+import org.gemini.ui.forge.utils.findParentBlockId
 import org.gemini.ui.forge.utils.readLocalFileBytes
+import org.gemini.ui.forge.utils.updateBlockInList
 
 /**
  * UI Studio 独立工作室的视图模型。
@@ -80,10 +86,12 @@ class UIStudioViewModel {
         val firstPage = effectiveProject.pages.firstOrNull()
         val initialWidth = firstPage?.width?.takeIf { it > 0 } ?: 1920f
         val initialHeight = firstPage?.height?.takeIf { it > 0 } ?: 1080f
+        val initialOpenTabs = firstPage?.let { listOf(it.id) } ?: emptyList()
 
         state = state.copy(
             project = effectiveProject,
             currentViewId = firstPage?.id,
+            openViewIds = if (state.openViewIds.isEmpty()) initialOpenTabs else state.openViewIds,
             canvasWidth = initialWidth,
             canvasHeight = initialHeight,
             scale = 0.6f,
@@ -320,11 +328,20 @@ class UIStudioViewModel {
      */
     fun createAssetFolder(name: String, parentFolderId: String? = state.selectedFolderId) {
         if (name.isBlank()) return
+        val trimmed = name.trim()
         val newFolder = UIAssetFolder(
             id = "folder_${getCurrentTimeMillis()}",
-            name = name.trim(),
+            name = trimmed,
             parentFolderId = parentFolderId
         )
+        val sanitizedProject = state.project?.projectId?.replace(" ", "_") ?: "default"
+        scope.launch(Dispatchers.Default) {
+            try {
+                val dirRel = "templates/$sanitizedProject/assets/image/$trimmed/placeholder.tmp"
+                TemplateFile(dirRel).createParentDirs()
+            } catch (_: Exception) {}
+        }
+
         val updatedLib = state.assetLibrary.copy(
             folders = state.assetLibrary.folders + newFolder
         )
@@ -334,7 +351,207 @@ class UIStudioViewModel {
             isNewFolderDialogVisible = false
         )
         saveAssetLibrary()
-        Toast.show("成功创建文件夹: $name", ToastType.SUCCESS)
+        Toast.show("成功创建文件夹: $trimmed", ToastType.SUCCESS)
+    }
+
+    /**
+     * 将素材文件移动到指定的文件夹（若 targetFolderId == null 则移动到根目录）。
+     * 同步物理移动磁盘文件并更新素材与项目图元引用。
+     */
+    fun moveAssetToFolder(assetId: String, targetFolderId: String?, repo: TemplateRepository) {
+        val asset = state.assetLibrary.items.find { it.id == assetId } ?: return
+        if (asset.folderId == targetFolderId) return
+
+        val sanitizedProject = state.project?.projectId?.replace(" ", "_") ?: "default"
+        val targetFolder = state.assetLibrary.folders.find { it.id == targetFolderId }
+        val targetSubDir = if (targetFolder != null) "${targetFolder.name}/" else ""
+        val fileName = asset.relativePath.substringAfterLast("/")
+        val newRelPath = "templates/$sanitizedProject/assets/image/${targetSubDir}$fileName"
+
+        scope.launch(Dispatchers.Default) {
+            // 物理移动文件（具备旧路径失效智能探测自愈）
+            try {
+                var resolvedOldFile = TemplateFile(asset.relativePath)
+                if (!resolvedOldFile.exists()) {
+                    val candidate1 = TemplateFile("templates/$sanitizedProject/assets/image/$fileName")
+                    val candidate2 = TemplateFile("templates/$sanitizedProject/assets/$assetId/$fileName")
+                    if (candidate1.exists()) {
+                        resolvedOldFile = candidate1
+                    } else if (candidate2.exists()) {
+                        resolvedOldFile = candidate2
+                    }
+                }
+                if (resolvedOldFile.exists()) {
+                    val bytes = resolvedOldFile.readBytes()
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        val newFile = TemplateFile(newRelPath)
+                        newFile.createParentDirs()
+                        newFile.writeBytes(bytes)
+                        if (resolvedOldFile.getAbsolutePath() != newFile.getAbsolutePath()) {
+                            resolvedOldFile.delete()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                AppLogger.w("UIStudioViewModel", "物理移动素材文件失败: ${e.message}")
+            }
+        }
+
+        // 更新素材库项
+        val updatedItems = state.assetLibrary.items.map {
+            if (it.id == assetId) {
+                it.copy(folderId = targetFolderId, relativePath = newRelPath)
+            } else it
+        }
+
+        // 同步递归更新 project 内所有图元（包括容器内嵌套图元）的关联图片路径
+        fun updateBlockImages(blocks: List<UIBlock>): List<UIBlock> {
+            return blocks.map { b ->
+                val updatedChildren = updateBlockImages(b.children)
+                if (b.id == assetId) {
+                    b.copy(
+                        currentImageUri = TemplateFile(newRelPath),
+                        referenceImage = TemplateFile(newRelPath),
+                        children = updatedChildren
+                    )
+                } else {
+                    b.copy(children = updatedChildren)
+                }
+            }
+        }
+
+        val updatedPages = state.project?.pages?.map { page ->
+            page.copy(blocks = updateBlockImages(page.blocks))
+        }
+
+        val updatedProject = if (updatedPages != null && state.project != null) {
+            state.project!!.copy(pages = updatedPages)
+        } else state.project
+
+        state = state.copy(
+            project = updatedProject,
+            assetLibrary = state.assetLibrary.copy(items = updatedItems)
+        )
+        saveAssetLibrary()
+        saveProject(repo)
+        val destDesc = targetFolder?.name ?: "根目录"
+        Toast.show("素材已移动至: $destDesc", ToastType.SUCCESS)
+    }
+
+    /**
+     * 递归遍历并更新模块树中的目标图元。
+     */
+    private fun updateBlockInTreeRecursively(
+        blocks: List<UIBlock>,
+        targetId: String,
+        transform: (UIBlock) -> UIBlock
+    ): List<UIBlock> {
+        return blocks.map { b ->
+            if (b.id == targetId) {
+                transform(b)
+            } else if (b.children.isNotEmpty()) {
+                b.copy(children = updateBlockInTreeRecursively(b.children, targetId, transform))
+            } else {
+                b
+            }
+        }
+    }
+
+    /**
+     * 递归遍历整棵模块树并统一变换所有图元。
+     */
+    private fun mapAllBlocksRecursively(
+        blocks: List<UIBlock>,
+        transform: (UIBlock) -> UIBlock
+    ): List<UIBlock> {
+        return blocks.map { b ->
+            val updated = transform(b)
+            if (updated.children.isNotEmpty()) {
+                updated.copy(children = mapAllBlocksRecursively(updated.children, transform))
+            } else {
+                updated
+            }
+        }
+    }
+
+    /**
+     * 切换指定组件/图层的锁定状态（递归支持容器内的子图元）。
+     */
+    fun toggleBlockLock(blockId: String, repo: TemplateRepository) {
+        val currentV = state.currentView ?: return
+        val updatedBlocks = updateBlockInTreeRecursively(currentV.blocks, blockId) { b ->
+            val newLock = !b.isLocked
+            // 若为容器，级联锁定全部子项
+            if (b.children.isNotEmpty()) {
+                b.copy(isLocked = newLock, children = mapAllBlocksRecursively(b.children) { it.copy(isLocked = newLock) })
+            } else {
+                b.copy(isLocked = newLock)
+            }
+        }.bindParents()
+        updateViewBlocksAndSave(currentV.id, updatedBlocks, repo)
+    }
+
+    /**
+     * 一键锁定/解锁当前视图的所有组件（全层级递归）：
+     * 若存在任一未锁定的组件，则将全部组件锁定；
+     * 若所有组件均已锁定，则全部解锁。
+     */
+    fun toggleAllBlocksLocked(repo: TemplateRepository) {
+        val currentV = state.currentView ?: return
+        if (currentV.blocks.isEmpty()) return
+        fun hasAnyUnlocked(list: List<UIBlock>): Boolean = list.any { !it.isLocked || hasAnyUnlocked(it.children) }
+        val targetLock = hasAnyUnlocked(currentV.blocks)
+        val updatedBlocks = mapAllBlocksRecursively(currentV.blocks) { it.copy(isLocked = targetLock) }.bindParents()
+        updateViewBlocksAndSave(currentV.id, updatedBlocks, repo)
+        val msg = if (targetLock) "已锁定当前视图全部组件" else "已解锁当前视图全部组件"
+        Toast.show(msg, ToastType.INFO)
+    }
+
+    /**
+     * 一键显示/隐藏当前视图的所有组件（全层级递归）：
+     * 若存在任一隐藏的组件，则将全部组件设为显示；
+     * 若所有组件均已显示，则全部隐藏。
+     */
+    fun toggleAllBlocksVisibility(repo: TemplateRepository) {
+        val currentV = state.currentView ?: return
+        if (currentV.blocks.isEmpty()) return
+        fun hasAnyHidden(list: List<UIBlock>): Boolean = list.any { !it.isVisible || hasAnyHidden(it.children) }
+        val targetVisible = hasAnyHidden(currentV.blocks)
+        val updatedBlocks = mapAllBlocksRecursively(currentV.blocks) { it.copy(isVisible = targetVisible) }.bindParents()
+        updateViewBlocksAndSave(currentV.id, updatedBlocks, repo)
+        val msg = if (targetVisible) "已显示当前视图全部组件" else "已隐藏当前视图全部组件"
+        Toast.show(msg, ToastType.INFO)
+    }
+
+    /**
+     * 快捷发起将两个组件合并至新建纯父容器的确认弹窗。
+     */
+    fun groupBlocksIntoContainer(draggedId: String, targetId: String) {
+        state = state.copy(pendingCreateContainer = draggedId to targetId)
+    }
+
+    /**
+     * 展开/折叠指定图层容器。
+     */
+    fun toggleHierarchyBlockExpanded(blockId: String) {
+        val current = state.expandedHierarchyBlockIds
+        state = state.copy(
+            expandedHierarchyBlockIds = if (current.contains(blockId)) current - blockId else current + blockId
+        )
+    }
+
+    /**
+     * 一键全部展开/全部折叠图层树容器。
+     */
+    fun toggleAllHierarchyBlocksExpanded() {
+        val currentV = state.currentView ?: return
+        val allContainerIds = currentV.blocks.filter { it.isPureContainer || it.children.isNotEmpty() }.map { it.id }.toSet()
+        val isAllExpanded = state.expandedHierarchyBlockIds.containsAll(allContainerIds) && allContainerIds.isNotEmpty()
+        state = state.copy(
+            expandedHierarchyBlockIds = if (isAllExpanded) emptySet() else allContainerIds
+        )
+        val msg = if (isAllExpanded) "已折叠全部容器" else "已展开全部容器"
+        Toast.show(msg, ToastType.INFO)
     }
 
     /**
@@ -397,16 +614,181 @@ class UIStudioViewModel {
     // ====== 视图界面 (Views / Pages) 生命周期管理 ======
 
     /**
-     * 选中并激活指定视图界面。
+     * 选中并激活指定视图界面，同时确保在顶部标签栏中处于打开状态。
      */
     fun selectView(viewId: String) {
+        openViewTab(viewId)
+    }
+
+    /**
+     * 在中间顶部标签栏中打开并激活指定视图界面。
+     */
+    fun openViewTab(viewId: String) {
         val page = state.project?.pages?.find { it.id == viewId } ?: return
+        val currentOpen = state.openViewIds
+        val updatedOpen = if (currentOpen.contains(viewId)) currentOpen else currentOpen + viewId
         state = state.copy(
+            openViewIds = updatedOpen,
             currentViewId = viewId,
             canvasWidth = page.width,
             canvasHeight = page.height,
+            activeContainerId = null,
+            selectedBlockId = null,
+            selectedAssetId = null
+        )
+    }
+
+    /**
+     * 选中并激活指定页面视图标签。
+     */
+    fun selectViewTab(viewId: String) {
+        selectView(viewId)
+        state = state.copy(activeContainerId = null)
+    }
+
+    /**
+     * 打开父容器的专属独立编辑视图标签页。
+     */
+    fun openContainerTab(containerId: String) {
+        val currentTabs = state.openContainerTabs
+        val updatedTabs = if (currentTabs.contains(containerId)) currentTabs else currentTabs + containerId
+        state = state.copy(
+            openContainerTabs = updatedTabs,
+            activeContainerId = containerId,
+            selectedBlockId = containerId
+        )
+        Toast.show("已打开容器独立布局视图", ToastType.INFO)
+    }
+
+    /**
+     * 关闭指定父容器的编辑标签页。
+     */
+    fun closeContainerTab(containerId: String) {
+        val currentTabs = state.openContainerTabs
+        if (!currentTabs.contains(containerId)) return
+        val updatedTabs = currentTabs.filter { it != containerId }
+        val newActiveId = if (state.activeContainerId == containerId) {
+            updatedTabs.lastOrNull()
+        } else {
+            state.activeContainerId
+        }
+        state = state.copy(
+            openContainerTabs = updatedTabs,
+            activeContainerId = newActiveId
+        )
+    }
+
+    /**
+     * 切换选中指定父容器编辑标签页。
+     */
+    fun selectContainerTab(containerId: String) {
+        state = state.copy(
+            activeContainerId = containerId,
+            selectedBlockId = containerId
+        )
+    }
+
+    /**
+     * 关闭指定视图的标签页。
+     */
+    fun closeViewTab(viewId: String) {
+        val currentOpen = state.openViewIds
+        if (!currentOpen.contains(viewId)) return
+        val updatedOpen = currentOpen.filter { it != viewId }
+        val newActiveId = if (state.currentViewId == viewId) {
+            val idx = currentOpen.indexOf(viewId)
+            if (updatedOpen.isNotEmpty()) {
+                val nextIdx = (idx - 1).coerceAtLeast(0)
+                updatedOpen.getOrNull(nextIdx) ?: updatedOpen.firstOrNull()
+            } else {
+                null
+            }
+        } else {
+            state.currentViewId
+        }
+        val nextPage = state.project?.pages?.find { it.id == newActiveId }
+        state = state.copy(
+            openViewIds = updatedOpen,
+            currentViewId = newActiveId,
+            canvasWidth = nextPage?.width ?: state.canvasWidth,
+            canvasHeight = nextPage?.height ?: state.canvasHeight,
+            activeContainerId = null,
             selectedBlockId = null
         )
+    }
+
+    /**
+     * 一键关闭中间顶部所有打开的视图标签页，彻底清空画布及组件渲染。
+     */
+    fun closeAllViewTabs() {
+        state = state.copy(
+            openViewIds = emptyList(),
+            currentViewId = null,
+            openContainerTabs = emptyList(),
+            activeContainerId = null,
+            selectedBlockId = null,
+            selectedAssetId = null
+        )
+        Toast.show("已关闭所有视图标签", ToastType.INFO)
+    }
+
+    /**
+     * 关闭除指定视图之外的其他所有视图标签页。
+     */
+    fun closeOtherViewTabs(viewId: String) {
+        if (!state.openViewIds.contains(viewId)) return
+        val nextPage = state.project?.pages?.find { it.id == viewId }
+        state = state.copy(
+            openViewIds = listOf(viewId),
+            currentViewId = viewId,
+            openContainerTabs = emptyList(),
+            activeContainerId = null,
+            canvasWidth = nextPage?.width ?: state.canvasWidth,
+            canvasHeight = nextPage?.height ?: state.canvasHeight,
+            selectedBlockId = null
+        )
+        Toast.show("已关闭其他视图标签", ToastType.INFO)
+    }
+
+    /**
+     * 切换左侧边栏下半部分的工作区 Tab (素材库 / 图层层级)。
+     */
+    fun switchLeftBottomTab(tab: UIStudioLeftBottomTab) {
+        state = state.copy(leftBottomTab = tab)
+    }
+
+    /**
+     * 动态修改指定视图界面的画布宽高尺寸并持久化。
+     */
+    fun updatePageDimensions(viewId: String, newWidth: Float, newHeight: Float, repo: TemplateRepository) {
+        val proj = state.project ?: return
+        val targetPage = proj.pages.find { it.id == viewId } ?: return
+        val clampedW = newWidth.coerceIn(100f, 10000f)
+        val clampedH = newHeight.coerceIn(100f, 10000f)
+        val updatedPage = targetPage.copy(width = clampedW, height = clampedH).postProcess()
+        val updatedPages = proj.pages.map { if (it.id == viewId) updatedPage else it }
+        val updatedProject = proj.copy(pages = updatedPages)
+        state = state.copy(
+            project = updatedProject,
+            canvasWidth = if (state.currentViewId == viewId) clampedW else state.canvasWidth,
+            canvasHeight = if (state.currentViewId == viewId) clampedH else state.canvasHeight
+        )
+        scope.launch {
+            repo.saveTemplate(updatedProject.projectId, updatedProject)
+        }
+        Toast.show("已更新视图尺寸: ${clampedW.toInt()} × ${clampedH.toInt()}", ToastType.SUCCESS)
+    }
+
+    /**
+     * 清空当前所有选中状态（组件与素材均重置），联动恢复页面主视图属性面板。
+     */
+    fun clearSelection() {
+        if (state.selectedBlockId != null || state.selectedAssetId != null) {
+            state = state.copy(
+                selectedBlockId = null,
+                selectedAssetId = null
+            )
+        }
     }
 
     /**
@@ -424,9 +806,11 @@ class UIStudioViewModel {
         )
         val updatedPages = proj.pages + newPage
         val updatedProject = proj.copy(pages = updatedPages)
+        val updatedOpen = state.openViewIds + newPage.id
         state = state.copy(
             project = updatedProject,
             currentViewId = newPage.id,
+            openViewIds = updatedOpen,
             canvasWidth = width,
             canvasHeight = height,
             selectedBlockId = null,
@@ -436,6 +820,40 @@ class UIStudioViewModel {
             repo.saveTemplate(updatedProject.projectId, updatedProject)
         }
         Toast.show("成功创建视图: $viewName", ToastType.SUCCESS)
+    }
+
+    /**
+     * 复制并克隆指定视图界面 (含全部图元深度复制)。
+     */
+    fun duplicateView(page: UIPage, repo: TemplateRepository) {
+        val proj = state.project ?: return
+        val newViewName = "${page.nameStr}_副本"
+        val timestamp = getCurrentTimeMillis()
+        val clonedBlocks = page.blocks.map { block ->
+            block.copy(id = "block_${timestamp}_${block.id.takeLast(6)}")
+        }
+        val duplicatedPage = UIPage(
+            id = "view_$timestamp",
+            nameStr = newViewName,
+            width = page.width,
+            height = page.height,
+            blocks = clonedBlocks
+        )
+        val updatedPages = proj.pages + duplicatedPage
+        val updatedProject = proj.copy(pages = updatedPages)
+        val updatedOpen = state.openViewIds + duplicatedPage.id
+        state = state.copy(
+            project = updatedProject,
+            currentViewId = duplicatedPage.id,
+            openViewIds = updatedOpen,
+            canvasWidth = duplicatedPage.width,
+            canvasHeight = duplicatedPage.height,
+            selectedBlockId = null
+        )
+        scope.launch {
+            repo.saveTemplate(updatedProject.projectId, updatedProject)
+        }
+        Toast.show("已克隆视图: $newViewName", ToastType.SUCCESS)
     }
 
     /**
@@ -576,24 +994,32 @@ class UIStudioViewModel {
 
     fun updateProjectModel(modelName: String) {
         val updated = state.projectAgentConfig.copy(modelName = modelName)
-        saveProjectAgentConfig(updated)
+        saveProjectAgentConfig(updated, notifyUser = false)
+        Toast.show("已切换模型: $modelName", ToastType.SUCCESS)
     }
 
     fun updateProjectModel(model: GeminiModel) {
-        updateProjectModel(model.modelName)
+        val updated = state.projectAgentConfig.copy(modelName = model.modelName)
+        saveProjectAgentConfig(updated, notifyUser = false)
+        Toast.show("已切换模型: ${model.displayName}", ToastType.SUCCESS)
     }
 
     fun updateProjectSystemPrompt(systemPrompt: String) {
         val updated = state.projectAgentConfig.copy(systemPrompt = systemPrompt)
-        saveProjectAgentConfig(updated)
+        saveProjectAgentConfig(updated, notifyUser = true)
     }
 
     fun updateProjectApiFlavor(apiFlavor: ApiFlavor) {
         val updated = state.projectAgentConfig.copy(apiFlavor = apiFlavor)
-        saveProjectAgentConfig(updated)
+        saveProjectAgentConfig(updated, notifyUser = false)
+        val name = when (apiFlavor) {
+            ApiFlavor.INTERACTIONS -> "会话 API"
+            ApiFlavor.GENERATE_CONTENT -> "原生 API"
+        }
+        Toast.show("已切换通信协议: $name", ToastType.SUCCESS)
     }
 
-    fun saveProjectAgentConfig(config: ProjectAgentConfig) {
+    fun saveProjectAgentConfig(config: ProjectAgentConfig, notifyUser: Boolean = true) {
         state = state.copy(projectAgentConfig = config)
         val proj = state.project ?: return
         val sanitized = proj.projectId.trim().replace(" ", "_")
@@ -607,7 +1033,9 @@ class UIStudioViewModel {
                 }
                 val text = jsonFormat.encodeToString(ProjectAgentConfig.serializer(), config)
                 TemplateFile(path).writeBytes(text.encodeToByteArray())
-                Toast.show("项目 Agent 配置已更新", ToastType.SUCCESS)
+                if (notifyUser) {
+                    Toast.show("项目 Agent 配置已更新", ToastType.SUCCESS)
+                }
             } catch (e: Exception) {
                 AppLogger.e("UIStudioViewModel", "保存项目 Agent 配置失败", e)
             }
@@ -654,7 +1082,7 @@ class UIStudioViewModel {
                 val welcomeMsg = VisualChatMessage(
                     id = "msg_${now}_welcome",
                     role = "model",
-                    prompt = "🤖 你好！我是当前项目的专属 UI 智能排版架构师。当前视图:「${state.currentView?.nameStr ?: "未选择"}」(${state.currentView?.width?.toInt() ?: 0} × ${state.currentView?.height?.toInt() ?: 0})，素材库已就绪 ${state.assetLibrary.items.size} 个切片资产。你可以向我描述界面排版构想、上传原型草图或让我在当前视图规划组件布局！",
+                    prompt = "🤖 你好！我是当前工程的专属「UI Studio 智能设计助理」。当前视图:「${state.currentView?.nameStr ?: "未选择"}」(${state.currentView?.width?.toInt() ?: 0} × ${state.currentView?.height?.toInt() ?: 0})，素材库已就绪 ${state.assetLibrary.items.size} 个切片资产。你可以向我描述界面排版构想、上传原型草图或让我在当前视图规划组件布局！",
                     timestamp = now
                 )
                 val initialSession = VisualChatSession(
@@ -780,8 +1208,8 @@ class UIStudioViewModel {
             state.currentChatSession!!
         }
 
-        val attachments = if (attachmentsList.isNotEmpty()) {
-            attachmentsList.mapNotNull { it.localUri ?: it.name }
+        val rawAttachments = if (attachmentsList.isNotEmpty()) {
+            attachmentsList.mapNotNull { it.localUri }
         } else {
             state.aiChatAttachments
         }
@@ -790,7 +1218,7 @@ class UIStudioViewModel {
             id = "msg_${now}_user",
             role = "user",
             prompt = userText,
-            inputImageUris = attachments,
+            inputImageUris = rawAttachments,
             timestamp = now
         )
 
@@ -811,6 +1239,34 @@ class UIStudioViewModel {
 
         scope.launch(Dispatchers.Default) {
             try {
+                // 若存在无 localUri 仅有 bytes 的内存附件，协程内异步落盘并补齐持久化 URI
+                if (attachmentsList.any { it.localUri.isNullOrBlank() && it.bytes != null && it.bytes.isNotEmpty() }) {
+                    val proj = state.project
+                    val sanitized = proj?.projectId?.trim()?.replace(" ", "_") ?: "default"
+                    val tempDir = "templates/$sanitized/chat_attachments"
+                    val persistedUris = attachmentsList.mapNotNull { attach ->
+                        if (!attach.localUri.isNullOrBlank()) {
+                            attach.localUri
+                        } else if (attach.bytes != null && attach.bytes.isNotEmpty()) {
+                            try {
+                                val fileName = attach.name.ifBlank { "paste_${getCurrentTimeMillis()}.png" }
+                                val fileRelPath = "$tempDir/$fileName"
+                                val file = TemplateFile(fileRelPath)
+                                file.writeBytes(attach.bytes)
+                                file.getAbsolutePath()
+                            } catch (_: Exception) {
+                                null
+                            }
+                        } else null
+                    }
+                    if (persistedUris.isNotEmpty()) {
+                        val correctedUserMsg = userMsg.copy(inputImageUris = persistedUris)
+                        val correctedMessages = updatedSession.messages.map { if (it.id == userMsg.id) correctedUserMsg else it }
+                        val correctedSession = updatedSession.copy(messages = correctedMessages)
+                        state = state.copy(chatSessions = state.chatSessions.map { if (it.id == correctedSession.id) correctedSession else it })
+                        saveSession(correctedSession)
+                    }
+                }
                 val effectiveApiKey = apiKey.ifBlank { configManager.loadKey("GEMINI_API_KEY") ?: "" }
                 val apiFlavor = state.projectAgentConfig.apiFlavor
                 val systemPrompt = state.projectAgentConfig.systemPrompt
@@ -1304,7 +1760,7 @@ class UIStudioViewModel {
                     )
 
                     val assetId = item.id.ifBlank { "asset_${getCurrentTimeMillis()}_$idx" }
-                    val relPath = "templates/$sanitizedName/assets/${folderSubDir}${assetId}.png"
+                    val relPath = "templates/$sanitizedName/assets/image/${folderSubDir}${assetId}.png"
 
                     // 2. 将切片物理写入磁盘素材库目录 (支持自动透明去背)
                     if (sliceBytes != null && sliceBytes.isNotEmpty()) {
@@ -1378,6 +1834,21 @@ class UIStudioViewModel {
             expandedFolderIds = if (current.contains(folderId)) current - folderId else current + folderId
         )
     }
+
+    /**
+     * 一键全部展开或全部折叠所有素材文件夹。
+     */
+    fun toggleAllFoldersExpanded() {
+        val folders = state.assetLibrary.folders
+        if (folders.isEmpty()) return
+        val allExpanded = folders.all { state.expandedFolderIds.contains(it.id) }
+        state = state.copy(
+            expandedFolderIds = if (allExpanded) emptySet() else folders.map { it.id }.toSet()
+        )
+    }
+
+    fun setDraggedAssetId(id: String?) { state = state.copy(draggedAssetId = id) }
+    fun setHoveredFolderId(id: String?) { state = state.copy(hoveredFolderId = id) }
 
     fun startRenameFolder(folder: UIAssetFolder) { state = state.copy(renamingFolder = folder) }
     fun cancelRenameFolder() { state = state.copy(renamingFolder = null) }
@@ -1472,11 +1943,37 @@ class UIStudioViewModel {
         saveProject(repo)
     }
 
+    /**
+     * 实时平移单个图元（高频拖拽中毫秒级更新内存坐标，递归支持子图元）。
+     */
+    fun moveBlockDelta(blockId: String, dx: Float, dy: Float) {
+        val view = state.currentView ?: return
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) { block ->
+            val b = block.bounds
+            val w = b.right - b.left
+            val h = b.bottom - b.top
+            val newLeft = b.left + dx
+            val newTop = b.top + dy
+            block.copy(bounds = SerialRect(newLeft, newTop, newLeft + w, newTop + h))
+        }.bindParents()
+        val updatedPages = state.project?.pages?.map {
+            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
+        } ?: return
+        state = state.copy(project = state.project?.copy(pages = updatedPages))
+    }
+
+    /**
+     * 图元拖拽释放后执行持久化刷盘。
+     */
+    fun commitBlockMove(repo: TemplateRepository = TemplateRepository()) {
+        saveProject(repo)
+    }
+
     fun updateBlockType(blockId: String, newType: UIBlockType, repo: TemplateRepository) {
         val view = state.currentView ?: return
-        val updatedBlocks = view.blocks.map {
-            if (it.id == blockId) it.copy(type = newType) else it
-        }
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
+            it.copy(type = newType)
+        }.bindParents()
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
@@ -1510,13 +2007,473 @@ class UIStudioViewModel {
 
     fun deleteSelectedBlock(blockId: String, repo: TemplateRepository) {
         val view = state.currentView ?: return
-        val updatedBlocks = view.blocks.filterNot { it.id == blockId }
+        val updatedBlocks = removeBlockFromTree(view.blocks, blockId).bindParents()
+        updateViewBlocksAndSave(view.id, updatedBlocks, repo)
+        state = state.copy(selectedBlockId = null)
+        Toast.show("已删除组件", ToastType.INFO)
+    }
+
+    /**
+     * 递归从模块树中安全移除指定 ID 的图元对象。
+     */
+    private fun removeBlockFromTree(list: List<UIBlock>, id: String): List<UIBlock> {
+        return list.filterNot { it.id == id }.map { block ->
+            if (block.children.any { it.id == id }) {
+                block.copy(children = block.children.filterNot { it.id == id })
+            } else {
+                block.copy(children = removeBlockFromTree(block.children, id))
+            }
+        }
+    }
+
+    /**
+     * 移动图层层级（支持 BEFORE / AFTER 同级排序及 INSIDE 父子容器嵌套约束）。
+     */
+    fun moveHierarchyBlock(
+        draggedId: String,
+        targetId: String?,
+        position: DropPosition,
+        repo: TemplateRepository
+    ) {
+        val view = state.currentView ?: return
+        if (draggedId == targetId) return
+        val draggedBlock = view.blocks.findBlockById(draggedId) ?: return
+
+        val oldParentId = view.blocks.findParentBlockId(draggedId)
+        val oldParent = oldParentId?.let { view.blocks.findBlockById(it) }
+        val targetParentId = if (targetId != null) view.blocks.findParentBlockId(targetId) else null
+        val isMovingOutOfParent = oldParentId != null && (
+            (position == DropPosition.INSIDE && targetId != oldParentId) ||
+            (position != DropPosition.INSIDE && targetParentId != oldParentId) ||
+            targetId == null
+        )
+
+        // 移出最后一个子组件时强校验与弹窗拦截
+        if (isMovingOutOfParent && oldParent != null && oldParent.children.size <= 1) {
+            state = state.copy(
+                pendingDragRemoveLastChild = DragRemoveLastChildContext(
+                    draggedId = draggedId,
+                    oldParentId = oldParent.id,
+                    targetId = targetId,
+                    position = position
+                )
+            )
+            return
+        }
+
+        executeMoveHierarchyBlock(
+            draggedId = draggedId,
+            targetId = targetId,
+            position = position,
+            repo = repo,
+            dissolveContainerId = null
+        )
+    }
+
+    /**
+     * 用户确认移除最后一个子组件操作：可选择保留或解散父容器。
+     */
+    fun confirmDragRemoveLastChild(keepContainer: Boolean, repo: TemplateRepository) {
+        val ctx = state.pendingDragRemoveLastChild ?: return
+        state = state.copy(pendingDragRemoveLastChild = null)
+        executeMoveHierarchyBlock(
+            draggedId = ctx.draggedId,
+            targetId = ctx.targetId,
+            position = ctx.position,
+            repo = repo,
+            dissolveContainerId = if (keepContainer) null else ctx.oldParentId
+        )
+    }
+
+    /**
+     * 取消最后一个子组件的移出操作，恢复原始层级状态。
+     */
+    fun cancelDragRemoveLastChild() {
+        state = state.copy(pendingDragRemoveLastChild = null)
+    }
+
+    private fun executeMoveHierarchyBlock(
+        draggedId: String,
+        targetId: String?,
+        position: DropPosition,
+        repo: TemplateRepository,
+        dissolveContainerId: String? = null
+    ) {
+        val view = state.currentView ?: return
+        val draggedBlock = view.blocks.findBlockById(draggedId) ?: return
+
+        // 目标为 null：移至根列表末尾
+        if (targetId == null) {
+            val draggedAbsBounds = view.blocks.calculateBlockAbsoluteBounds(draggedId) ?: draggedBlock.bounds
+            val cleanedBlocks = removeBlockFromTree(view.blocks, draggedId)
+            val updatedDragged = draggedBlock.copy(bounds = draggedAbsBounds)
+            var newBlocks = (cleanedBlocks + updatedDragged).bindParents()
+            if (dissolveContainerId != null) {
+                newBlocks = removeBlockFromTree(newBlocks, dissolveContainerId).bindParents()
+            }
+            updateViewBlocksAndSave(view.id, newBlocks, repo)
+            return
+        }
+
+        val targetBlock = view.blocks.findBlockById(targetId) ?: return
+        val targetParentId = view.blocks.findParentBlockId(targetId)
+
+        if (position == DropPosition.INSIDE) {
+            // 移入目标成组逻辑判定：
+            // 1. 若目标本身就是纯容器
+            if (targetBlock.isPureContainer || targetBlock.type == UIBlockType.CONTAINER) {
+                val targetAbsBounds = view.blocks.calculateBlockAbsoluteBounds(targetId) ?: targetBlock.bounds
+                val draggedAbsBounds = view.blocks.calculateBlockAbsoluteBounds(draggedId) ?: draggedBlock.bounds
+                val localBounds = SerialRect(
+                    left = draggedAbsBounds.left - targetAbsBounds.left,
+                    top = draggedAbsBounds.top - targetAbsBounds.top,
+                    right = draggedAbsBounds.right - targetAbsBounds.left,
+                    bottom = draggedAbsBounds.bottom - targetAbsBounds.top
+                )
+                val cleanedBlocks = removeBlockFromTree(view.blocks, draggedId)
+                val updatedTarget = targetBlock.copy(children = targetBlock.children + draggedBlock.copy(bounds = localBounds))
+                var resultBlocks = cleanedBlocks.updateBlockInList(targetId) { updatedTarget }.bindParents()
+                if (dissolveContainerId != null) {
+                    resultBlocks = removeBlockFromTree(resultBlocks, dissolveContainerId).bindParents()
+                }
+                updateViewBlocksAndSave(view.id, resultBlocks, repo)
+                Toast.show("已将组件移入容器: ${targetBlock.id}", ToastType.SUCCESS)
+                return
+            }
+
+            // 2. 若目标所处已有父容器
+            if (targetParentId != null) {
+                val parentBlock = view.blocks.findBlockById(targetParentId) ?: return
+                val parentAbsBounds = view.blocks.calculateBlockAbsoluteBounds(targetParentId) ?: parentBlock.bounds
+                val draggedAbsBounds = view.blocks.calculateBlockAbsoluteBounds(draggedId) ?: draggedBlock.bounds
+                val localBounds = SerialRect(
+                    left = draggedAbsBounds.left - parentAbsBounds.left,
+                    top = draggedAbsBounds.top - parentAbsBounds.top,
+                    right = draggedAbsBounds.right - parentAbsBounds.left,
+                    bottom = draggedAbsBounds.bottom - parentAbsBounds.top
+                )
+                val cleanedBlocks = removeBlockFromTree(view.blocks, draggedId)
+                var resultBlocks = cleanedBlocks.updateBlockInList(targetParentId) { p ->
+                    p.copy(children = p.children + draggedBlock.copy(bounds = localBounds))
+                }.bindParents()
+                if (dissolveContainerId != null) {
+                    resultBlocks = removeBlockFromTree(resultBlocks, dissolveContainerId).bindParents()
+                }
+                updateViewBlocksAndSave(view.id, resultBlocks, repo)
+                Toast.show("已将组件移入同级容器", ToastType.SUCCESS)
+                return
+            }
+
+            // 3. 目标为独立根图层且无父容器：触发二次确认弹窗
+            state = state.copy(pendingCreateContainer = draggedId to targetId)
+            return
+        }
+
+        // BEFORE 或 AFTER：同级相邻排序
+        val draggedAbsBounds = view.blocks.calculateBlockAbsoluteBounds(draggedId) ?: draggedBlock.bounds
+        val cleanedBlocks = removeBlockFromTree(view.blocks, draggedId)
+
+        if (targetParentId != null) {
+            val parentBlock = cleanedBlocks.findBlockById(targetParentId) ?: return
+            val parentAbsBounds = cleanedBlocks.calculateBlockAbsoluteBounds(targetParentId) ?: parentBlock.bounds
+            val localBounds = SerialRect(
+                left = draggedAbsBounds.left - parentAbsBounds.left,
+                top = draggedAbsBounds.top - parentAbsBounds.top,
+                right = draggedAbsBounds.right - parentAbsBounds.left,
+                bottom = draggedAbsBounds.bottom - parentAbsBounds.top
+            )
+            val updatedDragged = draggedBlock.copy(bounds = localBounds)
+            var resultBlocks = cleanedBlocks.updateBlockInList(targetParentId) { p ->
+                val list = p.children.toMutableList()
+                val targetIndex = list.indexOfFirst { it.id == targetId }
+                val insertIndex = if (position == DropPosition.BEFORE) targetIndex else targetIndex + 1
+                list.add(insertIndex.coerceIn(0, list.size), updatedDragged)
+                p.copy(children = list)
+            }.bindParents()
+            if (dissolveContainerId != null) {
+                resultBlocks = removeBlockFromTree(resultBlocks, dissolveContainerId).bindParents()
+            }
+            updateViewBlocksAndSave(view.id, resultBlocks, repo)
+        } else {
+            val updatedDragged = draggedBlock.copy(bounds = draggedAbsBounds)
+            val list = cleanedBlocks.toMutableList()
+            val targetIndex = list.indexOfFirst { it.id == targetId }
+            val insertIndex = if (position == DropPosition.BEFORE) targetIndex else targetIndex + 1
+            list.add(insertIndex.coerceIn(0, list.size), updatedDragged)
+            var resultBlocks = list.bindParents()
+            if (dissolveContainerId != null) {
+                resultBlocks = removeBlockFromTree(resultBlocks, dissolveContainerId).bindParents()
+            }
+            updateViewBlocksAndSave(view.id, resultBlocks, repo)
+        }
+    }
+
+    /**
+     * 用户确认创建父容器约束。
+     */
+    fun confirmCreateContainer(draggedId: String, targetId: String, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val blockA = view.blocks.findBlockById(draggedId) ?: return
+        val blockB = view.blocks.findBlockById(targetId) ?: return
+
+        val boundsA = view.blocks.calculateBlockAbsoluteBounds(draggedId) ?: blockA.bounds
+        val boundsB = view.blocks.calculateBlockAbsoluteBounds(targetId) ?: blockB.bounds
+
+        val unionLeft = kotlin.math.min(boundsA.left, boundsB.left)
+        val unionTop = kotlin.math.min(boundsA.top, boundsB.top)
+        val unionRight = kotlin.math.max(boundsA.right, boundsB.right)
+        val unionBottom = kotlin.math.max(boundsA.bottom, boundsB.bottom)
+        val unionRect = SerialRect(unionLeft, unionTop, unionRight, unionBottom)
+
+        val localA = blockA.copy(bounds = SerialRect(boundsA.left - unionLeft, boundsA.top - unionTop, boundsA.right - unionLeft, boundsA.bottom - unionTop))
+        val localB = blockB.copy(bounds = SerialRect(boundsB.left - unionLeft, boundsB.top - unionTop, boundsB.right - unionLeft, boundsB.bottom - unionTop))
+
+        val containerId = "Container_${getCurrentTimeMillis() % 10000}"
+        val container = UIBlock(
+            id = containerId,
+            type = UIBlockType.CONTAINER,
+            isPureContainer = true,
+            bounds = unionRect,
+            children = listOf(localB, localA)
+        )
+
+        val remaining = removeBlockFromTree(removeBlockFromTree(view.blocks, draggedId), targetId)
+        val targetIdx = view.blocks.indexOfFirst { it.id == targetId }
+        val mutable = remaining.toMutableList()
+        val insertIdx = if (targetIdx >= 0) targetIdx.coerceAtMost(mutable.size) else mutable.size
+        mutable.add(insertIdx, container)
+        val resultBlocks = mutable.bindParents()
+
+        updateViewBlocksAndSave(view.id, resultBlocks, repo)
+        state = state.copy(pendingCreateContainer = null, selectedBlockId = containerId)
+        Toast.show("成功创建父约束容器: $containerId", ToastType.SUCCESS)
+    }
+
+    fun cancelCreateContainer() {
+        state = state.copy(pendingCreateContainer = null)
+    }
+
+    /**
+     * 请求将组件移出父容器。若为容器内最后一个组件，触发确认提示。
+     */
+    fun requestRemoveBlockFromParent(blockId: String, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val parentId = view.blocks.findParentBlockId(blockId) ?: return
+        val parent = view.blocks.findBlockById(parentId) ?: return
+        if (parent.children.size <= 1) {
+            state = state.copy(pendingRemoveLastChildAction = Triple(parentId, blockId, false))
+        } else {
+            performRemoveBlockFromParent(parentId, blockId, false, repo)
+        }
+    }
+
+    /**
+     * 请求删除组件。若属于容器且为最后一个子组件，触发确认提示。
+     */
+    fun requestDeleteBlock(blockId: String, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val parentId = view.blocks.findParentBlockId(blockId)
+        if (parentId != null) {
+            val parent = view.blocks.findBlockById(parentId)
+            if (parent != null && parent.children.size <= 1) {
+                state = state.copy(pendingRemoveLastChildAction = Triple(parentId, blockId, true))
+                return
+            }
+        }
+        deleteSelectedBlock(blockId, repo)
+    }
+
+    fun confirmRemoveLastChildAction(repo: TemplateRepository) {
+        val action = state.pendingRemoveLastChildAction ?: return
+        val (containerId, childId, isDelete) = action
+        performRemoveBlockFromParent(containerId, childId, isDelete, repo)
+        state = state.copy(pendingRemoveLastChildAction = null)
+    }
+
+    fun cancelRemoveLastChildAction() {
+        state = state.copy(pendingRemoveLastChildAction = null)
+    }
+
+    private fun performRemoveBlockFromParent(
+        containerId: String,
+        childId: String,
+        isDelete: Boolean,
+        repo: TemplateRepository
+    ) {
+        val view = state.currentView ?: return
+        val child = view.blocks.findBlockById(childId) ?: return
+        val childAbsBounds = view.blocks.calculateBlockAbsoluteBounds(childId) ?: child.bounds
+        val parent = view.blocks.findBlockById(containerId) ?: return
+
+        val parentIndexInRoot = view.blocks.indexOfFirst { it.id == containerId }
+        val remainingInContainer = parent.children.filterNot { it.id == childId }
+
+        var newBlocks = removeBlockFromTree(view.blocks, childId)
+        if (remainingInContainer.isEmpty()) {
+            newBlocks = removeBlockFromTree(newBlocks, containerId)
+        }
+
+        if (!isDelete) {
+            val mutable = newBlocks.toMutableList()
+            val targetInsertIndex = if (parentIndexInRoot >= 0) {
+                if (remainingInContainer.isNotEmpty()) {
+                    val currentParentIdx = mutable.indexOfFirst { it.id == containerId }
+                    if (currentParentIdx >= 0) currentParentIdx + 1 else mutable.size
+                } else {
+                    parentIndexInRoot.coerceIn(0, mutable.size)
+                }
+            } else {
+                mutable.size
+            }
+            mutable.add(targetInsertIndex, child.copy(bounds = childAbsBounds))
+            newBlocks = mutable
+        }
+
+        val resultBlocks = newBlocks.bindParents()
+        updateViewBlocksAndSave(view.id, resultBlocks, repo)
+        val actionText = if (isDelete) "组件已删除" else "组件已移出父容器"
+        val containerText = if (remainingInContainer.isEmpty()) "，原父容器已自动解散清理" else ""
+        Toast.show("$actionText$containerText", ToastType.SUCCESS)
+    }
+
+    /**
+     * 解散父容器：将其内部所有子图层平移释放至根列表，并销毁该纯容器。
+     */
+    fun ungroupContainer(containerId: String, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val container = view.blocks.findBlockById(containerId) ?: return
+        val containerAbsBounds = view.blocks.calculateBlockAbsoluteBounds(containerId) ?: container.bounds
+        val releasedChildren = container.children.map { child ->
+            val absLeft = containerAbsBounds.left + child.bounds.left
+            val absTop = containerAbsBounds.top + child.bounds.top
+            child.copy(bounds = SerialRect(absLeft, absTop, absLeft + child.bounds.width, absTop + child.bounds.height))
+        }
+        val withoutContainer = removeBlockFromTree(view.blocks, containerId)
+        val resultBlocks = (withoutContainer + releasedChildren).bindParents()
+        updateViewBlocksAndSave(view.id, resultBlocks, repo)
+        Toast.show("已解散父容器: ${container.id}", ToastType.SUCCESS)
+    }
+
+    private fun updateViewBlocksAndSave(viewId: String, newBlocks: List<UIBlock>, repo: TemplateRepository) {
+        val updatedPages = state.project?.pages?.map {
+            if (it.id == viewId) it.copy(blocks = newBlocks) else it
+        } ?: return
+        state = state.copy(project = state.project?.copy(pages = updatedPages))
+        saveProject(repo)
+    }
+
+    /**
+     * 切换指定组件的可见性状态 (显示/隐藏，递归支持容器内的子图元)。
+     */
+    fun toggleBlockVisibility(blockId: String, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) { b ->
+            val newVisible = !b.isVisible
+            if (b.children.isNotEmpty()) {
+                b.copy(isVisible = newVisible, children = mapAllBlocksRecursively(b.children) { it.copy(isVisible = newVisible) })
+            } else {
+                b.copy(isVisible = newVisible)
+            }
+        }.bindParents()
+        updateViewBlocksAndSave(view.id, updatedBlocks, repo)
+    }
+
+    /**
+     * 将指定组件置于顶层（移至渲染列表尾部）。
+     */
+    fun bringBlockToFront(blockId: String, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val target = view.blocks.find { it.id == blockId } ?: return
+        val updatedBlocks = view.blocks.filterNot { it.id == blockId } + target
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), selectedBlockId = null)
+        state = state.copy(project = state.project?.copy(pages = updatedPages))
         saveProject(repo)
-        Toast.show("已删除图元", ToastType.INFO)
+        Toast.show("已将组件置于顶层", ToastType.SUCCESS)
+    }
+
+    /**
+     * 将指定组件置于底层（移至渲染列表头部）。
+     */
+    fun sendBlockToBack(blockId: String, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val target = view.blocks.find { it.id == blockId } ?: return
+        val updatedBlocks = listOf(target) + view.blocks.filterNot { it.id == blockId }
+        val updatedPages = state.project?.pages?.map {
+            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
+        } ?: return
+        state = state.copy(project = state.project?.copy(pages = updatedPages))
+        saveProject(repo)
+        Toast.show("已将组件置于底层", ToastType.SUCCESS)
+    }
+
+    /**
+     * 将指定组件上移一层。
+     */
+    fun moveBlockUp(blockId: String, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val idx = view.blocks.indexOfFirst { it.id == blockId }
+        if (idx == -1 || idx == view.blocks.lastIndex) return
+        val mutable = view.blocks.toMutableList()
+        val item = mutable.removeAt(idx)
+        mutable.add(idx + 1, item)
+        val updatedPages = state.project?.pages?.map {
+            if (it.id == view.id) it.copy(blocks = mutable) else it
+        } ?: return
+        state = state.copy(project = state.project?.copy(pages = updatedPages))
+        saveProject(repo)
+    }
+
+    /**
+     * 将指定组件下移一层。
+     */
+    fun moveBlockDown(blockId: String, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val idx = view.blocks.indexOfFirst { it.id == blockId }
+        if (idx <= 0) return
+        val mutable = view.blocks.toMutableList()
+        val item = mutable.removeAt(idx)
+        mutable.add(idx - 1, item)
+        val updatedPages = state.project?.pages?.map {
+            if (it.id == view.id) it.copy(blocks = mutable) else it
+        } ?: return
+        state = state.copy(project = state.project?.copy(pages = updatedPages))
+        saveProject(repo)
+    }
+
+    /**
+     * 重命名组件（递归支持子组件）。
+     */
+    fun renameBlock(blockId: String, newName: String, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val target = view.blocks.findBlockById(blockId) ?: return
+        val trimmed = newName.trim().ifBlank { target.id }
+        if (trimmed == blockId) {
+            state = state.copy(renamingBlockId = null)
+            return
+        }
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
+            it.copy(id = trimmed)
+        }.bindParents()
+        val updatedPages = state.project?.pages?.map {
+            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
+        } ?: return
+        state = state.copy(
+            project = state.project?.copy(pages = updatedPages),
+            selectedBlockId = if (state.selectedBlockId == blockId) trimmed else state.selectedBlockId,
+            renamingBlockId = null
+        )
+        saveProject(repo)
+        Toast.show("组件已重命名为: $trimmed", ToastType.SUCCESS)
+    }
+
+    fun startRenameBlock(blockId: String) {
+        state = state.copy(renamingBlockId = blockId)
+    }
+
+    fun cancelRenameBlock() {
+        state = state.copy(renamingBlockId = null)
     }
 
     fun requestClearCurrentSession() {

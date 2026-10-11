@@ -1,6 +1,8 @@
 package org.gemini.ui.forge.ui.uistudio.component
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,23 +21,26 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.UnfoldLess
+import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.extend.contextMenuClickable
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
@@ -44,8 +49,6 @@ import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import org.gemini.ui.forge.ui.uistudio.dialog.UIStudioRenameDialog
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetFolder
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
-import org.gemini.ui.forge.utils.readLocalFileBytes
-import org.gemini.ui.forge.utils.toImageBitmap
 
 /**
  * UI Studio 素材库树形视图面板 (Tree View)。
@@ -71,6 +74,7 @@ fun UIStudioAssetPanel(
     var renamingAssetTarget by remember { mutableStateOf<UIAssetItem?>(null) }
     var deletingFolderTarget by remember { mutableStateOf<UIAssetFolder?>(null) }
     var deletingAssetTarget by remember { mutableStateOf<UIAssetItem?>(null) }
+    val folderBoundsMap = remember { mutableStateMapOf<String, Rect>() }
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -118,7 +122,24 @@ fun UIStudioAssetPanel(
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // 一键展开/折叠全部素材文件夹
+                    if (library.folders.isNotEmpty()) {
+                        val allFoldersExpanded = library.folders.all { state.expandedFolderIds.contains(it.id) }
+                        IconButton(
+                            onClick = { viewModel.toggleAllFoldersExpanded() },
+                            modifier = Modifier
+                                .size(28.dp)
+                                .tip(if (allFoldersExpanded) "折叠全部文件夹" else "展开全部文件夹")
+                        ) {
+                            Icon(
+                                imageVector = if (allFoldersExpanded) Icons.Default.UnfoldLess else Icons.Default.UnfoldMore,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
                     IconButton(
                         onClick = { viewModel.revealFolderInExplorer(null) },
                         modifier = Modifier
@@ -200,18 +221,35 @@ fun UIStudioAssetPanel(
                     library.folders.forEach { folder ->
                         val isExpanded = state.expandedFolderIds.contains(folder.id)
                         val folderItems = library.getItemsInFolder(folder.id)
+                        val isHovered = state.hoveredFolderId == folder.id
 
                         item(key = "folder_${folder.id}") {
                             var showFolderMenu by remember { mutableStateOf(false) }
 
-                            Box {
+                            BoxWithConstraints {
+                                val minMenuWidth = maxOf(200.dp, maxWidth * 0.85f)
+                                val maxMenuWidth = maxOf(260.dp, maxWidth)
+
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    color = if (isHovered) {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    },
+                                    border = if (isHovered) {
+                                        BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                                    } else null,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(6.dp))
-                                        .clickable { viewModel.toggleFolderExpanded(folder.id) }
+                                        .onGloballyPositioned { coords ->
+                                            folderBoundsMap[folder.id] = coords.boundsInRoot()
+                                        }
+                                        .contextMenuClickable(
+                                            onClick = { viewModel.toggleFolderExpanded(folder.id) },
+                                            onContextMenu = { showFolderMenu = true }
+                                        )
                                 ) {
                                     Row(
                                         modifier = Modifier
@@ -248,12 +286,12 @@ fun UIStudioAssetPanel(
                                         )
                                         IconButton(
                                             onClick = { showFolderMenu = true },
-                                            modifier = Modifier.size(20.dp)
+                                            modifier = Modifier.size(20.dp).tip("更多操作")
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Default.Edit,
+                                                imageVector = Icons.Default.MoreVert,
                                                 contentDescription = "Options",
-                                                modifier = Modifier.size(12.dp),
+                                                modifier = Modifier.size(14.dp),
                                                 tint = MaterialTheme.colorScheme.outline
                                             )
                                         }
@@ -262,7 +300,16 @@ fun UIStudioAssetPanel(
 
                                 DropdownMenu(
                                     expanded = showFolderMenu,
-                                    onDismissRequest = { showFolderMenu = false }
+                                    onDismissRequest = { showFolderMenu = false },
+                                    modifier = Modifier
+                                        .widthIn(min = minMenuWidth, max = maxMenuWidth)
+                                        .shadow(elevation = 10.dp, shape = RoundedCornerShape(10.dp))
+                                        .border(
+                                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(10.dp))
+                                        .padding(vertical = 4.dp)
                                 ) {
                                     DropdownMenuItem(
                                         text = { Text("在本地资源管理器中打开") },
@@ -280,6 +327,10 @@ fun UIStudioAssetPanel(
                                             renamingFolderTarget = folder
                                         }
                                     )
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                    )
                                     DropdownMenuItem(
                                         text = { Text("删除文件夹", color = MaterialTheme.colorScheme.error) },
                                         leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
@@ -295,48 +346,63 @@ fun UIStudioAssetPanel(
                         // 文件夹内部的素材子项（展开时呈现）
                         if (isExpanded) {
                             items(folderItems, key = { "item_${it.id}" }) { item ->
-                                AssetTreeLeafItem(
+                                UIStudioAssetTreeLeafItem(
                                     item = item,
                                     isSelected = state.selectedAssetId == item.id,
                                     indentPadding = 24.dp,
                                     viewModel = viewModel,
                                     templateRepo = templateRepo,
                                     onRename = { renamingAssetTarget = it },
-                                    onDelete = { deletingAssetTarget = it }
+                                    onDelete = { deletingAssetTarget = it },
+                                    onDragHover = { rootPos ->
+                                        val hitFolderId = folderBoundsMap.entries.firstOrNull { it.value.contains(rootPos) }?.key
+                                        viewModel.setHoveredFolderId(hitFolderId)
+                                    },
+                                    onDragEnd = {
+                                        val targetFolderId = state.hoveredFolderId
+                                        val draggedId = state.draggedAssetId
+                                        if (draggedId != null) {
+                                            viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
+                                        }
+                                        viewModel.setDraggedAssetId(null)
+                                        viewModel.setHoveredFolderId(null)
+                                    }
                                 )
                             }
                         }
                     }
 
-                    // 2. 根目录下直接所属的素材（未分类）
+                    // 2. 根目录下直接所属的素材（不设“未分类素材”标签，平铺排列）
                     val rootItems = library.getItemsInFolder(null)
-                    if (rootItems.isNotEmpty()) {
-                        item(key = "header_root_items") {
-                            Text(
-                                text = "未分类素材 (${rootItems.size})",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
-                                color = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.padding(top = 6.dp, bottom = 2.dp, start = 4.dp)
-                            )
-                        }
-                        items(rootItems, key = { "root_item_${it.id}" }) { item ->
-                            AssetTreeLeafItem(
-                                item = item,
-                                isSelected = state.selectedAssetId == item.id,
-                                indentPadding = 8.dp,
-                                viewModel = viewModel,
-                                templateRepo = templateRepo,
-                                onRename = { renamingAssetTarget = it },
-                                onDelete = { deletingAssetTarget = it }
-                            )
-                        }
+                    items(rootItems, key = { "root_item_${it.id}" }) { item ->
+                        UIStudioAssetTreeLeafItem(
+                            item = item,
+                            isSelected = state.selectedAssetId == item.id,
+                            indentPadding = 4.dp,
+                            viewModel = viewModel,
+                            templateRepo = templateRepo,
+                            onRename = { renamingAssetTarget = it },
+                            onDelete = { deletingAssetTarget = it },
+                            onDragHover = { rootPos ->
+                                val hitFolderId = folderBoundsMap.entries.firstOrNull { it.value.contains(rootPos) }?.key
+                                viewModel.setHoveredFolderId(hitFolderId)
+                            },
+                            onDragEnd = {
+                                val targetFolderId = state.hoveredFolderId
+                                val draggedId = state.draggedAssetId
+                                if (draggedId != null) {
+                                    viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
+                                }
+                                viewModel.setDraggedAssetId(null)
+                                viewModel.setHoveredFolderId(null)
+                            }
+                        )
                     }
                 }
             }
         }
-    }
 
-    // 重命名文件夹弹窗
+        // 重命名文件夹弹窗
     renamingFolderTarget?.let { folder ->
         UIStudioRenameDialog(
             title = "重命名文件夹",
@@ -393,168 +459,4 @@ fun UIStudioAssetPanel(
     }
 }
 
-/**
- * 素材树叶子节点单项组件（带微缩图、尺寸药丸与丰富右键菜单）。
- */
-@Composable
-private fun AssetTreeLeafItem(
-    item: UIAssetItem,
-    isSelected: Boolean,
-    indentPadding: androidx.compose.ui.unit.Dp,
-    viewModel: UIStudioViewModel,
-    templateRepo: TemplateRepository,
-    onRename: (UIAssetItem) -> Unit,
-    onDelete: (UIAssetItem) -> Unit
-) {
-    val state = viewModel.state
-    val copy = rememberClipboardAction()
-    var bitmap by remember(item.relativePath) { mutableStateOf<ImageBitmap?>(null) }
-    var showContextMenu by remember { mutableStateOf(false) }
-
-    LaunchedEffect(item.relativePath) {
-        withContext(Dispatchers.Default) {
-            val bytes = readLocalFileBytes(item.relativePath)
-                ?: try {
-                    TemplateFile(item.relativePath).readBytes()
-                } catch (_: Exception) {
-                    null
-                }
-            if (bytes != null) {
-                bitmap = bytes.toImageBitmap()
-            }
-        }
-    }
-
-    Box(modifier = Modifier.fillMaxWidth()) {
-        Surface(
-            shape = RoundedCornerShape(6.dp),
-            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = indentPadding, end = 4.dp, top = 1.dp, bottom = 1.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .clickable { viewModel.selectAsset(item.id) }
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 微缩图容器
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(4.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val isMatting = state.isMattingAsset && state.mattingAssetId == item.id
-                    if (bitmap != null && !isMatting) {
-                        androidx.compose.foundation.Image(
-                            bitmap = bitmap!!,
-                            contentDescription = item.name,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit
-                        )
-                    } else if (isMatting) {
-                        CircularProgressIndicator(modifier = Modifier.size(10.dp), strokeWidth = 1.5.dp)
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Image,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(6.dp))
-
-                // 名称与尺寸
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Normal),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "${item.width}×${item.height}",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                // 右侧小选项触发图标
-                IconButton(
-                    onClick = { showContextMenu = true },
-                    modifier = Modifier.size(20.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Menu",
-                        modifier = Modifier.size(12.dp),
-                        tint = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
-        }
-
-        // 丰富的右键上下文菜单
-        DropdownMenu(
-            expanded = showContextMenu,
-            onDismissRequest = { showContextMenu = false }
-        ) {
-            DropdownMenuItem(
-                text = { Text("🪄 一键去除背景 (生成透明图)") },
-                leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    viewModel.removeAssetBackground(item.id)
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("➕ 添加到当前视图画布") },
-                leadingIcon = { Icon(Icons.Default.PlaylistAdd, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    viewModel.addAssetToCanvas(item, templateRepo)
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("✏️ 重命名素材") },
-                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    onRename(item)
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("📁 在系统资源管理器中显示") },
-                leadingIcon = { Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    viewModel.revealAssetInExplorer(item)
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("📋 复制文件路径") },
-                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    copy(item.relativePath, "已复制素材路径: ${item.relativePath}")
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("🗑️ 删除素材", color = MaterialTheme.colorScheme.error) },
-                leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    onDelete(item)
-                }
-            )
-        }
-    }
 }

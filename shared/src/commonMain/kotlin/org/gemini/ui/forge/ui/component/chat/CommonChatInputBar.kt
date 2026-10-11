@@ -20,7 +20,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -62,6 +65,7 @@ fun CommonChatInputBar(
     onSendMessage: (text: String, attachments: List<CommonChatAttachment>) -> Unit,
     modifier: Modifier = Modifier,
     config: CommonChatStudioConfig = CommonChatStudioConfig(),
+    onImagePreviewRequested: ((String) -> Unit)? = null,
     leadingActions: @Composable RowScope.() -> Unit = {},
     trailingActions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -80,8 +84,18 @@ fun CommonChatInputBar(
             if (bytes != null && bytes.isNotEmpty()) {
                 val time = getCurrentTimeMillis()
                 val name = "clipboard_$time.png"
+                // 自动保存至应用缓存目录，获得持久化 URI 供 Coil 缩略图异步加载与灯箱全景预览
+                val cachedUri = try {
+                    val cacheRel = "cache/clipboard/$name"
+                    val file = org.gemini.ui.forge.data.TemplateFile(cacheRel)
+                    file.writeBytes(bytes)
+                    file.getAbsolutePath()
+                } catch (e: Exception) {
+                    null
+                }
                 attachments = attachments + CommonChatAttachment(
                     name = name,
+                    localUri = cachedUri,
                     bytes = bytes,
                     mimeType = "image/png"
                 )
@@ -121,13 +135,20 @@ fun CommonChatInputBar(
         onSendMessage(text, currentAttach)
     }
 
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        modifier = modifier.fillMaxWidth()
-    ) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val containerWidth = maxWidth
+        val effectiveDialogWidth = config.dialogWidth ?: containerWidth
+        // ★ 核心动态响应式视口：浮层菜单统一严格按视口宽度的 85% 计算，最大高度占视口高度的 70%
+        val adaptiveMenuWidth = effectiveDialogWidth * 0.85f
+        val dynamicMenuMaxHeight = config.dialogHeight?.let { it * 0.70f } ?: 520.dp
+
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 2.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
         Column(modifier = Modifier.padding(spacing.medium)) {
             // 1. 已选中的多模态附件预览栏
             if (attachments.isNotEmpty()) {
@@ -140,36 +161,42 @@ fun CommonChatInputBar(
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.clickable {
+                                attach.localUri?.let { uri -> onImagePreviewRequested?.invoke(uri) }
+                            }
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                             ) {
                                 if (attach.mimeType.startsWith("image/")) {
-                                    if (attach.localUri != null) {
+                                    val imageModel: Any? = attach.localUri ?: attach.bytes
+                                    if (imageModel != null) {
                                         AsyncImage(
-                                            model = attach.localUri,
+                                            model = imageModel,
                                             contentDescription = null,
-                                            modifier = Modifier.size(24.dp).clip(RoundedCornerShape(4.dp)),
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(RoundedCornerShape(6.dp)),
                                             contentScale = ContentScale.Crop
                                         )
                                     } else {
-                                        Icon(Icons.Default.Image, null, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Image, null, modifier = Modifier.size(24.dp))
                                     }
-                                    Spacer(Modifier.width(6.dp))
+                                    Spacer(Modifier.width(8.dp))
                                 }
                                 Text(
                                     text = attach.name,
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     maxLines = 1
                                 )
-                                Spacer(Modifier.width(4.dp))
+                                Spacer(Modifier.width(6.dp))
                                 Icon(
                                     Icons.Default.Close,
                                     contentDescription = "移除附件",
                                     modifier = Modifier
-                                        .size(14.dp)
+                                        .size(16.dp)
                                         .clickable {
                                             attachments = attachments.toMutableList().apply { removeAt(index) }
                                         },
@@ -246,7 +273,8 @@ fun CommonChatInputBar(
 
                     // 动态模型选择器（对齐公用旗舰 DropdownMenu 下拉卡片菜单）
                     if (config.showModelSelector) {
-                        Box {
+                        var modelBtnWidthPx by remember { mutableStateOf(0) }
+                        Box(modifier = Modifier.onGloballyPositioned { modelBtnWidthPx = it.size.width }) {
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -273,18 +301,23 @@ fun CommonChatInputBar(
                                 }
                             }
 
+                            val modelBtnWidthDp = with(LocalDensity.current) { modelBtnWidthPx.toDp() }
                             CommonModelSelectionMenu(
                                 expanded = isModelMenuExpanded,
                                 selectedModel = selectedModel,
                                 onModelSelected = onModelSelected,
-                                onDismissRequest = { isModelMenuExpanded = false }
+                                onDismissRequest = { isModelMenuExpanded = false },
+                                minMenuWidth = modelBtnWidthDp,
+                                maxMenuWidth = adaptiveMenuWidth,
+                                maxMenuHeight = dynamicMenuMaxHeight
                             )
                         }
                     }
 
                     // 原生协议切换器
                     if (config.showApiFlavorSelector) {
-                        Box {
+                        var flavorBtnWidthPx by remember { mutableStateOf(0) }
+                        Box(modifier = Modifier.onGloballyPositioned { flavorBtnWidthPx = it.size.width }) {
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -299,8 +332,8 @@ fun CommonChatInputBar(
                                 ) {
                                     Text(
                                         text = when (selectedApiFlavor) {
-                                            ApiFlavor.INTERACTIONS -> "⚡ 会话 API"
-                                            ApiFlavor.GENERATE_CONTENT -> "⚡ 原生 API"
+                                            ApiFlavor.INTERACTIONS -> "⚡ Interactions"
+                                            ApiFlavor.GENERATE_CONTENT -> "⚡ generateContent"
                                         },
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Medium
@@ -314,21 +347,36 @@ fun CommonChatInputBar(
                                 }
                             }
 
+                            val flavorBtnWidthDp = with(LocalDensity.current) { flavorBtnWidthPx.toDp() }
                             DropdownMenu(
                                 expanded = isFlavorMenuExpanded,
-                                onDismissRequest = { isFlavorMenuExpanded = false }
+                                onDismissRequest = { isFlavorMenuExpanded = false },
+                                offset = DpOffset(0.dp, (-8).dp),
+                                modifier = Modifier
+                                    .widthIn(min = flavorBtnWidthDp, max = adaptiveMenuWidth)
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                                        org.gemini.ui.forge.ui.theme.AppShapes.medium
+                                    )
                             ) {
                                 config.availableApiFlavors.forEach { flavor ->
                                     DropdownMenuItem(
                                         text = {
-                                            Column {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
                                                 Text(
                                                     text = when (flavor) {
-                                                        ApiFlavor.INTERACTIONS -> "会话 API (Interactions - 最新标准)"
-                                                        ApiFlavor.GENERATE_CONTENT -> "原生 API (GenerateContent - 传统单次)"
+                                                        ApiFlavor.INTERACTIONS -> "⚡ Interactions API"
+                                                        ApiFlavor.GENERATE_CONTENT -> "⚡ generateContent API"
                                                     },
+                                                    style = MaterialTheme.typography.bodySmall,
                                                     fontWeight = if (flavor == selectedApiFlavor) FontWeight.Bold else FontWeight.Normal,
-                                                    color = if (flavor == selectedApiFlavor) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                    color = if (flavor == selectedApiFlavor) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1
                                                 )
                                             }
                                         },
@@ -379,4 +427,5 @@ fun CommonChatInputBar(
             }
         }
     }
+}
 }

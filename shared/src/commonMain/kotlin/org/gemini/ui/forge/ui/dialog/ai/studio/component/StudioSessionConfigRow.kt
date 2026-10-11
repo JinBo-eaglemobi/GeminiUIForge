@@ -94,7 +94,7 @@ fun StudioSessionConfigRow(
             DropdownMenu(
                 expanded = isModelMenuExpanded,
                 onDismissRequest = { isModelMenuExpanded = false },
-                offset = DpOffset(0.dp, 4.dp),
+                offset = DpOffset(0.dp, (-8).dp),
                 properties = PopupProperties(focusable = true),
                 modifier = Modifier
                     .widthIn(min = 280.dp, max = maxMenuWidth)
@@ -228,6 +228,7 @@ fun StudioSessionConfigRow(
                 DropdownMenu(
                     expanded = isThinkingMenuExpanded,
                     onDismissRequest = { isThinkingMenuExpanded = false },
+                    offset = DpOffset(0.dp, (-8).dp),
                     modifier = Modifier
                         .widthIn(min = 360.dp, max = 460.dp)
                         .background(MaterialTheme.colorScheme.surface)

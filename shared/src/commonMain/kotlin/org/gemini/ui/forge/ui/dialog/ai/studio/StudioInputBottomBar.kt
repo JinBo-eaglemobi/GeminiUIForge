@@ -153,9 +153,8 @@ fun StudioInputBottomBar(
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val containerWidth = maxWidth
         val effectiveDialogWidth = dialogWidth ?: containerWidth
-        // ★ 核心动态响应式视口：预设菜单严格占视口宽度的 85%，菜单最大高度严格占视口高度的 70%
-        val adaptivePresetMenuWidth = effectiveDialogWidth * 0.85f
-        val adaptiveModelMenuWidth = (effectiveDialogWidth * 0.55f).coerceIn(380.dp, 600.dp)
+        // ★ 核心动态响应式视口：浮层菜单（预设菜单与模型选择菜单）统一严格按视口宽度的 85% 计算，最大高度占视口高度的 70%
+        val adaptiveMenuWidth = effectiveDialogWidth * 0.85f
         val dynamicMenuMaxHeight = dialogHeight?.let { it * 0.70f }
 
         Surface(
@@ -452,7 +451,7 @@ fun StudioInputBottomBar(
                             StudioPresetDropdownMenu(
                                 presets = presets,
                                 selectedPresetId = selectedPresetId,
-                                maxMenuWidth = adaptivePresetMenuWidth,
+                                maxMenuWidth = adaptiveMenuWidth,
                                 maxMenuHeight = dynamicMenuMaxHeight,
                                 onPresetSelected = { preset ->
                                     selectedPresetId = preset.id
@@ -555,7 +554,7 @@ fun StudioInputBottomBar(
                             onCountSelected = onCountSelected,
                             currentThinkingLevel = currentThinkingLevel,
                             onThinkingLevelSelected = onThinkingLevelSelected,
-                            maxMenuWidth = adaptiveModelMenuWidth,
+                            maxMenuWidth = adaptiveMenuWidth,
                             maxMenuHeight = dynamicMenuMaxHeight
                         )
 

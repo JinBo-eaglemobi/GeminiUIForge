@@ -81,15 +81,24 @@ fun UIStudioScreen(
                 )
             }
 
-            // 中部核心交互画布（自适应占据剩余空间，默认自适应居中）
-            Box(
+            // 中部核心交互画布与顶部多标签页
+            Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
             ) {
+                // 顶部多页面标签栏
+                UIStudioPageTabBar(
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // 核心交互画布
                 UIStudioCanvasArea(
                     viewModel = viewModel,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
                 )
             }
 

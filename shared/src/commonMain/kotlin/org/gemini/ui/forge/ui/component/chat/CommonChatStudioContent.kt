@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -25,6 +26,7 @@ import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.model.chat.VisualChatSession
+import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -83,6 +85,7 @@ fun CommonChatStudioContent(
     inputTrailingActions: @Composable RowScope.() -> Unit = {}
 ) {
     val spacing = LocalAppSpacing.current
+    val density = LocalDensity.current
     val currentSession = remember(sessions, currentSessionId) {
         sessions.find { it.id == currentSessionId }
     }
@@ -90,11 +93,17 @@ fun CommonChatStudioContent(
     // 窄屏抽屉式会话覆盖层控制
     var isNarrowSessionDrawerOpen by remember { mutableStateOf(false) }
 
+    // 沉浸式图片灯箱激活状态（内置开箱即用）
+    var lightboxImageUri by remember { mutableStateOf<String?>(null) }
+
+    // 宽屏模式下会话侧栏拖拽宽度（自由拖拽，安全范围 180dp ~ 420dp，默认 240dp）
+    var sidebarWidthDp by remember { mutableStateOf(240.dp) }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val isNarrowMode = config.enableNarrowModeAutoFold && maxWidth < config.narrowBreakpointDp.dp
 
         Row(modifier = Modifier.fillMaxSize()) {
-            // 宽屏模式：左侧固定会话侧栏 (240dp)
+            // 宽屏模式：左侧可拖拽会话侧栏
             if (!isNarrowMode) {
                 CommonChatSessionSidebar(
                     sessions = sessions,
@@ -103,12 +112,15 @@ fun CommonChatStudioContent(
                     onNewSession = onNewSession,
                     onDeleteSession = onDeleteSession,
                     config = config,
-                    modifier = Modifier.width(240.dp)
+                    modifier = Modifier.width(sidebarWidthDp)
                 )
 
-                VerticalDivider(
-                    thickness = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                // 纵向拖拽分割线（遵循 column-resizer 规范）
+                VerticalSplitter(
+                    onDrag = { deltaPx ->
+                        val deltaDp = with(density) { deltaPx.toDp() }
+                        sidebarWidthDp = (sidebarWidthDp + deltaDp).coerceIn(180.dp, 420.dp)
+                    }
                 )
             }
 
@@ -184,7 +196,13 @@ fun CommonChatStudioContent(
                         isGenerating = isGenerating,
                         streamingText = streamingText,
                         emptyTipText = config.emptyTipText,
-                        onImageClick = onImageClick,
+                        onImageClick = { clickedUri ->
+                            if (onImageClick != null) {
+                                onImageClick(clickedUri)
+                            } else {
+                                lightboxImageUri = clickedUri
+                            }
+                        },
                         messageActions = messageActions,
                         modifier = Modifier.weight(1f)
                     )
@@ -198,6 +216,13 @@ fun CommonChatStudioContent(
                         onApiFlavorSelected = onApiFlavorSelected,
                         onSendMessage = onSendMessage,
                         config = config,
+                        onImagePreviewRequested = { uri ->
+                            if (onImageClick != null) {
+                                onImageClick(uri)
+                            } else {
+                                lightboxImageUri = uri
+                            }
+                        },
                         leadingActions = inputLeadingActions,
                         trailingActions = inputTrailingActions
                     )
@@ -251,6 +276,14 @@ fun CommonChatStudioContent(
                     }
                 }
             }
+        }
+
+        // 内置通用原寸沉浸式图片灯箱（全屏大图、滚轮缩放、复制与资源管理器定位）
+        lightboxImageUri?.let { uri ->
+            CommonImageLightbox(
+                imageUri = uri,
+                onDismiss = { lightboxImageUri = null }
+            )
         }
     }
 }

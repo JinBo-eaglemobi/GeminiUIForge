@@ -114,18 +114,11 @@ fun UIStudioViewsPanel(
                 }
             }
 
-            // 搜索框（移除写死 44.dp 导致的 Placeholder 文字截断，设置标准紧凑 contentPadding）
-            OutlinedTextField(
+            // 独立紧凑自定义搜索框（彻底解决 M3 原生 OutlinedTextField 文字截断缺陷）
+            UIStudioSearchField(
                 value = state.viewSearchQuery,
                 onValueChange = { viewModel.updateViewSearchQuery(it) },
-                placeholder = { Text("搜索视图...", style = MaterialTheme.typography.bodySmall) },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(16.dp))
-                },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                textStyle = MaterialTheme.typography.bodySmall,
-                shape = RoundedCornerShape(8.dp)
+                placeholder = "搜索视图..."
             )
 
             // 视图列表
@@ -174,72 +167,13 @@ fun UIStudioViewsPanel(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(filteredPages, key = { it.id }) { page ->
-                        val isSelected = page.id == state.currentViewId
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { viewModel.selectView(page.id) }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = spacing.small, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = page.nameStr,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = "${page.width.toInt()} × ${page.height.toInt()} · ${page.blocks.size} 个图元",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(
-                                        onClick = { viewModel.startRenameView(page) },
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .tip("重命名视图 (F2)")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Edit,
-                                            contentDescription = "Rename View",
-                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                    }
-
-                                    if (allPages.size > 1) {
-                                        IconButton(
-                                            onClick = { viewModel.requestDeleteView(page) },
-                                            modifier = Modifier
-                                                .size(24.dp)
-                                                .tip("删除该视图 (Delete)")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.DeleteOutline,
-                                                contentDescription = "Delete View",
-                                                tint = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        UIStudioViewRowItem(
+                            page = page,
+                            isSelected = page.id == state.currentViewId,
+                            canDelete = allPages.size > 1,
+                            viewModel = viewModel,
+                            templateRepo = templateRepo
+                        )
                     }
                 }
             }

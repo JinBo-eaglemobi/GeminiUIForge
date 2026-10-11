@@ -3,7 +3,6 @@ package org.gemini.ui.forge.ui.uistudio.component
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,12 +17,17 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.gemini.ui.forge.model.ui.SerialRect
+import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
@@ -46,13 +50,12 @@ fun UIStudioCanvasArea(
 ) {
     val spacing = LocalAppSpacing.current
     val state = viewModel.state
-    val currentView = state.project?.pages?.find { it.id == state.currentViewId }
-        ?: state.project?.pages?.firstOrNull()
+    val currentView = state.currentView
 
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
 
     // 默认自适应居中联动
-    LaunchedEffect(containerSize, currentView?.id, state.isFitToViewport) {
+    LaunchedEffect(containerSize, currentView?.id, state.activeContainerId, state.isFitToViewport) {
         if (state.isFitToViewport && containerSize.width > 0 && containerSize.height > 0) {
             viewModel.fitToViewport(containerSize.width.toFloat(), containerSize.height.toFloat())
         }
@@ -69,31 +72,102 @@ fun UIStudioCanvasArea(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(currentView?.id, state.panOffset, state.scale) {
+                .pointerInput(currentView?.id, state.activeContainerId, state.panOffset, state.scale) {
                     detectTapGestures(
-                        onTap = { tapOffset ->
+                        onDoubleTap = { tapOffset ->
                             val currentV = currentView ?: return@detectTapGestures
+                            val logicalX = (tapOffset.x - state.panOffset.x) / state.scale
+                            val logicalY = (tapOffset.y - state.panOffset.y) / state.scale
+
+                            if (state.activeContainerId == null) {
+                                // 主视图视口下：双击父组件，新开一个标签页面显示父组件内的布局
+                                val hitRoot = currentV.blocks.findLast { b ->
+                                    if (!b.isVisible || b.isLocked) return@findLast false
+                                    val r = b.bounds
+                                    logicalX >= r.left && logicalX <= r.right &&
+                                    logicalY >= r.top && logicalY <= r.bottom
+                                }
+                                if (hitRoot != null && (hitRoot.isPureContainer || hitRoot.children.isNotEmpty())) {
+                                    viewModel.openContainerTab(hitRoot.id)
+                                }
+                            }
+                        },
+                        onTap = { tapOffset ->
+                            val currentV = currentView
+                            if (currentV == null) {
+                                viewModel.clearSelection()
+                                return@detectTapGestures
+                            }
                             // 将点击绝对坐标通过当前平移与缩放矩阵逆映射至视图逻辑坐标
                             val logicalX = (tapOffset.x - state.panOffset.x) / state.scale
                             val logicalY = (tapOffset.y - state.panOffset.y) / state.scale
 
-                            // 顶层优先倒序命中测试
-                            val hitBlock = currentV.blocks.findLast { b ->
-                                val r = b.bounds
-                                logicalX >= r.left && logicalX <= r.right &&
-                                logicalY >= r.top && logicalY <= r.bottom
+                            val activeContainer = state.activeContainerBlock
+                            if (activeContainer != null) {
+                                // 模式 A：容器独立视口中，点击可命中该容器内的直接子组件
+                                val hitChild = activeContainer.children.findLast { b ->
+                                    if (!b.isVisible || b.isLocked) return@findLast false
+                                    val r = b.bounds
+                                    logicalX >= r.left && logicalX <= r.right &&
+                                    logicalY >= r.top && logicalY <= r.bottom
+                                }
+                                if (hitChild != null) {
+                                    viewModel.selectBlock(hitChild.id)
+                                } else {
+                                    viewModel.selectBlock(activeContainer.id)
+                                }
+                            } else {
+                                // 模式 B：全局主视图视口（旧版铁律）：严禁绕过父组件选中子组件，点击任何子组件返回父组件本身
+                                val hitRoot = currentV.blocks.findLast { b ->
+                                    if (!b.isVisible || b.isLocked) return@findLast false
+                                    val r = b.bounds
+                                    logicalX >= r.left && logicalX <= r.right &&
+                                    logicalY >= r.top && logicalY <= r.bottom
+                                }
+                                if (hitRoot != null) {
+                                    viewModel.selectBlock(hitRoot.id)
+                                } else {
+                                    // 点击脱离 Page 范围或未点中任何组件，默认清空所有选中，联动展示页面属性
+                                    viewModel.clearSelection()
+                                }
                             }
-                            viewModel.selectBlock(hitBlock?.id)
                         }
                     )
                 }
+                // 1. 鼠标滚轮缩放画布
                 .pointerInput(Unit) {
-                    detectTransformGestures { centroid, pan, zoom, _ ->
-                        if (zoom != 1.0f) {
-                            viewModel.onZoom(zoom, centroid)
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Scroll) {
+                                val change = event.changes.firstOrNull() ?: continue
+                                val delta = change.scrollDelta.y
+                                if (delta != 0f) {
+                                    val multiplier = if (delta > 0) 0.9f else 1.1f
+                                    viewModel.onZoom(multiplier, change.position)
+                                }
+                                event.changes.forEach { it.consume() }
+                            }
                         }
-                        if (pan.x != 0f || pan.y != 0f) {
-                            viewModel.onPan(pan)
+                    }
+                }
+                // 2. 专用鼠标右键平移画布手势（严格禁止鼠标左键平移画布，释放左键供图元拖拽使用）
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.buttons.isSecondaryPressed) {
+                                if (event.type == PointerEventType.Move) {
+                                    val change = event.changes.firstOrNull()
+                                    if (change != null) {
+                                        val delta = change.position - change.previousPosition
+                                        if (delta.x != 0f || delta.y != 0f) {
+                                            viewModel.onPan(delta)
+                                            change.consume()
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -142,6 +216,10 @@ fun UIStudioCanvasArea(
                     }
                 }
             } else {
+                val activeContainer = state.activeContainerBlock
+                val effectiveWidth = activeContainer?.bounds?.width ?: currentView.width
+                val effectiveHeight = activeContainer?.bounds?.height ?: currentView.height
+
                 // 画布实体容器（应用图形平移与缩放矩阵）
                 Surface(
                     color = Color(0xFF1E293B),
@@ -156,8 +234,8 @@ fun UIStudioCanvasArea(
                             transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
                         }
                         .size(
-                            width = currentView.width.dp,
-                            height = currentView.height.dp
+                            width = effectiveWidth.dp,
+                            height = effectiveHeight.dp
                         )
                         .shadow(
                             elevation = 20.dp,
@@ -166,8 +244,22 @@ fun UIStudioCanvasArea(
                             spotColor = Color.Black.copy(alpha = 0.9f)
                         )
                 ) {
-                    val blocks = currentView.blocks
-                    if (blocks.isEmpty()) {
+                    val renderableBlocks = remember(currentView.blocks, activeContainer?.id) {
+                        if (activeContainer != null) {
+                            // 容器独立编辑视口模式：仅渲染容器内部子组件（局部坐标）
+                            activeContainer.children.filter { it.isVisible }.map { child ->
+                                RenderableBlockInfo(
+                                    block = child,
+                                    absBounds = child.bounds,
+                                    isInheritedLocked = child.isLocked || activeContainer.isLocked
+                                )
+                            }
+                        } else {
+                            // 全局主视图模式：全层级递归展平
+                            collectRenderableBlocks(currentView.blocks)
+                        }
+                    }
+                    if (renderableBlocks.isEmpty()) {
                         // 当前视图内图元为空的引导状态
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -197,13 +289,49 @@ fun UIStudioCanvasArea(
                             }
                         }
                     } else {
-                        // 渲染该视图中的所有图元实体
+                        // 渲染该视图中的所有可见图元实体（全层级递归展平绝对坐标）
                         Box(modifier = Modifier.fillMaxSize()) {
-                            blocks.forEach { block ->
+                            renderableBlocks.forEach { info ->
                                 UIStudioBlockItem(
-                                    block = block,
-                                    isSelected = block.id == state.selectedBlockId,
-                                    onClick = { viewModel.selectBlock(block.id) }
+                                    block = info.block,
+                                    absBounds = info.absBounds,
+                                    isSelected = info.block.id == state.selectedBlockId,
+                                    scale = state.scale,
+                                    onClick = {
+                                        if (activeContainer == null) {
+                                            // 主视图模式层级门禁：严禁绕过父容器直接选中子组件，点击必须选中所属顶层根父容器
+                                            val rootParent = currentView.blocks.find { root ->
+                                                root.id == info.block.id || root.children.any { c ->
+                                                    c.id == info.block.id || c.children.any { cc -> cc.id == info.block.id }
+                                                }
+                                            }
+                                            val targetId = rootParent?.id ?: info.block.id
+                                            viewModel.selectBlock(targetId)
+                                        } else {
+                                            // 容器专属独立编辑视口下：允许直接选中该容器内的子组件
+                                            viewModel.selectBlock(info.block.id)
+                                        }
+                                    },
+                                    onDoubleTap = {
+                                        if (activeContainer == null) {
+                                            // 主视图模式下：双击父容器，新开标签页面显示父组件内部布局
+                                            val rootParent = currentView.blocks.find { root ->
+                                                root.id == info.block.id || root.children.any { c ->
+                                                    c.id == info.block.id || c.children.any { cc -> cc.id == info.block.id }
+                                                }
+                                            }
+                                            val targetContainer = rootParent ?: info.block
+                                            if (targetContainer.isPureContainer || targetContainer.children.isNotEmpty() || targetContainer.type == org.gemini.ui.forge.model.ui.UIBlockType.CONTAINER) {
+                                                viewModel.openContainerTab(targetContainer.id)
+                                            }
+                                        }
+                                    },
+                                    onDragDelta = { dx, dy ->
+                                        viewModel.moveBlockDelta(info.block.id, dx, dy)
+                                    },
+                                    onDragEnd = {
+                                        viewModel.commitBlockMove()
+                                    }
                                 )
                             }
                         }
@@ -245,4 +373,58 @@ fun UIStudioCanvasArea(
             }
         }
     }
+}
+
+/**
+ * UI Studio 画布全层级展平图元渲染模型。
+ */
+private data class RenderableBlockInfo(
+    val block: UIBlock,
+    val absBounds: SerialRect,
+    val isInheritedLocked: Boolean
+)
+
+/**
+ * 递归收集页面内所有可见的图元，并精准推导累加其绝对全局坐标矩形与继承锁定态。
+ */
+private fun collectRenderableBlocks(
+    blocks: List<UIBlock>,
+    parentOffsetX: Float = 0f,
+    parentOffsetY: Float = 0f,
+    parentLocked: Boolean = false,
+    parentVisible: Boolean = true
+): List<RenderableBlockInfo> {
+    val result = mutableListOf<RenderableBlockInfo>()
+    for (b in blocks) {
+        val currentVisible = parentVisible && b.isVisible
+        if (!currentVisible) continue
+
+        val currentLocked = parentLocked || b.isLocked
+        val absLeft = parentOffsetX + b.bounds.left
+        val absTop = parentOffsetY + b.bounds.top
+        val absW = b.bounds.right - b.bounds.left
+        val absH = b.bounds.bottom - b.bounds.top
+        val absRect = SerialRect(absLeft, absTop, absLeft + absW, absTop + absH)
+
+        result.add(
+            RenderableBlockInfo(
+                block = b.copy(isLocked = currentLocked),
+                absBounds = absRect,
+                isInheritedLocked = currentLocked
+            )
+        )
+
+        if (b.children.isNotEmpty()) {
+            result.addAll(
+                collectRenderableBlocks(
+                    blocks = b.children,
+                    parentOffsetX = absLeft,
+                    parentOffsetY = absTop,
+                    parentLocked = currentLocked,
+                    parentVisible = currentVisible
+                )
+            )
+        }
+    }
+    return result
 }

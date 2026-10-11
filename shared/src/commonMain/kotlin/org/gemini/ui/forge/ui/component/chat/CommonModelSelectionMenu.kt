@@ -46,13 +46,15 @@ fun CommonModelSelectionMenu(
     selectedModel: GeminiModel,
     onModelSelected: (GeminiModel) -> Unit,
     onDismissRequest: () -> Unit,
+    minMenuWidth: Dp = 0.dp,
     maxMenuWidth: Dp = 440.dp,
     maxMenuHeight: Dp = 520.dp,
-    offset: DpOffset = DpOffset(0.dp, 4.dp),
+    offset: DpOffset = DpOffset(0.dp, (-8).dp),
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
     val studioModels = remember { StudioModelResolver.resolveStudioModels() }
+    val effectiveMinWidth = maxOf(320.dp, minMenuWidth)
 
     DropdownMenu(
         expanded = expanded,
@@ -60,7 +62,7 @@ fun CommonModelSelectionMenu(
         offset = offset,
         properties = PopupProperties(focusable = true),
         modifier = modifier
-            .widthIn(min = 300.dp, max = maxMenuWidth)
+            .widthIn(min = effectiveMinWidth, max = maxMenuWidth)
             .heightIn(max = maxMenuHeight)
             .background(MaterialTheme.colorScheme.surface)
             .border(

@@ -73,7 +73,9 @@ fun CommonChatMessageList(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().padding(horizontal = spacing.medium)) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().padding(horizontal = spacing.medium)) {
+        val maxBubbleWidth = (maxWidth * 0.85f).coerceAtLeast(320.dp)
+
         if (messages.isEmpty() && !isGenerating) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -100,10 +102,15 @@ fun CommonChatMessageList(
             ) {
                 items(messages, key = { it.id }) { msg ->
                     if (msg.role == "user") {
-                        CommonUserBubble(message = msg, onImageClick = onImageClick)
+                        CommonUserBubble(
+                            message = msg,
+                            maxBubbleWidth = maxBubbleWidth,
+                            onImageClick = onImageClick
+                        )
                     } else {
                         CommonModelBubble(
                             message = msg,
+                            maxBubbleWidth = maxBubbleWidth,
                             onImageClick = onImageClick,
                             messageActions = messageActions
                         )
@@ -127,6 +134,7 @@ fun CommonChatMessageList(
 @Composable
 private fun CommonUserBubble(
     message: VisualChatMessage,
+    maxBubbleWidth: androidx.compose.ui.unit.Dp,
     onImageClick: ((String) -> Unit)?
 ) {
     val spacing = LocalAppSpacing.current
@@ -137,7 +145,7 @@ private fun CommonUserBubble(
     ) {
         Column(
             horizontalAlignment = Alignment.End,
-            modifier = Modifier.widthIn(max = 680.dp)
+            modifier = Modifier.widthIn(max = maxBubbleWidth)
         ) {
             Surface(
                 color = MaterialTheme.colorScheme.primary,
@@ -152,19 +160,30 @@ private fun CommonUserBubble(
                         style = MaterialTheme.typography.bodyMedium
                     )
 
-                    // 关联附件图片展示
-                    message.generatedImageUri?.takeIf { it.isNotBlank() }?.let { imgUri ->
+                    // 关联附件图片展示 (单图或多图网格)
+                    val allImages = (listOfNotNull(message.generatedImageUri) + message.inputImageUris)
+                        .filter { it.isNotBlank() }
+                        .distinct()
+
+                    if (allImages.isNotEmpty()) {
                         Spacer(Modifier.height(spacing.small))
-                        AsyncImage(
-                            model = imgUri,
-                            contentDescription = "附件图片",
-                            modifier = Modifier
-                                .size(140.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                                .clickable { onImageClick?.invoke(imgUri) },
-                            contentScale = ContentScale.Crop
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(spacing.small),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            allImages.forEach { imgUri ->
+                                AsyncImage(
+                                    model = imgUri,
+                                    contentDescription = "附件图片",
+                                    modifier = Modifier
+                                        .size(120.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                        .clickable { onImageClick?.invoke(imgUri) },
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -194,6 +213,7 @@ private fun CommonUserBubble(
 @Composable
 private fun CommonModelBubble(
     message: VisualChatMessage,
+    maxBubbleWidth: androidx.compose.ui.unit.Dp,
     onImageClick: ((String) -> Unit)?,
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit
 ) {
@@ -221,7 +241,7 @@ private fun CommonModelBubble(
 
         Column(
             horizontalAlignment = Alignment.Start,
-            modifier = Modifier.widthIn(max = 760.dp)
+            modifier = Modifier.widthIn(max = maxBubbleWidth)
         ) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),

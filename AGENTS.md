@@ -209,6 +209,30 @@
     3. `dialogMediumWidth` (720.dp) — 中型详情、普通列表弹窗；
     4. `dialogLargeWidth` (960.dp) — 大型 PC 仪表盘、2 列 Bento、MCP 服务中心与调试控制台；
     5. `dialogHugeWidth` (1280.dp) — 全景宽屏通信档案、全景对比编辑器。
+  - **响应式动态宽度计算规范 (Responsive Dynamic Menu & Dialog Sizing)**：
+    对于依赖外部宿主容器或视口大小的浮层菜单（如 AI 对话输入底栏的模型选择菜单、专业预设菜单等），**严禁在底层组件内部写死静态固定宽度，严禁对特定菜单人为施加割裂的狭窄比例或硬上限夹具**。必须统一通过 `BoxWithConstraints` 动态感知当前弹窗或容器的实际可用宽度 `effectiveDialogWidth`，统一采用黄金视口比例：
+    - 浮层菜单最大宽度统一严格按 **`effectiveDialogWidth * 0.85f`** 进行自适应响应；
+    - **【触发按钮自适应最小宽度铁律】**：浮层菜单/弹窗的最小宽度必须动态锚定在当前触发按钮的实际可视宽度（`minWidth = maxOf(minSafeWidth, anchorButtonWidth)`），严禁写死死板固定常数，确保菜单展开时底边或顶边至少与触发按钮等宽，形成视觉对齐与支撑；
+    - 浮层菜单最大高度统一严格按 **`dialogHeight * 0.70f`**（或默认 520.dp）动态限制，确保在任何分辨率与视口缩放比下内容横向舒展无挤压、垂直平滑滚动。
+  - **平台默认宽度逃逸铁律**：所有自定义 `Dialog` 必须显式声明 `properties = DialogProperties(usePlatformDefaultWidth = false)`，防止 Compose 平台默认窄宽度（约 280~320dp）拦截并破坏 Design Tokens 宽度。
+- **UI Studio 与传统 Slots 模板双轨架构规范 (Dual-Track Project Architecture Specification)**: **【业务铁律】**
+  - **自然属性二元解耦判定（referenceImages 零冗余铁律）**：
+    UI Studio 项目与传统 Slots 模板项目在数据契约上拥有天然区别，**严禁在 ProjectState 中新增任何破坏性枚举或冗余标志字段**，一律基于 `referenceImages.isEmpty()` 进行二元判定（`val isUiStudioProject: Boolean get() = referenceImages.isEmpty()`）：
+    1. **传统 Slots 模板工程**：拥有整景设计参考图（`referenceImages.isNotEmpty()`），大厅点击卡片自适应路由进入 `AppScreen.PROJECT_WORKSPACE`；
+    2. **独立 UI Studio 工程**：无整景设计参考图（`referenceImages.isEmpty()`），大厅卡片封面左上角点缀 `UI Studio` 标识药丸，点击自适应路由直通 `AppScreen.UI_STUDIO`；
+  - **三栏独立工作台架构规范**：
+    UI Studio 工作台采用左侧复合面板（上：视图界面列表 `ViewsPanel` | 中：水平手柄 `HorizontalSplitter` | 下：树形素材库 `AssetPanel`）、中间交互画布（`CanvasArea`，自适应 Fit to Viewport 居中显示，右下角悬浮 AI Chat 入口）、右侧动态属性检查器（`PropertyPanel`，动态联动图元几何与类型）。左右面板与中间画布必须通过 `VerticalSplitter` 相互解耦并支持双向自由拖拽调整宽度；
+  - **素材库文件夹体系与磁盘物理同步规范**：
+    素材库由 `UIAssetLibrary` 统一管理（`UIAssetFolder` 树与 `UIAssetItem` 清单），持久化存储于 `templates/{projectName}/asset_library.json`；任何切片入库、文件夹创建或重命名必须与本地磁盘物理目录（`templates/{projectName}/assets/...`）实时双向同步，且素材库加载时必须执行双通道自愈扫描（`healAssetLibrary`），自动收录磁盘已存在但未登记的孤儿切片文件。
+- **全场景通用 AI 对话组件库插槽定制规范 (Universal Modular AI Chat Specification)**: **【架构铁律】**
+  - **纯净通用与业务完全解耦**：
+    全项目所有 AI 对话场景（无论是项目级 AI 架构师还是微观图元生图）必须统一沉淀并复用 `org.gemini.ui.forge.ui.component.chat` 目录下的纯净通用组件体系，**绝对严禁将业务专有逻辑（如 Slots 图元槽位、特定游戏状态）硬编码渗入通用组件库**；
+  - **插槽扩展模型 (Slot Extension Model)**：
+    通用对话组件库必须通过参数插槽全面暴露定制能力：顶部操作栏动作（`topBarActions`）、单条消息气泡后置操作（`messageActions`）、输入栏前置工具插槽（`inputLeadingActions`）与后置发送扩展（`inputTrailingActions`），使各业务端既能保持统一的视觉交互美学，又能自由注入业务专有特性；
+  - **项目级会话隔离与物理落盘规范**：
+    项目级 AI Chat 会话必须持久化存储在对应项目私有目录下（`templates/{projectName}/sessions/{sessionId}.json` 与 `agent_config.json`），数据结构严格对齐系统标准 `VisualChatSession`；
+  - **模型动态探测与剪贴板位图快捷支持**：
+    模型选择必须动态从 `GeminiModel.entries` / `StudioModelResolver` 读取（默认最新旗舰模型），严禁硬编码老旧版本；输入框必须支持通过 `Ctrl+V` / `Cmd+V` 自动捕获系统剪贴板位图并挂载为图片附件。
 - **折叠组件一键全量折叠/展开规范 (One-Click Global Folding Specification)**: **【红线规则】**
   - 全项目凡是具有 2 个或以上独立可折叠卡片的界面（如 Bento 仪表盘、多模块属性面板、报文流水），**一律强制在顶部 Header 或工具栏配备“一键折叠全部 / 一键展开全部”的全局切换按钮**（使用 `Icons.Default.UnfoldLess` 与 `Icons.Default.UnfoldMore`，并挂载当前状态 Tooltip），彻底消除用户逐卡片点击的操作疲劳。
 - **PC 悬浮提示 Tooltip 视口智能翻转与防遮挡规范 (Tooltip Viewport Specification)**: **【红线规则】**

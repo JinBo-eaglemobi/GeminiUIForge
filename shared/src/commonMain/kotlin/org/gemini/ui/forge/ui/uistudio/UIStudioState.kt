@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.assetsheet.AssetSheetParseResult
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.utils.findBlockById
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.model.chat.VisualChatSession
@@ -13,6 +14,14 @@ import org.gemini.ui.forge.ui.uistudio.model.ProjectAgentConfig
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetFolder
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
+
+/**
+ * UI Studio 左侧边栏下半部分 Tab 分类枚举。
+ */
+enum class UIStudioLeftBottomTab {
+    ASSETS,     // 素材库 (Asset Library)
+    HIERARCHY   // 图层层级 (Hierarchy)
+}
 
 /**
  * UI Studio 界面响应式状态数据模型。
@@ -71,6 +80,9 @@ data class UIStudioState(
     val selectedAssetId: String? = null,
     val isNewFolderDialogVisible: Boolean = false,
     val currentViewId: String? = null,
+    val openViewIds: List<String> = emptyList(),
+    val leftBottomTab: UIStudioLeftBottomTab = UIStudioLeftBottomTab.ASSETS,
+    val renamingBlockId: String? = null,
     val viewSearchQuery: String = "",
     val isNewViewDialogVisible: Boolean = false,
     val isAiChatDialogVisible: Boolean = false,
@@ -80,7 +92,7 @@ data class UIStudioState(
     val isFitToViewport: Boolean = true,
     val isMattingAsset: Boolean = false,
     val mattingAssetId: String? = null,
-    val autoRemoveBgOnSlice: Boolean = false,
+    val autoRemoveBgOnSlice: Boolean = true,
     val expandedFolderIds: Set<String> = emptySet(),
     val renamingFolder: UIAssetFolder? = null,
     val renamingAsset: UIAssetItem? = null,
@@ -97,8 +109,24 @@ data class UIStudioState(
     val chatSearchQuery: String = "",
     val streamingAiText: String = "",
     val aiChatAttachments: List<String> = emptyList(),
-    val isAiChatSending: Boolean = false
+    val isAiChatSending: Boolean = false,
+    val pendingCreateContainer: Pair<String, String>? = null,
+    val pendingRemoveLastChildAction: Triple<String, String, Boolean>? = null,
+    val pendingDragRemoveLastChild: DragRemoveLastChildContext? = null,
+    val openContainerTabs: List<String> = emptyList(),
+    val activeContainerId: String? = null,
+    val expandedHierarchyBlockIds: Set<String> = emptySet(),
+    val draggedAssetId: String? = null,
+    val hoveredFolderId: String? = null
 ) {
+    /**
+     * 当前处于激活独立编辑状态的父容器组件 [UIBlock]（若处于整页模式则为 null）。
+     */
+    val activeContainerBlock: UIBlock?
+        get() {
+            val cid = activeContainerId ?: return null
+            return currentView?.blocks?.findBlockById(cid)
+        }
     /**
      * 获取当前处于活跃对话状态的会话单元 [VisualChatSession]。
      */
@@ -110,13 +138,14 @@ data class UIStudioState(
         }
     /**
      * 获取当前处于活跃编辑状态的视图界面 [UIPage]。
+     * 若所有标签已全部关闭或未指定活跃视图，则严格返回 null，清空画布渲染。
      */
     val currentView: UIPage?
         get() {
             val pages = project?.pages ?: return null
-            if (pages.isEmpty()) return null
-            val viewId = currentViewId ?: return pages.firstOrNull()
-            return pages.find { it.id == viewId } ?: pages.firstOrNull()
+            if (pages.isEmpty() || openViewIds.isEmpty()) return null
+            val viewId = currentViewId ?: return null
+            return pages.find { it.id == viewId }
         }
 
     /**
@@ -134,3 +163,14 @@ data class UIStudioState(
     val selectedAsset: UIAssetItem?
         get() = assetLibrary.items.find { it.id == selectedAssetId }
 }
+
+/**
+ * 拖拽将最后一个子组件移出父容器时的上下文信息。
+ */
+data class DragRemoveLastChildContext(
+    val draggedId: String,
+    val oldParentId: String,
+    val targetId: String?,
+    val position: org.gemini.ui.forge.model.ui.DropPosition
+)
+

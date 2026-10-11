@@ -78,5 +78,7 @@ data class CommonChatStudioConfig(
     val showAttachmentPicker: Boolean = true,
     val showSessionSearch: Boolean = true,
     val enableNarrowModeAutoFold: Boolean = true,
-    val narrowBreakpointDp: Float = 640f
+    val narrowBreakpointDp: Float = 640f,
+    val dialogWidth: androidx.compose.ui.unit.Dp? = null,
+    val dialogHeight: androidx.compose.ui.unit.Dp? = null
 )

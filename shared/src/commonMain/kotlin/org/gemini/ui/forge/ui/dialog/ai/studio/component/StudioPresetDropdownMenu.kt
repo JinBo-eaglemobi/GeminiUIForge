@@ -98,7 +98,7 @@ fun StudioPresetDropdownMenu(
         DropdownMenu(
             expanded = isExpanded,
             onDismissRequest = { isExpanded = false },
-            offset = DpOffset(0.dp, 4.dp),
+            offset = DpOffset(0.dp, (-8).dp),
             properties = PopupProperties(focusable = true),
             modifier = Modifier
                 .widthIn(min = 380.dp, max = maxMenuWidth)
