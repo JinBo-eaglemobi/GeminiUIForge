@@ -6,22 +6,22 @@
     ]
   },
   "mcp": {
-    "gemini-ui-forge": {
-      "type": "remote",
-      "url": "http://127.0.0.1:18330/mcp",
-      "enabled": true
-    },
-    "compose-hot-reload": {
-      "type": "local",
-      "enabled": true,
-      "command": [
-        "pwsh",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "scripts/hot-mcp-launcher.ps1"
-      ]
+    "servers": {
+      "gemini-ui-forge": {
+        "type": "remote",
+        "url": "http://127.0.0.1:18330/mcp"
+      },
+      "compose-hot-reload": {
+        "type": "local",
+        "command": [
+          "pwsh",
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "scripts/hot-mcp-launcher.ps1"
+        ]
+      }
     }
   }
 }

@@ -55,22 +55,25 @@ fun UIStudioLeftSidebar(
             viewModel = viewModel,
             templateRepo = templateRepo,
             modifier = Modifier
-                .weight(state.viewsPanelHeightRatio.coerceIn(0.15f, 0.85f))
+                .weight(state.viewsPanelHeightRatio.coerceIn(0.05f, 0.95f))
                 .fillMaxWidth()
         )
 
-        // 水平分割手柄
+        // 水平分割手柄（官方 draggable 封装）
         HorizontalSplitter(
             onDrag = { deltaPx ->
                 val deltaRatio = deltaPx / totalHeightPx
-                viewModel.updateViewsPanelHeightRatio(state.viewsPanelHeightRatio + deltaRatio)
+                viewModel.updateViewsPanelHeightRatio(viewModel.state.viewsPanelHeightRatio + deltaRatio)
+            },
+            onDragEnd = {
+                viewModel.saveWorkspaceLayout()
             }
         )
 
         // 下半部分：带 Tab 切换的多功能区 (素材库 / 图层层级)
         Column(
             modifier = Modifier
-                .weight((1f - state.viewsPanelHeightRatio).coerceIn(0.15f, 0.85f))
+                .weight((1f - state.viewsPanelHeightRatio).coerceIn(0.05f, 0.95f))
                 .fillMaxWidth()
         ) {
             // 下半部分顶部分段切换栏

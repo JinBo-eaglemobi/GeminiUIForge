@@ -8,6 +8,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.data.repository.TemplateRepository
@@ -42,6 +46,7 @@ fun UIStudioScreen(
         UIStudioViewModel()
     }
     val state = viewModel.state
+    var containerCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     LaunchedEffect(projectState) {
         viewModel.loadProject(projectState)
@@ -62,69 +67,88 @@ fun UIStudioScreen(
         },
         modifier = modifier.fillMaxSize()
     ) { innerPadding ->
-        Row(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
             val density = LocalDensity.current
+            val totalContainerWidth = maxWidth
 
-            // 左侧复合侧栏（上：视图 Views | 下：素材库 Assets，可上下拖拽高度）
-            if (state.isAssetPanelVisible) {
-                UIStudioLeftSidebar(
-                    viewModel = viewModel,
-                    templateRepo = templateRepository,
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onGloballyPositioned { containerCoords = it }
+            ) {
+                // 左侧复合侧栏（上：视图 Views | 下：素材库 Assets，可上下拖拽高度）
+                if (state.isAssetPanelVisible) {
+                    UIStudioLeftSidebar(
+                        viewModel = viewModel,
+                        templateRepo = templateRepository,
+                        modifier = Modifier
+                            .width(state.leftPanelWidth)
+                            .fillMaxHeight()
+                    )
+
+                    // 左侧纵向拖拽分割线（官方 draggable 封装，毫秒级无损平滑响应）
+                    VerticalSplitter(
+                        onDrag = { deltaPx ->
+                            val deltaDp = with(density) { deltaPx.toDp() }
+                            viewModel.updateLeftPanelWidth(
+                                viewModel.state.leftPanelWidth + deltaDp,
+                                totalContainerWidth = totalContainerWidth
+                            )
+                        },
+                        onDragEnd = {
+                            viewModel.saveWorkspaceLayout()
+                        }
+                    )
+                }
+
+                // 中部核心交互画布与顶部多标签页
+                Column(
                     modifier = Modifier
-                        .width(state.leftPanelWidth)
+                        .weight(1f)
                         .fillMaxHeight()
-                )
+                ) {
+                    // 顶部多页面标签栏
+                    UIStudioPageTabBar(
+                        viewModel = viewModel,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-                // 左侧纵向拖拽分割线
+                    // 核心交互画布
+                    UIStudioCanvasArea(
+                        viewModel = viewModel,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    )
+                }
+
+                // 右侧纵向拖拽分割线（官方 draggable 封装，毫秒级无损平滑响应）
                 VerticalSplitter(
                     onDrag = { deltaPx ->
                         val deltaDp = with(density) { deltaPx.toDp() }
-                        viewModel.updateLeftPanelWidth(state.leftPanelWidth + deltaDp)
+                        viewModel.updateRightPanelWidth(
+                            viewModel.state.rightPanelWidth - deltaDp,
+                            totalContainerWidth = totalContainerWidth
+                        )
+                    },
+                    onDragEnd = {
+                        viewModel.saveWorkspaceLayout()
                     }
                 )
-            }
 
-            // 中部核心交互画布与顶部多标签页
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-            ) {
-                // 顶部多页面标签栏
-                UIStudioPageTabBar(
+                // 右侧复合边栏（属性检查面板 + 独立高保真实时预览面板，可自由拖拽宽度与上下高度）
+                UIStudioRightSidebar(
                     viewModel = viewModel,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // 核心交互画布
-                UIStudioCanvasArea(
-                    viewModel = viewModel,
+                    templateRepo = templateRepository,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
+                        .width(state.rightPanelWidth)
+                        .fillMaxHeight()
                 )
             }
-
-            // 右侧纵向拖拽分割线
-            VerticalSplitter(
-                onDrag = { deltaPx ->
-                    val deltaDp = with(density) { deltaPx.toDp() }
-                    viewModel.updateRightPanelWidth(state.rightPanelWidth - deltaDp)
-                }
-            )
-
-            // 右侧复合边栏（属性检查面板 + 独立高保真实时预览面板，可自由拖拽宽度与上下高度）
-            UIStudioRightSidebar(
-                viewModel = viewModel,
-                templateRepo = templateRepository,
-                modifier = Modifier
-                    .width(state.rightPanelWidth)
-                    .fillMaxHeight()
-            )
         }
 
         // 挂载新建视图界面弹窗

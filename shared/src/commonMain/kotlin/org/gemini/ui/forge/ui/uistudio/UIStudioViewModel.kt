@@ -9,8 +9,17 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import org.jetbrains.skia.Bitmap
+import org.jetbrains.skia.Image
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
@@ -66,6 +75,7 @@ class UIStudioViewModel {
         ignoreUnknownKeys = true
         prettyPrint = true
         isLenient = true
+        encodeDefaults = true
     }
 
     private val storage = LocalFileStorage()
@@ -103,6 +113,9 @@ class UIStudioViewModel {
 
         // 异步加载各视图视口记忆缓存 (viewport_cache.json)
         loadViewportCache(effectiveProject.projectId)
+
+        // 异步加载工作台边栏布局记忆配置 (workspace_layout.json)
+        loadWorkspaceLayout(effectiveProject.projectId)
 
         // 异步加载素材库 (asset_library.json)
         loadAssetLibrary(effectiveProject.projectId)
@@ -743,6 +756,60 @@ class UIStudioViewModel {
         }
     }
 
+    /**
+     * 从本地磁盘异步加载当前项目的工作台布局记忆配置 `workspace_layout.json`。
+     */
+    fun loadWorkspaceLayout(projectId: String) {
+        scope.launch(Dispatchers.Default) {
+            val sanitized = projectId.trim().replace(" ", "_")
+            val path = "templates/$sanitized/workspace_layout.json"
+            try {
+                val tFile = TemplateFile(path)
+                if (tFile.exists()) {
+                    val bytes = tFile.readBytes()
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        val layout = jsonHelper.decodeFromString(UIStudioLayoutConfig.serializer(), bytes.decodeToString())
+                        withContext(Dispatchers.Main) {
+                            state = state.copy(
+                                leftPanelWidth = layout.leftPanelWidthDp.dp,
+                                rightPanelWidth = layout.rightPanelWidthDp.dp,
+                                viewsPanelHeightRatio = layout.viewsPanelHeightRatio.coerceIn(0.05f, 0.95f),
+                                propertyPanelHeightRatio = layout.propertyPanelHeightRatio.coerceIn(0.05f, 0.95f)
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                AppLogger.w("UIStudioViewModel", "读取工作区布局失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 将当前工作台边栏宽度与面板高度比例持久化写入本地磁盘 `templates/{projectId}/workspace_layout.json`。
+     */
+    fun saveWorkspaceLayout(projectId: String? = null) {
+        val targetProjectId = projectId ?: state.project?.projectId ?: return
+        scope.launch(Dispatchers.Default) {
+            val sanitized = targetProjectId.trim().replace(" ", "_")
+            val path = "templates/$sanitized/workspace_layout.json"
+            try {
+                val layout = UIStudioLayoutConfig(
+                    leftPanelWidthDp = state.leftPanelWidth.value,
+                    rightPanelWidthDp = state.rightPanelWidth.value,
+                    viewsPanelHeightRatio = state.viewsPanelHeightRatio,
+                    propertyPanelHeightRatio = state.propertyPanelHeightRatio
+                )
+                val tFile = TemplateFile(path)
+                tFile.createParentDirs()
+                val jsonStr = jsonHelper.encodeToString(UIStudioLayoutConfig.serializer(), layout)
+                tFile.writeBytes(jsonStr.encodeToByteArray())
+            } catch (e: Exception) {
+                AppLogger.w("UIStudioViewModel", "保存工作区布局失败: ${e.message}")
+            }
+        }
+    }
+
     fun zoomIn() {
         state = state.copy(scale = (state.scale * 1.2f).coerceIn(0.1f, 5.0f), isFitToViewport = false)
         cacheCurrentViewport()
@@ -802,14 +869,13 @@ class UIStudioViewModel {
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
     }
 
     /**
      * 独立调节选中图元的不透明度 opacity（范围 0.0~1.0f）。
      */
-    fun updateSelectedBlockOpacity(opacity: Float, repo: TemplateRepository) {
+    fun updateSelectedBlockOpacity(opacity: Float, repo: TemplateRepository = TemplateRepository()) {
         val selectedId = state.selectedBlockId ?: return
         updateBlockOpacity(selectedId, opacity, repo)
     }
@@ -817,7 +883,7 @@ class UIStudioViewModel {
     /**
      * 独立调节指定图元的不透明度 opacity（范围 0.0~1.0f）。
      */
-    fun updateBlockOpacity(blockId: String, opacity: Float, repo: TemplateRepository) {
+    fun updateBlockOpacity(blockId: String, opacity: Float, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val clamped = opacity.coerceIn(0.0f, 1.0f)
         val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
@@ -826,14 +892,13 @@ class UIStudioViewModel {
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
     }
 
     /**
      * 一键重置图元的变换属性（双轴缩放还原 1.0，透明度还原 1.0）。
      */
-    fun resetBlockTransform(blockId: String, repo: TemplateRepository) {
+    fun resetBlockTransform(blockId: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
             it.copy(scaleX = 1.0f, scaleY = 1.0f, opacity = 1.0f)
@@ -841,8 +906,7 @@ class UIStudioViewModel {
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
     }
 
     fun triggerFitToViewport() {
@@ -1022,12 +1086,9 @@ class UIStudioViewModel {
         state = state.copy(
             project = updatedProject,
             canvasWidth = if (state.currentViewId == viewId) clampedW else state.canvasWidth,
-            canvasHeight = if (state.currentViewId == viewId) clampedH else state.canvasHeight
+            canvasHeight = if (state.currentViewId == viewId) clampedH else state.canvasHeight,
+            isDirty = true
         )
-        scope.launch {
-            repo.saveTemplate(updatedProject.projectId, updatedProject)
-        }
-        Toast.show("已更新视图尺寸: ${clampedW.toInt()} × ${clampedH.toInt()}", ToastType.SUCCESS)
     }
 
     /**
@@ -1585,16 +1646,31 @@ class UIStudioViewModel {
 
     // ====== 边栏尺寸与自适应居中 ======
 
-    fun updateLeftPanelWidth(width: Dp) {
-        state = state.copy(leftPanelWidth = width.coerceIn(200.dp, 500.dp))
+    fun updateLeftPanelWidth(width: Dp, totalContainerWidth: Dp? = null) {
+        val minWidth = 60.dp
+        val maxWidth = if (totalContainerWidth != null && totalContainerWidth > minWidth) {
+            val intersectWidth = (totalContainerWidth - state.rightPanelWidth).coerceAtLeast(minWidth)
+            (intersectWidth * 0.90f).coerceAtLeast(minWidth)
+        } else {
+            1200.dp
+        }
+        state = state.copy(leftPanelWidth = width.coerceIn(minWidth, maxWidth))
     }
 
-    fun updateRightPanelWidth(width: Dp) {
-        state = state.copy(rightPanelWidth = width.coerceIn(200.dp, 520.dp))
+    fun updateRightPanelWidth(width: Dp, totalContainerWidth: Dp? = null) {
+        val minWidth = 60.dp
+        val maxWidth = if (totalContainerWidth != null && totalContainerWidth > minWidth) {
+            val leftW = if (state.isAssetPanelVisible) state.leftPanelWidth else 0.dp
+            val intersectWidth = (totalContainerWidth - leftW).coerceAtLeast(minWidth)
+            (intersectWidth * 0.90f).coerceAtLeast(minWidth)
+        } else {
+            1200.dp
+        }
+        state = state.copy(rightPanelWidth = width.coerceIn(minWidth, maxWidth))
     }
 
     fun updateViewsPanelHeightRatio(ratio: Float) {
-        state = state.copy(viewsPanelHeightRatio = ratio.coerceIn(0.2f, 0.8f))
+        state = state.copy(viewsPanelHeightRatio = ratio.coerceIn(0.05f, 0.95f))
     }
 
     /**
@@ -1640,7 +1716,7 @@ class UIStudioViewModel {
      * 更新右侧属性面板与预览面板的高度比例。
      */
     fun updatePropertyPanelHeightRatio(ratio: Float) {
-        state = state.copy(propertyPanelHeightRatio = ratio.coerceIn(0.2f, 0.8f))
+        state = state.copy(propertyPanelHeightRatio = ratio.coerceIn(0.05f, 0.95f))
     }
 
     /**
@@ -1854,6 +1930,7 @@ class UIStudioViewModel {
             try {
                 repo.saveTemplate(proj.projectId, proj)
                 saveViewportCache(proj.projectId)
+                saveWorkspaceLayout(proj.projectId)
                 state = state.copy(isDirty = false)
                 Toast.show("项目保存成功", ToastType.SUCCESS)
             } catch (e: Exception) {
@@ -2051,60 +2128,101 @@ class UIStudioViewModel {
                 val canvasW = state.canvasWidth
                 val canvasH = state.canvasHeight
 
+                // ★ 关键性能突破：在循环外仅解码一次大图为共享不可变 Bitmap，彻底消除 N 次巨幅大图重复解码开销！
+                val baseImage = try {
+                    Image.makeFromEncoded(imageBytes)
+                } catch (e: Exception) {
+                    AppLogger.e("UIStudioViewModel", "❌ 解码大图失败", e)
+                    null
+                }
+                if (baseImage == null) {
+                    Toast.show("无法解析图集图像数据", ToastType.ERROR)
+                    state = state.copy(isSlicingAssets = false)
+                    return@launch
+                }
+                val imgWidth = baseImage.width
+                val imgHeight = baseImage.height
+                val srcBitmap = Bitmap.makeFromImage(baseImage).apply { setImmutable() }
+
                 val targetFolderId = state.selectedFolderId
                 val targetFolder = state.assetLibrary.folders.find { it.id == targetFolderId }
                 val folderSubDir = if (targetFolder != null) "${targetFolder.name.trim().replace(" ", "_")}/" else ""
 
-                val newAssetItems = mutableListOf<UIAssetItem>()
                 val total = items.size
-
                 val shouldRemoveBg = state.autoRemoveBgOnSlice
-                for ((idx, item) in items.withIndex()) {
-                    state = state.copy(
-                        sliceProgress = (idx + 1).toFloat() / total,
-                        sliceStatusText = if (shouldRemoveBg) {
-                            "正在切片并去背 (${idx + 1}/$total): ${item.name}"
-                        } else {
-                            "正在切片 (${idx + 1}/$total): ${item.name}"
+
+                // ★ 多协程多核并发池：充分榨干 CPU 多核并发切片算力
+                val concurrencyLimit = 8
+                val sliceSemaphore = Semaphore(concurrencyLimit)
+                val mattingSemaphore = Semaphore(2) // 去背脚本独立并发限制，防止子进程打满
+                val progressMutex = Mutex()
+                var completedCount = 0
+
+                val newAssetItems = coroutineScope {
+                    items.mapIndexed { idx, item ->
+                        async(Dispatchers.Default) {
+                            sliceSemaphore.withPermit {
+                                // 1. 调用 Skia 执行微秒级物理切片（零大图重复解码）
+                                val sliceBytes = cropImage(
+                                    srcBitmap = srcBitmap,
+                                    imageWidth = imgWidth,
+                                    imageHeight = imgHeight,
+                                    bounds = item.bounds,
+                                    originalWidth = canvasW,
+                                    originalHeight = canvasH,
+                                    isPng = true
+                                )
+
+                                val assetId = item.id.ifBlank { "asset_${getCurrentTimeMillis()}_$idx" }
+                                val relPath = "templates/$sanitizedName/assets/image/${folderSubDir}${assetId}.png"
+
+                                // 2. 将切片物理写入磁盘素材库目录 (支持自动透明去背)
+                                if (sliceBytes != null && sliceBytes.isNotEmpty()) {
+                                    val finalBytes = if (shouldRemoveBg) {
+                                        mattingSemaphore.withPermit {
+                                            val matted = mattingService.removeBackground(sliceBytes)
+                                            if (matted != null && matted.isNotEmpty()) matted else sliceBytes
+                                        }
+                                    } else {
+                                        sliceBytes
+                                    }
+                                    val tFile = TemplateFile(relPath)
+                                    tFile.writeBytes(finalBytes)
+                                }
+
+                                // 3. 线程安全更新切片进度与状态
+                                val currentDone = progressMutex.withLock {
+                                    completedCount++
+                                    completedCount
+                                }
+                                state = state.copy(
+                                    sliceProgress = currentDone.toFloat() / total,
+                                    sliceStatusText = if (shouldRemoveBg) {
+                                        "正在并发切片并去背 ($currentDone/$total): ${item.name}"
+                                    } else {
+                                        "正在并发切片 ($currentDone/$total): ${item.name}"
+                                    }
+                                )
+
+                                // 4. 构建资产项实体 (带索引保证最终稳定保序)
+                                IndexedValue(
+                                    idx,
+                                    UIAssetItem(
+                                        id = assetId,
+                                        name = item.name,
+                                        relativePath = relPath,
+                                        width = item.bounds.width.toInt().coerceAtLeast(1),
+                                        height = item.bounds.height.toInt().coerceAtLeast(1),
+                                        category = item.type.name.lowercase(),
+                                        folderId = targetFolderId,
+                                        createdAt = getCurrentTimeMillis()
+                                    )
+                                )
+                            }
                         }
-                    )
-
-                    // 1. 调用 Skia 执行高质量透明 Alpha 通道图像物理切片
-                    val sliceBytes = cropImage(
-                        imageBytes = imageBytes,
-                        bounds = item.bounds,
-                        originalWidth = canvasW,
-                        originalHeight = canvasH,
-                        isPng = true
-                    )
-
-                    val assetId = item.id.ifBlank { "asset_${getCurrentTimeMillis()}_$idx" }
-                    val relPath = "templates/$sanitizedName/assets/image/${folderSubDir}${assetId}.png"
-
-                    // 2. 将切片物理写入磁盘素材库目录 (支持自动透明去背)
-                    if (sliceBytes != null && sliceBytes.isNotEmpty()) {
-                        val finalBytes = if (shouldRemoveBg) {
-                            val matted = mattingService.removeBackground(sliceBytes)
-                            if (matted != null && matted.isNotEmpty()) matted else sliceBytes
-                        } else {
-                            sliceBytes
-                        }
-                        val tFile = TemplateFile(relPath)
-                        tFile.writeBytes(finalBytes)
-                    }
-
-                    // 3. 构建对应的 UIAssetItem 资产实体并归入素材库
-                    val assetItem = UIAssetItem(
-                        id = assetId,
-                        name = item.name,
-                        relativePath = relPath,
-                        width = item.bounds.width.toInt().coerceAtLeast(1),
-                        height = item.bounds.height.toInt().coerceAtLeast(1),
-                        category = item.type.name.lowercase(),
-                        folderId = targetFolderId,
-                        createdAt = getCurrentTimeMillis()
-                    )
-                    newAssetItems.add(assetItem)
+                    }.awaitAll()
+                        .sortedBy { it.index }
+                        .map { it.value }
                 }
 
                 // 4. 将切片生成的素材归入素材库 (Asset Library)，同步更新状态并持久化落盘
@@ -2227,9 +2345,9 @@ class UIStudioViewModel {
         val targetH = asset.height.coerceAtLeast(32)
 
         if (activeContainer != null) {
-            // 当前处于父组件打开的独立编辑视口：添加到该父组件内
-            val posX = logicalX ?: ((activeContainer.bounds.width - targetW).coerceAtLeast(0f) / 2f)
-            val posY = logicalY ?: ((activeContainer.bounds.height - targetH).coerceAtLeast(0f) / 2f)
+            // 当前处于父组件打开的独立编辑视口：添加到该父组件内（居中落位在光标松手点）
+            val posX = if (logicalX != null) logicalX - (targetW / 2f) else ((activeContainer.bounds.width - targetW).coerceAtLeast(0f) / 2f)
+            val posY = if (logicalY != null) logicalY - (targetH / 2f) else ((activeContainer.bounds.height - targetH).coerceAtLeast(0f) / 2f)
             val newBlock = UIBlock(
                 id = "block_${asset.id}_${Random.nextInt(1000, 9999)}",
                 type = UIBlockType.IMAGE,
@@ -2244,9 +2362,9 @@ class UIStudioViewModel {
             state = state.copy(selectedBlockId = newBlock.id)
             Toast.show("已将素材添加到容器「${activeContainer.id}」: ${asset.name}", ToastType.SUCCESS)
         } else {
-            // 主视图界面：添加到页面根级 blocks
-            val posX = logicalX ?: ((view.width - targetW).coerceAtLeast(0f) / 2f)
-            val posY = logicalY ?: ((view.height - targetH).coerceAtLeast(0f) / 2f)
+            // 主视图界面：添加到页面根级 blocks（居中落位在光标松手点）
+            val posX = if (logicalX != null) logicalX - (targetW / 2f) else ((view.width - targetW).coerceAtLeast(0f) / 2f)
+            val posY = if (logicalY != null) logicalY - (targetH / 2f) else ((view.height - targetH).coerceAtLeast(0f) / 2f)
             val newBlock = UIBlock(
                 id = "block_${asset.id}_${Random.nextInt(1000, 9999)}",
                 type = UIBlockType.IMAGE,
@@ -2264,18 +2382,17 @@ class UIStudioViewModel {
 
     fun startRenameView(view: UIPage) { state = state.copy(renamingView = view) }
     fun cancelRenameView() { state = state.copy(renamingView = null) }
-    fun commitRenameView(viewId: String, newName: String, repo: TemplateRepository) {
+    fun commitRenameView(viewId: String, newName: String, repo: TemplateRepository = TemplateRepository()) {
         if (newName.isBlank()) return
         val updatedPages = state.project?.pages?.map {
             if (it.id == viewId) it.copy(nameStr = newName.trim()) else it
         } ?: return
         val updatedProject = state.project?.copy(pages = updatedPages) ?: return
-        state = state.copy(project = updatedProject, renamingView = null)
-        saveProject(repo)
+        state = state.copy(project = updatedProject, renamingView = null, isDirty = true)
         Toast.show("视图已重命名为: $newName", ToastType.SUCCESS)
     }
 
-    fun updateBlockBounds(blockId: String, left: Float, top: Float, width: Float, height: Float, repo: TemplateRepository) {
+    fun updateBlockBounds(blockId: String, left: Float, top: Float, width: Float, height: Float, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val updatedBlocks = view.blocks.map {
             if (it.id == blockId) it.copy(bounds = SerialRect(left, top, left + width, top + height)) else it
@@ -2283,8 +2400,7 @@ class UIStudioViewModel {
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
     }
 
     /**
@@ -2312,17 +2428,17 @@ class UIStudioViewModel {
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
     }
 
     /**
-     * 图元拖拽释放后执行持久化刷盘。
+     * 图元拖拽释放后标记未保存状态（仅更新内存，不写磁盘）。
      */
     fun commitBlockMove(repo: TemplateRepository = TemplateRepository()) {
-        saveProject(repo)
+        state = state.copy(isDirty = true)
     }
 
-    fun updateBlockType(blockId: String, newType: UIBlockType, repo: TemplateRepository) {
+    fun updateBlockType(blockId: String, newType: UIBlockType, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
             it.copy(type = newType)
@@ -2330,11 +2446,10 @@ class UIStudioViewModel {
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
     }
 
-    fun updateBlockPrompts(blockId: String, userPromptZh: String, userPromptEn: String, repo: TemplateRepository) {
+    fun updateBlockPrompts(blockId: String, userPromptZh: String, userPromptEn: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val updatedBlocks = view.blocks.map {
             if (it.id == blockId) it.copy(userPromptZh = userPromptZh, userPromptEn = userPromptEn) else it
@@ -2342,11 +2457,10 @@ class UIStudioViewModel {
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
     }
 
-    fun updateBlockPureContainer(blockId: String, isPure: Boolean, repo: TemplateRepository) {
+    fun updateBlockPureContainer(blockId: String, isPure: Boolean, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val updatedBlocks = view.blocks.map {
             if (it.id == blockId) it.copy(isPureContainer = isPure) else it
@@ -2354,8 +2468,7 @@ class UIStudioViewModel {
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
     }
 
     fun deleteSelectedBlock(blockId: String, repo: TemplateRepository) {
@@ -2707,18 +2820,20 @@ class UIStudioViewModel {
         Toast.show("已解散父容器: ${container.id}", ToastType.SUCCESS)
     }
 
-    private fun updateViewBlocksAndSave(viewId: String, newBlocks: List<UIBlock>, repo: TemplateRepository) {
+    private fun updateViewBlocksAndSave(viewId: String, newBlocks: List<UIBlock>, repo: TemplateRepository = TemplateRepository()) {
         val updatedPages = state.project?.pages?.map {
             if (it.id == viewId) it.copy(blocks = newBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(
+            project = state.project?.copy(pages = updatedPages),
+            isDirty = true
+        )
     }
 
     /**
      * 切换指定组件的可见性状态 (显示/隐藏，递归支持容器内的子图元)。
      */
-    fun toggleBlockVisibility(blockId: String, repo: TemplateRepository) {
+    fun toggleBlockVisibility(blockId: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) { b ->
             val newVisible = !b.isVisible
@@ -2734,37 +2849,35 @@ class UIStudioViewModel {
     /**
      * 将指定组件置于顶层（移至渲染列表尾部）。
      */
-    fun bringBlockToFront(blockId: String, repo: TemplateRepository) {
+    fun bringBlockToFront(blockId: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val target = view.blocks.find { it.id == blockId } ?: return
         val updatedBlocks = view.blocks.filterNot { it.id == blockId } + target
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
         Toast.show("已将组件置于顶层", ToastType.SUCCESS)
     }
 
     /**
      * 将指定组件置于底层（移至渲染列表头部）。
      */
-    fun sendBlockToBack(blockId: String, repo: TemplateRepository) {
+    fun sendBlockToBack(blockId: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val target = view.blocks.find { it.id == blockId } ?: return
         val updatedBlocks = listOf(target) + view.blocks.filterNot { it.id == blockId }
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
         Toast.show("已将组件置于底层", ToastType.SUCCESS)
     }
 
     /**
      * 将指定组件上移一层。
      */
-    fun moveBlockUp(blockId: String, repo: TemplateRepository) {
+    fun moveBlockUp(blockId: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val idx = view.blocks.indexOfFirst { it.id == blockId }
         if (idx == -1 || idx == view.blocks.lastIndex) return
@@ -2774,14 +2887,13 @@ class UIStudioViewModel {
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = mutable) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
     }
 
     /**
      * 将指定组件下移一层。
      */
-    fun moveBlockDown(blockId: String, repo: TemplateRepository) {
+    fun moveBlockDown(blockId: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val idx = view.blocks.indexOfFirst { it.id == blockId }
         if (idx <= 0) return
@@ -2791,14 +2903,13 @@ class UIStudioViewModel {
         val updatedPages = state.project?.pages?.map {
             if (it.id == view.id) it.copy(blocks = mutable) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages))
-        saveProject(repo)
+        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
     }
 
     /**
      * 重命名组件（递归支持子组件）。
      */
-    fun renameBlock(blockId: String, newName: String, repo: TemplateRepository) {
+    fun renameBlock(blockId: String, newName: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val target = view.blocks.findBlockById(blockId) ?: return
         val trimmed = newName.trim().ifBlank { target.id }
@@ -2815,9 +2926,9 @@ class UIStudioViewModel {
         state = state.copy(
             project = state.project?.copy(pages = updatedPages),
             selectedBlockId = if (state.selectedBlockId == blockId) trimmed else state.selectedBlockId,
-            renamingBlockId = null
+            renamingBlockId = null,
+            isDirty = true
         )
-        saveProject(repo)
         Toast.show("组件已重命名为: $trimmed", ToastType.SUCCESS)
     }
 

@@ -117,10 +117,10 @@ fun UIStudioHierarchyPanel(
                     .padding(spacing.small)
                     .onGloballyPositioned { listCoordinates = it }
             ) {
-                // 顶部工具栏：紧凑搜索框 + 一键折叠/展开 + 一键锁定/解锁
+                // 顶部工具栏：紧凑搜索框 + 一键锁定/解锁 + 一键显示/隐藏 + 一键折叠/展开 (严格与下方行项 X 坐标 1:1 对齐)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().padding(end = 4.dp)
                 ) {
                     UIStudioSearchField(
                         value = searchQuery,
@@ -131,50 +131,52 @@ fun UIStudioHierarchyPanel(
 
                     Spacer(modifier = Modifier.width(4.dp))
 
-                    // 一键全部展开 / 全部折叠容器
-                    IconButton(
-                        onClick = { viewModel.toggleAllHierarchyBlocksExpanded() },
-                        modifier = Modifier
-                            .size(30.dp)
-                            .tip("全部展开/折叠容器")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.UnfoldMore,
-                            contentDescription = "展开折叠",
-                            tint = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    // 一键全部显示 / 隐藏组件
-                    val isAnyHidden = currentView?.blocks?.any { !it.isVisible } == true
-                    IconButton(
-                        onClick = { viewModel.toggleAllBlocksVisibility(templateRepo) },
-                        modifier = Modifier
-                            .size(30.dp)
-                            .tip(if (isAnyHidden) "显示全部组件" else "隐藏全部组件")
-                    ) {
-                        Icon(
-                            imageVector = if (isAnyHidden) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = "显示全部",
-                            tint = if (isAnyHidden) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    // 一键全部锁定 / 解锁组件
+                    // 1. 一键全部锁定 / 解锁组件 (对齐下方行项的锁定开关)
                     val isAnyUnlocked = currentView?.blocks?.any { !it.isLocked } == true
                     IconButton(
                         onClick = { viewModel.toggleAllBlocksLocked(templateRepo) },
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(20.dp)
                             .tip(if (isAnyUnlocked) "锁定全部组件" else "解锁全部组件")
                     ) {
                         Icon(
                             imageVector = if (isAnyUnlocked) Icons.Default.LockOpen else Icons.Default.Lock,
                             contentDescription = "锁定全部",
                             tint = if (isAnyUnlocked) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+
+                    // 2. 一键全部显示 / 隐藏组件 (对齐下方行项的眼睛开关)
+                    val isAnyHidden = currentView?.blocks?.any { !it.isVisible } == true
+                    IconButton(
+                        onClick = { viewModel.toggleAllBlocksVisibility(templateRepo) },
+                        modifier = Modifier
+                            .size(20.dp)
+                            .tip(if (isAnyHidden) "显示全部组件" else "隐藏全部组件")
+                    ) {
+                        Icon(
+                            imageVector = if (isAnyHidden) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = "显示全部",
+                            tint = if (isAnyHidden) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+
+                    // 3. 一键全部展开 / 全部折叠容器 (放最后，对齐下方行项的更多选项)
+                    val allContainerIds = currentView?.blocks?.filter { it.isPureContainer || it.children.isNotEmpty() }?.map { it.id }?.toSet().orEmpty()
+                    val isAllExpanded = state.expandedHierarchyBlockIds.containsAll(allContainerIds) && allContainerIds.isNotEmpty()
+                    IconButton(
+                        onClick = { viewModel.toggleAllHierarchyBlocksExpanded() },
+                        modifier = Modifier
+                            .size(20.dp)
+                            .tip(if (isAllExpanded) "折叠全部容器" else "展开全部容器")
+                    ) {
+                        Icon(
+                            imageVector = if (isAllExpanded) Icons.Default.UnfoldLess else Icons.Default.UnfoldMore,
+                            contentDescription = "展开折叠",
+                            tint = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }

@@ -18,7 +18,16 @@ import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.cropImage
 import org.gemini.ui.forge.utils.readLocalFileBytes
+import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Image
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * AI 图集导入流水线 MCP 工具。
@@ -179,53 +188,72 @@ class ImportAssetSheetPipelineTool(
             }
         }
 
-        // 3. 执行 Skia 物理透明切片落盘与构建 UIBlock
-        onProgress?.invoke(0.8f, "正在执行物理透明切片并落盘至资产库...")
+        // 3. 执行 Skia 物理透明切片落盘与构建 UIBlock (原图一次解码 + 多协程并发)
+        onProgress?.invoke(0.8f, "正在执行并发物理透明切片并落盘至资产库...")
         val canvasW = parseResult.canvasWidth
         val canvasH = parseResult.canvasHeight
 
-        val createdBlocks = mutableListOf<UIBlock>()
-        val savedAssetPaths = mutableListOf<String>()
+        // ★ 一次解码为不可变 Bitmap，避免每个切片都重复全图解码
+        val srcBitmap = Bitmap.makeFromImage(skiaImage).apply { setImmutable() }
+        val sliceSemaphore = Semaphore(8)
+        val progressMutex = Mutex()
+        var completedCount = 0
 
-        finalItems.forEachIndexed { index, item ->
-            val b = item.bounds
-            val localCropRect = SerialRect(
-                left = b.left.coerceIn(0f, imgWidth),
-                top = b.top.coerceIn(0f, imgHeight),
-                right = b.right.coerceIn(0f, imgWidth),
-                bottom = b.bottom.coerceIn(0f, imgHeight)
-            )
+        val (createdBlocks, savedAssetPaths) = coroutineScope {
+            val results = finalItems.mapIndexed { index, item ->
+                async(Dispatchers.Default) {
+                    sliceSemaphore.withPermit {
+                        val b = item.bounds
+                        val localCropRect = SerialRect(
+                            left = b.left.coerceIn(0f, imgWidth),
+                            top = b.top.coerceIn(0f, imgHeight),
+                            right = b.right.coerceIn(0f, imgWidth),
+                            bottom = b.bottom.coerceIn(0f, imgHeight)
+                        )
 
-            val sliceBytes = cropImage(
-                imageBytes = imageBytes,
-                bounds = localCropRect,
-                originalWidth = imgWidth,
-                originalHeight = imgHeight,
-                isPng = true
-            )
+                        val sliceBytes = cropImage(
+                            srcBitmap = srcBitmap,
+                            imageWidth = skiaImage.width,
+                            imageHeight = skiaImage.height,
+                            bounds = localCropRect,
+                            originalWidth = imgWidth,
+                            originalHeight = imgHeight,
+                            isPng = true
+                        )
 
-            val relativeAssetPath = "templates/$sanitizedName/assets/${item.id}/${item.id}.png"
-            var fileHandle: TemplateFile? = null
-            if (sliceBytes != null && sliceBytes.isNotEmpty()) {
-                val tFile = TemplateFile(relativeAssetPath)
-                tFile.writeBytes(sliceBytes)
-                fileHandle = tFile
-                savedAssetPaths.add(relativeAssetPath)
-            }
+                        val relativeAssetPath = "templates/$sanitizedName/assets/${item.id}/${item.id}.png"
+                        var fileHandle: TemplateFile? = null
+                        if (sliceBytes != null && sliceBytes.isNotEmpty()) {
+                            val tFile = TemplateFile(relativeAssetPath)
+                            tFile.writeBytes(sliceBytes)
+                            fileHandle = tFile
+                        }
 
-            val block = UIBlock(
-                id = item.id,
-                type = item.type,
-                bounds = b,
-                cropRect = b,
-                currentImageUri = fileHandle,
-                referenceImage = fileHandle,
-                userPromptZh = item.name,
-                userPromptEn = item.name
-            )
-            createdBlocks.add(block)
+                        val block = UIBlock(
+                            id = item.id,
+                            type = item.type,
+                            bounds = b,
+                            cropRect = b,
+                            currentImageUri = fileHandle,
+                            referenceImage = fileHandle,
+                            userPromptZh = item.name,
+                            userPromptEn = item.name
+                        )
 
-            onProgress?.invoke(0.8f + (index.toFloat() / finalItems.size) * 0.15f, "切片中 (${index + 1}/${finalItems.size}): ${item.name}")
+                        val done = progressMutex.withLock {
+                            completedCount++
+                            completedCount
+                        }
+                        onProgress?.invoke(0.8f + (done.toFloat() / finalItems.size) * 0.15f, "并发切片中 ($done/${finalItems.size}): ${item.name}")
+
+                        IndexedValue(index, Pair(block, if (fileHandle != null) relativeAssetPath else null))
+                    }
+                }
+            }.awaitAll().sortedBy { it.index }.map { it.value }
+
+            val blocks = results.map { it.first }
+            val paths = results.mapNotNull { it.second }
+            Pair(blocks, paths)
         }
 
         // 4. 构建并保存 ProjectState

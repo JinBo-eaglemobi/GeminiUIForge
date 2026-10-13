@@ -37,6 +37,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,6 +72,7 @@ fun UIStudioAssetPanel(
     val state = viewModel.state
     val library = state.assetLibrary
     val copy = rememberClipboardAction()
+    val density = LocalDensity.current.density.coerceAtLeast(0.1f)
 
     var renamingFolderTarget by remember { mutableStateOf<UIAssetFolder?>(null) }
     var renamingAssetTarget by remember { mutableStateOf<UIAssetItem?>(null) }
@@ -357,36 +359,34 @@ fun UIStudioAssetPanel(
                                     onRename = { renamingAssetTarget = it },
                                     onDelete = { deletingAssetTarget = it },
                                     onDragHover = { rootPos ->
+                                        val liveState = viewModel.state
                                         val hitFolderId = folderBoundsMap.entries.firstOrNull { it.value.contains(rootPos) }?.key
                                         viewModel.setHoveredFolderId(hitFolderId)
 
-                                        val canvasRect = state.canvasWindowBounds
+                                        val canvasRect = liveState.canvasWindowBounds
                                         val isOverCanvas = canvasRect != null &&
                                             rootPos.x >= canvasRect.left && rootPos.x <= canvasRect.right &&
                                             rootPos.y >= canvasRect.top && rootPos.y <= canvasRect.bottom
                                         viewModel.setCanvasDragHovered(isOverCanvas)
-                                        if (isOverCanvas) {
-                                            viewModel.updateLastDragHoverPos(Offset(rootPos.x, rootPos.y))
-                                        }
+                                        viewModel.updateLastDragHoverPos(Offset(rootPos.x, rootPos.y))
                                     },
                                     onDragEnd = {
-                                        val canvasRect = state.canvasWindowBounds
-                                        val isOverCanvas = state.isCanvasDragHovered
-                                        val draggedId = state.draggedAssetId
-                                        val asset = library.items.find { it.id == draggedId }
+                                        val liveState = viewModel.state
+                                        val canvasRect = liveState.canvasWindowBounds
+                                        val lastPos = liveState.lastDragHoverPos
+                                        val isOverCanvas = canvasRect != null && lastPos != null &&
+                                            lastPos.x >= canvasRect.left && lastPos.x <= canvasRect.right &&
+                                            lastPos.y >= canvasRect.top && lastPos.y <= canvasRect.bottom
 
-                                        if (isOverCanvas && asset != null && canvasRect != null) {
-                                            val lastPos = state.lastDragHoverPos
-                                            val dropX = lastPos?.x ?: canvasRect.left
-                                            val dropY = lastPos?.y ?: canvasRect.top
-                                            val logicalX = ((dropX - canvasRect.left) - state.panOffset.x) / state.scale
-                                            val logicalY = ((dropY - canvasRect.top) - state.panOffset.y) / state.scale
-                                            viewModel.addAssetToCanvas(asset, logicalX, logicalY, templateRepo)
+                                        if (isOverCanvas && canvasRect != null && lastPos != null) {
+                                            val currentScale = liveState.scale.coerceAtLeast(0.01f)
+                                            val logicalX = (((lastPos.x - canvasRect.left) - liveState.panOffset.x) / currentScale) / density
+                                            val logicalY = (((lastPos.y - canvasRect.top) - liveState.panOffset.y) / currentScale) / density
+                                            viewModel.addAssetToCanvas(item, logicalX, logicalY, templateRepo)
                                         } else {
-                                            val targetFolderId = state.hoveredFolderId
-                                            if (draggedId != null) {
-                                                viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
-                                            }
+                                            val targetFolderId = liveState.hoveredFolderId
+                                            val draggedId = liveState.draggedAssetId ?: item.id
+                                            viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
                                         }
                                         viewModel.setDraggedAssetId(null)
                                         viewModel.setHoveredFolderId(null)
@@ -410,36 +410,34 @@ fun UIStudioAssetPanel(
                             onRename = { renamingAssetTarget = it },
                             onDelete = { deletingAssetTarget = it },
                             onDragHover = { rootPos ->
+                                val liveState = viewModel.state
                                 val hitFolderId = folderBoundsMap.entries.firstOrNull { it.value.contains(rootPos) }?.key
                                 viewModel.setHoveredFolderId(hitFolderId)
 
-                                val canvasRect = state.canvasWindowBounds
+                                val canvasRect = liveState.canvasWindowBounds
                                 val isOverCanvas = canvasRect != null &&
                                     rootPos.x >= canvasRect.left && rootPos.x <= canvasRect.right &&
                                     rootPos.y >= canvasRect.top && rootPos.y <= canvasRect.bottom
                                 viewModel.setCanvasDragHovered(isOverCanvas)
-                                if (isOverCanvas) {
-                                    viewModel.updateLastDragHoverPos(Offset(rootPos.x, rootPos.y))
-                                }
+                                viewModel.updateLastDragHoverPos(Offset(rootPos.x, rootPos.y))
                             },
                             onDragEnd = {
-                                val canvasRect = state.canvasWindowBounds
-                                val isOverCanvas = state.isCanvasDragHovered
-                                val draggedId = state.draggedAssetId
-                                val asset = library.items.find { it.id == draggedId }
+                                val liveState = viewModel.state
+                                val canvasRect = liveState.canvasWindowBounds
+                                val lastPos = liveState.lastDragHoverPos
+                                val isOverCanvas = canvasRect != null && lastPos != null &&
+                                    lastPos.x >= canvasRect.left && lastPos.x <= canvasRect.right &&
+                                    lastPos.y >= canvasRect.top && lastPos.y <= canvasRect.bottom
 
-                                if (isOverCanvas && asset != null && canvasRect != null) {
-                                    val lastPos = state.lastDragHoverPos
-                                    val dropX = lastPos?.x ?: canvasRect.left
-                                    val dropY = lastPos?.y ?: canvasRect.top
-                                    val logicalX = ((dropX - canvasRect.left) - state.panOffset.x) / state.scale
-                                    val logicalY = ((dropY - canvasRect.top) - state.panOffset.y) / state.scale
-                                    viewModel.addAssetToCanvas(asset, logicalX, logicalY, templateRepo)
+                                if (isOverCanvas && canvasRect != null && lastPos != null) {
+                                    val currentScale = liveState.scale.coerceAtLeast(0.01f)
+                                    val logicalX = (((lastPos.x - canvasRect.left) - liveState.panOffset.x) / currentScale) / density
+                                    val logicalY = (((lastPos.y - canvasRect.top) - liveState.panOffset.y) / currentScale) / density
+                                    viewModel.addAssetToCanvas(item, logicalX, logicalY, templateRepo)
                                 } else {
-                                    val targetFolderId = state.hoveredFolderId
-                                    if (draggedId != null) {
-                                        viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
-                                    }
+                                    val targetFolderId = liveState.hoveredFolderId
+                                    val draggedId = liveState.draggedAssetId ?: item.id
+                                    viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
                                 }
                                 viewModel.setDraggedAssetId(null)
                                 viewModel.setHoveredFolderId(null)

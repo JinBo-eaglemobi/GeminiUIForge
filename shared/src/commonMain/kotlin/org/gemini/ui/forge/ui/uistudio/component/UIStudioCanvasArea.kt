@@ -373,7 +373,7 @@ fun UIStudioCanvasArea(
                                         viewModel.moveBlockDelta(info.block.id, dx, dy)
                                     },
                                     onDragEnd = {
-                                        viewModel.commitBlockMove()
+                                        // 移动操作已在内存中实时更新并标记 isDirty，绝不执行任何自动刷盘或 Toast 弹窗
                                     }
                                 )
                             }

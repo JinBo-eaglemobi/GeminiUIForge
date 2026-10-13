@@ -329,6 +329,67 @@ suspend fun cropToOpaqueBounds(
  * @param originalHeight 输入坐标对应的逻辑画布高度。
  * @return 仅经过裁剪的原始尺寸子图的 [Image] 对象，失败返回 null。
  */
+/**
+ * 从预解码的源位图提取指定边界的子图（仅裁剪，不涉及缩放），返回 [Image] 对象。
+ * 避免了每次切片都重新解码整张大图的巨大 CPU/内存开销。
+ *
+ * @param srcBitmap 预解码的源位图（应设置为不可变 setImmutable() 以支持多线程安全读取）。
+ * @param imageWidth 原图物理宽度。
+ * @param imageHeight 原图物理高度。
+ * @param bounds 裁剪区域（相对于 originalWidth/Height 的比例坐标）。
+ * @param originalWidth 输入坐标对应的逻辑画布宽度。
+ * @param originalHeight 输入坐标对应的逻辑画布高度。
+ * @return 仅经过裁剪的原始尺寸子图的 [Image] 对象，失败返回 null。
+ */
+fun extractImageSubsetToImage(
+    srcBitmap: Bitmap,
+    imageWidth: Int,
+    imageHeight: Int,
+    bounds: SerialRect,
+    originalWidth: Float,
+    originalHeight: Float
+): Image? {
+    return try {
+        val scaleX = imageWidth.toFloat() / originalWidth
+        val scaleY = imageHeight.toFloat() / originalHeight
+
+        val srcL = bounds.left * scaleX
+        val srcT = bounds.top * scaleY
+        val srcW = (bounds.width * scaleX).coerceAtLeast(1f)
+        val srcH = (bounds.height * scaleY).coerceAtLeast(1f)
+
+        // 使用 extractSubset 进行快速零拷贝子矩形裁剪
+        val croppedBitmap = Bitmap()
+        val extractSuccess = srcBitmap.extractSubset(
+            croppedBitmap,
+            IRect.makeXYWH(
+                srcL.toInt().coerceAtMost(imageWidth - 1),
+                srcT.toInt().coerceAtMost(imageHeight - 1),
+                srcW.toInt().coerceAtMost(imageWidth - srcL.toInt()),
+                srcH.toInt().coerceAtMost(imageHeight - srcT.toInt())
+            )
+        )
+
+        if (!extractSuccess) {
+            AppLogger.e("ImageUtils", "❌ Bitmap.extractSubset 裁剪失败")
+            return null
+        }
+        Image.makeFromBitmap(croppedBitmap)
+    } catch (e: Exception) {
+        AppLogger.e("ImageUtils", "❌ 跨平台裁剪提取子图失败", e)
+        null
+    }
+}
+
+/**
+ * 跨平台图像裁剪提取子图（仅裁剪，不涉及缩放）。
+ * 
+ * @param imageBytes 原始图像的字节数组。
+ * @param bounds 裁剪区域（相对于 originalWidth/Height 的比例坐标）。
+ * @param originalWidth 输入坐标对应的逻辑画布宽度。
+ * @param originalHeight 输入坐标对应的逻辑画布高度。
+ * @return 仅经过裁剪的原始尺寸子图的 [Image] 对象，失败返回 null。
+ */
 fun extractImageSubsetToImage(
     imageBytes: ByteArray,
     bounds: SerialRect,
@@ -337,40 +398,29 @@ fun extractImageSubsetToImage(
 ): Image? {
     return try {
         val image = Image.makeFromEncoded(imageBytes)
-        val scaleX = image.width.toFloat() / originalWidth
-        val scaleY = image.height.toFloat() / originalHeight
-
-        val srcL = bounds.left * scaleX
-        val srcT = bounds.top * scaleY
-        val srcW = (bounds.width * scaleX).coerceAtLeast(1f)
-        val srcH = (bounds.height * scaleY).coerceAtLeast(1f)
-
-        // 1. 将 Image 转换为 Bitmap (零拷贝/完美继承属性)
-        val srcBitmap = Bitmap.makeFromImage(image)
-
-        // 2. 使用 extractSubset 进行裁剪
-        val croppedBitmap = Bitmap()
-        val extractSuccess = srcBitmap.extractSubset(
-            croppedBitmap, 
-            IRect.makeXYWH(
-                srcL.toInt().coerceAtMost(image.width - 1),
-                srcT.toInt().coerceAtMost(image.height - 1),
-                srcW.toInt().coerceAtMost(image.width - srcL.toInt()),
-                srcH.toInt().coerceAtMost(image.height - srcT.toInt())
-            )
-        )
-
-        if (!extractSuccess) {
-            AppLogger.e("ImageUtils", "❌ Bitmap.extractSubset 裁剪失败")
-            return null
-        }
-        AppLogger.d("ImageUtils", "✅ 成功截取子图: 截取尺寸 = ${croppedBitmap.width}x${croppedBitmap.height}")
-
-        Image.makeFromBitmap(croppedBitmap)
+        val srcBitmap = Bitmap.makeFromImage(image).apply { setImmutable() }
+        extractImageSubsetToImage(srcBitmap, image.width, image.height, bounds, originalWidth, originalHeight)
     } catch (e: Exception) {
         AppLogger.e("ImageUtils", "❌ 跨平台裁剪提取子图失败", e)
         null
     }
+}
+
+/**
+ * 基于已预先解码好的不可变源 [Bitmap] 提取指定边界的子图字节数组（微秒级零重复解码）。
+ */
+fun extractImageSubset(
+    srcBitmap: Bitmap,
+    imageWidth: Int,
+    imageHeight: Int,
+    bounds: SerialRect,
+    originalWidth: Float,
+    originalHeight: Float,
+    isPng: Boolean = true
+): ByteArray? {
+    val image = extractImageSubsetToImage(srcBitmap, imageWidth, imageHeight, bounds, originalWidth, originalHeight) ?: return null
+    val format = if (isPng) EncodedImageFormat.PNG else EncodedImageFormat.JPEG
+    return image.encodeToData(format, 100)?.bytes
 }
 
 /**
@@ -522,6 +572,25 @@ fun scaleImage(
  * @param forceHeight 强制指定导出的图像高度（像素），为空则使用裁剪区域的原始大小。
  * @return 裁剪并缩放后的图像字节数组，失败返回 null。
  */
+/**
+ * 基于已预先解码好的不可变源 [Bitmap] 执行物理裁剪与可选缩放（零重复解码）。
+ */
+fun cropImage(
+    srcBitmap: Bitmap,
+    imageWidth: Int,
+    imageHeight: Int,
+    bounds: SerialRect,
+    originalWidth: Float,
+    originalHeight: Float,
+    isPng: Boolean = true,
+    forceWidth: Int? = null,
+    forceHeight: Int? = null
+): ByteArray? {
+    val subsetBytes = extractImageSubset(srcBitmap, imageWidth, imageHeight, bounds, originalWidth, originalHeight, isPng) ?: return null
+    if (forceWidth == null && forceHeight == null) return subsetBytes
+    return scaleImage(subsetBytes, forceWidth ?: 1, forceHeight ?: 1, isPng)
+}
+
 fun cropImage(
     imageBytes: ByteArray,
     bounds: SerialRect,

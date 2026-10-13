@@ -35,15 +35,18 @@ fun UIStudioRightSidebar(
             viewModel = viewModel,
             templateRepo = templateRepo,
             modifier = Modifier
-                .weight(state.propertyPanelHeightRatio.coerceIn(0.2f, 0.8f))
+                .weight(state.propertyPanelHeightRatio.coerceIn(0.05f, 0.95f))
                 .fillMaxWidth()
         )
 
-        // 中间水平拖拽分割线手柄
+        // 中间水平拖拽分割线手柄（官方 draggable 封装）
         HorizontalSplitter(
             onDrag = { deltaPx ->
                 val deltaRatio = deltaPx / totalHeightPx
-                viewModel.updatePropertyPanelHeightRatio(state.propertyPanelHeightRatio + deltaRatio)
+                viewModel.updatePropertyPanelHeightRatio(viewModel.state.propertyPanelHeightRatio + deltaRatio)
+            },
+            onDragEnd = {
+                viewModel.saveWorkspaceLayout()
             }
         )
 
@@ -51,7 +54,7 @@ fun UIStudioRightSidebar(
         UIStudioPreviewPanel(
             viewModel = viewModel,
             modifier = Modifier
-                .weight((1f - state.propertyPanelHeightRatio).coerceIn(0.2f, 0.8f))
+                .weight((1f - state.propertyPanelHeightRatio).coerceIn(0.05f, 0.95f))
                 .fillMaxWidth()
         )
     }

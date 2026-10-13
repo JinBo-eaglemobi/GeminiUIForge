@@ -195,3 +195,15 @@ data class ViewportState(
     val panY: Float
 )
 
+/**
+ * UI Studio 工作台边栏与面板尺寸布局持久化配置。
+ */
+@Serializable
+data class UIStudioLayoutConfig(
+    val leftPanelWidthDp: Float = 280f,
+    val rightPanelWidthDp: Float = 280f,
+    val viewsPanelHeightRatio: Float = 0.45f,
+    val propertyPanelHeightRatio: Float = 0.55f
+)
+
+
