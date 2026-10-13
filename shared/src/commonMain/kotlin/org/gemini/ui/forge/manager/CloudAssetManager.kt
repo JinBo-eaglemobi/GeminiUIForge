@@ -238,7 +238,6 @@ class CloudAssetManager(private val configManager: ConfigManager) {
             buildJsonObject {
                 put("inlineData", buildJsonObject {
                     put("mimeType", mimeType)
-                    @OptIn(ExperimentalEncodingApi::class)
                     put("data", Base64.encode(bytes))
                 })
             }

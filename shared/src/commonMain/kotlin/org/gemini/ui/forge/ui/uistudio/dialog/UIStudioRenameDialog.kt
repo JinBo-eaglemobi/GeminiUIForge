@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
@@ -51,7 +52,7 @@ fun UIStudioRenameDialog(
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                OutlinedTextField(
+                SelectAllOutlinedTextField(
                     value = nameInput,
                     onValueChange = { nameInput = it },
                     label = { Text("名称") },

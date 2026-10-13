@@ -15,13 +15,12 @@
       "type": "local",
       "enabled": true,
       "command": [
-        "cmd.exe",
-        "/c",
-        "gradlew.bat",
-        "--no-daemon",
-        "--quiet",
-        "--console=plain",
-        ":desktopApp:hotMcpServer"
+        "pwsh",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "scripts/hot-mcp-launcher.ps1"
       ]
     }
   }

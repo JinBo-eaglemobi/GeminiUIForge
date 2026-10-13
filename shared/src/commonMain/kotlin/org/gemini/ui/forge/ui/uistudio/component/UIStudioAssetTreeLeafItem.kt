@@ -5,21 +5,22 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.DragIndicator
-import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,12 +30,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -83,7 +89,7 @@ fun UIStudioAssetTreeLeafItem(
     var bitmap by remember(item.relativePath) { mutableStateOf<ImageBitmap?>(null) }
     var showContextMenu by remember { mutableStateOf(false) }
     var showMoveFolderDialog by remember { mutableStateOf(false) }
-    var handleCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var rowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val isBeingDragged = state.draggedAssetId == item.id
 
     LaunchedEffect(item.relativePath) {
@@ -113,11 +119,12 @@ fun UIStudioAssetTreeLeafItem(
                 .padding(start = indentPadding, end = 4.dp, top = 1.dp, bottom = 1.dp)
                 .clip(RoundedCornerShape(6.dp))
                 .alpha(if (isBeingDragged) 0.4f else 1.0f)
-                .clickable { viewModel.selectAsset(item.id) }
+                .onGloballyPositioned { rowCoords = it }
+                // 1. 鼠标右键菜单 (PointerEventPass.Initial 优先快速捕获)
                 .pointerInput(item.id) {
                     awaitPointerEventScope {
                         while (true) {
-                            val event = awaitPointerEvent()
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
                             if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
                                 showContextMenu = true
                                 event.changes.forEach { it.consume() }
@@ -125,46 +132,53 @@ fun UIStudioAssetTreeLeafItem(
                         }
                     }
                 }
+                // 2. 整行整块即刻拖拽与单击融合手势 (无需对准细小手柄或长按，任意位置按下移动 >6px 即拖动)
+                .pointerInput(item.id) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        if (!down.pressed) return@awaitEachGesture
+                        if (currentEvent.buttons.isSecondaryPressed) return@awaitEachGesture
+
+                        var isDragging = false
+                        var totalDistance = 0f
+
+                        drag(down.id) { change ->
+                            val dragAmount = change.positionChange()
+                            totalDistance += dragAmount.getDistance()
+                            if (!isDragging && totalDistance > 6f) {
+                                isDragging = true
+                                viewModel.setDraggedAssetId(item.id)
+                            }
+                            if (isDragging) {
+                                rowCoords?.localToWindow(change.position)?.let { winPos ->
+                                    onDragHover(winPos)
+                                    viewModel.updateDragCursorPosition(winPos)
+                                }
+                                change.consume()
+                            }
+                        }
+
+                        if (isDragging) {
+                            viewModel.updateDragCursorPosition(null)
+                            onDragEnd()
+                        } else if (totalDistance <= 6f) {
+                            viewModel.selectAsset(item.id)
+                        }
+                    }
+                }
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                    .padding(horizontal = 4.dp, vertical = 4.dp)
+                    .semantics {
+                        onClick {
+                            viewModel.selectAsset(item.id)
+                            true
+                        }
+                    },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 拖拽手柄（支持长按拖拽至目标文件夹）
-                Icon(
-                    imageVector = Icons.Default.DragIndicator,
-                    contentDescription = "拖拽移动",
-                    tint = MaterialTheme.colorScheme.outlineVariant,
-                    modifier = Modifier
-                        .size(16.dp)
-                        .onGloballyPositioned { handleCoords = it }
-                        .pointerInput(item.id) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = {
-                                    viewModel.setDraggedAssetId(item.id)
-                                },
-                                onDrag = { change, _ ->
-                                    handleCoords?.localToRoot(change.position)?.let { rootPos ->
-                                        onDragHover(rootPos)
-                                    }
-                                    change.consume()
-                                },
-                                onDragEnd = {
-                                    onDragEnd()
-                                },
-                                onDragCancel = {
-                                    viewModel.setDraggedAssetId(null)
-                                    viewModel.setHoveredFolderId(null)
-                                }
-                            )
-                        }
-                        .tip("长按拖拽放入文件夹")
-                )
-
-                Spacer(modifier = Modifier.width(2.dp))
-
                 // 微缩图容器
                 Box(
                     modifier = Modifier
@@ -194,21 +208,15 @@ fun UIStudioAssetTreeLeafItem(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
-                // 名称与尺寸
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Normal),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "${item.width}×${item.height}",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                // 素材名称（宽高移至右下侧独立预览面板展示）
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Normal),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
 
                 // 右侧更多操作图标（触控端与移动端便捷入口）
                 IconButton(
@@ -251,10 +259,10 @@ fun UIStudioAssetTreeLeafItem(
             )
             DropdownMenuItem(
                 text = { Text("添加到当前视图画布", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.PlaylistAdd, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 onClick = {
                     showContextMenu = false
-                    viewModel.addAssetToCanvas(item, templateRepo)
+                    viewModel.addAssetToCanvas(item, repo = templateRepo)
                 }
             )
             DropdownMenuItem(
@@ -267,7 +275,7 @@ fun UIStudioAssetTreeLeafItem(
             )
             DropdownMenuItem(
                 text = { Text("在系统资源管理器中显示", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 onClick = {
                     showContextMenu = false
                     viewModel.revealAssetInExplorer(item)
@@ -275,7 +283,7 @@ fun UIStudioAssetTreeLeafItem(
             )
             DropdownMenuItem(
                 text = { Text("移动至文件夹...", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.DriveFileMove, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                leadingIcon = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 onClick = {
                     showContextMenu = false
                     showMoveFolderDialog = true

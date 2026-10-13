@@ -33,7 +33,7 @@ fun UIStudioScreen(
     modifier: Modifier = Modifier
 ) {
     val projectState = appViewModel.state.value.project
-    val viewModel = remember(projectState?.projectId) {
+    val viewModel = remember(projectState.projectId) {
         UIStudioViewModel()
     }
     val state = viewModel.state
@@ -110,9 +110,10 @@ fun UIStudioScreen(
                 }
             )
 
-            // 右侧图元属性面板（可自由拖拽宽度）
-            UIStudioPropertyPanel(
+            // 右侧复合边栏（属性检查面板 + 独立高保真实时预览面板，可自由拖拽宽度与上下高度）
+            UIStudioRightSidebar(
                 viewModel = viewModel,
+                templateRepo = templateRepository,
                 modifier = Modifier
                     .width(state.rightPanelWidth)
                     .fillMaxHeight()
@@ -200,5 +201,14 @@ fun UIStudioScreen(
                 statusText = state.sliceStatusText
             )
         }
+
+        // 顶层全局悬浮拖拽光标跟随镜像 (Drag Ghost Badge)
+        val draggedAsset = remember(state.draggedAssetId, state.assetLibrary.items) {
+            state.assetLibrary.items.find { it.id == state.draggedAssetId }
+        }
+        UIStudioDragGhostBadge(
+            asset = draggedAsset,
+            cursorPos = state.dragCursorPosition
+        )
     }
 }

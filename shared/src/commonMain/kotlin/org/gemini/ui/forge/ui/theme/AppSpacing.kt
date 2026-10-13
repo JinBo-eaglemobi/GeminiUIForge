@@ -23,6 +23,21 @@ data class AppSpacing(
     val large: Dp = 24.dp,
     val extraLarge: Dp = 32.dp,
     
+    /** 是否处于桌面紧凑模式 */
+    val isCompact: Boolean = false,
+
+    /** 输入框内部水平内边距 (水平 padding) */
+    val textFieldPaddingHorizontal: Dp = if (isCompact) 10.dp else 16.dp,
+
+    /** 输入框内部垂直内边距 (垂直 padding)：紧凑模式保留 6dp 呼吸感对标 IDEA；触控模式 12dp 确保 48dp 大热区不偏上 */
+    val textFieldPaddingVertical: Dp = if (isCompact) 6.dp else 12.dp,
+    
+    /** 表单控件行间距 (垂直间距)：杜绝控件挤压贴死 */
+    val formRowSpacing: Dp = if (isCompact) 10.dp else 14.dp,
+
+    /** 表单控件列间距 (同一行内多输入框的水平间距)：保证如 X 与 Y、W 与 H 之间有清晰舒适的分隔 */
+    val formColumnSpacing: Dp = if (isCompact) 10.dp else 14.dp,
+
     /**
      * 弹窗标准宽度 Tokens 阶梯体系 (Design Tokens)
      * [dialogAlertWidth] 用于轻量警告、操作二次确认、简单输入等微型弹窗（默认 440.dp）。
@@ -65,16 +80,32 @@ val LocalAppSpacing = staticCompositionLocalOf { AppSpacing() }
  * 默认间距配置。
  * 适用于具有触控交互的设备或移动端应用，提供较大的点击区域和宽松的视觉布局。
  */
-val DefaultSpacing = AppSpacing()
+val DefaultSpacing = AppSpacing(
+    extraSmall = 4.dp,
+    small = 8.dp,
+    medium = 16.dp,
+    large = 24.dp,
+    extraLarge = 32.dp,
+    isCompact = false,
+    textFieldPaddingHorizontal = 16.dp,
+    textFieldPaddingVertical = 12.dp,
+    formRowSpacing = 14.dp,
+    formColumnSpacing = 14.dp
+)
 
 /**
  * 紧凑间距配置。
  * 适用于高密度的 PC 端或桌面端应用，空间利用率更高，适合密集的数据展示。
  */
 val CompactSpacing = AppSpacing(
-    extraSmall = 2.dp,
-    small = 4.dp,
-    medium = 8.dp,
-    large = 16.dp,
-    extraLarge = 24.dp
+    extraSmall = 4.dp,
+    small = 8.dp,
+    medium = 12.dp,
+    large = 18.dp,
+    extraLarge = 24.dp,
+    isCompact = true,
+    textFieldPaddingHorizontal = 10.dp,
+    textFieldPaddingVertical = 6.dp,
+    formRowSpacing = 10.dp,
+    formColumnSpacing = 10.dp
 )

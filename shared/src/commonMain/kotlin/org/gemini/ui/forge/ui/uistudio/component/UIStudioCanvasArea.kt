@@ -21,6 +21,8 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
@@ -67,6 +69,17 @@ fun UIStudioCanvasArea(
             .background(Color(0xFF0F172A)) // 深色工业底色
             .clipToBounds()
             .onSizeChanged { containerSize = it }
+            .onGloballyPositioned { coords ->
+                val b = coords.boundsInWindow()
+                viewModel.updateCanvasWindowBounds(SerialRect(b.left, b.top, b.right, b.bottom))
+            }
+            .then(
+                if (state.isCanvasDragHovered) {
+                    Modifier.border(2.dp, Color(0xFF818CF8), RoundedCornerShape(4.dp))
+                } else {
+                    Modifier
+                }
+            )
     ) {
         // 画布交互与手势层
         Box(
@@ -244,16 +257,17 @@ fun UIStudioCanvasArea(
                             spotColor = Color.Black.copy(alpha = 0.9f)
                         )
                 ) {
-                    val renderableBlocks = remember(currentView.blocks, activeContainer?.id) {
+                    val renderableBlocks = remember(currentView.blocks, activeContainer?.id, activeContainer?.opacity) {
                         if (activeContainer != null) {
-                            // 容器独立编辑视口模式：仅渲染容器内部子组件（局部坐标）
-                            activeContainer.children.filter { it.isVisible }.map { child ->
-                                RenderableBlockInfo(
-                                    block = child,
-                                    absBounds = child.bounds,
-                                    isInheritedLocked = child.isLocked || activeContainer.isLocked
-                                )
-                            }
+                            // 容器独立编辑视口模式：仅渲染容器内部子组件（局部坐标，继承容器透明度）
+                            collectRenderableBlocks(
+                                blocks = activeContainer.children,
+                                parentOffsetX = 0f,
+                                parentOffsetY = 0f,
+                                parentLocked = activeContainer.isLocked,
+                                parentVisible = true,
+                                parentOpacity = activeContainer.effectiveOpacity
+                            )
                         } else {
                             // 全局主视图模式：全层级递归展平
                             collectRenderableBlocks(currentView.blocks)
@@ -295,6 +309,7 @@ fun UIStudioCanvasArea(
                                 UIStudioBlockItem(
                                     block = info.block,
                                     absBounds = info.absBounds,
+                                    inheritedOpacity = info.inheritedOpacity,
                                     isSelected = info.block.id == state.selectedBlockId,
                                     scale = state.scale,
                                     onClick = {
@@ -340,6 +355,18 @@ fun UIStudioCanvasArea(
             }
         }
 
+        // 独立覆盖层：右上角悬浮视口缩放与居中工具集（完全免疫底层画布平移缩放手势）
+        if (currentView != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(spacing.medium),
+                contentAlignment = Alignment.TopEnd
+            ) {
+                UIStudioCanvasToolbar(viewModel = viewModel)
+            }
+        }
+
         // 独立覆盖层：右下角悬浮「✨ AI Chat」智能排版按钮（完全免疫底层画布平移缩放手势）
         if (currentView != null) {
             Box(
@@ -372,6 +399,46 @@ fun UIStudioCanvasArea(
                 )
             }
         }
+
+        // 拖拽素材悬停高亮提示浮层
+        if (state.isCanvasDragHovered) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF6366F1).copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF818CF8)),
+                    shadowElevation = 8.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CropFree,
+                            contentDescription = null,
+                            tint = Color(0xFF818CF8),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = if (state.activeContainerId != null) {
+                                "松开添加至父容器「${state.activeContainerId}」"
+                            } else {
+                                "松开添加至当前视图「${currentView?.id ?: ""}」"
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -381,18 +448,20 @@ fun UIStudioCanvasArea(
 private data class RenderableBlockInfo(
     val block: UIBlock,
     val absBounds: SerialRect,
-    val isInheritedLocked: Boolean
+    val inheritedOpacity: Float = 1.0f,
+    val isInheritedLocked: Boolean = false
 )
 
 /**
- * 递归收集页面内所有可见的图元，并精准推导累加其绝对全局坐标矩形与继承锁定态。
+ * 递归收集页面内所有可见的图元，并精准推导累加其绝对全局坐标矩形与继承锁定态及父级级联透明度。
  */
 private fun collectRenderableBlocks(
     blocks: List<UIBlock>,
     parentOffsetX: Float = 0f,
     parentOffsetY: Float = 0f,
     parentLocked: Boolean = false,
-    parentVisible: Boolean = true
+    parentVisible: Boolean = true,
+    parentOpacity: Float = 1.0f
 ): List<RenderableBlockInfo> {
     val result = mutableListOf<RenderableBlockInfo>()
     for (b in blocks) {
@@ -406,10 +475,13 @@ private fun collectRenderableBlocks(
         val absH = b.bounds.bottom - b.bounds.top
         val absRect = SerialRect(absLeft, absTop, absLeft + absW, absTop + absH)
 
+        val currentCumulativeOpacity = (parentOpacity * b.effectiveOpacity).coerceIn(0.0f, 1.0f)
+
         result.add(
             RenderableBlockInfo(
                 block = b.copy(isLocked = currentLocked),
                 absBounds = absRect,
+                inheritedOpacity = parentOpacity,
                 isInheritedLocked = currentLocked
             )
         )
@@ -421,7 +493,8 @@ private fun collectRenderableBlocks(
                     parentOffsetX = absLeft,
                     parentOffsetY = absTop,
                     parentLocked = currentLocked,
-                    parentVisible = currentVisible
+                    parentVisible = currentVisible,
+                    parentOpacity = currentCumulativeOpacity
                 )
             )
         }

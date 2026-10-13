@@ -89,6 +89,10 @@ data class UIStudioState(
     val leftPanelWidth: Dp = 280.dp,
     val rightPanelWidth: Dp = 280.dp,
     val viewsPanelHeightRatio: Float = 0.45f,
+    val propertyPanelHeightRatio: Float = 0.55f,
+    val isCanvasDragHovered: Boolean = false,
+    val canvasWindowBounds: org.gemini.ui.forge.model.ui.SerialRect? = null,
+    val lastDragHoverPos: androidx.compose.ui.geometry.Offset? = null,
     val isFitToViewport: Boolean = true,
     val isMattingAsset: Boolean = false,
     val mattingAssetId: String? = null,
@@ -117,7 +121,9 @@ data class UIStudioState(
     val activeContainerId: String? = null,
     val expandedHierarchyBlockIds: Set<String> = emptySet(),
     val draggedAssetId: String? = null,
-    val hoveredFolderId: String? = null
+    val hoveredFolderId: String? = null,
+    val viewViewportCache: Map<String, ViewportState> = emptyMap(),
+    val dragCursorPosition: androidx.compose.ui.geometry.Offset? = null
 ) {
     /**
      * 当前处于激活独立编辑状态的父容器组件 [UIBlock]（若处于整页模式则为 null）。
@@ -172,5 +178,14 @@ data class DragRemoveLastChildContext(
     val oldParentId: String,
     val targetId: String?,
     val position: org.gemini.ui.forge.model.ui.DropPosition
+)
+
+/**
+ * 视图界面的视口历史状态（缩放比例与平移位移）。
+ */
+data class ViewportState(
+    val scale: Float,
+    val panX: Float,
+    val panY: Float
 )
 

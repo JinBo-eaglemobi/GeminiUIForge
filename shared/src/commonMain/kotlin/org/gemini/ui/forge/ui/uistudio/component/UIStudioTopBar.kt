@@ -3,7 +3,6 @@ package org.gemini.ui.forge.ui.uistudio.component
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -12,10 +11,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.automirrored.filled.ViewSidebar
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.ViewSidebar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -127,7 +125,7 @@ fun UIStudioTopBar(
                 }
             }
 
-            // 右侧：素材库开关 + 视口复位 + 缩放百分比 + 保存按钮
+            // 右侧：素材库开关 + 保存按钮
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(spacing.small)
@@ -140,34 +138,11 @@ fun UIStudioTopBar(
                         .tip("切换左侧面板 (Toggle Sidebar)")
                 ) {
                     Icon(
-                        imageVector = if (state.isAssetPanelVisible) Icons.Default.ViewSidebar else Icons.Default.FolderOpen,
+                        imageVector = if (state.isAssetPanelVisible) Icons.AutoMirrored.Filled.ViewSidebar else Icons.Default.FolderOpen,
                         contentDescription = "Toggle Sidebar",
                         tint = if (state.isAssetPanelVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                // 视口复位自适应居中
-                IconButton(
-                    onClick = { viewModel.resetViewport() },
-                    modifier = Modifier
-                        .size(36.dp)
-                        .tip("自适应视口居中 (Fit to Viewport)")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CenterFocusStrong,
-                        contentDescription = "Reset Viewport"
-                    )
-                }
-
-                // 缩放百分比显示
-                Text(
-                    text = "${(state.scale * 100).toInt()}%",
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.width(42.dp)
-                )
-
-                Spacer(modifier = Modifier.width(spacing.extraSmall))
 
                 // 一键保存工程按钮
                 IconButton(

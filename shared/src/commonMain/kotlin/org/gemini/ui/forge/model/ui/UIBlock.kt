@@ -51,10 +51,31 @@ data class UIBlock(
     val resourceBindingPath: List<String> = emptyList(), // 新增：资源绑定层级路径
     val isPureContainer: Boolean = false, // 纯容器/占位层：表示该模块没有任何资源生成，仅占位排版或作为组合层
     val clipOverflow: Boolean = false, // 是否裁剪超出范围的子内容（overflow: hidden），默认 false 为可见
+    val scaleX: Float = 1.0f, // 独立水平缩放变换因数 (默认 1.0f 为原寸)
+    val scaleY: Float = 1.0f, // 独立垂直缩放变换因数 (默认 1.0f 为原寸)
+    val opacity: Float = 1.0f, // 独立不透明度 (默认 1.0f 为完全不透明，范围 0.0~1.0)
     // ★ 运行时持有直接父级引用，主构造函数声明 + @Transient 阻断 JSON 序列化，copy() 自动继承，永不断裂！
     @Transient
     val parent: UIBlock? = null
 ) : AssetSupport {
+
+    /**
+     * 生效的水平缩放比例（允许设置为 0，完全忠实反映用户设定与变换）
+     */
+    val effectiveScaleX: Float
+        get() = scaleX
+
+    /**
+     * 生效的垂直缩放比例（允许设置为 0，完全忠实反映用户设定与变换）
+     */
+    val effectiveScaleY: Float
+        get() = scaleY
+
+    /**
+     * 生效的不透明度（允许设置为 0 完全透明，范围 0.0~1.0）
+     */
+    val effectiveOpacity: Float
+        get() = opacity.coerceIn(0.0f, 1.0f)
 
     /**
      * 判断当前模块是否开启了溢出子内容裁剪/隐藏 (overflow: hidden)

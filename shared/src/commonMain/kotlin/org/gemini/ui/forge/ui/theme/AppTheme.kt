@@ -23,6 +23,12 @@ import org.gemini.ui.forge.utils.RetryingClipboard
  */
 val LocalPlatformDensity = staticCompositionLocalOf { Density(1f) }
 
+/**
+ * 全局紧凑模式标志。
+ * 供组件感知当前是否处于桌面紧凑视图，以便进行自适应尺寸与微调。
+ */
+val LocalIsCompact = staticCompositionLocalOf { false }
+
 val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(2.dp),
     small = RoundedCornerShape(4.dp),
@@ -139,6 +145,7 @@ fun AppTheme(
     CompositionLocalProvider(
         LocalDensity provides uiDensity,
         LocalPlatformDensity provides baseDensity, // ★ 备份系统的物理真实密度，供 SwingPanel 等原生嵌入组件隔离使用
+        LocalIsCompact provides isCompact,
         LocalMinimumInteractiveComponentSize provides if (isCompact) 0.dp else 48.dp,
         LocalAppSpacing provides currentSpacing,
         // 带重试兜底的剪贴板：统一容忍 Windows 剪贴板瞬锁异常，

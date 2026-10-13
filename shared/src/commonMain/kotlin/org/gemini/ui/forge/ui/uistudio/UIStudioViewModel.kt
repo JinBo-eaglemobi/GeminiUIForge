@@ -581,7 +581,10 @@ class UIStudioViewModel {
      * 选中单个素材。
      */
     fun selectAsset(assetId: String?) {
-        state = state.copy(selectedAssetId = assetId)
+        state = state.copy(
+            selectedAssetId = assetId,
+            selectedBlockId = if (assetId != null) null else state.selectedBlockId
+        )
     }
 
     /**
@@ -620,10 +623,130 @@ class UIStudioViewModel {
         openViewTab(viewId)
     }
 
+    fun updateDragCursorPosition(pos: Offset?) {
+        state = state.copy(dragCursorPosition = pos)
+    }
+
+    private fun cacheCurrentViewport() {
+        val currentKey = state.activeContainerId ?: state.currentViewId ?: return
+        val currentCache = state.viewViewportCache.toMutableMap()
+        currentCache[currentKey] = ViewportState(
+            scale = state.scale,
+            panX = state.panOffset.x,
+            panY = state.panOffset.y
+        )
+        state = state.copy(viewViewportCache = currentCache)
+    }
+
+    private fun restoreViewportOrFit(targetKey: String) {
+        val cached = state.viewViewportCache[targetKey]
+        if (cached != null) {
+            state = state.copy(
+                scale = cached.scale,
+                panOffset = Offset(cached.panX, cached.panY),
+                isFitToViewport = false
+            )
+        } else {
+            state = state.copy(isFitToViewport = true)
+        }
+    }
+
+    fun zoomIn() {
+        state = state.copy(scale = (state.scale * 1.2f).coerceIn(0.1f, 5.0f), isFitToViewport = false)
+    }
+
+    fun zoomOut() {
+        state = state.copy(scale = (state.scale / 1.2f).coerceIn(0.1f, 5.0f), isFitToViewport = false)
+    }
+
+    fun resetZoom(viewportWidth: Float = 0f, viewportHeight: Float = 0f) {
+        val activeContainer = state.activeContainerBlock
+        val targetWidth = (activeContainer?.bounds?.width ?: state.canvasWidth)
+        val targetHeight = (activeContainer?.bounds?.height ?: state.canvasHeight)
+        val vw = if (viewportWidth > 0f) viewportWidth else (state.canvasWindowBounds?.let { it.right - it.left } ?: targetWidth)
+        val vh = if (viewportHeight > 0f) viewportHeight else (state.canvasWindowBounds?.let { it.bottom - it.top } ?: targetHeight)
+
+        val panX = (vw - targetWidth) / 2f
+        val panY = (vh - targetHeight) / 2f
+
+        state = state.copy(
+            scale = 1.0f,
+            panOffset = Offset(panX, panY),
+            isFitToViewport = false
+        )
+    }
+
+    /**
+     * 独立调节选中图元的缩放因数 scaleX 与 scaleY（完全不影响 bounds.width 与 bounds.height 固有尺寸）。
+     */
+    fun updateSelectedBlockScale(scaleX: Float, scaleY: Float, repo: TemplateRepository) {
+        val selectedId = state.selectedBlockId ?: return
+        updateBlockScale(selectedId, scaleX, scaleY, repo)
+    }
+
+    /**
+     * 独立调节指定图元的缩放因数 scaleX 与 scaleY（完全不影响 bounds.width 与 bounds.height 固有尺寸）。
+     */
+    fun updateBlockScale(blockId: String, scaleX: Float, scaleY: Float, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
+            it.copy(scaleX = scaleX, scaleY = scaleY)
+        }.bindParents()
+        val updatedPages = state.project?.pages?.map {
+            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
+        } ?: return
+        state = state.copy(project = state.project?.copy(pages = updatedPages))
+        saveProject(repo)
+    }
+
+    /**
+     * 独立调节选中图元的不透明度 opacity（范围 0.0~1.0f）。
+     */
+    fun updateSelectedBlockOpacity(opacity: Float, repo: TemplateRepository) {
+        val selectedId = state.selectedBlockId ?: return
+        updateBlockOpacity(selectedId, opacity, repo)
+    }
+
+    /**
+     * 独立调节指定图元的不透明度 opacity（范围 0.0~1.0f）。
+     */
+    fun updateBlockOpacity(blockId: String, opacity: Float, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val clamped = opacity.coerceIn(0.0f, 1.0f)
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
+            it.copy(opacity = clamped)
+        }.bindParents()
+        val updatedPages = state.project?.pages?.map {
+            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
+        } ?: return
+        state = state.copy(project = state.project?.copy(pages = updatedPages))
+        saveProject(repo)
+    }
+
+    /**
+     * 一键重置图元的变换属性（双轴缩放还原 1.0，透明度还原 1.0）。
+     */
+    fun resetBlockTransform(blockId: String, repo: TemplateRepository) {
+        val view = state.currentView ?: return
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
+            it.copy(scaleX = 1.0f, scaleY = 1.0f, opacity = 1.0f)
+        }.bindParents()
+        val updatedPages = state.project?.pages?.map {
+            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
+        } ?: return
+        state = state.copy(project = state.project?.copy(pages = updatedPages))
+        saveProject(repo)
+    }
+
+    fun triggerFitToViewport() {
+        state = state.copy(isFitToViewport = true)
+    }
+
     /**
      * 在中间顶部标签栏中打开并激活指定视图界面。
      */
     fun openViewTab(viewId: String) {
+        cacheCurrentViewport()
         val page = state.project?.pages?.find { it.id == viewId } ?: return
         val currentOpen = state.openViewIds
         val updatedOpen = if (currentOpen.contains(viewId)) currentOpen else currentOpen + viewId
@@ -636,20 +759,26 @@ class UIStudioViewModel {
             selectedBlockId = null,
             selectedAssetId = null
         )
+        restoreViewportOrFit(viewId)
     }
 
     /**
      * 选中并激活指定页面视图标签。
      */
     fun selectViewTab(viewId: String) {
+        cacheCurrentViewport()
         selectView(viewId)
-        state = state.copy(activeContainerId = null)
+        state = state.copy(
+            activeContainerId = null
+        )
+        restoreViewportOrFit(viewId)
     }
 
     /**
      * 打开父容器的专属独立编辑视图标签页。
      */
     fun openContainerTab(containerId: String) {
+        cacheCurrentViewport()
         val currentTabs = state.openContainerTabs
         val updatedTabs = if (currentTabs.contains(containerId)) currentTabs else currentTabs + containerId
         state = state.copy(
@@ -657,6 +786,7 @@ class UIStudioViewModel {
             activeContainerId = containerId,
             selectedBlockId = containerId
         )
+        restoreViewportOrFit(containerId)
         Toast.show("已打开容器独立布局视图", ToastType.INFO)
     }
 
@@ -676,16 +806,24 @@ class UIStudioViewModel {
             openContainerTabs = updatedTabs,
             activeContainerId = newActiveId
         )
+        val targetKey = newActiveId ?: state.currentViewId
+        if (targetKey != null) {
+            restoreViewportOrFit(targetKey)
+        } else {
+            state = state.copy(isFitToViewport = true)
+        }
     }
 
     /**
      * 切换选中指定父容器编辑标签页。
      */
     fun selectContainerTab(containerId: String) {
+        cacheCurrentViewport()
         state = state.copy(
             activeContainerId = containerId,
             selectedBlockId = containerId
         )
+        restoreViewportOrFit(containerId)
     }
 
     /**
@@ -1348,10 +1486,17 @@ class UIStudioViewModel {
 
     /**
      * 自动将当前视图的画布居中并自适应填充满工作区视口 (Fit to Viewport)。
+     * 支持传入自定义页面/容器宽高（若未传则优先使用当前激活容器的宽高，其次使用主视图页面宽高）。
      */
-    fun fitToViewport(viewportWidth: Float, viewportHeight: Float) {
-        val canvasW = state.canvasWidth
-        val canvasH = state.canvasHeight
+    fun fitToViewport(
+        viewportWidth: Float,
+        viewportHeight: Float,
+        customWidth: Float? = null,
+        customHeight: Float? = null
+    ) {
+        val activeContainer = state.activeContainerBlock
+        val canvasW = customWidth ?: activeContainer?.bounds?.width ?: state.canvasWidth
+        val canvasH = customHeight ?: activeContainer?.bounds?.height ?: state.canvasHeight
         if (viewportWidth <= 0f || viewportHeight <= 0f || canvasW <= 0f || canvasH <= 0f) return
 
         val padding = 64f
@@ -1370,6 +1515,36 @@ class UIStudioViewModel {
             panOffset = Offset(panX, panY),
             isFitToViewport = true
         )
+    }
+
+    /**
+     * 更新右侧属性面板与预览面板的高度比例。
+     */
+    fun updatePropertyPanelHeightRatio(ratio: Float) {
+        state = state.copy(propertyPanelHeightRatio = ratio.coerceIn(0.2f, 0.8f))
+    }
+
+    /**
+     * 设置素材拖拽悬停至画布的高亮状态。
+     */
+    fun setCanvasDragHovered(isHovered: Boolean) {
+        if (state.isCanvasDragHovered != isHovered) {
+            state = state.copy(isCanvasDragHovered = isHovered)
+        }
+    }
+
+    /**
+     * 更新画布在窗口中的绝对物理矩形包围盒。
+     */
+    fun updateCanvasWindowBounds(bounds: org.gemini.ui.forge.model.ui.SerialRect?) {
+        state = state.copy(canvasWindowBounds = bounds)
+    }
+
+    /**
+     * 更新素材拖拽悬停时的最近光标绝对坐标。
+     */
+    fun updateLastDragHoverPos(pos: androidx.compose.ui.geometry.Offset?) {
+        state = state.copy(lastDragHoverPos = pos)
     }
 
     /**
@@ -1509,11 +1684,31 @@ class UIStudioViewModel {
 
     /**
      * 选中或取消选中指定图元。
+     * 若处于全局主视图模式且选中的是父容器内部子组件，根据层级门禁规则强制纠偏选中其根父组件。
      *
      * @param blockId 目标图元 ID，传入 null 表示点击空白处取消选中
      */
     fun selectBlock(blockId: String?) {
-        state = state.copy(selectedBlockId = blockId)
+        if (blockId == null) {
+            state = state.copy(
+                selectedBlockId = null,
+                selectedAssetId = state.selectedAssetId
+            )
+            return
+        }
+        val currentV = state.currentView
+        val effectiveId = if (state.activeContainerId == null && currentV != null) {
+            val rootParent = currentV.blocks.find { root ->
+                root.id == blockId || root.children.any { c -> c.id == blockId || c.children.any { cc -> cc.id == blockId } }
+            }
+            rootParent?.id ?: blockId
+        } else {
+            blockId
+        }
+        state = state.copy(
+            selectedBlockId = effectiveId,
+            selectedAssetId = null
+        )
     }
 
     /**
@@ -1893,29 +2088,54 @@ class UIStudioViewModel {
         org.gemini.ui.forge.getPlatform().openInFileExplorer(path)
     }
 
-    fun addAssetToCanvas(asset: UIAssetItem, repo: TemplateRepository) {
+    fun addAssetToCanvas(
+        asset: UIAssetItem,
+        logicalX: Float? = null,
+        logicalY: Float? = null,
+        repo: TemplateRepository
+    ) {
         val view = state.currentView ?: run {
             Toast.show("当前没有处于活跃的视图界面，请先选择或新建视图", ToastType.INFO)
             return
         }
-        val centerW = (view.width - asset.width.coerceAtLeast(32)).coerceAtLeast(0f) / 2f
-        val centerH = (view.height - asset.height.coerceAtLeast(32)).coerceAtLeast(0f) / 2f
-        val newBlock = UIBlock(
-            id = "block_${asset.id}_${Random.nextInt(1000, 9999)}",
-            type = UIBlockType.IMAGE,
-            bounds = SerialRect(centerW, centerH, centerW + asset.width, centerH + asset.height),
-            currentImageUri = TemplateFile(asset.relativePath),
-            userPromptZh = asset.name,
-            userPromptEn = asset.id
-        )
-        val updatedBlocks = view.blocks + newBlock
-        val updatedPages = state.project?.pages?.map {
-            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
-        } ?: listOf(view.copy(blocks = updatedBlocks))
-        val updatedProject = state.project?.copy(pages = updatedPages) ?: return
-        state = state.copy(project = updatedProject, selectedBlockId = newBlock.id)
-        saveProject(repo)
-        Toast.show("已将素材添加到视图: ${asset.name}", ToastType.SUCCESS)
+        val activeContainer = state.activeContainerBlock
+        val targetW = asset.width.coerceAtLeast(32)
+        val targetH = asset.height.coerceAtLeast(32)
+
+        if (activeContainer != null) {
+            // 当前处于父组件打开的独立编辑视口：添加到该父组件内
+            val posX = logicalX ?: ((activeContainer.bounds.width - targetW).coerceAtLeast(0f) / 2f)
+            val posY = logicalY ?: ((activeContainer.bounds.height - targetH).coerceAtLeast(0f) / 2f)
+            val newBlock = UIBlock(
+                id = "block_${asset.id}_${Random.nextInt(1000, 9999)}",
+                type = UIBlockType.IMAGE,
+                bounds = SerialRect(posX, posY, posX + targetW, posY + targetH),
+                currentImageUri = TemplateFile(asset.relativePath),
+                userPromptZh = asset.name,
+                userPromptEn = asset.id
+            )
+            val updatedContainer = activeContainer.copy(children = activeContainer.children + newBlock)
+            val updatedBlocks = view.blocks.updateBlockInList(activeContainer.id) { updatedContainer }.bindParents()
+            updateViewBlocksAndSave(view.id, updatedBlocks, repo)
+            state = state.copy(selectedBlockId = newBlock.id)
+            Toast.show("已将素材添加到容器「${activeContainer.id}」: ${asset.name}", ToastType.SUCCESS)
+        } else {
+            // 主视图界面：添加到页面根级 blocks
+            val posX = logicalX ?: ((view.width - targetW).coerceAtLeast(0f) / 2f)
+            val posY = logicalY ?: ((view.height - targetH).coerceAtLeast(0f) / 2f)
+            val newBlock = UIBlock(
+                id = "block_${asset.id}_${Random.nextInt(1000, 9999)}",
+                type = UIBlockType.IMAGE,
+                bounds = SerialRect(posX, posY, posX + targetW, posY + targetH),
+                currentImageUri = TemplateFile(asset.relativePath),
+                userPromptZh = asset.name,
+                userPromptEn = asset.id
+            )
+            val updatedBlocks = (view.blocks + newBlock).bindParents()
+            updateViewBlocksAndSave(view.id, updatedBlocks, repo)
+            state = state.copy(selectedBlockId = newBlock.id)
+            Toast.show("已将素材添加到视图: ${asset.name}", ToastType.SUCCESS)
+        }
     }
 
     fun startRenameView(view: UIPage) { state = state.copy(renamingView = view) }
@@ -1945,10 +2165,19 @@ class UIStudioViewModel {
 
     /**
      * 实时平移单个图元（高频拖拽中毫秒级更新内存坐标，递归支持子图元）。
+     * 若处于全局主视图模式，子组件严禁独立位移，强制收拢至其根父容器整体平移。
      */
     fun moveBlockDelta(blockId: String, dx: Float, dy: Float) {
         val view = state.currentView ?: return
-        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) { block ->
+        val effectiveId = if (state.activeContainerId == null) {
+            val rootParent = view.blocks.find { root ->
+                root.id == blockId || root.children.any { c -> c.id == blockId || c.children.any { cc -> cc.id == blockId } }
+            }
+            rootParent?.id ?: blockId
+        } else {
+            blockId
+        }
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, effectiveId) { block ->
             val b = block.bounds
             val w = b.right - b.left
             val h = b.bottom - b.top

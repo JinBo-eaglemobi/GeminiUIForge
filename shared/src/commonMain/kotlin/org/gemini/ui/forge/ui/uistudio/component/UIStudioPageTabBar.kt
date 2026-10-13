@@ -9,11 +9,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewQuilt
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.ViewQuilt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -104,7 +104,7 @@ fun UIStudioPageTabBar(
                                 .padding(horizontal = spacing.medium)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ViewQuilt,
+                                imageVector = Icons.AutoMirrored.Filled.ViewQuilt,
                                 contentDescription = null,
                                 tint = contentColor,
                                 modifier = Modifier.size(15.dp)

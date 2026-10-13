@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Collections
@@ -20,9 +22,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.UnfoldLess
 import androidx.compose.material.icons.filled.UnfoldMore
@@ -32,8 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -147,7 +149,7 @@ fun UIStudioAssetPanel(
                             .tip("在本地文件管理器中打开素材目录")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.OpenInNew,
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                             contentDescription = "Open Folder",
                             modifier = Modifier.size(16.dp)
                         )
@@ -244,7 +246,7 @@ fun UIStudioAssetPanel(
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(6.dp))
                                         .onGloballyPositioned { coords ->
-                                            folderBoundsMap[folder.id] = coords.boundsInRoot()
+                                            folderBoundsMap[folder.id] = coords.boundsInWindow()
                                         }
                                         .contextMenuClickable(
                                             onClick = { viewModel.toggleFolderExpanded(folder.id) },
@@ -258,7 +260,7 @@ fun UIStudioAssetPanel(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
-                                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
+                                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                             contentDescription = null,
                                             modifier = Modifier.size(16.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -313,7 +315,7 @@ fun UIStudioAssetPanel(
                                 ) {
                                     DropdownMenuItem(
                                         text = { Text("在本地资源管理器中打开") },
-                                        leadingIcon = { Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp)) },
                                         onClick = {
                                             showFolderMenu = false
                                             viewModel.revealFolderInExplorer(folder.id)
@@ -357,15 +359,39 @@ fun UIStudioAssetPanel(
                                     onDragHover = { rootPos ->
                                         val hitFolderId = folderBoundsMap.entries.firstOrNull { it.value.contains(rootPos) }?.key
                                         viewModel.setHoveredFolderId(hitFolderId)
+
+                                        val canvasRect = state.canvasWindowBounds
+                                        val isOverCanvas = canvasRect != null &&
+                                            rootPos.x >= canvasRect.left && rootPos.x <= canvasRect.right &&
+                                            rootPos.y >= canvasRect.top && rootPos.y <= canvasRect.bottom
+                                        viewModel.setCanvasDragHovered(isOverCanvas)
+                                        if (isOverCanvas) {
+                                            viewModel.updateLastDragHoverPos(Offset(rootPos.x, rootPos.y))
+                                        }
                                     },
                                     onDragEnd = {
-                                        val targetFolderId = state.hoveredFolderId
+                                        val canvasRect = state.canvasWindowBounds
+                                        val isOverCanvas = state.isCanvasDragHovered
                                         val draggedId = state.draggedAssetId
-                                        if (draggedId != null) {
-                                            viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
+                                        val asset = library.items.find { it.id == draggedId }
+
+                                        if (isOverCanvas && asset != null && canvasRect != null) {
+                                            val lastPos = state.lastDragHoverPos
+                                            val dropX = lastPos?.x ?: canvasRect.left
+                                            val dropY = lastPos?.y ?: canvasRect.top
+                                            val logicalX = ((dropX - canvasRect.left) - state.panOffset.x) / state.scale
+                                            val logicalY = ((dropY - canvasRect.top) - state.panOffset.y) / state.scale
+                                            viewModel.addAssetToCanvas(asset, logicalX, logicalY, templateRepo)
+                                        } else {
+                                            val targetFolderId = state.hoveredFolderId
+                                            if (draggedId != null) {
+                                                viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
+                                            }
                                         }
                                         viewModel.setDraggedAssetId(null)
                                         viewModel.setHoveredFolderId(null)
+                                        viewModel.setCanvasDragHovered(false)
+                                        viewModel.updateLastDragHoverPos(null)
                                     }
                                 )
                             }
@@ -386,15 +412,39 @@ fun UIStudioAssetPanel(
                             onDragHover = { rootPos ->
                                 val hitFolderId = folderBoundsMap.entries.firstOrNull { it.value.contains(rootPos) }?.key
                                 viewModel.setHoveredFolderId(hitFolderId)
+
+                                val canvasRect = state.canvasWindowBounds
+                                val isOverCanvas = canvasRect != null &&
+                                    rootPos.x >= canvasRect.left && rootPos.x <= canvasRect.right &&
+                                    rootPos.y >= canvasRect.top && rootPos.y <= canvasRect.bottom
+                                viewModel.setCanvasDragHovered(isOverCanvas)
+                                if (isOverCanvas) {
+                                    viewModel.updateLastDragHoverPos(Offset(rootPos.x, rootPos.y))
+                                }
                             },
                             onDragEnd = {
-                                val targetFolderId = state.hoveredFolderId
+                                val canvasRect = state.canvasWindowBounds
+                                val isOverCanvas = state.isCanvasDragHovered
                                 val draggedId = state.draggedAssetId
-                                if (draggedId != null) {
-                                    viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
+                                val asset = library.items.find { it.id == draggedId }
+
+                                if (isOverCanvas && asset != null && canvasRect != null) {
+                                    val lastPos = state.lastDragHoverPos
+                                    val dropX = lastPos?.x ?: canvasRect.left
+                                    val dropY = lastPos?.y ?: canvasRect.top
+                                    val logicalX = ((dropX - canvasRect.left) - state.panOffset.x) / state.scale
+                                    val logicalY = ((dropY - canvasRect.top) - state.panOffset.y) / state.scale
+                                    viewModel.addAssetToCanvas(asset, logicalX, logicalY, templateRepo)
+                                } else {
+                                    val targetFolderId = state.hoveredFolderId
+                                    if (draggedId != null) {
+                                        viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
+                                    }
                                 }
                                 viewModel.setDraggedAssetId(null)
                                 viewModel.setHoveredFolderId(null)
+                                viewModel.setCanvasDragHovered(false)
+                                viewModel.updateLastDragHoverPos(null)
                             }
                         )
                     }

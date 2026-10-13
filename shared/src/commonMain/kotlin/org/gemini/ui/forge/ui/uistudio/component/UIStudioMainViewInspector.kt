@@ -8,24 +8,27 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewQuilt
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.PanTool
-import androidx.compose.material.icons.filled.ViewQuilt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
@@ -46,6 +49,7 @@ fun UIStudioMainViewInspector(
 ) {
     val spacing = LocalAppSpacing.current
     val scrollState = rememberScrollState()
+    val state = viewModel.state
 
     Column(
         modifier = modifier
@@ -73,7 +77,7 @@ fun UIStudioMainViewInspector(
                         horizontalArrangement = Arrangement.spacedBy(spacing.extraSmall)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ViewQuilt,
+                            imageVector = Icons.AutoMirrored.Filled.ViewQuilt,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
@@ -121,16 +125,16 @@ fun UIStudioMainViewInspector(
         ) {
             Column(
                 modifier = Modifier.padding(spacing.medium),
-                verticalArrangement = Arrangement.spacedBy(spacing.small)
+                verticalArrangement = Arrangement.spacedBy(spacing.formRowSpacing)
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(spacing.small),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.formColumnSpacing),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     var widthText by remember(view.id, view.width) {
                         mutableStateOf(view.width.toInt().toString())
                     }
-                    OutlinedTextField(
+                    NumberOutlinedTextField(
                         value = widthText,
                         onValueChange = { input ->
                             widthText = input
@@ -140,15 +144,14 @@ fun UIStudioMainViewInspector(
                             }
                         },
                         label = { Text("宽度 W (px)", fontSize = 11.sp) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
+                        isFloat = false,
+                        modifier = Modifier.weight(1f).tip("页面宽度 W，按住左右滑动或滚动滚轮改值")
                     )
 
                     var heightText by remember(view.id, view.height) {
                         mutableStateOf(view.height.toInt().toString())
                     }
-                    OutlinedTextField(
+                    NumberOutlinedTextField(
                         value = heightText,
                         onValueChange = { input ->
                             heightText = input
@@ -158,9 +161,8 @@ fun UIStudioMainViewInspector(
                             }
                         },
                         label = { Text("高度 H (px)", fontSize = 11.sp) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
+                        isFloat = false,
+                        modifier = Modifier.weight(1f).tip("页面高度 H，按住左右滑动或滚动滚轮改值")
                     )
                 }
 
@@ -235,6 +237,58 @@ fun UIStudioMainViewInspector(
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.primary
                     )
+                }
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(vertical = 2.dp)
+                )
+
+                // 3. 舞台视口缩放百分比调节 (支持滑动改值与一键还原 100%)
+                val currentZoomPercent = (state.scale * 100f).roundToInt()
+                var zoomText by remember(state.scale) {
+                    mutableStateOf(currentZoomPercent.toString())
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(spacing.small),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    NumberOutlinedTextField(
+                        value = zoomText,
+                        onValueChange = { input ->
+                            zoomText = input
+                            val percent = input.toFloatOrNull()
+                            if (percent != null && percent > 0f) {
+                                val targetScale = (percent / 100f).coerceIn(0.1f, 5.0f)
+                                if (state.scale > 0f) {
+                                    viewModel.onZoom(targetScale / state.scale, androidx.compose.ui.geometry.Offset.Zero)
+                                }
+                            }
+                        },
+                        label = { Text("舞台视口缩放 (%)", fontSize = 11.sp) },
+                        isFloat = false,
+                        modifier = Modifier.weight(1f).tip("舞台视口缩放比例，按住左右滑动或滚动滚轮改值")
+                    )
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable {
+                                viewModel.resetZoom()
+                            }
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .tip("一键还原舞台为 100% 原始缩放值")
+                    ) {
+                        Text(
+                            text = "100%",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }

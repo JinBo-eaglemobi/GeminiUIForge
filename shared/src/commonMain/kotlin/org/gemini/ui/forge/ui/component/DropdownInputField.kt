@@ -38,8 +38,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/** 下拉按钮的设计宽度：大号箭头图标 + 完整左右热区，与输入框尾部的透明占位严格等宽 */
-private val DROPDOWN_BUTTON_WIDTH = 46.dp
+/** 下拉按钮的设计宽度：箭头图标 + 左右紧凑热区，与输入框尾部的透明占位严格等宽 */
+private val DROPDOWN_BUTTON_WIDTH = 32.dp
 
 /**
  * 通用下拉输入框组件：可编辑输入框与候选下拉列表的一体化组合。
@@ -148,7 +148,7 @@ fun <T> DropdownInputField(
                     Icon(
                         imageVector = if (expanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
                         contentDescription = null,
-                        modifier = Modifier.size(30.dp),
+                        modifier = Modifier.size(22.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

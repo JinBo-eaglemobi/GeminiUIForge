@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +45,7 @@ fun UIStudioBlockItem(
     block: UIBlock,
     isSelected: Boolean,
     absBounds: SerialRect = block.toAbsoluteBounds(),
+    inheritedOpacity: Float = 1.0f,
     scale: Float = 1.0f,
     onClick: () -> Unit,
     onDoubleTap: () -> Unit = {},
@@ -95,6 +97,11 @@ fun UIStudioBlockItem(
         modifier = modifier
             .offset(x = b.left.dp, y = b.top.dp)
             .size(width = width.dp, height = height.dp)
+            .graphicsLayer {
+                scaleX = block.effectiveScaleX
+                scaleY = block.effectiveScaleY
+                alpha = (block.effectiveOpacity * inheritedOpacity).coerceIn(0.0f, 1.0f)
+            }
             .border(
                 width = if (isSelected) 2.5.dp else 1.dp,
                 color = borderColor,

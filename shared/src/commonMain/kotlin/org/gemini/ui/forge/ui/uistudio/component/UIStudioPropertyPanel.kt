@@ -1,22 +1,25 @@
 package org.gemini.ui.forge.ui.uistudio.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewQuilt
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.ViewQuilt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.UIBlockType
+import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
@@ -71,7 +76,7 @@ fun UIStudioPropertyPanel(
                     imageVector = when {
                         selectedAsset != null && selectedId == null -> Icons.Default.Collections
                         selectedId != null -> Icons.Default.Tune
-                        else -> Icons.Default.ViewQuilt
+                        else -> Icons.AutoMirrored.Filled.ViewQuilt
                     },
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
@@ -195,7 +200,7 @@ fun UIStudioPropertyPanel(
                             verticalArrangement = Arrangement.spacedBy(spacing.extraSmall)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ViewQuilt,
+                                imageVector = Icons.AutoMirrored.Filled.ViewQuilt,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
                                 modifier = Modifier.size(32.dp)
@@ -222,7 +227,7 @@ fun UIStudioPropertyPanel(
                             .verticalScroll(scrollState),
                         verticalArrangement = Arrangement.spacedBy(spacing.medium)
                     ) {
-                        // 1. 基础信息卡片 (ID & 名称重命名 & 容器开关)
+                        // 1. 基础信息卡片 (ID & 名称重命名)
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(8.dp),
@@ -230,7 +235,7 @@ fun UIStudioPropertyPanel(
                         ) {
                             Column(
                                 modifier = Modifier.padding(spacing.small),
-                                verticalArrangement = Arrangement.spacedBy(spacing.extraSmall)
+                                verticalArrangement = Arrangement.spacedBy(spacing.small)
                             ) {
                                 Text(
                                     text = "组件 ID: ${selectedBlock.id}",
@@ -248,17 +253,13 @@ fun UIStudioPropertyPanel(
                                     horizontalArrangement = Arrangement.spacedBy(spacing.small),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    OutlinedTextField(
+                                    SelectAllOutlinedTextField(
                                         value = nameText,
                                         onValueChange = { nameText = it },
                                         label = { Text("重命名组件", fontSize = 11.sp) },
                                         singleLine = true,
                                         textStyle = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                        modifier = Modifier.weight(1f),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                                        )
+                                        modifier = Modifier.weight(1f)
                                     )
                                     IconButton(
                                         onClick = {
@@ -277,130 +278,286 @@ fun UIStudioPropertyPanel(
                                         )
                                     }
                                 }
+                            }
+                        }
 
+                        // 2. 几何坐标与尺寸 (X, Y, W, H 与 双轴独立缩放，支持鼠标水平滑动与滚轮微调)
+                        // 组件基准切片尺寸与双轴缩放状态计算 (范围 0.0 ~ 1.0)
+                        val matchingAsset = remember(selectedBlock.id, viewModel.state.assetLibrary.items) {
+                            viewModel.state.assetLibrary.items.find {
+                                it.id == selectedBlock.id ||
+                                it.name == selectedBlock.id ||
+                                (selectedBlock.currentImageUri?.relativePath?.contains(it.name) == true) ||
+                                selectedBlock.resourceBindingPath.contains(it.id)
+                            }
+                        }
+                        // 独立缩放 Transform 状态 (独立于 bounds 宽高)
+                        val currentScaleX = (kotlin.math.round(selectedBlock.effectiveScaleX * 100f) / 100f)
+                        val currentScaleY = (kotlin.math.round(selectedBlock.effectiveScaleY * 100f) / 100f)
+                        val currentOpacity = (kotlin.math.round(selectedBlock.effectiveOpacity * 100f) / 100f)
+
+                        var scaleXText by remember(selectedBlock.id, selectedBlock.effectiveScaleX) {
+                            val i = currentScaleX.toInt()
+                            mutableStateOf(if (currentScaleX == i.toFloat()) i.toString() else currentScaleX.toString())
+                        }
+                        var scaleYText by remember(selectedBlock.id, selectedBlock.effectiveScaleY) {
+                            val i = currentScaleY.toInt()
+                            mutableStateOf(if (currentScaleY == i.toFloat()) i.toString() else currentScaleY.toString())
+                        }
+                        var opacityText by remember(selectedBlock.id, selectedBlock.effectiveOpacity) {
+                            val i = currentOpacity.toInt()
+                            mutableStateOf(if (currentOpacity == i.toFloat()) i.toString() else currentOpacity.toString())
+                        }
+
+                        // 几何变换独立卡片 (规整卡片承载与标准行列间距)
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(spacing.small),
+                                verticalArrangement = Arrangement.spacedBy(spacing.formRowSpacing)
+                            ) {
+                                // 卡片 Header：标题与右侧「还原 1.0」胶囊按钮
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text("纯容器占位组件", style = MaterialTheme.typography.bodySmall)
-                                    Switch(
-                                        checked = selectedBlock.isPureContainer,
-                                        onCheckedChange = { isPure ->
-                                            viewModel.updateBlockPureContainer(selectedBlock.id, isPure, templateRepo)
+                                    Text(
+                                        text = "几何变换",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.outline,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                                        shape = RoundedCornerShape(4.dp),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .clickable {
+                                                scaleXText = "1"
+                                                scaleYText = "1"
+                                                opacityText = "1"
+                                                viewModel.resetBlockTransform(
+                                                    selectedBlock.id,
+                                                    templateRepo
+                                                )
+                                            }
+                                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                                            .tip("一键重置双轴缩放因数与透明度为 1.0 原寸 (不影响组件宽高 bounds)")
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.RestartAlt,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(12.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = "还原 1.0",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                                color = MaterialTheme.colorScheme.primary,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // 第 1 行：X (px) 与 Y (px) (严格 2 列等宽，舒适列间距)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(spacing.formColumnSpacing),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    var posXText by remember(selectedBlock.id, selectedBlock.bounds.left) {
+                                        mutableStateOf(selectedBlock.bounds.left.toInt().toString())
+                                    }
+                                    NumberOutlinedTextField(
+                                        value = posXText,
+                                        onValueChange = {
+                                            posXText = it
+                                            val newLeft = it.toFloatOrNull()
+                                            if (newLeft != null) {
+                                                viewModel.updateBlockBounds(
+                                                    selectedBlock.id,
+                                                    newLeft,
+                                                    selectedBlock.bounds.top,
+                                                    selectedBlock.bounds.width,
+                                                    selectedBlock.bounds.height,
+                                                    templateRepo
+                                                )
+                                            }
                                         },
-                                        modifier = Modifier.scale(0.8f)
+                                        label = { Text("X (px)", fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                                        isFloat = true,
+                                        modifier = Modifier.weight(1f).tip("水平坐标 X，按住左右滑动或滚动滚轮改值")
+                                    )
+
+                                    var posYText by remember(selectedBlock.id, selectedBlock.bounds.top) {
+                                        mutableStateOf(selectedBlock.bounds.top.toInt().toString())
+                                    }
+                                    NumberOutlinedTextField(
+                                        value = posYText,
+                                        onValueChange = {
+                                            posYText = it
+                                            val newTop = it.toFloatOrNull()
+                                            if (newTop != null) {
+                                                viewModel.updateBlockBounds(
+                                                    selectedBlock.id,
+                                                    selectedBlock.bounds.left,
+                                                    newTop,
+                                                    selectedBlock.bounds.width,
+                                                    selectedBlock.bounds.height,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        label = { Text("Y (px)", fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                                        isFloat = true,
+                                        modifier = Modifier.weight(1f).tip("垂直坐标 Y，按住左右滑动或滚动滚轮改值")
+                                    )
+                                }
+
+                                // 第 2 行：宽 W (px) 与 高 H (px) (严格 2 列等宽，舒适列间距)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(spacing.formColumnSpacing),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    var widthText by remember(selectedBlock.id, selectedBlock.bounds.width) {
+                                        mutableStateOf(selectedBlock.bounds.width.toInt().toString())
+                                    }
+                                    NumberOutlinedTextField(
+                                        value = widthText,
+                                        onValueChange = {
+                                            widthText = it
+                                            val newW = it.toFloatOrNull()
+                                            if (newW != null && newW > 0) {
+                                                viewModel.updateBlockBounds(
+                                                    selectedBlock.id,
+                                                    selectedBlock.bounds.left,
+                                                    selectedBlock.bounds.top,
+                                                    newW,
+                                                    selectedBlock.bounds.height,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        label = { Text("宽 W (px)", fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                                        isFloat = true,
+                                        modifier = Modifier.weight(1f).tip("宽度 W，按住左右滑动或滚动滚轮改值")
+                                    )
+
+                                    var heightText by remember(selectedBlock.id, selectedBlock.bounds.height) {
+                                        mutableStateOf(selectedBlock.bounds.height.toInt().toString())
+                                    }
+                                    NumberOutlinedTextField(
+                                        value = heightText,
+                                        onValueChange = {
+                                            heightText = it
+                                            val newH = it.toFloatOrNull()
+                                            if (newH != null && newH > 0) {
+                                                viewModel.updateBlockBounds(
+                                                    selectedBlock.id,
+                                                    selectedBlock.bounds.left,
+                                                    selectedBlock.bounds.top,
+                                                    selectedBlock.bounds.width,
+                                                    newH,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        label = { Text("高 H (px)", fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                                        isFloat = true,
+                                        modifier = Modifier.weight(1f).tip("高度 H，按住左右滑动或滚动滚轮改值")
+                                    )
+                                }
+
+                                // 第 3 行：缩放 X 与 缩放 Y (0.0~1.0 浮点范围，严格 2 列等宽，舒适列间距)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(spacing.formColumnSpacing),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    NumberOutlinedTextField(
+                                        value = scaleXText,
+                                        onValueChange = { input ->
+                                            scaleXText = input
+                                            val scaleVal = input.toFloatOrNull()
+                                            if (scaleVal != null) {
+                                                val clamped = scaleVal.coerceIn(0.0f, 1.0f)
+                                                viewModel.updateBlockScale(
+                                                    selectedBlock.id,
+                                                    clamped,
+                                                    selectedBlock.scaleY,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        label = { Text("缩放 X", fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                                        isFloat = true,
+                                        step = 0.05f,
+                                        minVal = 0.0f,
+                                        maxVal = 1.0f,
+                                        modifier = Modifier.weight(1f).tip("X 轴独立缩放因数 (0.0~1.0)，按住左右滑动或滚动滚轮改值")
+                                    )
+
+                                    NumberOutlinedTextField(
+                                        value = scaleYText,
+                                        onValueChange = { input ->
+                                            scaleYText = input
+                                            val scaleVal = input.toFloatOrNull()
+                                            if (scaleVal != null) {
+                                                val clamped = scaleVal.coerceIn(0.0f, 1.0f)
+                                                viewModel.updateBlockScale(
+                                                    selectedBlock.id,
+                                                    selectedBlock.scaleX,
+                                                    clamped,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        label = { Text("缩放 Y", fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                                        isFloat = true,
+                                        step = 0.05f,
+                                        minVal = 0.0f,
+                                        maxVal = 1.0f,
+                                        modifier = Modifier.weight(1f).tip("Y 轴独立缩放因数 (0.0~1.0)，按住左右滑动或滚动滚轮改值")
+                                    )
+                                }
+
+                                // 第 4 行：不透明度 (0.0~1.0 浮点范围，支持滑动调值，与上方网格完美通栏对齐)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    NumberOutlinedTextField(
+                                        value = opacityText,
+                                        onValueChange = { input ->
+                                            opacityText = input
+                                            val opVal = input.toFloatOrNull()
+                                            if (opVal != null) {
+                                                val clamped = opVal.coerceIn(0.0f, 1.0f)
+                                                viewModel.updateBlockOpacity(
+                                                    selectedBlock.id,
+                                                    clamped,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        label = { Text("透明度", fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                                        isFloat = true,
+                                        step = 0.05f,
+                                        minVal = 0.0f,
+                                        maxVal = 1.0f,
+                                        modifier = Modifier.weight(1f).tip("不透明度 (0.0~1.0)，0 为完全透明，1 为完全不透明，按住左右滑动或滚动滚轮改值")
                                     )
                                 }
                             }
-                        }
-
-                        // 2. 几何坐标与尺寸 (X, Y, W, H 动态修改)
-                        Text("几何变换", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.outline)
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(spacing.small),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            var posXText by remember(selectedBlock.id, selectedBlock.bounds.left) {
-                                mutableStateOf(selectedBlock.bounds.left.toInt().toString())
-                            }
-                            OutlinedTextField(
-                                value = posXText,
-                                onValueChange = {
-                                    posXText = it
-                                    val newLeft = it.toFloatOrNull()
-                                    if (newLeft != null) {
-                                        viewModel.updateBlockBounds(
-                                            selectedBlock.id,
-                                            newLeft,
-                                            selectedBlock.bounds.top,
-                                            selectedBlock.bounds.width,
-                                            selectedBlock.bounds.height,
-                                            templateRepo
-                                        )
-                                    }
-                                },
-                                label = { Text("X", fontSize = 11.sp) },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            var posYText by remember(selectedBlock.id, selectedBlock.bounds.top) {
-                                mutableStateOf(selectedBlock.bounds.top.toInt().toString())
-                            }
-                            OutlinedTextField(
-                                value = posYText,
-                                onValueChange = {
-                                    posYText = it
-                                    val newTop = it.toFloatOrNull()
-                                    if (newTop != null) {
-                                        viewModel.updateBlockBounds(
-                                            selectedBlock.id,
-                                            selectedBlock.bounds.left,
-                                            newTop,
-                                            selectedBlock.bounds.width,
-                                            selectedBlock.bounds.height,
-                                            templateRepo
-                                        )
-                                    }
-                                },
-                                label = { Text("Y", fontSize = 11.sp) },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(spacing.small),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            var widthText by remember(selectedBlock.id, selectedBlock.bounds.width) {
-                                mutableStateOf(selectedBlock.bounds.width.toInt().toString())
-                            }
-                            OutlinedTextField(
-                                value = widthText,
-                                onValueChange = {
-                                    widthText = it
-                                    val newW = it.toFloatOrNull()
-                                    if (newW != null && newW > 0) {
-                                        viewModel.updateBlockBounds(
-                                            selectedBlock.id,
-                                            selectedBlock.bounds.left,
-                                            selectedBlock.bounds.top,
-                                            newW,
-                                            selectedBlock.bounds.height,
-                                            templateRepo
-                                        )
-                                    }
-                                },
-                                label = { Text("宽 W (px)", fontSize = 11.sp) },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            var heightText by remember(selectedBlock.id, selectedBlock.bounds.height) {
-                                mutableStateOf(selectedBlock.bounds.height.toInt().toString())
-                            }
-                            OutlinedTextField(
-                                value = heightText,
-                                onValueChange = {
-                                    heightText = it
-                                    val newH = it.toFloatOrNull()
-                                    if (newH != null && newH > 0) {
-                                        viewModel.updateBlockBounds(
-                                            selectedBlock.id,
-                                            selectedBlock.bounds.left,
-                                            selectedBlock.bounds.top,
-                                            selectedBlock.bounds.width,
-                                            newH,
-                                            templateRepo
-                                        )
-                                    }
-                                },
-                                label = { Text("高 H (px)", fontSize = 11.sp) },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
                         }
 
                         // 3. 组件类型动态切换 (UIBlockType)
@@ -411,12 +568,12 @@ fun UIStudioPropertyPanel(
                             onExpandedChange = { typeExpanded = it },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            OutlinedTextField(
+                            SelectAllOutlinedTextField(
                                 value = selectedBlock.type.name,
                                 onValueChange = {},
                                 readOnly = true,
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded) },
-                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                             )
                             ExposedDropdownMenu(
                                 expanded = typeExpanded,

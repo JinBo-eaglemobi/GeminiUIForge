@@ -3,6 +3,8 @@ package org.gemini.ui.forge.ui.component
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -32,9 +34,13 @@ fun NumberOutlinedTextField(
     label: @Composable (() -> Unit)? = null,
     singleLine: Boolean = true,
     isFloat: Boolean = true,
-    enabled: Boolean = true
+    step: Float = 1f,
+    minVal: Float? = null,
+    maxVal: Float? = null,
+    enabled: Boolean = true,
+    contentPadding: PaddingValues? = null
 ) {
-    var localText by remember { mutableStateOf(normalizeNumberString(value, isFloat)) }
+    var localText by remember { mutableStateOf(normalizeNumberString(value, isFloat, minVal, maxVal)) }
     var focusInitialValue by remember { mutableStateOf(value) }
     var isFocused by remember { mutableStateOf(false) }
     var isDraggingState by remember { mutableStateOf(false) }
@@ -42,7 +48,7 @@ fun NumberOutlinedTextField(
 
     LaunchedEffect(value) {
         if (!isFocused && !isDraggingState) {
-            localText = normalizeNumberString(value, isFloat)
+            localText = normalizeNumberString(value, isFloat, minVal, maxVal)
         }
     }
 
@@ -55,10 +61,10 @@ fun NumberOutlinedTextField(
             onValueChange = { input ->
                 if (input.isEmpty()) {
                     localText = input
-                    onValueChange("0")
+                    onValueChange(if (minVal != null && minVal > 0f) minVal.toString() else "0")
                 } else if (input == "-" || input == "." || input == "-.") {
                     localText = input
-                    onValueChange("0")
+                    onValueChange(if (minVal != null && minVal > 0f) minVal.toString() else "0")
                 } else {
                     val isValid = if (isFloat) input.toFloatOrNull() != null else input.toIntOrNull() != null
                     if (isValid || (input.endsWith(".") && input.count { it == '.' } == 1)) {
@@ -70,6 +76,7 @@ fun NumberOutlinedTextField(
                 }
             },
             modifier = Modifier
+                .fillMaxWidth()
                 .focusRequester(focusRequester)
                 .onFocusChanged { focusState ->
                     if (focusState.isFocused) {
@@ -79,11 +86,11 @@ fun NumberOutlinedTextField(
                         isFocused = false
                         val isValid = if (isFloat) localText.toFloatOrNull() != null else localText.toIntOrNull() != null
                         if (!isValid) {
-                            val fallback = normalizeNumberString(focusInitialValue, isFloat)
+                            val fallback = normalizeNumberString(focusInitialValue, isFloat, minVal, maxVal)
                             localText = fallback
                             currentOnValueChange(fallback)
                         } else {
-                            val normalized = normalizeNumberString(localText, isFloat)
+                            val normalized = normalizeNumberString(localText, isFloat, minVal, maxVal)
                             localText = normalized
                             currentOnValueChange(normalized)
                         }
@@ -100,10 +107,12 @@ fun NumberOutlinedTextField(
                                             val scrollDelta = change.scrollDelta.y
                                             if (scrollDelta != 0f) {
                                                 change.consume()
-                                                val step = if (scrollDelta > 0) -1 else 1 // 滚轮向后（下）是减，向前（上）是加
+                                                val scrollDir = if (scrollDelta > 0) -1 else 1 // 滚轮向后（下）是减，向前（上）是加
                                                 val currentVal = localText.toFloatOrNull() ?: 0f
-                                                val newVal = currentVal + step
-                                                val formatted = normalizeNumberString(newVal.toString(), isFloat)
+                                                var newVal = currentVal + scrollDir * step
+                                                if (minVal != null) newVal = maxOf(minVal, newVal)
+                                                if (maxVal != null) newVal = minOf(maxVal, newVal)
+                                                val formatted = normalizeNumberString(newVal.toString(), isFloat, minVal, maxVal)
                                                 localText = formatted
                                                 currentOnValueChange(formatted)
                                             }
@@ -119,7 +128,8 @@ fun NumberOutlinedTextField(
             label = label,
             singleLine = singleLine,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            enabled = enabled
+            enabled = enabled,
+            contentPadding = contentPadding
         )
 
         // 当没有焦点且启用时，覆盖一个透明层来拦截 Hover 和 Drag
@@ -170,8 +180,10 @@ fun NumberOutlinedTextField(
                                             accumulatedDrag -= steps * threshold
 
                                             val currentVal = localText.toFloatOrNull() ?: 0f
-                                            val newVal = currentVal + steps
-                                            val formatted = normalizeNumberString(newVal.toString(), isFloat)
+                                            var newVal = currentVal + steps * step
+                                            if (minVal != null) newVal = maxOf(minVal, newVal)
+                                            if (maxVal != null) newVal = minOf(maxVal, newVal)
+                                            val formatted = normalizeNumberString(newVal.toString(), isFloat, minVal, maxVal)
                                             localText = formatted
                                             currentOnValueChange(formatted)
                                         }
@@ -202,13 +214,24 @@ fun NumberOutlinedTextField(
     }
 }
 
-private fun normalizeNumberString(input: String, isFloat: Boolean): String {
+private fun normalizeNumberString(
+    input: String,
+    isFloat: Boolean,
+    minVal: Float? = null,
+    maxVal: Float? = null
+): String {
     if (isFloat) {
-        val f = input.toFloatOrNull() ?: return input
-        val i = f.toInt()
-        return if (f == i.toFloat()) i.toString() else f.toString()
+        var f = input.toFloatOrNull() ?: return input
+        if (minVal != null) f = maxOf(minVal, f)
+        if (maxVal != null) f = minOf(maxVal, f)
+        // 浮点数保留合理精度（如果是 0~1 的缩放保留最多 2 位有效小数，避免 0.10000002 浮点累加误差）
+        val rounded = (kotlin.math.round(f * 100f) / 100f)
+        val i = rounded.toInt()
+        return if (rounded == i.toFloat()) i.toString() else rounded.toString()
     } else {
-        val i = input.toIntOrNull() ?: return input
+        var i = input.toIntOrNull() ?: return input
+        if (minVal != null) i = maxOf(minVal.toInt(), i)
+        if (maxVal != null) i = minOf(maxVal.toInt(), i)
         return i.toString()
     }
 }

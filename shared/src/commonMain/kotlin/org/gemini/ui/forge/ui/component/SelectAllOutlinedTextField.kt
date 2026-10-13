@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.component
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -18,6 +19,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
  * 封装的全局输入框组件：
@@ -44,7 +46,8 @@ fun SelectAllOutlinedTextField(
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
     singleLine: Boolean = maxLines == 1,
-    visualTransformation: VisualTransformation = VisualTransformation.None
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    contentPadding: PaddingValues? = null
 ) {
     // 维护带光标和选择状态的 TextFieldValue
     var textFieldValue by remember { mutableStateOf(TextFieldValue(text = value)) }
@@ -120,8 +123,13 @@ fun SelectAllOutlinedTextField(
                 isError = false,
                 interactionSource = interactionSource,
                 colors = colors,
-                // 使用 M3 默认内边距；紧凑形态由 AppTheme 全局 Density 重映射统一缩放
-                contentPadding = OutlinedTextFieldDefaults.contentPadding(),
+                // 自适应双端间距：紧凑模式保留 6dp 优雅呼吸感（对标 IDEA）；触控模式采用 12dp 大热区（绝不偏上）
+                contentPadding = contentPadding ?: OutlinedTextFieldDefaults.contentPadding(
+                    start = LocalAppSpacing.current.textFieldPaddingHorizontal,
+                    top = LocalAppSpacing.current.textFieldPaddingVertical,
+                    end = LocalAppSpacing.current.textFieldPaddingHorizontal,
+                    bottom = LocalAppSpacing.current.textFieldPaddingVertical
+                ),
                 container = {
                     OutlinedTextFieldDefaults.Container(
                         enabled = enabled,

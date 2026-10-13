@@ -76,7 +76,7 @@ object AssetSheetAiDetector {
             bytes = imageBytes,
             mimeType = mimeType,
             onLog = { logMsg -> onProgress?.invoke(0.35f, "资源准备: $logMsg") }
-        ) ?: throw IllegalStateException("构建 Gemini 图像请求分片失败")
+        )
 
         // 4. 组装请求报文
         val partsArray = buildJsonArray {
@@ -163,7 +163,6 @@ object AssetSheetAiDetector {
             }
             uri.startsWith("data:image", ignoreCase = true) -> {
                 val b64 = if (uri.contains(",")) uri.substringAfter(",") else uri
-                @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
                 val decoded = kotlin.io.encoding.Base64.decode(b64)
                 val inferredMime = if (uri.contains(";")) uri.substringBefore(";").removePrefix("data:") else "image/png"
                 decoded to inferredMime

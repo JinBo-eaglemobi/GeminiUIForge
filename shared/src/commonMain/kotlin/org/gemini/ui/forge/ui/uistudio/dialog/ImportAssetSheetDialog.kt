@@ -399,8 +399,8 @@ fun ImportAssetSheetDialog(
                             }
 
                             // 画布尺寸徽章
-                            val cw = result.canvasWidth ?: 0f
-                            val ch = result.canvasHeight ?: 0f
+                            val cw = result.canvasWidth
+                            val ch = result.canvasHeight
                             if (cw > 0 && ch > 0) {
                                 Surface(
                                     shape = RoundedCornerShape(4.dp),
@@ -441,7 +441,7 @@ fun ImportAssetSheetDialog(
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
-                                        item.category?.let { cat ->
+                                        item.category.let { cat ->
                                             Text(
                                                 text = cat,
                                                 style = MaterialTheme.typography.labelSmall,

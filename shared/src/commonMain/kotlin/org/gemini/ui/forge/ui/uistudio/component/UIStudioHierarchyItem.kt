@@ -5,11 +5,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,16 +27,20 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.DropPosition
@@ -114,7 +120,7 @@ fun UIStudioHierarchyItem(
                     }
                 // 历史路径失效自愈探测：若读不出，尝试从规范 assets/image/{id}.png 读取
                 if (bytes == null && state.project != null) {
-                    val sanitized = state.project!!.projectId.replace(" ", "_")
+                    val sanitized = state.project.projectId.replace(" ", "_")
                     val fallbackRel = "templates/$sanitized/assets/image/${block.id}.png"
                     bytes = try {
                         TemplateFile(fallbackRel).readBytes()
@@ -133,7 +139,7 @@ fun UIStudioHierarchyItem(
         }
     }
 
-    var handleCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var rowCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     val contentAlpha = when {
         isDragged -> 0.3f
@@ -164,23 +170,59 @@ fun UIStudioHierarchyItem(
                     .fillMaxWidth()
                     .padding(vertical = 1.dp)
                     .onGloballyPositioned { coordinates ->
+                        rowCoordinates = coordinates
                         onPositioned(block.id, coordinates.boundsInWindow())
                     }
-                    .combinedClickable(
-                        onClick = { viewModel.selectBlock(block.id) },
-                        onDoubleClick = {
-                            if (block.isPureContainer || hasChildren || block.type == UIBlockType.CONTAINER) {
-                                viewModel.openContainerTab(block.id)
-                            }
-                        }
-                    )
-                    .pointerInput(block.id, hasChildren, block.isPureContainer) {
+                    // 1. 鼠标右键菜单 (PointerEventPass.Initial 优先快速捕获)
+                    .pointerInput(block.id) {
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
                                     showContextMenu = true
                                     event.changes.forEach { it.consume() }
+                                }
+                            }
+                        }
+                    }
+                    // 2. 整行整块即刻拖拽与单击/双击融合手势 (无需对准细小手柄或长按，任意位置按下移动 >6px 即拖动)
+                    .pointerInput(block.id, hasChildren, block.isPureContainer) {
+                        var lastClickTime = 0L
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            if (!down.pressed) return@awaitEachGesture
+                            if (currentEvent.buttons.isSecondaryPressed) return@awaitEachGesture
+
+                            var isDragging = false
+                            var totalDistance = 0f
+
+                            drag(down.id) { change ->
+                                val dragAmount = change.positionChange()
+                                totalDistance += dragAmount.getDistance()
+                                if (!isDragging && totalDistance > 6f) {
+                                    isDragging = true
+                                    val windowPos = rowCoordinates?.localToWindow(change.position) ?: change.position
+                                    onStartDrag(block.id, windowPos)
+                                }
+                                if (isDragging) {
+                                    change.consume()
+                                    val windowPos = rowCoordinates?.localToWindow(change.position) ?: change.position
+                                    onDrag(windowPos)
+                                }
+                            }
+
+                            if (isDragging) {
+                                onDragEnd()
+                            } else if (totalDistance <= 6f) {
+                                val currentTime = getCurrentTimeMillis()
+                                if (currentTime - lastClickTime < 300L) {
+                                    if (block.isPureContainer || hasChildren || block.type == UIBlockType.CONTAINER) {
+                                        viewModel.openContainerTab(block.id)
+                                    }
+                                    lastClickTime = 0L
+                                } else {
+                                    lastClickTime = currentTime
+                                    viewModel.selectBlock(block.id)
                                 }
                             }
                         }
@@ -202,6 +244,12 @@ fun UIStudioHierarchyItem(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = (depth * 14 + 4).dp, end = 4.dp, top = 3.dp, bottom = 3.dp)
+                            .semantics {
+                                onClick {
+                                    viewModel.selectBlock(block.id)
+                                    true
+                                }
+                            }
                     ) {
                         // 折叠 / 展开手柄
                         if (hasChildren) {
@@ -210,7 +258,7 @@ fun UIStudioHierarchyItem(
                                 modifier = Modifier.size(18.dp)
                             ) {
                                 Icon(
-                                    imageVector = if (isContainerExpanded) Icons.Default.ArrowDropDown else Icons.Default.ArrowRight,
+                                    imageVector = if (isContainerExpanded) Icons.Default.ArrowDropDown else Icons.AutoMirrored.Filled.ArrowRight,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.outline.copy(alpha = contentAlpha),
                                     modifier = Modifier.size(16.dp)
@@ -219,34 +267,6 @@ fun UIStudioHierarchyItem(
                         } else {
                             Spacer(modifier = Modifier.width(18.dp))
                         }
-
-                        // 6点拖拽指示手柄（独立挂载手势，避免被行项点击抢占）
-                        Icon(
-                            imageVector = Icons.Default.DragIndicator,
-                            contentDescription = "拖拽手柄",
-                            tint = MaterialTheme.colorScheme.outline.copy(alpha = if (isHovered) 0.9f else 0.4f),
-                            modifier = Modifier
-                                .size(16.dp)
-                                .tip("拖拽此处可自由移动层级或拖入图元成组")
-                                .onGloballyPositioned { handleCoordinates = it }
-                                .pointerInput(block.id) {
-                                    detectDragGestures(
-                                        onDragStart = { localOffset ->
-                                            val windowPos = handleCoordinates?.localToWindow(localOffset) ?: localOffset
-                                            onStartDrag(block.id, windowPos)
-                                        },
-                                        onDrag = { change, _ ->
-                                            change.consume()
-                                            val windowPos = handleCoordinates?.localToWindow(change.position) ?: change.position
-                                            onDrag(windowPos)
-                                        },
-                                        onDragEnd = { onDragEnd() },
-                                        onDragCancel = { onDragEnd() }
-                                    )
-                                }
-                        )
-
-                        Spacer(modifier = Modifier.width(4.dp))
 
                         // 图层真实图片缩略图 (若无图片则优雅回退为类型图标)
                         if (bitmap != null) {
