@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -23,6 +24,7 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
@@ -53,13 +55,39 @@ fun UIStudioCanvasArea(
     val spacing = LocalAppSpacing.current
     val state = viewModel.state
     val currentView = state.currentView
+    val density = LocalDensity.current.density
 
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
 
-    // 默认自适应居中联动
-    LaunchedEffect(containerSize, currentView?.id, state.activeContainerId, state.isFitToViewport) {
-        if (state.isFitToViewport && containerSize.width > 0 && containerSize.height > 0) {
-            viewModel.fitToViewport(containerSize.width.toFloat(), containerSize.height.toFloat())
+    LaunchedEffect(density) {
+        viewModel.updateDensity(density)
+    }
+
+    // 默认自适应居中联动 (监听视口尺寸、视图宽高、容器状态、自适应标志以及自增触发器)
+    LaunchedEffect(
+        containerSize,
+        currentView?.id,
+        currentView?.width,
+        currentView?.height,
+        state.activeContainerId,
+        state.fitToViewportTrigger,
+        state.isFitToViewport,
+        density
+    ) {
+        if (containerSize.width > 0 && containerSize.height > 0) {
+            if (state.isFitToViewport) {
+                viewModel.fitToViewport(
+                    viewportWidth = containerSize.width.toFloat(),
+                    viewportHeight = containerSize.height.toFloat(),
+                    density = density
+                )
+            } else if (state.panOffset == Offset.Zero && state.viewViewportCache[state.activeContainerId ?: state.currentViewId] == null) {
+                viewModel.resetZoom(
+                    viewportWidth = containerSize.width.toFloat(),
+                    viewportHeight = containerSize.height.toFloat(),
+                    density = density
+                )
+            }
         }
     }
 
@@ -363,7 +391,7 @@ fun UIStudioCanvasArea(
                     .padding(spacing.medium),
                 contentAlignment = Alignment.TopEnd
             ) {
-                UIStudioCanvasToolbar(viewModel = viewModel)
+                UIStudioCanvasToolbar(viewModel = viewModel, containerSize = containerSize)
             }
         }
 

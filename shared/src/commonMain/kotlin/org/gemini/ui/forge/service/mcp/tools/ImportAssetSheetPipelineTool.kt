@@ -181,8 +181,8 @@ class ImportAssetSheetPipelineTool(
 
         // 3. 执行 Skia 物理透明切片落盘与构建 UIBlock
         onProgress?.invoke(0.8f, "正在执行物理透明切片并落盘至资产库...")
-        val canvasW = parseResult.canvasWidth ?: imgWidth
-        val canvasH = parseResult.canvasHeight ?: imgHeight
+        val canvasW = parseResult.canvasWidth
+        val canvasH = parseResult.canvasHeight
 
         val createdBlocks = mutableListOf<UIBlock>()
         val savedAssetPaths = mutableListOf<String>()

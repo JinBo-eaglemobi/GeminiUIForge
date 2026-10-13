@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.ui.component.tip
@@ -31,7 +32,8 @@ import kotlin.math.roundToInt
 @Composable
 fun UIStudioCanvasToolbar(
     viewModel: UIStudioViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    containerSize: IntSize = IntSize.Zero
 ) {
     val state = viewModel.state
     val zoomPercent = (state.scale * 100f).roundToInt()
@@ -67,7 +69,12 @@ fun UIStudioCanvasToolbar(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
-                    .clickable { viewModel.resetZoom() }
+                    .clickable {
+                        viewModel.resetZoom(
+                            viewportWidth = containerSize.width.toFloat(),
+                            viewportHeight = containerSize.height.toFloat()
+                        )
+                    }
                     .padding(horizontal = 6.dp, vertical = 4.dp)
                     .tip("重置为 100% 原始比例")
             ) {
@@ -106,7 +113,12 @@ fun UIStudioCanvasToolbar(
 
             // 4. 一键还原 100% 缩放值
             IconButton(
-                onClick = { viewModel.resetZoom() },
+                onClick = {
+                    viewModel.resetZoom(
+                        viewportWidth = containerSize.width.toFloat(),
+                        viewportHeight = containerSize.height.toFloat()
+                    )
+                },
                 modifier = Modifier
                     .size(28.dp)
                     .tip("一键还原 100% 缩放值")

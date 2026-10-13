@@ -94,10 +94,15 @@ class UIStudioViewModel {
             openViewIds = if (state.openViewIds.isEmpty()) initialOpenTabs else state.openViewIds,
             canvasWidth = initialWidth,
             canvasHeight = initialHeight,
-            scale = 0.6f,
-            panOffset = Offset(100f, 60f),
+            scale = 1.0f,
+            panOffset = Offset.Zero,
+            isFitToViewport = false,
+            isDirty = false,
             selectedBlockId = null
         )
+
+        // 异步加载各视图视口记忆缓存 (viewport_cache.json)
+        loadViewportCache(effectiveProject.projectId)
 
         // 异步加载素材库 (asset_library.json)
         loadAssetLibrary(effectiveProject.projectId)
@@ -627,7 +632,40 @@ class UIStudioViewModel {
         state = state.copy(dragCursorPosition = pos)
     }
 
-    private fun cacheCurrentViewport() {
+    /**
+     * 标记当前工程或视口布局发生了变更，设置 isDirty 为 true。
+     */
+    fun markDirty() {
+        if (!state.isDirty) {
+            state = state.copy(isDirty = true)
+        }
+    }
+
+    /**
+     * 请求退出 UI Studio 工作台（返回大厅）。
+     * 若当前有未保存的修改或视口调整，拦截并唤起三选确认弹窗；否则直接放行。
+     */
+    fun requestExit(onDirectExit: () -> Unit) {
+        if (state.isDirty) {
+            state = state.copy(showExitConfirmDialog = true)
+        } else {
+            onDirectExit()
+        }
+    }
+
+    /**
+     * 关闭未保存退出确认弹窗。
+     */
+    fun dismissExitDialog() {
+        state = state.copy(showExitConfirmDialog = false)
+    }
+
+    /**
+     * 暂存当前活跃视口（视图界面或父容器专属标签）的缩放比率与平移偏移量到内存缓存中，
+     * 并同步持久化到本地磁盘 `templates/{projectId}/viewport_cache.json`。
+     * 当切换标签页或关闭标签页时调用，以保证用户再次打开或切回时能够 100% 还原上次调整的视口布局。
+     */
+    fun cacheCurrentViewport() {
         val currentKey = state.activeContainerId ?: state.currentViewId ?: return
         val currentCache = state.viewViewportCache.toMutableMap()
         currentCache[currentKey] = ViewportState(
@@ -636,9 +674,17 @@ class UIStudioViewModel {
             panY = state.panOffset.y
         )
         state = state.copy(viewViewportCache = currentCache)
+        state.project?.projectId?.let { saveViewportCache(it) }
     }
 
-    private fun restoreViewportOrFit(targetKey: String) {
+    /**
+     * 还原指定视图界面或父容器标签页的视口布局。
+     * - 若缓存中存在此前保存的视口记录，则精确恢复该记录的 scale 与 panOffset；
+     * - 若该视图属于首次打开（无历史缓存），则严格以 100% (1.0f) 原始比例居中对齐呈现，绝不自动进行非 100% 的自适应缩放。
+     *
+     * @param targetKey 目标视图 ID 或容器 ID
+     */
+    private fun restoreViewportOrDefault(targetKey: String) {
         val cached = state.viewViewportCache[targetKey]
         if (cached != null) {
             state = state.copy(
@@ -647,27 +693,88 @@ class UIStudioViewModel {
                 isFitToViewport = false
             )
         } else {
-            state = state.copy(isFitToViewport = true)
+            // 首次打开默认严格为 100% 原始比例，并在当前舞台居中对齐
+            resetZoom()
+        }
+    }
+
+    /**
+     * 从本地磁盘异步加载当前项目的视口历史记忆缓存文件 `viewport_cache.json`。
+     */
+    fun loadViewportCache(projectId: String) {
+        scope.launch(Dispatchers.Default) {
+            val sanitized = projectId.trim().replace(" ", "_")
+            val path = "templates/$sanitized/viewport_cache.json"
+            try {
+                val tFile = TemplateFile(path)
+                if (tFile.exists()) {
+                    val bytes = tFile.readBytes()
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        val map = jsonHelper.decodeFromString<Map<String, ViewportState>>(bytes.decodeToString())
+                        state = state.copy(viewViewportCache = map)
+                        val activeKey = state.activeContainerId ?: state.currentViewId
+                        if (activeKey != null) {
+                            withContext(Dispatchers.Main) {
+                                restoreViewportOrDefault(activeKey)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                AppLogger.w("UIStudioViewModel", "读取视口缓存失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 将当前内存中的视口记忆映射持久化写入本地磁盘 `templates/{projectId}/viewport_cache.json`。
+     */
+    fun saveViewportCache(projectId: String) {
+        scope.launch(Dispatchers.Default) {
+            val sanitized = projectId.trim().replace(" ", "_")
+            val path = "templates/$sanitized/viewport_cache.json"
+            try {
+                val tFile = TemplateFile(path)
+                val jsonStr = jsonHelper.encodeToString(state.viewViewportCache)
+                tFile.writeBytes(jsonStr.encodeToByteArray())
+            } catch (e: Exception) {
+                AppLogger.w("UIStudioViewModel", "保存视口缓存失败: ${e.message}")
+            }
         }
     }
 
     fun zoomIn() {
         state = state.copy(scale = (state.scale * 1.2f).coerceIn(0.1f, 5.0f), isFitToViewport = false)
+        cacheCurrentViewport()
+        markDirty()
     }
 
     fun zoomOut() {
         state = state.copy(scale = (state.scale / 1.2f).coerceIn(0.1f, 5.0f), isFitToViewport = false)
+        cacheCurrentViewport()
+        markDirty()
     }
 
-    fun resetZoom(viewportWidth: Float = 0f, viewportHeight: Float = 0f) {
-        val activeContainer = state.activeContainerBlock
-        val targetWidth = (activeContainer?.bounds?.width ?: state.canvasWidth)
-        val targetHeight = (activeContainer?.bounds?.height ?: state.canvasHeight)
-        val vw = if (viewportWidth > 0f) viewportWidth else (state.canvasWindowBounds?.let { it.right - it.left } ?: targetWidth)
-        val vh = if (viewportHeight > 0f) viewportHeight else (state.canvasWindowBounds?.let { it.bottom - it.top } ?: targetHeight)
+    fun updateDensity(density: Float) {
+        if (state.density != density && density > 0f) {
+            state = state.copy(density = density)
+        }
+    }
 
-        val panX = (vw - targetWidth) / 2f
-        val panY = (vh - targetHeight) / 2f
+    fun resetZoom(viewportWidth: Float = 0f, viewportHeight: Float = 0f, density: Float? = null) {
+        val currentDensity = (density ?: state.density).coerceAtLeast(0.1f)
+        val activeContainer = state.activeContainerBlock
+        val currentView = state.currentView
+        val effectiveWidth = (activeContainer?.bounds?.width ?: currentView?.width ?: state.canvasWidth)
+        val effectiveHeight = (activeContainer?.bounds?.height ?: currentView?.height ?: state.canvasHeight)
+        val canvasPhysicalW = effectiveWidth * currentDensity
+        val canvasPhysicalH = effectiveHeight * currentDensity
+
+        val vw = if (viewportWidth > 0f) viewportWidth else (state.canvasWindowBounds?.let { it.right - it.left } ?: canvasPhysicalW)
+        val vh = if (viewportHeight > 0f) viewportHeight else (state.canvasWindowBounds?.let { it.bottom - it.top } ?: canvasPhysicalH)
+
+        val panX = (vw - canvasPhysicalW) / 2f
+        val panY = (vh - canvasPhysicalH) / 2f
 
         state = state.copy(
             scale = 1.0f,
@@ -739,7 +846,10 @@ class UIStudioViewModel {
     }
 
     fun triggerFitToViewport() {
-        state = state.copy(isFitToViewport = true)
+        state = state.copy(
+            isFitToViewport = true,
+            fitToViewportTrigger = state.fitToViewportTrigger + 1
+        )
     }
 
     /**
@@ -759,7 +869,7 @@ class UIStudioViewModel {
             selectedBlockId = null,
             selectedAssetId = null
         )
-        restoreViewportOrFit(viewId)
+        restoreViewportOrDefault(viewId)
     }
 
     /**
@@ -771,7 +881,7 @@ class UIStudioViewModel {
         state = state.copy(
             activeContainerId = null
         )
-        restoreViewportOrFit(viewId)
+        restoreViewportOrDefault(viewId)
     }
 
     /**
@@ -786,7 +896,7 @@ class UIStudioViewModel {
             activeContainerId = containerId,
             selectedBlockId = containerId
         )
-        restoreViewportOrFit(containerId)
+        restoreViewportOrDefault(containerId)
         Toast.show("已打开容器独立布局视图", ToastType.INFO)
     }
 
@@ -808,9 +918,9 @@ class UIStudioViewModel {
         )
         val targetKey = newActiveId ?: state.currentViewId
         if (targetKey != null) {
-            restoreViewportOrFit(targetKey)
+            restoreViewportOrDefault(targetKey)
         } else {
-            state = state.copy(isFitToViewport = true)
+            resetZoom()
         }
     }
 
@@ -823,7 +933,7 @@ class UIStudioViewModel {
             activeContainerId = containerId,
             selectedBlockId = containerId
         )
-        restoreViewportOrFit(containerId)
+        restoreViewportOrDefault(containerId)
     }
 
     /**
@@ -853,6 +963,9 @@ class UIStudioViewModel {
             activeContainerId = null,
             selectedBlockId = null
         )
+        if (newActiveId != null) {
+            restoreViewportOrDefault(newActiveId)
+        }
     }
 
     /**
@@ -1492,23 +1605,29 @@ class UIStudioViewModel {
         viewportWidth: Float,
         viewportHeight: Float,
         customWidth: Float? = null,
-        customHeight: Float? = null
+        customHeight: Float? = null,
+        density: Float? = null
     ) {
+        val currentDensity = (density ?: state.density).coerceAtLeast(0.1f)
         val activeContainer = state.activeContainerBlock
-        val canvasW = customWidth ?: activeContainer?.bounds?.width ?: state.canvasWidth
-        val canvasH = customHeight ?: activeContainer?.bounds?.height ?: state.canvasHeight
-        if (viewportWidth <= 0f || viewportHeight <= 0f || canvasW <= 0f || canvasH <= 0f) return
+        val currentView = state.currentView
+        val effectiveWidth = (customWidth ?: activeContainer?.bounds?.width ?: currentView?.width ?: state.canvasWidth)
+        val effectiveHeight = (customHeight ?: activeContainer?.bounds?.height ?: currentView?.height ?: state.canvasHeight)
+        if (viewportWidth <= 0f || viewportHeight <= 0f || effectiveWidth <= 0f || effectiveHeight <= 0f) return
 
-        val padding = 64f
-        val availW = (viewportWidth - padding).coerceAtLeast(100f)
-        val availH = (viewportHeight - padding).coerceAtLeast(100f)
+        val canvasPhysicalW = effectiveWidth * currentDensity
+        val canvasPhysicalH = effectiveHeight * currentDensity
 
-        val scaleX = availW / canvasW
-        val scaleY = availH / canvasH
+        val paddingPx = 64f * currentDensity
+        val availW = (viewportWidth - paddingPx).coerceAtLeast(100f)
+        val availH = (viewportHeight - paddingPx).coerceAtLeast(100f)
+
+        val scaleX = availW / canvasPhysicalW
+        val scaleY = availH / canvasPhysicalH
         val targetScale = minOf(scaleX, scaleY).coerceIn(0.1f, 3.0f)
 
-        val panX = (viewportWidth - canvasW * targetScale) / 2f
-        val panY = (viewportHeight - canvasH * targetScale) / 2f
+        val panX = (viewportWidth - canvasPhysicalW * targetScale) / 2f
+        val panY = (viewportHeight - canvasPhysicalH * targetScale) / 2f
 
         state = state.copy(
             scale = targetScale,
@@ -1657,8 +1776,11 @@ class UIStudioViewModel {
 
         state = state.copy(
             scale = newScale,
-            panOffset = Offset(newPanX, newPanY)
+            panOffset = Offset(newPanX, newPanY),
+            isFitToViewport = false
         )
+        cacheCurrentViewport()
+        markDirty()
     }
 
     /**
@@ -1668,18 +1790,18 @@ class UIStudioViewModel {
      */
     fun onPan(delta: Offset) {
         state = state.copy(
-            panOffset = state.panOffset + delta
+            panOffset = state.panOffset + delta,
+            isFitToViewport = false
         )
+        cacheCurrentViewport()
+        markDirty()
     }
 
     /**
-     * 重置画布视口至居中默认视野。
+     * 重置画布视口至居中 100% (1.0f) 原寸视野。
      */
     fun resetViewport() {
-        state = state.copy(
-            scale = 0.6f,
-            panOffset = Offset(100f, 60f)
-        )
+        resetZoom()
     }
 
     /**
@@ -1731,6 +1853,8 @@ class UIStudioViewModel {
         scope.launch {
             try {
                 repo.saveTemplate(proj.projectId, proj)
+                saveViewportCache(proj.projectId)
+                state = state.copy(isDirty = false)
                 Toast.show("项目保存成功", ToastType.SUCCESS)
             } catch (e: Exception) {
                 Toast.show("保存失败: ${e.message}", ToastType.ERROR)

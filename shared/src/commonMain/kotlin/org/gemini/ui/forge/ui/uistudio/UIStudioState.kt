@@ -14,6 +14,7 @@ import org.gemini.ui.forge.ui.uistudio.model.ProjectAgentConfig
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetFolder
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
+import kotlinx.serialization.Serializable
 
 /**
  * UI Studio 左侧边栏下半部分 Tab 分类枚举。
@@ -56,11 +57,13 @@ data class UIStudioState(
     val project: ProjectState? = null,
     val canvasWidth: Float = 1920f,
     val canvasHeight: Float = 1080f,
-    val scale: Float = 0.6f,
+    val scale: Float = 1.0f,
     val panOffset: Offset = Offset.Zero,
     val selectedBlockId: String? = null,
     val isAssetPanelVisible: Boolean = true,
     val isSaving: Boolean = false,
+    val isDirty: Boolean = false,
+    val showExitConfirmDialog: Boolean = false,
     val isImportSheetDialogVisible: Boolean = false,
     val sourceImagePath: String = "",
     val sourceJsonPath: String = "",
@@ -93,7 +96,9 @@ data class UIStudioState(
     val isCanvasDragHovered: Boolean = false,
     val canvasWindowBounds: org.gemini.ui.forge.model.ui.SerialRect? = null,
     val lastDragHoverPos: androidx.compose.ui.geometry.Offset? = null,
-    val isFitToViewport: Boolean = true,
+    val isFitToViewport: Boolean = false,
+    val fitToViewportTrigger: Long = 0L,
+    val density: Float = 1.0f,
     val isMattingAsset: Boolean = false,
     val mattingAssetId: String? = null,
     val autoRemoveBgOnSlice: Boolean = true,
@@ -183,6 +188,7 @@ data class DragRemoveLastChildContext(
 /**
  * 视图界面的视口历史状态（缩放比例与平移位移）。
  */
+@Serializable
 data class ViewportState(
     val scale: Float,
     val panX: Float,

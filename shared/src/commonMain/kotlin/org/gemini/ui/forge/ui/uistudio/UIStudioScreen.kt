@@ -1,7 +1,11 @@
 package org.gemini.ui.forge.ui.uistudio
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -9,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.app.AppScreen
 import org.gemini.ui.forge.ui.component.VerticalSplitter
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.chat.UIProjectAiStudioDialog
 import org.gemini.ui.forge.ui.uistudio.component.*
 import org.gemini.ui.forge.ui.uistudio.dialog.*
@@ -49,7 +54,9 @@ fun UIStudioScreen(
                 viewModel = viewModel,
                 templateRepo = templateRepository,
                 onBackToHome = {
-                    appViewModel.navigateTo(AppScreen.HOME)
+                    viewModel.requestExit(onDirectExit = {
+                        appViewModel.navigateTo(AppScreen.HOME)
+                    })
                 }
             )
         },
@@ -210,5 +217,37 @@ fun UIStudioScreen(
             asset = draggedAsset,
             cursorPos = state.dragCursorPosition
         )
+
+        // 挂载退出未保存确认弹窗 (三选：保存并退出 / 不保存退出 / 取消)
+        if (state.showExitConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissExitDialog() },
+                modifier = Modifier.width(LocalAppSpacing.current.dialogConfigWidth),
+                title = { Text("提醒") },
+                text = { Text("项目有未保存的修改或视口调整，是否保存后退出？") },
+                confirmButton = {
+                    Button(onClick = {
+                        viewModel.saveProject(templateRepository)
+                        viewModel.dismissExitDialog()
+                        appViewModel.navigateTo(AppScreen.HOME)
+                    }) {
+                        Text("保存并退出")
+                    }
+                },
+                dismissButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            viewModel.dismissExitDialog()
+                            appViewModel.navigateTo(AppScreen.HOME)
+                        }) {
+                            Text("不保存退出")
+                        }
+                        TextButton(onClick = { viewModel.dismissExitDialog() }) {
+                            Text("取消")
+                        }
+                    }
+                }
+            )
+        }
     }
 }
