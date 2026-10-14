@@ -63,25 +63,26 @@ fun UIStudioCanvasArea(
         viewModel.updateDensity(density)
     }
 
-    // 默认自适应居中联动 (监听视口尺寸、视图宽高、容器状态、自适应标志以及自增触发器)
+    // 自适应居中与初始视口联动（仅在用户显式触发居中、或首次打开未配置视口时执行一次，严禁随边栏拖动连续缩放！）
     LaunchedEffect(
-        containerSize,
         currentView?.id,
-        currentView?.width,
-        currentView?.height,
         state.activeContainerId,
         state.fitToViewportTrigger,
-        state.isFitToViewport,
-        density
+        state.isViewportInitialized
     ) {
+        if (!state.isViewportInitialized) return@LaunchedEffect
         if (containerSize.width > 0 && containerSize.height > 0) {
-            if (state.isFitToViewport) {
+            val activeKey = state.activeContainerId ?: state.currentViewId
+            val hasCache = activeKey != null && state.viewViewportCache[activeKey] != null
+            if (state.fitToViewportTrigger > 0L) {
+                // 用户显式点击「自适应居中」按钮，基于当前视口执行一次居中
                 viewModel.fitToViewport(
                     viewportWidth = containerSize.width.toFloat(),
                     viewportHeight = containerSize.height.toFloat(),
                     density = density
                 )
-            } else if (state.panOffset == Offset.Zero && state.viewViewportCache[state.activeContainerId ?: state.currentViewId] == null) {
+            } else if (!hasCache && state.panOffset == Offset.Zero) {
+                // 首次打开全新工程视图且无任何历史记录，执行一次初始 100% 居中
                 viewModel.resetZoom(
                     viewportWidth = containerSize.width.toFloat(),
                     viewportHeight = containerSize.height.toFloat(),
@@ -261,30 +262,49 @@ fun UIStudioCanvasArea(
                 val effectiveWidth = activeContainer?.bounds?.width ?: currentView.width
                 val effectiveHeight = activeContainer?.bounds?.height ?: currentView.height
 
-                // 画布实体容器（应用图形平移与缩放矩阵）
-                Surface(
-                    color = Color(0xFF1E293B),
-                    shape = RoundedCornerShape(2.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
-                    modifier = Modifier
-                        .graphicsLayer {
-                            translationX = state.panOffset.x
-                            translationY = state.panOffset.y
-                            scaleX = state.scale
-                            scaleY = state.scale
-                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                val canvasBgColor = remember(currentView.canvasBackgroundColor) {
+                    currentView.canvasBackgroundColor?.let { hex ->
+                        try {
+                            val cleanHex = hex.removePrefix("#")
+                            val colorLong = cleanHex.toLong(16)
+                            if (cleanHex.length == 6) Color(colorLong or 0xFF000000L) else Color(colorLong)
+                        } catch (_: Exception) {
+                            null
                         }
-                        .size(
-                            width = effectiveWidth.dp,
-                            height = effectiveHeight.dp
-                        )
-                        .shadow(
-                            elevation = 20.dp,
-                            shape = RoundedCornerShape(2.dp),
-                            ambientColor = Color.Black.copy(alpha = 0.6f),
-                            spotColor = Color.Black.copy(alpha = 0.9f)
-                        )
+                    } ?: Color(0xFF1E293B)
+                }
+
+                // 画布画板（Artboard）实体容器：
+                // 使用 wrapContentSize(unbounded = true) + requiredSize，彻底打破父容器 Box 的 maxWidth/maxHeight 强行夹取限制！
+                // 确保无论边栏如何拖动、视口如何改变，Page 画板物理尺寸恒定守恒，杜绝右侧内容被截断！
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .wrapContentSize(align = Alignment.TopStart, unbounded = true)
                 ) {
+                    Surface(
+                        color = canvasBgColor,
+                        shape = RoundedCornerShape(2.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                        modifier = Modifier
+                            .graphicsLayer {
+                                translationX = state.panOffset.x
+                                translationY = state.panOffset.y
+                                scaleX = state.scale
+                                scaleY = state.scale
+                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                            }
+                            .requiredSize(
+                                width = effectiveWidth.dp,
+                                height = effectiveHeight.dp
+                            )
+                            .shadow(
+                                elevation = 20.dp,
+                                shape = RoundedCornerShape(2.dp),
+                                ambientColor = Color.Black.copy(alpha = 0.6f),
+                                spotColor = Color.Black.copy(alpha = 0.9f)
+                            )
+                    ) {
                     val renderableBlocks = remember(currentView.blocks, activeContainer?.id, activeContainer?.opacity) {
                         if (activeContainer != null) {
                             // 容器独立编辑视口模式：仅渲染容器内部子组件（局部坐标，继承容器透明度）
@@ -379,6 +399,7 @@ fun UIStudioCanvasArea(
                             }
                         }
                     }
+                }
                 }
             }
         }

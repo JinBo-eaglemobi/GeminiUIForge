@@ -13,7 +13,7 @@
 
 ### 平台优先级规范（桌面版优先）
 
-- **桌面端 (JVM) 为第一优先级平台**：任何代码改动必须首先保证桌面端编译通过且功o能正常运行，再考虑其他平台。
+- **桌面端 (JVM) 为第一优先级平台**：任何代码改动必须首先保证桌面端编译通过且功能正常运行，再考虑其他平台。
 - 其他平台（Android / JS / iOS）的适配与修复**可延后**，不阻塞任务交付；当多平台实现存在冲突时，以桌面端实现为准，其余平台差异通过 `expect/actual` 机制后续补齐。
 - 若改动涉及其他平台但未在本次验证，必须在交付说明中显式标注"待适配 / 未验证"。
 
@@ -34,15 +34,13 @@
 
 ## 质量与校验（红线规则）
 
-- **IntelliJ IDEA 原生 Gradle 编译校验规范（MCP Run Configuration 优先铁律）**: **【红线规则】**
-  - **【热重载开发模式互斥阻断铁律】**：**若当前处于 `@forge-loop` 智能体接管、Compose 热重载开发模式或纯 UI 排版迭代场景下，本编译校验规则 100% 自动失效并绝对严禁执行！严禁调用 `compileDesktop` 全量编译任务**；代码改动一律交付热重载通道（官方 Compose Hot Reload MCP 或 IDEA `reloadHot`），仅对修改文件执行毫秒级语法速查（`idea_get_file_problems`）。
+- **IntelliJ IDEA 研发编译与局部增量初筛校验规范**: **【红线规则】**
+  - **【热重载与增量开发互斥阻断铁律】**：**若当前处于 `@forge-loop` 智能体接管、Compose 热重载开发模式或纯 UI 排版迭代场景下，严禁调用任何全量编译任务（如 `compileDesktop` 或全量 `:desktopApp:compileKotlin`）**；代码改动必须先通过 `idea_build_project(filesToRebuild = listOf(...))` 对修改文件执行精准毫秒级局部增量编译，确认 0 错误后交付热重载通道（官方 Compose Hot Reload MCP 极速热更或 IDEA 托管重启推进通道）。
   - **常规冷编译模式执行通道**：仅在明确处于**非热重载开发模式**（如底层平台配置变更、Gradle 依赖增删、KMP 多模块架构重构等无法热替换且未处于 `@forge-loop` 模式时），如果影响项目代码编译，才允许执行桌面端真实编译校验：
-  1. **首选通道 (IntelliJ IDEA 原生 Gradle 任务调度)**：
-     - 若当前挂载了 IDEA MCP 工具，**强制优先调用 `idea_execute_run_configuration(configurationName = "compileDesktop", projectPath = "<项目绝对根路径>", timeout = 180000, waitForExit = true)`**；
-     - 运行配置位于 `.run/compileDesktop.run.xml`，以 `exitCode: 0` 作为桌面端真实编译通过的终审凭证；
-  2. **快速语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 或 `idea_build_project` 做毫秒级局部语法速查；
-   3. **兜底通道 (命令行 Gradle)**：仅当无 IDEA MCP 工具时回退命令行：`./gradlew :desktopApp:compileKotlin`（严格遵循单一终端原则，严禁并列 `:shared`）；
-   4. 纯文档、注释或非代码修改不触发编译校验。
+    1. **首选通道 (IDEA 局部增量构建)**：优先调用 `idea_build_project(filesToRebuild = [...])` 对变动文件毫秒级编译；
+    2. **语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 做毫秒级文件语法速查；
+    3. **兜底通道 (命令行 Gradle)**：回退命令行终端：`./gradlew :desktopApp:compileKotlin`（严格遵循单一终端原则，严禁并列 `:shared`）；
+    4. 纯文档、注释或非代码修改不触发编译校验。
 - **Gradle 单一终端模块编译调用去重红线 (Single Terminal Task Invocation Redline)**: **【红线规则】**
   1. **【严厉禁令】严禁并列上游与下游模块任务**：在任何终端命令行执行、脚本调用、文档指引或 AI 自动校验过程中，**绝对严禁**执行形如 `./gradlew :shared:<task> :<appModule>:<task>` 的复合命令（例如严厉禁止 `./gradlew :shared:compileKotlinWasmJs :webApp:compileKotlinWasmJs`，严禁 `./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`）；
   2. **【单一终端原则】只调度最下游终端模块**：凡涉及 Application 工程的编译验证，**一律且仅指定单一终端模块对应的编译任务**（例如桌面端只需指定 `:desktopApp:compileKotlin`，Web 端只需指定 `:webApp:compileKotlinJs`，Android 端只需指定 `:androidApp:compileDebugKotlin`）。必须充分信任并利用 Gradle 官方原生 DAG 依赖机制自动级联构建上游 `:shared`，彻底杜绝重复执行与冗余任务评估；
@@ -105,10 +103,12 @@
 - **画布命中选择的层级门禁规范 (Canvas Hit-Test Hierarchy Gate Specification)**: **【红线规则】**
   - **二元命中域铁律 (Global vs Group-Edit Scoping)**：
     画布手势命中检测 (`List<UIBlock>.findHitBlock`) 严格按编辑上下文二元分流：
-    1. **全局模式 (`editingGroupId == null`)**：仅允许命中**顶层根模块**（按渲染列表倒序检索，父偏移恒为 0），严禁任何形式的深度递归穿透——点击父容器内部区域一律返回该顶层容器本身；
-    2. **组编辑模式 (`editingGroupId` 激活)**：仅允许命中**被编辑组的直接子模块列表**（倒序、不递归）；子元素均未命中但点击落在组容器 bounds 内时返回组容器本身，否则返回 null。
+    1. **全局主视图模式**：仅允许命中**顶层根模块**（按渲染列表倒序检索，父偏移恒为 0），严禁任何形式的深度递归穿透——点击父容器内部区域一律返回该顶层容器本身；
+    2. **组/容器编辑模式**：
+       - **UI Studio 独立工程**：双击父容器在顶部标签栏新开专属独立视口标签页（`activeContainerId` 激活），直接聚焦呈现该容器子组件排版并允许直接点选其直接子模块；
+       - **传统 Slots 模板工程**：双击父容器就地激活 `editingGroupId` 组编辑模式；仅允许命中被编辑组的直接子模块；
   - **逐层编辑门禁铁律 (Layer-by-Layer Edit Gate)**：
-    深层子模块严禁被画布直接点选，必须遵循标准编辑链路：双击容器进入组编辑模式 → 才能选中该层直接子模块 → 双击叶子自动切入其父组编辑。命中深度永远与 `editingGroupId` 的编辑链深度严格一致；
+    深层子模块严禁在主视图中被画布直接越权点选，必须遵循标准编辑链路：进入容器专属视口/组编辑模式 $\rightarrow$ 才能点选该层直接子模块。命中深度永远与当前视口/组编辑链深度严格一致；
   - **单一命中管道铁律 (Single Hit Pipeline)**：
     画布的单击选中、双击进出组、拖拽命中等所有手势**必须复用同一个 `findHitBlock` 函数**，严禁在业务端散落手写第二套碰撞检测逻辑，杜绝命中规则不一致的分裂行为。
 
@@ -153,7 +153,8 @@
   - **高阶业务语义管道化 (resizeBlock Pipeline)**：
     修改图元边界时，UI 层**强制调用 `viewModel.resizeBlock(blockId, newAbsoluteBounds)`（或 `layoutEditor.resizeBlock(...)`）**。该方法内部自动通过 `targetBlock.toLocalBounds(newAbsoluteBounds)` 执行代数守恒的逆向局部映射并自动执行 `bindParents()`，**绝对禁止在 UI 层散落手写 `parentOffset.x/y` 的减法**！
 - **提示词编辑界面规范与组件复用 (Prompt UI & BilingualPromptEditor)**: **【红线规则】**
-  - **严禁重复手搓 Prompt UI**：全项目凡是涉及或创建"AI 生图提示词 / 提交文案 (Prompt)"的输入与编辑界面（无论是在属性面板、弹窗还是页面中），**一律强制复用标准公共组件 `BilingualPromptEditor`**（位于 `org.gemini.ui.forge.ui.dialog.ai.component.BilingualPromptEditor` 或公共组件库），严禁在业务代码中再次手搓双语切换 Tab、输入框及优化按钮。
+  - **严禁重复手搓 Prompt UI**：全项目凡是涉及或创建"AI 生图提示词 / 提交文案 (Prompt)"的输入与编辑界面（涵盖传统 Slots 模板工作区、生图弹窗与微调浮层），**一律强制复用标准公共组件 `BilingualPromptEditor`**（位于 `org.gemini.ui.forge.ui.dialog.ai.component.BilingualPromptEditor` 或公共组件库），严禁在业务代码中再次手搓双语切换 Tab、输入框及优化按钮；
+  - **【UI Studio 属性面板豁免】**：UI Studio 独立工作台专职于游戏界面与切片排版，其属性面板纯粹聚焦于组件几何变换、尺寸与不透明度，完全豁免生图提示词组件；
   - **组件核心规范与标准使用范式**：
     1. **中英文双语无缝切换**: 内置 `SingleChoiceSegmentedButtonRow` 单行防折行机制，支持分别查看/编辑 `userPromptZh` 与 `userPromptEn`，并提供跨语言智能参考占位（正在编辑中文时智能提示英文参考，反之亦然）；
     2. **AI 优化辅助入口**: 内置 34dp 胶囊式"AI 提示词优化 (AI Optimize)"按钮，自带加载动画与防重点击；

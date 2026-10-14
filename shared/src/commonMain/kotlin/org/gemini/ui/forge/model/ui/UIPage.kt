@@ -20,6 +20,7 @@ data class UIPage(
     val width: Float = 1080f,
     val height: Float = 1920f,
     val sourceImageUri: TemplateFile? = null,
+    val canvasBackgroundColor: String? = null,
     val blocks: List<UIBlock> = emptyList()
 ) {
     /**

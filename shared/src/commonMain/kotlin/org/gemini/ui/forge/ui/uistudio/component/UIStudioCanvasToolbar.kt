@@ -64,19 +64,16 @@ fun UIStudioCanvasToolbar(
                 )
             }
 
-            // 2. 缩放百分比胶囊（点击重置 100%）
+            // 2. 缩放百分比胶囊（点击还原 100% 原寸，不影响画布坐标）
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
                     .clickable {
-                        viewModel.resetZoom(
-                            viewportWidth = containerSize.width.toFloat(),
-                            viewportHeight = containerSize.height.toFloat()
-                        )
+                        viewModel.resetZoomTo100()
                     }
                     .padding(horizontal = 6.dp, vertical = 4.dp)
-                    .tip("重置为 100% 原始比例")
+                    .tip("还原为 100% 原始比例 (保持当前坐标)")
             ) {
                 Text(
                     text = "$zoomPercent%",
@@ -111,17 +108,14 @@ fun UIStudioCanvasToolbar(
                 VerticalDivider(color = Color.White.copy(alpha = 0.2f))
             }
 
-            // 4. 一键还原 100% 缩放值
+            // 4. 一键还原 100% 缩放值 (仅还原缩放比例，不改变画布坐标)
             IconButton(
                 onClick = {
-                    viewModel.resetZoom(
-                        viewportWidth = containerSize.width.toFloat(),
-                        viewportHeight = containerSize.height.toFloat()
-                    )
+                    viewModel.resetZoomTo100()
                 },
                 modifier = Modifier
                     .size(28.dp)
-                    .tip("一键还原 100% 缩放值")
+                    .tip("一键还原 100% 缩放值 (保持当前坐标)")
             ) {
                 Icon(
                     imageVector = Icons.Default.RestartAlt,

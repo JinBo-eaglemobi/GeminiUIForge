@@ -1,5 +1,6 @@
 package org.gemini.ui.forge.ui.uistudio
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -8,7 +9,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -16,6 +20,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.app.AppScreen
+import org.gemini.ui.forge.model.app.ShortcutAction
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.chat.UIProjectAiStudioDialog
@@ -47,10 +52,44 @@ fun UIStudioScreen(
     }
     val state = viewModel.state
     var containerCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(projectState) {
         viewModel.loadProject(projectState)
         viewModel.checkDraft()
+        try {
+            focusRequester.requestFocus()
+        } catch (_: Exception) {}
+    }
+
+    // 收集全局快捷键中枢分发的事件
+    LaunchedEffect(Unit) {
+        appViewModel.shortcutEvent.collect { action ->
+            when (action) {
+                ShortcutAction.UNDO -> viewModel.undo()
+                ShortcutAction.REDO -> viewModel.redo()
+                ShortcutAction.SAVE -> viewModel.saveProject(templateRepository)
+                ShortcutAction.COPY -> viewModel.copySelectedBlock()
+                ShortcutAction.PASTE -> viewModel.pasteBlock(templateRepository)
+                ShortcutAction.CUT -> viewModel.cutSelectedBlock(templateRepository)
+                ShortcutAction.DELETE -> {
+                    val selId = viewModel.state.selectedBlockId
+                    if (selId != null) viewModel.deleteSelectedBlock(selId, templateRepository)
+                }
+                ShortcutAction.MOVE_UP -> viewModel.nudgeSelectedBlock(0f, -1f)
+                ShortcutAction.MOVE_UP_FAST -> viewModel.nudgeSelectedBlock(0f, -10f)
+                ShortcutAction.MOVE_DOWN -> viewModel.nudgeSelectedBlock(0f, 1f)
+                ShortcutAction.MOVE_DOWN_FAST -> viewModel.nudgeSelectedBlock(0f, 10f)
+                ShortcutAction.MOVE_LEFT -> viewModel.nudgeSelectedBlock(-1f, 0f)
+                ShortcutAction.MOVE_LEFT_FAST -> viewModel.nudgeSelectedBlock(-10f, 0f)
+                ShortcutAction.MOVE_RIGHT -> viewModel.nudgeSelectedBlock(1f, 0f)
+                ShortcutAction.MOVE_RIGHT_FAST -> viewModel.nudgeSelectedBlock(10f, 0f)
+                ShortcutAction.RENAME -> {
+                    val selId = viewModel.state.selectedBlockId
+                    if (selId != null) viewModel.startRenameBlock(selId)
+                }
+            }
+        }
     }
 
     Scaffold(
@@ -65,7 +104,95 @@ fun UIStudioScreen(
                 }
             )
         },
-        modifier = modifier.fillMaxSize()
+        modifier = modifier
+            .fillMaxSize()
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val isCtrl = event.isCtrlPressed || event.isMetaPressed
+                val isShift = event.isShiftPressed
+
+                when {
+                    // Ctrl+Z / Cmd+Z: 撤销
+                    isCtrl && !isShift && event.key == Key.Z -> {
+                        viewModel.undo()
+                        true
+                    }
+                    // Ctrl+Y / Ctrl+Shift+Z / Cmd+Shift+Z: 重做
+                    (isCtrl && event.key == Key.Y) || (isCtrl && isShift && event.key == Key.Z) -> {
+                        viewModel.redo()
+                        true
+                    }
+                    // Ctrl+S / Cmd+S: 保存
+                    isCtrl && event.key == Key.S -> {
+                        viewModel.saveProject(templateRepository)
+                        true
+                    }
+                    // Ctrl+C: 复制组件
+                    isCtrl && event.key == Key.C -> {
+                        viewModel.copySelectedBlock()
+                        true
+                    }
+                    // Ctrl+V: 粘贴组件
+                    isCtrl && event.key == Key.V -> {
+                        viewModel.pasteBlock(templateRepository)
+                        true
+                    }
+                    // Ctrl+X: 剪切组件
+                    isCtrl && event.key == Key.X -> {
+                        viewModel.cutSelectedBlock(templateRepository)
+                        true
+                    }
+                    // Ctrl+D: 快速克隆组件
+                    isCtrl && event.key == Key.D -> {
+                        viewModel.duplicateSelectedBlock(templateRepository)
+                        true
+                    }
+                    // F2: 重命名组件
+                    event.key == Key.F2 -> {
+                        val selId = viewModel.state.selectedBlockId
+                        if (selId != null) {
+                            viewModel.startRenameBlock(selId)
+                            true
+                        } else false
+                    }
+                    // Delete / Backspace: 删除图元（无输入框获焦时）
+                    (event.key == Key.Delete || event.key == Key.Backspace) && !isCtrl -> {
+                        val selId = viewModel.state.selectedBlockId
+                        if (selId != null && viewModel.state.renamingBlockId == null && viewModel.state.renamingView == null) {
+                            viewModel.deleteSelectedBlock(selId, templateRepository)
+                            true
+                        } else false
+                    }
+                    // 方向键平移组件
+                    event.key == Key.DirectionUp -> {
+                        if (viewModel.state.selectedBlockId != null) {
+                            viewModel.nudgeSelectedBlock(0f, if (isShift) -10f else -1f)
+                            true
+                        } else false
+                    }
+                    event.key == Key.DirectionDown -> {
+                        if (viewModel.state.selectedBlockId != null) {
+                            viewModel.nudgeSelectedBlock(0f, if (isShift) 10f else 1f)
+                            true
+                        } else false
+                    }
+                    event.key == Key.DirectionLeft -> {
+                        if (viewModel.state.selectedBlockId != null) {
+                            viewModel.nudgeSelectedBlock(if (isShift) -10f else -1f, 0f)
+                            true
+                        } else false
+                    }
+                    event.key == Key.DirectionRight -> {
+                        if (viewModel.state.selectedBlockId != null) {
+                            viewModel.nudgeSelectedBlock(if (isShift) 10f else 1f, 0f)
+                            true
+                        } else false
+                    }
+                    else -> false
+                }
+            }
     ) { innerPadding ->
         BoxWithConstraints(
             modifier = Modifier

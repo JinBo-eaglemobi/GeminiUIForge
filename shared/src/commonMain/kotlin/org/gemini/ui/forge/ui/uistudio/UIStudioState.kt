@@ -98,6 +98,7 @@ data class UIStudioState(
     val lastDragHoverPos: androidx.compose.ui.geometry.Offset? = null,
     val isFitToViewport: Boolean = false,
     val fitToViewportTrigger: Long = 0L,
+    val isViewportInitialized: Boolean = false,
     val density: Float = 1.0f,
     val isMattingAsset: Boolean = false,
     val mattingAssetId: String? = null,
@@ -128,8 +129,13 @@ data class UIStudioState(
     val draggedAssetId: String? = null,
     val hoveredFolderId: String? = null,
     val viewViewportCache: Map<String, ViewportState> = emptyMap(),
-    val dragCursorPosition: androidx.compose.ui.geometry.Offset? = null
+    val dragCursorPosition: androidx.compose.ui.geometry.Offset? = null,
+    val undoStack: List<UIStudioHistoryEntry> = emptyList(),
+    val redoStack: List<UIStudioHistoryEntry> = emptyList(),
+    val clipboardBlock: UIBlock? = null
 ) {
+    val canUndo: Boolean get() = undoStack.isNotEmpty()
+    val canRedo: Boolean get() = redoStack.isNotEmpty()
     /**
      * 当前处于激活独立编辑状态的父容器组件 [UIBlock]（若处于整页模式则为 null）。
      */
@@ -186,13 +192,23 @@ data class DragRemoveLastChildContext(
 )
 
 /**
+ * UI Studio 历史操作版本快照。
+ */
+data class UIStudioHistoryEntry(
+    val label: String,
+    val project: ProjectState,
+    val timestamp: Long = org.gemini.ui.forge.getCurrentTimeMillis()
+)
+
+/**
  * 视图界面的视口历史状态（缩放比例与平移位移）。
  */
 @Serializable
 data class ViewportState(
     val scale: Float,
     val panX: Float,
-    val panY: Float
+    val panY: Float,
+    val isFitToViewport: Boolean = false
 )
 
 /**

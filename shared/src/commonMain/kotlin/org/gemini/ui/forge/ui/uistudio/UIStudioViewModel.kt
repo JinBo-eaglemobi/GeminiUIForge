@@ -107,6 +107,7 @@ class UIStudioViewModel {
             scale = 1.0f,
             panOffset = Offset.Zero,
             isFitToViewport = false,
+            isViewportInitialized = false,
             isDirty = false,
             selectedBlockId = null
         )
@@ -656,9 +657,10 @@ class UIStudioViewModel {
 
     /**
      * 请求退出 UI Studio 工作台（返回大厅）。
-     * 若当前有未保存的修改或视口调整，拦截并唤起三选确认弹窗；否则直接放行。
+     * 退出前强制暂存当前视口，若当前有未保存的修改或视口调整，拦截并唤起三选确认弹窗；否则直接放行。
      */
     fun requestExit(onDirectExit: () -> Unit) {
+        cacheCurrentViewport()
         if (state.isDirty) {
             state = state.copy(showExitConfirmDialog = true)
         } else {
@@ -674,6 +676,18 @@ class UIStudioViewModel {
     }
 
     /**
+     * 仅且只将缩放值还原为 100% (1.0f)，绝不修改或重置画布的 X/Y 坐标，杜绝坐标跳动。
+     */
+    fun resetZoomTo100() {
+        state = state.copy(
+            scale = 1.0f,
+            isFitToViewport = false
+        )
+        cacheCurrentViewport()
+        markDirty()
+    }
+
+    /**
      * 暂存当前活跃视口（视图界面或父容器专属标签）的缩放比率与平移偏移量到内存缓存中，
      * 并同步持久化到本地磁盘 `templates/{projectId}/viewport_cache.json`。
      * 当切换标签页或关闭标签页时调用，以保证用户再次打开或切回时能够 100% 还原上次调整的视口布局。
@@ -684,7 +698,8 @@ class UIStudioViewModel {
         currentCache[currentKey] = ViewportState(
             scale = state.scale,
             panX = state.panOffset.x,
-            panY = state.panOffset.y
+            panY = state.panOffset.y,
+            isFitToViewport = state.isFitToViewport
         )
         state = state.copy(viewViewportCache = currentCache)
         state.project?.projectId?.let { saveViewportCache(it) }
@@ -692,7 +707,7 @@ class UIStudioViewModel {
 
     /**
      * 还原指定视图界面或父容器标签页的视口布局。
-     * - 若缓存中存在此前保存的视口记录，则精确恢复该记录的 scale 与 panOffset；
+     * - 若缓存中存在此前保存的视口记录，则精确恢复该记录的 scale、panOffset 以及是否自适应居中；
      * - 若该视图属于首次打开（无历史缓存），则严格以 100% (1.0f) 原始比例居中对齐呈现，绝不自动进行非 100% 的自适应缩放。
      *
      * @param targetKey 目标视图 ID 或容器 ID
@@ -703,8 +718,11 @@ class UIStudioViewModel {
             state = state.copy(
                 scale = cached.scale,
                 panOffset = Offset(cached.panX, cached.panY),
-                isFitToViewport = false
+                isFitToViewport = cached.isFitToViewport
             )
+            if (cached.isFitToViewport) {
+                state = state.copy(fitToViewportTrigger = state.fitToViewportTrigger + 1)
+            }
         } else {
             // 首次打开默认严格为 100% 原始比例，并在当前舞台居中对齐
             resetZoom()
@@ -735,6 +753,10 @@ class UIStudioViewModel {
                 }
             } catch (e: Exception) {
                 AppLogger.w("UIStudioViewModel", "读取视口缓存失败: ${e.message}")
+            } finally {
+                withContext(Dispatchers.Main) {
+                    state = state.copy(isViewportInitialized = true)
+                }
             }
         }
     }
@@ -848,6 +870,7 @@ class UIStudioViewModel {
             panOffset = Offset(panX, panY),
             isFitToViewport = false
         )
+        cacheCurrentViewport()
     }
 
     /**
@@ -1710,6 +1733,27 @@ class UIStudioViewModel {
             panOffset = Offset(panX, panY),
             isFitToViewport = true
         )
+        cacheCurrentViewport()
+    }
+
+    /**
+     * 更新指定页面的画布参考底色（用于在编辑中直观区隔渲染区域与无限舞台背景）。
+     */
+    fun updatePageCanvasBackgroundColor(pageId: String, colorHex: String?, repo: TemplateRepository) {
+        val proj = state.project ?: return
+        val updatedPages = proj.pages.map { page ->
+            if (page.id == pageId) page.copy(canvasBackgroundColor = colorHex) else page
+        }
+        val updatedProject = proj.copy(pages = updatedPages)
+        state = state.copy(project = updatedProject)
+        markDirty()
+        scope.launch(Dispatchers.Default) {
+            try {
+                repo.saveTemplate(updatedProject.projectId, updatedProject)
+            } catch (e: Exception) {
+                AppLogger.w("UIStudioViewModel", "保存页面参考背景色失败", e)
+            }
+        }
     }
 
     /**
@@ -1939,6 +1983,164 @@ class UIStudioViewModel {
                 state = state.copy(isSaving = false)
             }
         }
+    }
+
+    /** 执行深拷贝以避免快照与内存状态的引用污染 */
+    private fun deepCopyProject(project: ProjectState): ProjectState {
+        val copiedPages = project.pages.map { page ->
+            page.copy(blocks = deepCopyBlocks(page.blocks))
+        }
+        return project.copy(pages = copiedPages)
+    }
+
+    private fun deepCopyBlocks(blocks: List<UIBlock>): List<UIBlock> {
+        return blocks.map { block ->
+            block.copy(
+                bounds = block.bounds.copy(),
+                cropRect = block.cropRect?.copy(),
+                ninePatchConfig = block.ninePatchConfig.copy(),
+                properties = block.properties,
+                children = deepCopyBlocks(block.children)
+            )
+        }
+    }
+
+    /**
+     * 保存当前项目状态至撤销快照栈 (最大深度 50)。
+     */
+    fun saveSnapshot(label: String = "操作") {
+        val proj = state.project ?: return
+        val snapshot = deepCopyProject(proj)
+        val entry = UIStudioHistoryEntry(label = label, project = snapshot)
+        val newUndo = (state.undoStack + entry).let { if (it.size > 50) it.drop(1) else it }
+        state = state.copy(undoStack = newUndo, redoStack = emptyList())
+    }
+
+    /**
+     * 撤销上一步操作 (Ctrl+Z / Cmd+Z)。
+     */
+    fun undo() {
+        if (state.undoStack.isEmpty()) {
+            Toast.show("暂无可撤销的历史记录", ToastType.INFO)
+            return
+        }
+        val currentProj = state.project ?: return
+        val currentSnapshot = deepCopyProject(currentProj)
+        val lastEntry = state.undoStack.last()
+        val newUndo = state.undoStack.dropLast(1)
+        val newRedo = state.redoStack + UIStudioHistoryEntry(label = "撤销", project = currentSnapshot)
+        state = state.copy(
+            project = deepCopyProject(lastEntry.project),
+            undoStack = newUndo,
+            redoStack = newRedo,
+            isDirty = true
+        )
+        Toast.show("已撤销: ${lastEntry.label}", ToastType.INFO)
+    }
+
+    /**
+     * 重做下一步操作 (Ctrl+Y / Ctrl+Shift+Z / Cmd+Shift+Z)。
+     */
+    fun redo() {
+        if (state.redoStack.isEmpty()) {
+            Toast.show("已是最新操作，无可重做记录", ToastType.INFO)
+            return
+        }
+        val currentProj = state.project ?: return
+        val currentSnapshot = deepCopyProject(currentProj)
+        val nextEntry = state.redoStack.last()
+        val newRedo = state.redoStack.dropLast(1)
+        val newUndo = state.undoStack + UIStudioHistoryEntry(label = "重做", project = currentSnapshot)
+        state = state.copy(
+            project = deepCopyProject(nextEntry.project),
+            undoStack = newUndo,
+            redoStack = newRedo,
+            isDirty = true
+        )
+        Toast.show("已重做: ${nextEntry.label}", ToastType.INFO)
+    }
+
+    fun copySelectedBlock() {
+        val blockId = state.selectedBlockId ?: run {
+            Toast.show("请先选择要复制的组件", ToastType.INFO)
+            return
+        }
+        val view = state.currentView ?: return
+        val target = view.blocks.findBlockById(blockId) ?: return
+        state = state.copy(clipboardBlock = target)
+        Toast.show("已复制组件: ${target.userPromptZh.ifBlank { target.id }}", ToastType.SUCCESS)
+    }
+
+    fun cutSelectedBlock(repo: TemplateRepository = TemplateRepository()) {
+        val blockId = state.selectedBlockId ?: run {
+            Toast.show("请先选择要剪切的组件", ToastType.INFO)
+            return
+        }
+        val view = state.currentView ?: return
+        val target = view.blocks.findBlockById(blockId) ?: return
+        saveSnapshot("剪切组件")
+        state = state.copy(clipboardBlock = target)
+        deleteSelectedBlock(blockId, repo)
+        Toast.show("已剪切组件: ${target.userPromptZh.ifBlank { target.id }}", ToastType.SUCCESS)
+    }
+
+    fun pasteBlock(repo: TemplateRepository = TemplateRepository()) {
+        val copied = state.clipboardBlock ?: run {
+            Toast.show("剪贴板中暂无组件", ToastType.INFO)
+            return
+        }
+        val view = state.currentView ?: return
+        saveSnapshot("粘贴组件")
+        val timestamp = getCurrentTimeMillis()
+        val newId = "block_${timestamp % 100000}_${(100..999).random()}"
+        val offsetDistance = 20f
+        val newBounds = SerialRect(
+            copied.bounds.left + offsetDistance,
+            copied.bounds.top + offsetDistance,
+            copied.bounds.right + offsetDistance,
+            copied.bounds.bottom + offsetDistance
+        )
+        val newBlock = copied.copy(
+            id = newId,
+            bounds = newBounds
+        )
+        val updatedBlocks = (view.blocks + newBlock).bindParents()
+        updateViewBlocksAndSave(view.id, updatedBlocks, repo)
+        state = state.copy(selectedBlockId = newBlock.id)
+        Toast.show("已粘贴组件: ${newBlock.userPromptZh.ifBlank { newBlock.id }}", ToastType.SUCCESS)
+    }
+
+    fun duplicateSelectedBlock(repo: TemplateRepository = TemplateRepository()) {
+        val blockId = state.selectedBlockId ?: run {
+            Toast.show("请先选择要克隆的组件", ToastType.INFO)
+            return
+        }
+        val view = state.currentView ?: return
+        val target = view.blocks.findBlockById(blockId) ?: return
+        saveSnapshot("克隆组件")
+        val timestamp = getCurrentTimeMillis()
+        val newId = "block_${timestamp % 100000}_${(100..999).random()}"
+        val offsetDistance = 20f
+        val newBounds = SerialRect(
+            target.bounds.left + offsetDistance,
+            target.bounds.top + offsetDistance,
+            target.bounds.right + offsetDistance,
+            target.bounds.bottom + offsetDistance
+        )
+        val newBlock = target.copy(
+            id = newId,
+            bounds = newBounds
+        )
+        val updatedBlocks = (view.blocks + newBlock).bindParents()
+        updateViewBlocksAndSave(view.id, updatedBlocks, repo)
+        state = state.copy(selectedBlockId = newBlock.id)
+        Toast.show("已克隆组件: ${newBlock.userPromptZh.ifBlank { newBlock.id }}", ToastType.SUCCESS)
+    }
+
+    fun nudgeSelectedBlock(dx: Float, dy: Float) {
+        val blockId = state.selectedBlockId ?: return
+        saveSnapshot("微调组件")
+        moveBlockDelta(blockId, dx, dy)
     }
 
     /**
@@ -2343,6 +2545,7 @@ class UIStudioViewModel {
         val activeContainer = state.activeContainerBlock
         val targetW = asset.width.coerceAtLeast(32)
         val targetH = asset.height.coerceAtLeast(32)
+        saveSnapshot("添加素材: ${asset.name}")
 
         if (activeContainer != null) {
             // 当前处于父组件打开的独立编辑视口：添加到该父组件内（居中落位在光标松手点）
@@ -2473,6 +2676,7 @@ class UIStudioViewModel {
 
     fun deleteSelectedBlock(blockId: String, repo: TemplateRepository) {
         val view = state.currentView ?: return
+        saveSnapshot("删除组件")
         val updatedBlocks = removeBlockFromTree(view.blocks, blockId).bindParents()
         updateViewBlocksAndSave(view.id, updatedBlocks, repo)
         state = state.copy(selectedBlockId = null)

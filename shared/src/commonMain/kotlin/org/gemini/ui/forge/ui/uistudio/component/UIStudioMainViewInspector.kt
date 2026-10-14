@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.ui.uistudio.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Mouse
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -278,16 +280,103 @@ fun UIStudioMainViewInspector(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .clickable {
-                                viewModel.resetZoom()
+                                viewModel.resetZoomTo100()
                             }
                             .padding(horizontal = 8.dp, vertical = 6.dp)
-                            .tip("一键还原舞台为 100% 原始缩放值")
+                            .tip("一键还原舞台为 100% 原始缩放值 (保持当前坐标)")
                     ) {
                         Text(
                             text = "100%",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.primary
                         )
+                    }
+                }
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(vertical = 2.dp)
+                )
+
+                // 4. 画布参考底色 (用于直观区隔渲染区域与无限舞台背景)
+                Column(verticalArrangement = Arrangement.spacedBy(spacing.extraSmall)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(spacing.extraSmall)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "画布参考底色",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        Text(
+                            text = view.canvasBackgroundColor ?: "#1E293B",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    val colorPresets = listOf(
+                        "#1E293B" to "经典蓝灰",
+                        "#0F172A" to "极夜深黑",
+                        "#334155" to "柔和中灰",
+                        "#1B3B2B" to "暗夜森林",
+                        "#FFFFFF" to "纯白视口"
+                    )
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        colorPresets.forEach { (hex, name) ->
+                            val isCurrent = (view.canvasBackgroundColor ?: "#1E293B").equals(hex, ignoreCase = true)
+                            val presetColor = try {
+                                val clean = hex.removePrefix("#")
+                                val l = clean.toLong(16)
+                                if (clean.length == 6) Color(l or 0xFF000000L) else Color(l)
+                            } catch (_: Exception) {
+                                Color(0xFF1E293B)
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(24.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(presetColor)
+                                    .then(
+                                        if (isCurrent) {
+                                            Modifier.border(
+                                                2.dp,
+                                                MaterialTheme.colorScheme.primary,
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                        } else {
+                                            Modifier.border(
+                                                1.dp,
+                                                Color.White.copy(alpha = 0.2f),
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                        }
+                                    )
+                                    .clickable {
+                                        viewModel.updatePageCanvasBackgroundColor(view.id, hex, templateRepo)
+                                    }
+                                    .tip("切换底色: $name ($hex)")
+                            )
+                        }
                     }
                 }
             }
