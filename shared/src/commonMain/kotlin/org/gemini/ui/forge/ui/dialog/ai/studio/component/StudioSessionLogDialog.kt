@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.gemini.ui.forge.extend.rememberClipboardAction
+import org.gemini.ui.forge.formatTimestamp
 import org.gemini.ui.forge.manager.SessionTrafficStore
 import org.gemini.ui.forge.model.chat.TrafficDirection
 import org.gemini.ui.forge.model.chat.TrafficRecord
@@ -343,6 +344,24 @@ private fun TrafficRecordItem(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    // 通信时间戳 (开头展示，精确到毫秒)
+                    val timeStr = remember(record.timestamp) {
+                        formatTimestamp(record.timestamp, "HH:mm:ss.SSS")
+                    }
+                    Surface(
+                        shape = AppShapes.small,
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(end = spacing.small)
+                    ) {
+                        Text(
+                            text = timeStr,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
+
                     // 方向标识胶囊
                     Surface(
                         shape = AppShapes.small,

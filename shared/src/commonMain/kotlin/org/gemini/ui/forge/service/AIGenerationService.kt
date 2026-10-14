@@ -18,6 +18,10 @@ import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.api.ChatMessage
 import org.gemini.ui.forge.model.chat.TrafficDirection
 import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.service.ai.GeminiChatEngine
+import org.gemini.ui.forge.service.ai.GeminiChatRequest
+import org.gemini.ui.forge.service.ai.GeminiChatHistoryItem
+import org.gemini.ui.forge.service.ai.GeminiGenerationConfig
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
@@ -44,6 +48,11 @@ class AIGenerationService(
     val localMattingService = LocalMattingService(storage, scriptManager)
 
     private val geminiClient = GeminiClient()
+    private val chatEngine = GeminiChatEngine(
+        geminiClient = geminiClient,
+        configManager = configManager,
+        cloudAssetManager = cloudAssetManager
+    )
     private val geminiGenerator = GeminiImageGenerator(cloudAssetManager, promptManager, geminiClient)
 
     /**
@@ -534,27 +543,16 @@ class AIGenerationService(
         val promptTemplate = promptManager.getPrompt("ai_optimize_prompt")
         val fullPrompt = promptTemplate.replace("{0}", originalPrompt)
 
-        val requestBody = buildJsonObject {
-            put("contents", buildJsonArray {
-                // 1. 注入历史会话记录
-                history.forEach { msg ->
-                    add(buildJsonObject {
-                        put("role", msg.role)
-                        put("parts", buildJsonArray {
-                            add(buildJsonObject { put("text", msg.text) })
-                        })
-                    })
-                }
+        val historyItems = history.map { msg ->
+            GeminiChatHistoryItem(role = msg.role, text = msg.text)
+        }
 
-                // 2. 追加当前最新请求
-                add(buildJsonObject {
-                    put("role", "user")
-                    put("parts", buildJsonArray {
-                        add(buildJsonObject { put("text", fullPrompt) })
-                    })
-                })
-            })
-        }.toString()
+        val request = GeminiChatRequest(
+            apiKey = apiKey,
+            prompt = fullPrompt,
+            history = historyItems,
+            generationConfig = GeminiGenerationConfig(temperature = 0.7)
+        )
 
         var lastException: Exception? = null
         for (attempt in 0..maxRetries) {
@@ -562,18 +560,12 @@ class AIGenerationService(
                 if (attempt > 0) {
                     syncLog("⚠️ 提示词优化重试中 (${attempt + 1})...", onLog)
                 }
-                val accumulatedText = StringBuilder()
-                geminiClient.streamGenerateContent(
-                    url = url,
-                    requestBody = requestBody,
-                    onLog = onLog,
-                    onChunk = { chunk ->
-                        accumulatedText.append(chunk)
-                        onChunk(chunk)
-                    },
+                val result = chatEngine.executeChat(
+                    request = request,
+                    onChunk = { chunk -> onChunk(chunk) },
                     onRawTraffic = onRawTraffic
                 )
-                val finalString = accumulatedText.toString()
+                val finalString = result.text.trim()
                 if (finalString.isEmpty()) throw Exception("优化响应为空")
                 return finalString
             } catch (e: Exception) {

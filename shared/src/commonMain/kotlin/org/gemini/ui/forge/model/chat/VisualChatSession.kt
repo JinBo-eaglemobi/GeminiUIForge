@@ -31,8 +31,49 @@ data class VisualChatMessage(
     /** Google 官方加密思考签名凭据 (用于多轮对话轻量化状态接力与防篡改) */
     val thoughtSignature: String? = null,
     /** Google Interactions API 交互轮次 ID (用于链式多轮会话继承) */
-    val interactionId: String? = null
-)
+    val interactionId: String? = null,
+    /** 本轮 AI 回答的历史变体列表 (用于支持 < 1/2 > 分页切换查看) */
+    val variants: List<String> = emptyList(),
+    /** 当前激活查看的变体索引 */
+    val activeVariantIndex: Int = 0,
+    /** 当前回复的模型名称 (如 "Gemini 3.8 Flash") */
+    val modelName: String? = null,
+    /** 推理生成耗时 (毫秒) */
+    val durationMs: Long? = null,
+    /** 输入 Token 统计 */
+    val promptTokens: Int? = null,
+    /** 输出 Token 统计 */
+    val candidatesTokens: Int? = null,
+    /** 总计消耗 Token */
+    val totalTokens: Int? = null,
+    /** 是否属于执行失败/请求异常状态 */
+    val isError: Boolean = false,
+    /** 错误详细描述信息 (用于错误卡片展示) */
+    val errorMessage: String? = null
+) {
+    /** 获取当前生效的有效展示文本 (优先取激活分支变体，并通过视图投影器提取人类可读内容，绝不倾倒纯 JSON) */
+    val effectiveText: String
+        get() {
+            val raw = if (variants.isNotEmpty() && activeVariantIndex in variants.indices) {
+                variants[activeVariantIndex]
+            } else {
+                prompt.ifBlank { textZh.ifBlank { textEn } }
+            }
+            return org.gemini.ui.forge.service.ai.ChatPayloadViewProjector.projectDisplayContent(raw).text
+        }
+
+    /** 获取当前生效的有效思维链思考过程 (优先取已提取的 thought，若无则从原始报文中动态投影) */
+    val effectiveThought: String?
+        get() {
+            if (!thought.isNullOrBlank()) return thought
+            val raw = if (variants.isNotEmpty() && activeVariantIndex in variants.indices) {
+                variants[activeVariantIndex]
+            } else {
+                prompt.ifBlank { textZh.ifBlank { textEn } }
+            }
+            return org.gemini.ui.forge.service.ai.ChatPayloadViewProjector.projectDisplayContent(raw).thoughtText
+        }
+}
 
 /**
  * 独立功能域会话对象

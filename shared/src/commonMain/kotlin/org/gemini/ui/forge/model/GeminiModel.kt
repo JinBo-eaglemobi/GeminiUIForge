@@ -182,4 +182,11 @@ enum class GeminiModel(
 
     /** 版本: gemini-2.5-flash-preview-native-audio-dialog-2025-05-19 · Token: 输入 131072 / 输出 8192 · 温度 1.0 · 最高温度 2.0 · TopP 0.95 · TopK 64 · 思考: 支持 */
     GEMINI_2_5_FLASH_NATIVE_AUDIO_PREVIEW_09_2025("gemini-2.5-flash-native-audio-preview-09-2025", "Gemini 2.5 Flash Native Audio Preview 09-2025", "Gemini 2.5 Flash Native Audio Preview 09-2025", "countTokens, bidiGenerateContent", version = "gemini-2.5-flash-preview-native-audio-dialog-2025-05-19", baseModelId = "", inputTokenLimit = 131072, outputTokenLimit = 8192, temperature = 1.0f, maxTemperature = 2.0f, topP = 0.95f, topK = 64, supportsThinking = true);
+
+    companion object {
+        fun fromModelName(name: String?): GeminiModel? {
+            if (name.isNullOrBlank()) return null
+            return entries.find { it.modelName.equals(name, ignoreCase = true) }
+        }
+    }
 }

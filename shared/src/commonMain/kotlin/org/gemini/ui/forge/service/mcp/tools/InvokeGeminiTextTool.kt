@@ -3,6 +3,9 @@ package org.gemini.ui.forge.service.mcp.tools
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.service.GeminiClient
+import org.gemini.ui.forge.service.ai.GeminiChatEngine
+import org.gemini.ui.forge.service.ai.GeminiChatRequest
+import org.gemini.ui.forge.service.ai.GeminiGenerationConfig
 import org.gemini.ui.forge.service.mcp.McpToolAnnotations
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
 import org.gemini.ui.forge.service.mcp.McpToolResult
@@ -13,7 +16,7 @@ import org.gemini.ui.forge.service.mcp.McpToolResult
  */
 class InvokeGeminiTextTool(
     private val configManager: ConfigManager = ConfigManager(),
-    private val geminiClient: GeminiClient = GeminiClient()
+    private val chatEngine: GeminiChatEngine = GeminiChatEngine()
 ) : McpToolDefinition {
 
     override val name: String = "invoke_gemini_text"
@@ -92,52 +95,36 @@ class InvokeGeminiTextTool(
             ?: configManager.loadGlobalGeminiKey()?.ifBlank { null }
             ?: return McpToolResult.error("本地未配置 Gemini API Key，请先在应用设置中填写 GEMINI_API_KEY 或配置环境变量")
 
-        val baseUrl = configManager.loadKey("GEMINI_BASE_URL")?.ifBlank { null }
-            ?: "https://generativelanguage.googleapis.com"
-        val cleanBaseUrl = baseUrl.trimEnd('/')
-        val url = "$cleanBaseUrl/v1beta/models/$model:streamGenerateContent?key=$apiKey&alt=sse"
-
-        val requestBody = buildJsonObject {
-            if (!systemPrompt.isNullOrBlank()) {
-                put("systemInstruction", buildJsonObject {
-                    put("parts", buildJsonArray {
-                        add(buildJsonObject { put("text", systemPrompt) })
-                    })
-                })
-            }
-            put("contents", buildJsonArray {
-                add(buildJsonObject {
-                    put("role", "user")
-                    put("parts", buildJsonArray {
-                        add(buildJsonObject { put("text", prompt) })
-                    })
-                })
-            })
-            put("generationConfig", buildJsonObject {
-                put("temperature", temperature)
-            })
-        }.toString()
-
         onProgress?.invoke(0.3f, "正在向 Gemini 发起生成推理 ($model)...")
-        val textBuilder = StringBuilder()
 
         return try {
-            geminiClient.streamGenerateContent(
-                url = url,
-                requestBody = requestBody,
-                onLog = { logMsg ->
-                    onProgress?.invoke(0.6f, logMsg)
-                },
-                onChunk = { chunk ->
-                    textBuilder.append(chunk)
+            val resolvedModel = org.gemini.ui.forge.model.GeminiModel.fromModelName(model)
+                ?: org.gemini.ui.forge.model.GeminiModel.GEMINI_2_5_FLASH
+
+            val request = GeminiChatRequest(
+                apiKey = apiKey,
+                model = resolvedModel,
+                prompt = prompt,
+                systemInstruction = systemPrompt,
+                generationConfig = GeminiGenerationConfig(
+                    temperature = temperature
+                )
+            )
+
+            val result = chatEngine.executeChat(
+                request = request,
+                onChunk = { _ ->
+                    onProgress?.invoke(0.6f, "正在流式生成...")
                 }
             )
 
-            val fullText = textBuilder.toString()
             val resultJson = buildJsonObject {
                 put("model", model)
-                put("text", fullText)
-                put("length", fullText.length)
+                put("text", result.text)
+                if (result.thoughtText != null) {
+                    put("thinking", result.thoughtText)
+                }
+                put("length", result.text.length)
             }
             McpToolResult.success(resultJson.toString())
         } catch (e: Exception) {

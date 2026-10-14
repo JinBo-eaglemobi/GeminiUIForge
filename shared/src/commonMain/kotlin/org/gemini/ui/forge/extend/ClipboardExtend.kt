@@ -25,6 +25,11 @@ expect fun String.toClipEntry(): ClipEntry
 expect suspend fun readClipboardImageBytes(): ByteArray?
 
 /**
+ * 尝试感知并获取当前高亮划选的文本（若无选区或平台不支持则返回 null）
+ */
+expect suspend fun getSelectedTextOrNull(): String?
+
+/**
  * 异步复制字符串至指定 Clipboard 对象
  */
 suspend fun String.toClipboard(clipboard: Clipboard) {

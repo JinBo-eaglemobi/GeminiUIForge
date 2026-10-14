@@ -8,3 +8,5 @@ actual fun String.toClipEntry(): ClipEntry {
 }
 
 actual suspend fun readClipboardImageBytes(): ByteArray? = null
+
+actual suspend fun getSelectedTextOrNull(): String? = null

@@ -11,6 +11,10 @@ import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.manager.PromptManager
 import org.gemini.ui.forge.model.assetsheet.AssetSheetParseResult
 import org.gemini.ui.forge.service.GeminiClient
+import org.gemini.ui.forge.service.ai.GeminiChatEngine
+import org.gemini.ui.forge.service.ai.GeminiChatRequest
+import org.gemini.ui.forge.service.ai.GeminiChatAttachment
+import org.gemini.ui.forge.service.ai.GeminiGenerationConfig
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.getMimeType
@@ -66,61 +70,48 @@ object AssetSheetAiDetector {
             "Please detect all discrete UI elements, buttons, symbols, icons, badges in this SpriteSheet image and output a JSON with canvas size [w, h] and elements array with [id, name, type, bounds: [x,y,w,h], description]."
         }
 
-        onProgress?.invoke(0.25f, "正在上传图集视觉资源到云端多模态分析网关...")
+        onProgress?.invoke(0.25f, "正在准备图集多模态资产与云端分析环境...")
 
-        val cloudAssetManager = CloudAssetManager(configManager)
         val fileName = imagePath.substringAfterLast("/").substringAfterLast("\\").ifBlank { "sprite_sheet.png" }
+        val chatEngine = GeminiChatEngine(configManager = configManager)
 
-        val imagePart = cloudAssetManager.buildGeminiImagePart(
-            displayName = fileName,
-            bytes = imageBytes,
-            mimeType = mimeType,
-            onLog = { logMsg -> onProgress?.invoke(0.35f, "资源准备: $logMsg") }
+        val request = GeminiChatRequest(
+            apiKey = effectiveApiKey,
+            prompt = basePrompt,
+            attachments = listOf(
+                GeminiChatAttachment(
+                    name = fileName,
+                    localUri = imagePath,
+                    bytes = imageBytes,
+                    mimeType = mimeType
+                )
+            ),
+            preferCloudUpload = true,
+            generationConfig = GeminiGenerationConfig(
+                responseMimeType = "application/json",
+                temperature = 0.2
+            )
         )
-
-        // 4. 组装请求报文
-        val partsArray = buildJsonArray {
-            add(buildJsonObject { put("text", basePrompt) })
-            add(imagePart)
-        }
-
-        val requestBody = buildJsonObject {
-            put("contents", buildJsonArray {
-                add(buildJsonObject {
-                    put("role", "user")
-                    put("parts", partsArray)
-                })
-            })
-            put("generationConfig", buildJsonObject {
-                put("responseMimeType", "application/json")
-                put("temperature", 0.2) // 低采样温度确保坐标与边界预测的精准与严密
-            })
-        }.toString()
 
         onProgress?.invoke(0.45f, "📡 正在请求 Gemini 视觉大模型执行图元目标检测与坐标识别...")
 
-        val geminiClient = GeminiClient()
-        val url = ApiConfig.getStreamGenerateContentEndpoint(effectiveApiKey)
-        val accumulatedResponse = StringBuilder()
-
-        try {
-            geminiClient.streamGenerateContent(
-                url = url,
-                requestBody = requestBody,
-                onLog = { logMsg -> onProgress?.invoke(0.60f, "模型分析中: $logMsg") },
-                onChunk = { chunk -> accumulatedResponse.append(chunk) }
+        val rawText = try {
+            val result = chatEngine.executeChat(
+                request = request,
+                onChunk = { _ -> onProgress?.invoke(0.60f, "模型正在分析生成坐标...") }
             )
+            result.text.trim()
         } catch (e: Exception) {
             AppLogger.e(TAG, "Gemini 目标检测通信失败", e)
             throw IllegalStateException("AI 视觉目标检测通信失败: ${e.message}", e)
         }
 
-        val rawText = accumulatedResponse.toString().trim()
         if (rawText.isBlank()) {
             throw IllegalStateException("Gemini 视觉大模型返回了空响应")
         }
 
         onProgress?.invoke(0.80f, "正在清洗与结构化自适应提取图元数据...")
+        val geminiClient = GeminiClient()
         val cleanJson = geminiClient.cleanJson(rawText)
 
         // 5. 调用自适应解析引擎进行标准化清洗与自愈

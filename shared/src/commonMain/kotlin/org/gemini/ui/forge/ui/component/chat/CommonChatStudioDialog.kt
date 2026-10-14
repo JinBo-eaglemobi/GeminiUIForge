@@ -61,6 +61,9 @@ fun CommonChatStudioDialog(
     onDismiss: () -> Unit,
     config: CommonChatStudioConfig = CommonChatStudioConfig(),
     onImageClick: ((String) -> Unit)? = null,
+    onSwitchVariant: ((messageId: String, variantIndex: Int) -> Unit)? = null,
+    onRegenerate: ((messageId: String) -> Unit)? = null,
+    onDeleteMessage: ((messageId: String) -> Unit)? = null,
     topBarActions: @Composable RowScope.() -> Unit = {},
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     inputLeadingActions: @Composable RowScope.() -> Unit = {},
@@ -96,6 +99,9 @@ fun CommonChatStudioDialog(
                 onSendMessage = onSendMessage,
                 config = config,
                 onImageClick = onImageClick,
+                onSwitchVariant = onSwitchVariant,
+                onRegenerate = onRegenerate,
+                onDeleteMessage = onDeleteMessage,
                 topBarActions = {
                     topBarActions()
                     IconButton(

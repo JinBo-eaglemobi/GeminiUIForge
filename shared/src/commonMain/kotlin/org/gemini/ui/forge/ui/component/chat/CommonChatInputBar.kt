@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -64,6 +65,8 @@ fun CommonChatInputBar(
     onApiFlavorSelected: (ApiFlavor) -> Unit,
     onSendMessage: (text: String, attachments: List<CommonChatAttachment>) -> Unit,
     modifier: Modifier = Modifier,
+    inputTextOverride: String? = null,
+    onInputTextConsumed: () -> Unit = {},
     config: CommonChatStudioConfig = CommonChatStudioConfig(),
     onImagePreviewRequested: ((String) -> Unit)? = null,
     leadingActions: @Composable RowScope.() -> Unit = {},
@@ -72,7 +75,16 @@ fun CommonChatInputBar(
     val spacing = LocalAppSpacing.current
     val scope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
+    var preferCloudUpload by remember { mutableStateOf(true) }
     var attachments by remember { mutableStateOf<List<CommonChatAttachment>>(emptyList()) }
+
+    // 回填外部重新编辑的文本
+    LaunchedEffect(inputTextOverride) {
+        if (!inputTextOverride.isNullOrBlank()) {
+            inputText = inputTextOverride
+            onInputTextConsumed()
+        }
+    }
 
     var isModelMenuExpanded by remember { mutableStateOf(false) }
     var isFlavorMenuExpanded by remember { mutableStateOf(false) }
@@ -129,7 +141,7 @@ fun CommonChatInputBar(
     fun performSend() {
         if (!canSend) return
         val text = inputText.trim()
-        val currentAttach = attachments
+        val currentAttach = attachments.map { it.copy(preferCloudUpload = preferCloudUpload) }
         inputText = ""
         attachments = emptyList()
         onSendMessage(text, currentAttach)
@@ -150,68 +162,90 @@ fun CommonChatInputBar(
             modifier = Modifier.fillMaxWidth()
         ) {
         Column(modifier = Modifier.padding(spacing.medium)) {
-            // 1. 已选中的多模态附件预览栏
+            // 1. 已选中的多模态附件预览栏与云端上传选项
             if (attachments.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = spacing.small),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.small),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    attachments.forEachIndexed { index, attach ->
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            modifier = Modifier.clickable {
-                                attach.localUri?.let { uri -> onImagePreviewRequested?.invoke(uri) }
-                            }
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                            ) {
-                                if (attach.mimeType.startsWith("image/")) {
-                                    val imageModel: Any? = attach.localUri ?: attach.bytes
-                                    if (imageModel != null) {
-                                        AsyncImage(
-                                            model = imageModel,
-                                            contentDescription = null,
-                                            modifier = Modifier
-                                                .size(36.dp)
-                                                .clip(RoundedCornerShape(6.dp)),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    } else {
-                                        Icon(Icons.Default.Image, null, modifier = Modifier.size(24.dp))
-                                    }
-                                    Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.fillMaxWidth().padding(bottom = spacing.small)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(spacing.small),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        attachments.forEachIndexed { index, attach ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier.clickable {
+                                    attach.localUri?.let { uri -> onImagePreviewRequested?.invoke(uri) }
                                 }
-                                Text(
-                                    text = attach.name,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "移除附件",
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .clickable {
-                                            attachments = attachments.toMutableList().apply { removeAt(index) }
-                                        },
-                                    tint = MaterialTheme.colorScheme.error
-                                )
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    if (attach.mimeType.startsWith("image/")) {
+                                        val imageModel: Any? = attach.localUri ?: attach.bytes
+                                        if (imageModel != null) {
+                                            AsyncImage(
+                                                model = imageModel,
+                                                contentDescription = null,
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .clip(RoundedCornerShape(6.dp)),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        } else {
+                                            Icon(Icons.Default.Image, null, modifier = Modifier.size(24.dp))
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                    }
+                                    Text(
+                                        text = attach.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "移除附件",
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clickable {
+                                                attachments = attachments.toMutableList().apply { removeAt(index) }
+                                            },
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             }
                         }
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { preferCloudUpload = !preferCloudUpload }
+                    ) {
+                        Checkbox(
+                            checked = preferCloudUpload,
+                            onCheckedChange = { preferCloudUpload = it },
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "优先上传至云端服务 (Google File API)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
 
-            // 2. 自适应多行文本输入框
+            // 2. 自适应多行文本输入框 (默认呈现标准 2 行输入高度)
             OutlinedTextField(
                 value = inputText,
                 onValueChange = { inputText = it },
+                minLines = 2,
+                maxLines = 6,
                 placeholder = {
                     Text(
                         text = if (config.inputPlaceholder.contains("Ctrl+V")) config.inputPlaceholder else "${config.inputPlaceholder} (支持 Ctrl+V 粘贴截图)",
@@ -221,7 +255,6 @@ fun CommonChatInputBar(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 60.dp, max = 160.dp)
                     .onPreviewKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown) {
                             if (event.key == Key.Enter && !event.isShiftPressed) {
@@ -324,7 +357,7 @@ fun CommonChatInputBar(
                                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                                 modifier = Modifier
                                     .clickable { isFlavorMenuExpanded = true }
-                                    .tip("切换通信协议 (当前: ${selectedApiFlavor.name})")
+                                    .tip("切换通信协议 (当前: ${selectedApiFlavor.displayNameZh})")
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -353,7 +386,7 @@ fun CommonChatInputBar(
                                 onDismissRequest = { isFlavorMenuExpanded = false },
                                 offset = DpOffset(0.dp, (-8).dp),
                                 modifier = Modifier
-                                    .widthIn(min = flavorBtnWidthDp, max = adaptiveMenuWidth)
+                                    .widthIn(min = maxOf(flavorBtnWidthDp, 240.dp), max = adaptiveMenuWidth)
                                     .background(MaterialTheme.colorScheme.surface)
                                     .border(
                                         1.dp,
@@ -364,18 +397,41 @@ fun CommonChatInputBar(
                                 config.availableApiFlavors.forEach { flavor ->
                                     DropdownMenuItem(
                                         text = {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                                                verticalAlignment = Alignment.CenterVertically
+                                            Column(
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                                verticalArrangement = Arrangement.spacedBy(2.dp)
                                             ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text(
+                                                        text = when (flavor) {
+                                                            ApiFlavor.INTERACTIONS -> "⚡ Interactions API"
+                                                            ApiFlavor.GENERATE_CONTENT -> "⚡ generateContent API"
+                                                        },
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = if (flavor == selectedApiFlavor) FontWeight.Bold else FontWeight.Medium,
+                                                        color = if (flavor == selectedApiFlavor) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                        maxLines = 1
+                                                    )
+                                                    if (flavor == selectedApiFlavor) {
+                                                        Icon(
+                                                            Icons.Default.Check,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(14.dp),
+                                                            tint = MaterialTheme.colorScheme.primary
+                                                        )
+                                                    }
+                                                }
                                                 Text(
                                                     text = when (flavor) {
-                                                        ApiFlavor.INTERACTIONS -> "⚡ Interactions API"
-                                                        ApiFlavor.GENERATE_CONTENT -> "⚡ generateContent API"
+                                                        ApiFlavor.INTERACTIONS -> "新一代交互协议 · 链式上下文与高级管道"
+                                                        ApiFlavor.GENERATE_CONTENT -> "官方标准生成协议 · 经典流式响应"
                                                     },
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = if (flavor == selectedApiFlavor) FontWeight.Bold else FontWeight.Normal,
-                                                    color = if (flavor == selectedApiFlavor) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                                                     maxLines = 1
                                                 )
                                             }

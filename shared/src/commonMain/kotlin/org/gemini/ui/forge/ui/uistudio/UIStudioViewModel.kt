@@ -24,8 +24,12 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.gemini.ui.forge.data.TemplateFile
+import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.assetsheet.AssetImportDraft
@@ -33,13 +37,26 @@ import org.gemini.ui.forge.model.assetsheet.NormalizedAssetItem
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.manager.ConfigManager
+import org.gemini.ui.forge.manager.SessionTrafficStore
+import org.gemini.ui.forge.model.chat.TrafficDirection
+import org.gemini.ui.forge.model.chat.TrafficRecord
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIPage
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
 import kotlinx.datetime.Clock
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import org.gemini.ui.forge.service.GeminiClient
 import org.gemini.ui.forge.service.LocalMattingService
+import org.gemini.ui.forge.service.ai.GeminiChatEngine
+import org.gemini.ui.forge.service.ai.GeminiChatRequest
+import org.gemini.ui.forge.service.ai.GeminiChatAttachment
+import org.gemini.ui.forge.service.ai.GeminiChatHistoryItem
+import org.gemini.ui.forge.service.ai.GeminiGenerationConfig
 import org.gemini.ui.forge.service.assetsheet.AssetSheetNormalizer
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.ToastType
@@ -81,6 +98,9 @@ class UIStudioViewModel {
     private val storage = LocalFileStorage()
     private val mattingService = LocalMattingService(storage)
     private val configManager = ConfigManager()
+    val trafficStore = SessionTrafficStore()
+    val trafficScopeId: String get() = "uistudio_${state.project?.projectId?.ifBlank { "default" } ?: "default"}"
+    val chatEngine = GeminiChatEngine()
 
     /** 界面响应式状态快照 */
     var state by mutableStateOf(UIStudioState())
@@ -1347,11 +1367,7 @@ class UIStudioViewModel {
     fun updateProjectApiFlavor(apiFlavor: ApiFlavor) {
         val updated = state.projectAgentConfig.copy(apiFlavor = apiFlavor)
         saveProjectAgentConfig(updated, notifyUser = false)
-        val name = when (apiFlavor) {
-            ApiFlavor.INTERACTIONS -> "会话 API"
-            ApiFlavor.GENERATE_CONTENT -> "原生 API"
-        }
-        Toast.show("已切换通信协议: $name", ToastType.SUCCESS)
+        Toast.show("已切换通信协议: ${apiFlavor.displayNameZh}", ToastType.SUCCESS)
     }
 
     fun saveProjectAgentConfig(config: ProjectAgentConfig, notifyUser: Boolean = true) {
@@ -1404,9 +1420,10 @@ class UIStudioViewModel {
                 }.sortedByDescending { it.updatedAt }
 
                 if (loadedSessions.isNotEmpty()) {
-                    val activeId = state.currentChatSessionId ?: loadedSessions.first().id
+                    val healedSessions = healSessionErrors(loadedSessions)
+                    val activeId = state.currentChatSessionId ?: healedSessions.first().id
                     state = state.copy(
-                        chatSessions = loadedSessions,
+                        chatSessions = healedSessions,
                         currentChatSessionId = activeId
                     )
                     return@launch
@@ -1451,6 +1468,50 @@ class UIStudioViewModel {
             } catch (e: Exception) {
                 AppLogger.e("UIStudioViewModel", "保存会话文件失败: ${session.id}", e)
             }
+        }
+    }
+
+    private suspend fun healSessionErrors(sessions: List<VisualChatSession>): List<VisualChatSession> {
+        return sessions.map { session ->
+            val hasUnresolvedError = session.messages.any { msg ->
+                msg.role == "model" && (msg.effectiveText.isBlank() || msg.isError) && msg.errorMessage.isNullOrBlank()
+            }
+            if (!hasUnresolvedError) return@map session
+
+            val records = trafficStore.listRecords(trafficScopeId, session.id)
+            val respErrors = records.filter { it.direction == TrafficDirection.RESP }.mapNotNull { r ->
+                try {
+                    val root = jsonHelper.parseToJsonElement(r.body).jsonObject
+                    val errObj = root["error"]?.jsonObject
+                    if (errObj != null) {
+                        val msg = errObj["message"]?.jsonPrimitive?.contentOrNull ?: "未知服务端错误"
+                        val code = errObj["code"]?.jsonPrimitive?.contentOrNull ?: errObj["status"]?.jsonPrimitive?.contentOrNull
+                        val formatted = if (!code.isNullOrBlank()) "[$code] $msg" else msg
+                        r.timestamp to formatted
+                    } else null
+                } catch (_: Exception) {
+                    null
+                }
+            }
+
+            if (respErrors.isEmpty()) return@map session
+
+            var sessionHealed = false
+            val updatedMessages = session.messages.map { msg ->
+                if (msg.role == "model" && (msg.effectiveText.isBlank() || msg.isError) && msg.errorMessage.isNullOrBlank()) {
+                    val matchedErr = respErrors.minByOrNull { kotlin.math.abs(it.first - msg.timestamp) }?.second
+                    if (matchedErr != null) {
+                        sessionHealed = true
+                        msg.copy(isError = true, errorMessage = matchedErr)
+                    } else msg
+                } else msg
+            }
+
+            val healedSession = if (sessionHealed) session.copy(messages = updatedMessages) else session
+            if (sessionHealed) {
+                saveSession(healedSession)
+            }
+            healedSession
         }
     }
 
@@ -1549,12 +1610,16 @@ class UIStudioViewModel {
             state.aiChatAttachments
         }
         val now = getCurrentTimeMillis()
+        val modelDisplayName = GeminiModel.fromModelName(state.projectAgentConfig.modelName)?.displayName
+            ?: state.projectAgentConfig.modelName.ifBlank { GeminiModel.GEMINI_3_8_FLASH.displayName }
+
         val userMsg = VisualChatMessage(
             id = "msg_${now}_user",
             role = "user",
             prompt = userText,
             inputImageUris = rawAttachments,
-            timestamp = now
+            timestamp = now,
+            modelName = modelDisplayName
         )
 
         val updatedMessages = activeSession.messages + userMsg
@@ -1602,58 +1667,145 @@ class UIStudioViewModel {
                         saveSession(correctedSession)
                     }
                 }
-                val effectiveApiKey = apiKey.ifBlank { configManager.loadKey("GEMINI_API_KEY") ?: "" }
+                val effectiveApiKey = apiKey.ifBlank {
+                    configManager.loadKey("GEMINI_API_KEY") ?: configManager.loadGlobalGeminiKey() ?: ""
+                }
+
+                if (effectiveApiKey.isBlank()) {
+                    val errorMsg = "⚠️ 尚未检测到有效 Gemini API Key。\n请点击主界面右上角「设置」并在「AI 模型与网络」中配置您的 Gemini API Key，或在系统环境变量中设置 GEMINI_API_KEY。"
+                    Toast.show("未配置 Gemini API Key，无法发起真实网络请求", ToastType.ERROR)
+                    val assistantMsg = VisualChatMessage(
+                        id = "msg_${getCurrentTimeMillis()}_assistant",
+                        role = "model",
+                        prompt = errorMsg,
+                        timestamp = getCurrentTimeMillis()
+                    )
+                    val sessionAfterReply = (state.chatSessions.find { it.id == activeSession.id } ?: activeSession).let { cur ->
+                        cur.copy(
+                            messages = cur.messages + assistantMsg,
+                            updatedAt = getCurrentTimeMillis()
+                        )
+                    }
+                    val finalSessions = state.chatSessions.map { if (it.id == sessionAfterReply.id) sessionAfterReply else it }
+                    state = state.copy(chatSessions = finalSessions, isAiChatSending = false)
+                    saveSession(sessionAfterReply)
+                    return@launch
+                }
+
                 val apiFlavor = state.projectAgentConfig.apiFlavor
-                val systemPrompt = state.projectAgentConfig.systemPrompt
+                val systemPrompt = state.projectAgentConfig.systemPrompt.ifBlank {
+                    "你是一位精通游戏 UI/UX 布局设计的资深架构师，协助开发者在 UI Studio 中完成视图排版、图元尺寸规划与素材建议。"
+                }
                 val selectedModel = state.projectAgentConfig.modelName.ifBlank { GeminiModel.GEMINI_3_8_FLASH.modelName }
                 val view = state.currentView
                 val contextInfo = "当前视图: ${view?.nameStr ?: "无"} (${view?.width ?: 0f} x ${view?.height ?: 0f})，素材库共有 ${state.assetLibrary.items.size} 个资产。"
 
-                var replyContent = ""
-                if (effectiveApiKey.isNotBlank()) {
-                    try {
-                        val client = GeminiClient()
-                        val url = "https://generativelanguage.googleapis.com/v1beta/models/$selectedModel:streamGenerateContent?key=$effectiveApiKey&alt=sse"
-                        val fullPrompt = "$systemPrompt\n\n[上下文信息] $contextInfo\n\n[用户指令] $userText"
-                        val requestBody = kotlinx.serialization.json.buildJsonObject {
-                            put("contents", kotlinx.serialization.json.buildJsonArray {
-                                add(kotlinx.serialization.json.buildJsonObject {
-                                    put("parts", kotlinx.serialization.json.buildJsonArray {
-                                        add(kotlinx.serialization.json.buildJsonObject { put("text", fullPrompt) })
-                                    })
-                                })
-                            })
-                            put("generationConfig", kotlinx.serialization.json.buildJsonObject {
-                                put("temperature", state.projectAgentConfig.temperature)
-                            })
-                        }.toString()
-                        val sb = StringBuilder()
-                        client.streamGenerateContent(
-                            url = url,
-                            requestBody = requestBody,
-                            onChunk = { chunk: String ->
-                                sb.append(chunk)
+                val preferCloud = attachmentsList.any { it.preferCloudUpload }
+                val chatAttachments = attachmentsList.map { attach ->
+                    GeminiChatAttachment(
+                        name = attach.name,
+                        localUri = attach.localUri,
+                        bytes = attach.bytes,
+                        mimeType = attach.mimeType
+                    )
+                }
+
+                // 注入历史消息
+                val historyItems = activeSession.messages.filter { it.id != userMsg.id }.map { msg ->
+                    GeminiChatHistoryItem(
+                        role = msg.role,
+                        text = msg.effectiveText
+                    )
+                }
+
+                val resolvedModel = GeminiModel.fromModelName(selectedModel) ?: GeminiModel.GEMINI_3_8_FLASH
+
+                val chatRequest = GeminiChatRequest(
+                    apiKey = effectiveApiKey,
+                    model = resolvedModel,
+                    apiFlavor = apiFlavor,
+                    prompt = userText,
+                    systemInstruction = "$systemPrompt\n\n[上下文信息] $contextInfo",
+                    attachments = chatAttachments,
+                    preferCloudUpload = preferCloud,
+                    history = historyItems,
+                    previousInteractionId = activeSession.latestInteractionId,
+                    generationConfig = GeminiGenerationConfig(
+                        temperature = state.projectAgentConfig.temperature.toDouble()
+                    )
+                )
+
+                val result = try {
+                    chatEngine.executeChat(
+                        request = chatRequest,
+                        onChunk = { chunk ->
+                            state = state.copy(streamingAiText = state.streamingAiText + chunk)
+                        },
+                        onRawTraffic = { direction, rawUrl, body ->
+                            scope.launch(Dispatchers.Default) {
+                                val record = TrafficRecord(
+                                    seq = 0,
+                                    direction = direction,
+                                    timestamp = getCurrentTimeMillis(),
+                                    url = rawUrl,
+                                    model = selectedModel,
+                                    body = body
+                                )
+                                trafficStore.append(record, trafficScopeId, activeSession.id)
                             }
-                        )
-                        replyContent = sb.toString()
-                    } catch (e: Exception) {
-                        AppLogger.w("UIStudioViewModel", "Gemini API 调用异常，生成备选建议", e)
-                        replyContent = "💡 基于驱动「${apiFlavor.displayNameZh}」与模型「$selectedModel」建议：\n1. 建议将核心交互组件置于视图中下方，预留 32dp 安全边距；\n2. 严格按 8pt 空间网格对齐；\n3. 推荐使用素材库已有素材保证风格统一。\n(通信说明: ${e.message ?: "未配置外部通道"})"
+                        }
+                    )
+                } catch (e: Exception) {
+                    AppLogger.e("UIStudioViewModel", "Gemini API 调用异常", e)
+                    Toast.show("AI 回复失败: ${e.message}", ToastType.ERROR)
+                    org.gemini.ui.forge.service.ai.GeminiChatResult(
+                        text = "⚠️ 网络通信异常：${e.message ?: "未知网络错误"}\n可点击顶部网络通信图标 (Receipt) 查看原始 HTTP 报文排查问题。",
+                        rawResponseJson = e.message ?: "",
+                        isSuccess = false,
+                        errorMessage = e.message
+                    )
+                } finally {
+                    state = state.copy(streamingAiText = "")
+                }
+
+                if (!result.isSuccess) {
+                    val errMsg = result.errorMessage ?: "服务调用未成功"
+                    withContext(Dispatchers.Main) {
+                        Toast.show("AI 响应异常: $errMsg", ToastType.ERROR)
                     }
+                }
+
+                val finalAssistantText = if (result.text.isNotBlank()) {
+                    result.text
+                } else if (!result.isSuccess) {
+                    result.errorMessage ?: "服务端未返回错误详情"
                 } else {
-                    replyContent = "🤖 [驱动: ${apiFlavor.displayNameZh} · 模型: $selectedModel]\n已接收排版意图：\"$userText\"\n\n【排版规划方案】\n1. 目标视图：${view?.nameStr ?: "MainPage"} (${view?.width?.toInt() ?: 0} × ${view?.height?.toInt() ?: 0})\n2. 推荐布局结构：\n   - 顶部导航栏（高度 64dp，贴合顶部，放置返回与标题）\n   - 中部主内容展示区（自适应居中，8pt 边距）\n   - 底部浮动控制栏（居中水平分布）\n3. 素材应用：素材库已有 ${state.assetLibrary.items.size} 个切片资产，可直接拖入画布对应区域完成装配。"
+                    "（未收到有效文本内容）"
                 }
 
                 val assistantMsg = VisualChatMessage(
                     id = "msg_${getCurrentTimeMillis()}_assistant",
                     role = "model",
-                    prompt = replyContent,
-                    timestamp = getCurrentTimeMillis()
+                    prompt = finalAssistantText,
+                    variants = listOf(finalAssistantText),
+                    activeVariantIndex = 0,
+                    thought = result.thoughtText,
+                    thoughtSignature = result.thoughtSignature,
+                    interactionId = result.interactionId,
+                    modelName = result.modelName ?: selectedModel,
+                    durationMs = result.durationMs,
+                    promptTokens = result.promptTokens,
+                    candidatesTokens = result.candidatesTokens,
+                    totalTokens = result.totalTokens,
+                    timestamp = getCurrentTimeMillis(),
+                    isError = !result.isSuccess,
+                    errorMessage = result.errorMessage
                 )
 
                 val sessionAfterReply = (state.chatSessions.find { it.id == activeSession.id } ?: activeSession).let { cur ->
                     cur.copy(
                         messages = cur.messages + assistantMsg,
+                        latestInteractionId = result.interactionId ?: cur.latestInteractionId,
                         updatedAt = getCurrentTimeMillis()
                     )
                 }
@@ -1663,6 +1815,225 @@ class UIStudioViewModel {
             } catch (e: Exception) {
                 AppLogger.e("UIStudioViewModel", "AI Chat 处理异常", e)
                 state = state.copy(isAiChatSending = false)
+            }
+        }
+    }
+
+    /**
+     * 切换某条消息的版本展示（例如用户针对单条提问重新生成多次后，在 < 1/2 > 之间翻页切换）。
+     */
+    fun switchChatMessageVariant(messageId: String, variantIndex: Int) {
+        val activeSession = state.currentChatSession ?: return
+        val updatedMessages = activeSession.messages.map { msg ->
+            if (msg.id == messageId) {
+                val clamped = variantIndex.coerceIn(0, (msg.variants.size - 1).coerceAtLeast(0))
+                val targetVariantText = msg.variants.getOrNull(clamped) ?: ""
+                val isTargetFailed = targetVariantText.isBlank() || targetVariantText.startsWith("⚠️")
+                msg.copy(
+                    activeVariantIndex = clamped,
+                    isError = isTargetFailed
+                )
+            } else msg
+        }
+        val updatedSession = activeSession.copy(messages = updatedMessages, updatedAt = getCurrentTimeMillis())
+        val updatedSessions = state.chatSessions.map { if (it.id == updatedSession.id) updatedSession else it }
+        state = state.copy(chatSessions = updatedSessions)
+        saveSession(updatedSession)
+    }
+
+    /**
+     * 删除单条对话记录或一整轮对话。
+     * 若删除的是用户提问，连带其后直接紧随的 AI 回答一并移除。
+     */
+    fun deleteChatMessage(messageId: String) {
+        val activeSession = state.currentChatSession ?: return
+        val targetIndex = activeSession.messages.indexOfFirst { it.id == messageId }
+        if (targetIndex < 0) return
+        val targetMsg = activeSession.messages[targetIndex]
+
+        val updatedMessages = if (targetMsg.role == "user") {
+            activeSession.messages.filterIndexed { index, _ ->
+                index != targetIndex && !(index == targetIndex + 1 && activeSession.messages.getOrNull(index)?.role == "model")
+            }
+        } else {
+            activeSession.messages.filterIndexed { index, _ -> index != targetIndex }
+        }
+        val updatedSession = activeSession.copy(messages = updatedMessages, updatedAt = getCurrentTimeMillis())
+        val updatedSessions = state.chatSessions.map { if (it.id == updatedSession.id) updatedSession else it }
+        state = state.copy(chatSessions = updatedSessions)
+        saveSession(updatedSession)
+        Toast.show("已删除该条对话记录", ToastType.INFO)
+    }
+
+    /**
+     * 重新生成某条消息的回答。
+     * 若传入的是 AI 消息，则针对其对应的提问重新生成，并将新结果存入该 AI 消息的 variants 列表中追加版本；
+     * 若传入的是用户提问，则直接重新触发回答。
+     */
+    fun regenerateChatMessage(messageId: String) {
+        val activeSession = state.currentChatSession ?: return
+        val targetIndex = activeSession.messages.indexOfFirst { it.id == messageId }
+        if (targetIndex < 0) return
+
+        val (userMsg, modelMsg) = if (activeSession.messages[targetIndex].role == "model") {
+            val prevUser = activeSession.messages.take(targetIndex).lastOrNull { it.role == "user" }
+            prevUser to activeSession.messages[targetIndex]
+        } else {
+            val nextModel = activeSession.messages.drop(targetIndex + 1).firstOrNull { it.role == "model" }
+            activeSession.messages[targetIndex] to nextModel
+        }
+
+        if (userMsg == null) {
+            Toast.show("未找到对应的用户提问，无法重新生成", ToastType.INFO)
+            return
+        }
+
+        state = state.copy(isAiChatSending = true, streamingAiText = "")
+
+        scope.launch(Dispatchers.Default) {
+            val effectiveApiKey = configManager.loadKey("GEMINI_API_KEY") ?: configManager.loadGlobalGeminiKey() ?: ""
+            if (effectiveApiKey.isBlank()) {
+                withContext(Dispatchers.Main) {
+                    Toast.show("未配置 Gemini API Key，无法发起真实网络请求", ToastType.ERROR)
+                    state = state.copy(isAiChatSending = false)
+                }
+                return@launch
+            }
+            try {
+                val apiFlavor = state.projectAgentConfig.apiFlavor
+                val systemPrompt = state.projectAgentConfig.systemPrompt.ifBlank {
+                    "你是一位精通游戏 UI/UX 布局设计的资深架构师，协助开发者在 UI Studio 中完成视图排版、图元尺寸规划与素材建议。"
+                }
+                val selectedModel = state.projectAgentConfig.modelName.ifBlank { GeminiModel.GEMINI_3_8_FLASH.modelName }
+                val view = state.currentView
+                val contextInfo = "当前视图: ${view?.nameStr ?: "无"} (${view?.width ?: 0f} x ${view?.height ?: 0f})，素材库共有 ${state.assetLibrary.items.size} 个资产。"
+
+                val chatAttachments = userMsg.inputImageUris.map { uri ->
+                    GeminiChatAttachment(
+                        name = uri.substringAfterLast("/"),
+                        localUri = uri,
+                        bytes = readLocalFileBytes(uri),
+                        mimeType = if (uri.endsWith(".png", true)) "image/png" else "image/jpeg"
+                    )
+                }
+
+                val historyItems = activeSession.messages.take(targetIndex).filter { it.id != userMsg.id }.map { msg ->
+                    GeminiChatHistoryItem(
+                        role = msg.role,
+                        text = msg.effectiveText
+                    )
+                }
+
+                val resolvedModel = GeminiModel.fromModelName(selectedModel) ?: GeminiModel.GEMINI_3_8_FLASH
+
+                val previousInteractionId = activeSession.messages
+                    .take(targetIndex)
+                    .lastOrNull { !it.interactionId.isNullOrBlank() }
+                    ?.interactionId ?: activeSession.latestInteractionId
+
+                val chatRequest = GeminiChatRequest(
+                    apiKey = effectiveApiKey,
+                    model = resolvedModel,
+                    apiFlavor = apiFlavor,
+                    prompt = userMsg.prompt,
+                    systemInstruction = "$systemPrompt\n\n[上下文信息] $contextInfo",
+                    attachments = chatAttachments,
+                    preferCloudUpload = true,
+                    history = historyItems,
+                    previousInteractionId = previousInteractionId,
+                    generationConfig = GeminiGenerationConfig(
+                        temperature = state.projectAgentConfig.temperature.toDouble()
+                    )
+                )
+
+                val result = chatEngine.executeChat(
+                    request = chatRequest,
+                    onChunk = { chunk ->
+                        state = state.copy(streamingAiText = state.streamingAiText + chunk)
+                    },
+                    onRawTraffic = { direction, rawUrl, body ->
+                        scope.launch(Dispatchers.Default) {
+                            val record = TrafficRecord(
+                                seq = 0,
+                                direction = direction,
+                                timestamp = getCurrentTimeMillis(),
+                                url = rawUrl,
+                                model = selectedModel,
+                                body = body
+                            )
+                            trafficStore.append(record, trafficScopeId, activeSession.id)
+                        }
+                    }
+                )
+
+                val finalResultText = if (result.text.isNotBlank()) {
+                    result.text
+                } else if (!result.isSuccess) {
+                    result.errorMessage ?: "服务端未返回错误详情"
+                } else {
+                    "（未收到有效文本内容）"
+                }
+
+                val updatedModelMsg = if (modelMsg != null) {
+                    val currentVariants = if (modelMsg.variants.isEmpty()) listOf(modelMsg.prompt) else modelMsg.variants
+                    val newVariants = currentVariants + finalResultText
+                    modelMsg.copy(
+                        prompt = finalResultText,
+                        variants = newVariants,
+                        activeVariantIndex = newVariants.lastIndex,
+                        thought = result.thoughtText,
+                        thoughtSignature = result.thoughtSignature,
+                        interactionId = result.interactionId,
+                        modelName = result.modelName ?: selectedModel,
+                        durationMs = result.durationMs,
+                        promptTokens = result.promptTokens,
+                        candidatesTokens = result.candidatesTokens,
+                        totalTokens = result.totalTokens,
+                        timestamp = getCurrentTimeMillis(),
+                        isError = !result.isSuccess,
+                        errorMessage = result.errorMessage
+                    )
+                } else {
+                    VisualChatMessage(
+                        id = "msg_${getCurrentTimeMillis()}_assistant",
+                        role = "model",
+                        prompt = finalResultText,
+                        variants = listOf(finalResultText),
+                        activeVariantIndex = 0,
+                        thought = result.thoughtText,
+                        thoughtSignature = result.thoughtSignature,
+                        interactionId = result.interactionId,
+                        modelName = result.modelName ?: selectedModel,
+                        durationMs = result.durationMs,
+                        promptTokens = result.promptTokens,
+                        candidatesTokens = result.candidatesTokens,
+                        totalTokens = result.totalTokens,
+                        timestamp = getCurrentTimeMillis(),
+                        isError = !result.isSuccess,
+                        errorMessage = result.errorMessage
+                    )
+                }
+
+                val updatedMessages = if (modelMsg != null) {
+                    activeSession.messages.map { if (it.id == modelMsg.id) updatedModelMsg else it }
+                } else {
+                    activeSession.messages + updatedModelMsg
+                }
+
+                val updatedSession = activeSession.copy(
+                    messages = updatedMessages,
+                    latestInteractionId = result.interactionId ?: activeSession.latestInteractionId,
+                    updatedAt = getCurrentTimeMillis()
+                )
+                val updatedSessions = state.chatSessions.map { if (it.id == updatedSession.id) updatedSession else it }
+                state = state.copy(chatSessions = updatedSessions, isAiChatSending = false)
+                saveSession(updatedSession)
+            } catch (e: Exception) {
+                AppLogger.e("UIStudioViewModel", "重新生成失败", e)
+                Toast.show("重新生成失败: ${e.message}", ToastType.ERROR)
+                state = state.copy(isAiChatSending = false)
+            } finally {
+                state = state.copy(streamingAiText = "")
             }
         }
     }

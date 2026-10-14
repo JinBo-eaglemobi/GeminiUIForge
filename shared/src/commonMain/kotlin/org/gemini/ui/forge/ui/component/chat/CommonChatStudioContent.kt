@@ -79,6 +79,9 @@ fun CommonChatStudioContent(
     modifier: Modifier = Modifier,
     config: CommonChatStudioConfig = CommonChatStudioConfig(),
     onImageClick: ((String) -> Unit)? = null,
+    onSwitchVariant: ((messageId: String, variantIndex: Int) -> Unit)? = null,
+    onRegenerate: ((messageId: String) -> Unit)? = null,
+    onDeleteMessage: ((messageId: String) -> Unit)? = null,
     topBarActions: @Composable RowScope.() -> Unit = {},
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     inputLeadingActions: @Composable RowScope.() -> Unit = {},
@@ -98,6 +101,9 @@ fun CommonChatStudioContent(
 
     // 宽屏模式下会话侧栏拖拽宽度（自由拖拽，安全范围 180dp ~ 420dp，默认 240dp）
     var sidebarWidthDp by remember { mutableStateOf(240.dp) }
+
+    // 重新编辑消息回填至输入框的中间状态
+    var inputTextToInject by remember { mutableStateOf<String?>(null) }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val isNarrowMode = config.enableNarrowModeAutoFold && maxWidth < config.narrowBreakpointDp.dp
@@ -203,6 +209,18 @@ fun CommonChatStudioContent(
                                 lightboxImageUri = clickedUri
                             }
                         },
+                        onVariantIndexChanged = { msg, newIdx ->
+                            onSwitchVariant?.invoke(msg.id, newIdx)
+                        },
+                        onRegenerateRequested = { msg ->
+                            onRegenerate?.invoke(msg.id)
+                        },
+                        onDeleteRequested = { msg ->
+                            onDeleteMessage?.invoke(msg.id)
+                        },
+                        onEditRequested = { textToEdit ->
+                            inputTextToInject = textToEdit
+                        },
                         messageActions = messageActions,
                         modifier = Modifier.weight(1f)
                     )
@@ -216,6 +234,8 @@ fun CommonChatStudioContent(
                         onApiFlavorSelected = onApiFlavorSelected,
                         onSendMessage = onSendMessage,
                         config = config,
+                        inputTextOverride = inputTextToInject,
+                        onInputTextConsumed = { inputTextToInject = null },
                         onImagePreviewRequested = { uri ->
                             if (onImageClick != null) {
                                 onImageClick(uri)

@@ -17,7 +17,8 @@ data class CommonChatAttachment(
     val name: String,
     val localUri: String? = null,
     val bytes: ByteArray? = null,
-    val mimeType: String = "image/png"
+    val mimeType: String = "image/png",
+    val preferCloudUpload: Boolean = true
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

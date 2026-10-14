@@ -75,7 +75,8 @@ fun StudioChatMessageList(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().padding(horizontal = spacing.medium)) {
+    androidx.compose.foundation.text.selection.SelectionContainer(modifier = modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize().padding(horizontal = spacing.medium)) {
         if (messages.isEmpty() && !isGenerating) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -127,6 +128,7 @@ fun StudioChatMessageList(
             }
         }
     }
+}
 }
 
 /**

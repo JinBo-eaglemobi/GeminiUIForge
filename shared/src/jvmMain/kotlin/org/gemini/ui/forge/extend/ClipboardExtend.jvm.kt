@@ -42,3 +42,38 @@ actual suspend fun readClipboardImageBytes(): ByteArray? = withContext(Dispatche
     }
     null
 }
+
+actual suspend fun getSelectedTextOrNull(): String? = withContext(Dispatchers.IO) {
+    try {
+        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+        val oldClip = try {
+            if (clipboard.isDataFlavorAvailable(DataFlavor.stringFlavor)) {
+                clipboard.getData(DataFlavor.stringFlavor) as? String
+            } else null
+        } catch (_: Throwable) { null }
+
+        // 尝试使用 AWT Robot 触发 Ctrl+C 复制选区
+        val robot = java.awt.Robot()
+        val isMac = System.getProperty("os.name")?.contains("Mac", ignoreCase = true) == true
+        val mask = if (isMac) java.awt.event.KeyEvent.VK_META else java.awt.event.KeyEvent.VK_CONTROL
+        robot.keyPress(mask)
+        robot.keyPress(java.awt.event.KeyEvent.VK_C)
+        robot.keyRelease(java.awt.event.KeyEvent.VK_C)
+        robot.keyRelease(mask)
+
+        // 短暂让位剪贴板刷新
+        kotlinx.coroutines.delay(40)
+
+        val newClip = try {
+            if (clipboard.isDataFlavorAvailable(DataFlavor.stringFlavor)) {
+                clipboard.getData(DataFlavor.stringFlavor) as? String
+            } else null
+        } catch (_: Throwable) { null }
+
+        if (!newClip.isNullOrBlank() && newClip != oldClip) {
+            newClip
+        } else null
+    } catch (_: Throwable) {
+        null
+    }
+}

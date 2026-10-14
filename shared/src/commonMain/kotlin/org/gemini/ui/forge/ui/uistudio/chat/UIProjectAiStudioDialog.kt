@@ -7,8 +7,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,6 +21,7 @@ import org.gemini.ui.forge.ui.component.chat.CommonChatStudioConfig
 import org.gemini.ui.forge.ui.component.chat.CommonChatStudioContent
 import org.gemini.ui.forge.ui.component.chat.CommonSystemInstructionModalOverlay
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.dialog.ai.studio.component.StudioSessionLogDialog
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 
@@ -37,6 +39,7 @@ fun UIProjectAiStudioDialog(
 ) {
     val state = viewModel.state
     val currentSession = state.currentChatSession
+    var showTrafficLogDialog by remember { mutableStateOf(false) }
 
     val currentModel = GeminiModel.entries.find {
         it.modelName == state.projectAgentConfig.modelName
@@ -81,6 +84,15 @@ fun UIProjectAiStudioDialog(
                     onSendMessage = { text, attachments ->
                         viewModel.sendChatMessage(text, attachments)
                     },
+                    onSwitchVariant = { messageId, variantIndex ->
+                        viewModel.switchChatMessageVariant(messageId, variantIndex)
+                    },
+                    onRegenerate = { messageId ->
+                        viewModel.regenerateChatMessage(messageId)
+                    },
+                    onDeleteMessage = { messageId ->
+                        viewModel.deleteChatMessage(messageId)
+                    },
                     config = studioConfig,
                     topBarActions = {
                         // 1. 当前视图标签胶囊
@@ -109,7 +121,20 @@ fun UIProjectAiStudioDialog(
                             )
                         }
 
-                        // 3. 清空当前会话消息按钮（二次确认保护）
+                        // 3. 真实网络通信日志入口
+                        IconButton(
+                            onClick = { showTrafficLogDialog = true },
+                            modifier = Modifier.size(32.dp).tip("查看网络通信报文与 API 真实日志")
+                        ) {
+                            Icon(
+                                Icons.Default.ReceiptLong,
+                                contentDescription = "通信报文",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        // 4. 清空当前会话消息按钮（二次确认保护）
                         if (currentSession != null && currentSession.messages.isNotEmpty()) {
                             IconButton(
                                 onClick = { viewModel.requestClearCurrentSession() },
@@ -124,7 +149,7 @@ fun UIProjectAiStudioDialog(
                             }
                         }
 
-                        // 4. 关闭工作室按钮
+                        // 5. 关闭工作室按钮
                         IconButton(
                             onClick = onDismiss,
                             modifier = Modifier.size(32.dp).tip("关闭工作室")
@@ -158,6 +183,16 @@ fun UIProjectAiStudioDialog(
                     isDestructive = true,
                     onConfirm = { viewModel.confirmClearCurrentSession() },
                     onDismiss = { viewModel.cancelClearCurrentSession() }
+                )
+            }
+
+            // 真实网络通信报文与 API 日志查看弹窗
+            if (showTrafficLogDialog) {
+                StudioSessionLogDialog(
+                    scopeId = viewModel.trafficScopeId,
+                    sessionId = currentSession?.id ?: "default_sess",
+                    trafficStore = viewModel.trafficStore,
+                    onDismiss = { showTrafficLogDialog = false }
                 )
             }
         }

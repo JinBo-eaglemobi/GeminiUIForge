@@ -18,6 +18,9 @@ import org.gemini.ui.forge.model.assetsheet.NormalizedAssetItem
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.service.GeminiClient
+import org.gemini.ui.forge.service.ai.GeminiChatEngine
+import org.gemini.ui.forge.service.ai.GeminiChatRequest
+import org.gemini.ui.forge.service.ai.GeminiGenerationConfig
 
 /**
  * 异构图集规范检测与双通道自我同步引擎。
@@ -239,37 +242,18 @@ object AssetSheetNormalizer {
             请直接输出纯净合法 JSON，严禁任何 markdown 标记或解释文字。
         """.trimIndent()
 
-        val cleanBaseUrl = (baseUrl?.ifBlank { null } ?: "https://generativelanguage.googleapis.com").trimEnd('/')
-        val model = "gemini-2.5-flash"
-        val url = "$cleanBaseUrl/v1beta/models/$model:streamGenerateContent?key=$apiKey&alt=sse"
-
-        val requestBody = buildJsonObject {
-            put("systemInstruction", buildJsonObject {
-                put("parts", buildJsonArray {
-                    add(buildJsonObject { put("text", systemPrompt) })
-                })
-            })
-            put("contents", buildJsonArray {
-                add(buildJsonObject {
-                    put("role", "user")
-                    put("parts", buildJsonArray {
-                        add(buildJsonObject { put("text", "请清洗并规范化以下数据：\n$jsonText") })
-                    })
-                })
-            })
-            put("generationConfig", buildJsonObject {
-                put("temperature", 0.1)
-            })
-        }.toString()
-
-        val client = GeminiClient()
-        val textBuilder = StringBuilder()
-        client.streamGenerateContent(
-            url = url,
-            requestBody = requestBody,
-            onChunk = { chunk -> textBuilder.append(chunk) }
+        val chatEngine = GeminiChatEngine()
+        val request = GeminiChatRequest(
+            apiKey = apiKey,
+            model = org.gemini.ui.forge.model.GeminiModel.GEMINI_2_5_FLASH,
+            prompt = "请清洗并规范化以下数据：\n$jsonText",
+            systemInstruction = systemPrompt,
+            generationConfig = GeminiGenerationConfig(
+                temperature = 0.1
+            )
         )
-        val response = textBuilder.toString()
+        val chatResult = chatEngine.executeChat(request)
+        val response = chatResult.text
 
         val cleanJson = response.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
         val result = normalizeJsonOffline(cleanJson)
