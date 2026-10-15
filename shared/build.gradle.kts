@@ -14,15 +14,7 @@ val appVersion = (project.findProperty("versionName")?.toString()?.trim()
     ?: System.getenv("GITHUB_REF_NAME")?.let { tag ->
         if (tag.startsWith("v")) tag.removePrefix("v").substringBefore("-") else null
     }
-    ?: try {
-        providers.exec {
-            commandLine("git", "describe", "--tags", "--abbrev=0")
-        }.standardOutput.asText.get().trim()
-            .let { tag -> if (tag.startsWith("v")) tag.removePrefix("v").substringBefore("-") else null }
-    } catch (e: Exception) {
-        null
-    }
-    ?: "1.0.0").let { version ->
+    ?: "1.0.7").let { version ->
     val cleanVersion = version.filter { it.isDigit() || it == '.' }
     val segments = cleanVersion.split(".")
     val finalVer = if (segments.size > 3) {
@@ -139,6 +131,8 @@ kotlin {
             implementation(libs.filekit.dialogs)
             implementation(libs.filekit.dialogs.compose)
             implementation(libs.filekit.coil)
+            // multiplatform-markdown-renderer (v0.45.0) 跨平台 Markdown 原生自绘渲染
+            implementation(libs.markdown.renderer.m3)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

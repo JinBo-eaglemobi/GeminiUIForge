@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -47,10 +48,8 @@ fun CommonGeneratingBubble(
         ) {
             Column(modifier = Modifier.padding(spacing.medium)) {
                 if (streamingText.isNotBlank()) {
-                    Text(
-                        text = streamingText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                    AppMarkdown(
+                        content = streamingText
                     )
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {

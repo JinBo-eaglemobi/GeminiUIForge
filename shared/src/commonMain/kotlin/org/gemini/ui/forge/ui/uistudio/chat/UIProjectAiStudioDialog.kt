@@ -93,6 +93,8 @@ fun UIProjectAiStudioDialog(
                     onDeleteMessage = { messageId ->
                         viewModel.deleteChatMessage(messageId)
                     },
+                    mentionState = viewModel.mentionState,
+                    mentionCandidates = viewModel.getMentionCandidates(viewModel.mentionState.searchQuery),
                     config = studioConfig,
                     topBarActions = {
                         // 1. 当前视图标签胶囊

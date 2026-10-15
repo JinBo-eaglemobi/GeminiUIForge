@@ -37,6 +37,15 @@ import org.gemini.ui.forge.model.assetsheet.NormalizedAssetItem
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.manager.ConfigManager
+import org.gemini.ui.forge.model.chat.MentionCategory
+import org.gemini.ui.forge.model.chat.MentionItem
+import org.gemini.ui.forge.model.chat.MentionPayload
+import org.gemini.ui.forge.state.MentionState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Description
 import org.gemini.ui.forge.manager.SessionTrafficStore
 import org.gemini.ui.forge.model.chat.TrafficDirection
 import org.gemini.ui.forge.model.chat.TrafficRecord
@@ -101,6 +110,89 @@ class UIStudioViewModel {
     val trafficStore = SessionTrafficStore()
     val trafficScopeId: String get() = "uistudio_${state.project?.projectId?.ifBlank { "default" } ?: "default"}"
     val chatEngine = GeminiChatEngine()
+
+    /** AI 输入栏「@」上下文引用状态管理中心 */
+    val mentionState = MentionState()
+
+    /**
+     * 获取当前工程中所有可供「@」引用的候选实体列表，支持根据关键词即时过滤
+     */
+    fun getMentionCandidates(query: String = ""): List<MentionItem> {
+        val candidates = mutableListOf<MentionItem>()
+        val trimmed = query.trim()
+
+        // 1. 视图界面 (Views)
+        state.project?.pages?.forEach { page ->
+            candidates.add(
+                MentionItem(
+                    id = "view_${page.id}",
+                    title = page.nameStr,
+                    subtitle = "${page.width.toInt()}x${page.height.toInt()} · ${page.blocks.size} 个图元",
+                    category = MentionCategory.VIEW,
+                    icon = Icons.Default.AspectRatio,
+                    payload = MentionPayload.ViewPayload(
+                        viewId = page.id,
+                        viewName = page.nameStr,
+                        width = page.width.toInt(),
+                        height = page.height.toInt(),
+                        blockCount = page.blocks.size
+                    )
+                )
+            )
+        }
+
+        // 2. 当前视图图层图元 (Blocks - 递归收集整棵组件树)
+        fun collectBlocks(blocks: List<UIBlock>) {
+            blocks.forEach { block ->
+                val boundsStr = "[${block.bounds.left.toInt()}, ${block.bounds.top.toInt()}, ${block.bounds.width.toInt()}, ${block.bounds.height.toInt()}]"
+                candidates.add(
+                    MentionItem(
+                        id = "block_${block.id}",
+                        title = block.id,
+                        subtitle = "类型: ${block.type.name} · 坐标: $boundsStr",
+                        category = MentionCategory.BLOCK,
+                        icon = Icons.Default.Layers,
+                        payload = MentionPayload.BlockPayload(
+                            blockId = block.id,
+                            blockName = block.id,
+                            type = block.type.name,
+                            bounds = boundsStr,
+                            isContainer = block.isPureContainer
+                        )
+                    )
+                )
+                collectBlocks(block.children)
+            }
+        }
+        state.currentView?.blocks?.let { collectBlocks(it) }
+
+        // 3. 素材库切片资产 (Assets)
+        state.assetLibrary.items.forEach { asset ->
+            candidates.add(
+                MentionItem(
+                    id = "asset_${asset.id}",
+                    title = asset.name,
+                    subtitle = "${asset.width}x${asset.height} · ${asset.relativePath}",
+                    category = MentionCategory.ASSET,
+                    icon = Icons.Default.Image,
+                    previewImagePath = asset.relativePath,
+                    payload = MentionPayload.AssetPayload(
+                        assetId = asset.id,
+                        fileName = asset.name,
+                        filePath = asset.relativePath,
+                        width = asset.width,
+                        height = asset.height
+                    )
+                )
+            )
+        }
+
+        if (trimmed.isBlank()) return candidates
+        return candidates.filter {
+            it.title.contains(trimmed, ignoreCase = true) ||
+                    it.subtitle?.contains(trimmed, ignoreCase = true) == true
+        }
+    }
 
     /** 界面响应式状态快照 */
     var state by mutableStateOf(UIStudioState())
@@ -1708,6 +1800,55 @@ class UIStudioViewModel {
                         bytes = attach.bytes,
                         mimeType = attach.mimeType
                     )
+                }.toMutableList()
+
+                // 提取已选中的 @ 上下文实体并组装格式化 XML
+                val attachedMentionsList = mentionState.attachedMentions.toList()
+                val mentionContextBuilder = StringBuilder()
+
+                if (attachedMentionsList.isNotEmpty()) {
+                    mentionContextBuilder.append("\n\n<context_attachments>\n")
+                    attachedMentionsList.forEach { mention ->
+                        when (val p = mention.payload) {
+                            is MentionPayload.ViewPayload -> {
+                                mentionContextBuilder.append("  <view id=\"${p.viewId}\" name=\"${p.viewName}\" resolution=\"${p.width}x${p.height}\" block_count=\"${p.blockCount}\"/>\n")
+                            }
+                            is MentionPayload.BlockPayload -> {
+                                mentionContextBuilder.append("  <block id=\"${p.blockId}\" name=\"${p.blockName}\" type=\"${p.type}\" bounds=\"${p.bounds}\" is_container=\"${p.isContainer}\"/>\n")
+                            }
+                            is MentionPayload.AssetPayload -> {
+                                mentionContextBuilder.append("  <asset id=\"${p.assetId}\" file_name=\"${p.fileName}\" dimensions=\"${p.width}x${p.height}\" path=\"${p.filePath}\"/>\n")
+                                // 若为切片素材，自动尝试读取本地文件字节流以多模态附件发送
+                                try {
+                                    val assetBytes = readLocalFileBytes(p.filePath)
+                                    if (assetBytes != null && assetBytes.isNotEmpty()) {
+                                        val mime = when {
+                                            p.filePath.endsWith(".png", true) -> "image/png"
+                                            p.filePath.endsWith(".jpg", true) || p.filePath.endsWith(".jpeg", true) -> "image/jpeg"
+                                            p.filePath.endsWith(".webp", true) -> "image/webp"
+                                            else -> "image/png"
+                                        }
+                                        chatAttachments.add(
+                                            GeminiChatAttachment(
+                                                name = p.fileName,
+                                                localUri = p.filePath,
+                                                bytes = assetBytes,
+                                                mimeType = mime
+                                            )
+                                        )
+                                    }
+                                } catch (e: Exception) {
+                                    AppLogger.w("UIStudioViewModel", "读取引用素材文件失败: ${p.filePath}, ${e.message}")
+                                }
+                            }
+                            is MentionPayload.DocPayload -> {
+                                mentionContextBuilder.append("  <document name=\"${p.fileName}\">\n${p.content ?: ""}\n  </document>\n")
+                            }
+                        }
+                    }
+                    mentionContextBuilder.append("</context_attachments>\n")
+                    // 发送完毕后清空已挂载实体药丸
+                    mentionState.clearMentions()
                 }
 
                 // 注入历史消息
@@ -1725,7 +1866,7 @@ class UIStudioViewModel {
                     model = resolvedModel,
                     apiFlavor = apiFlavor,
                     prompt = userText,
-                    systemInstruction = "$systemPrompt\n\n[上下文信息] $contextInfo",
+                    systemInstruction = "$systemPrompt\n\n[上下文信息] $contextInfo$mentionContextBuilder",
                     attachments = chatAttachments,
                     preferCloudUpload = preferCloud,
                     history = historyItems,

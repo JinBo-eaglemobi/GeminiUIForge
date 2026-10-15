@@ -220,7 +220,6 @@ class GeminiChatEngine(
     /**
      * generateContent 官方协议流式构建与执行
      */
-    @OptIn(ExperimentalEncodingApi::class)
     private suspend fun executeGenerateContentStream(
         request: GeminiChatRequest,
         onChunk: (String) -> Unit,
@@ -408,7 +407,6 @@ class GeminiChatEngine(
     /**
      * Interactions API 官方协议执行
      */
-    @OptIn(ExperimentalEncodingApi::class)
     private suspend fun executeInteractionsStream(
         request: GeminiChatRequest,
         onChunk: (String) -> Unit,
@@ -419,10 +417,12 @@ class GeminiChatEngine(
         val url = "${request.baseUrl}/v1beta/interactions?key=${request.apiKey}"
 
         val requestJson = buildJsonObject {
+            // 官方 Interactions 协议核心流式开关：stream = true (Input only. Whether the interaction will be streamed)
+            put("stream", true)
             put("model", request.model.modelName)
 
-            // 1. 官方规范：独立 system_instruction
-            if (!request.systemInstruction.isNullOrBlank()) {
+            // 1. 官方规范：独立 system_instruction（仅在首轮未传入 previousInteractionId 时确立，多轮自动继承避免冗余）
+            if (request.previousInteractionId.isNullOrBlank() && !request.systemInstruction.isNullOrBlank()) {
                 put("system_instruction", request.systemInstruction)
             }
 
@@ -470,89 +470,114 @@ class GeminiChatEngine(
             })
         }.toString()
 
-        onStatusLog("⚡ [Interactions API] 发起请求 (${request.model.modelName})...")
+        onStatusLog("⚡ [Interactions API] 发起流式请求 (${request.model.modelName})...")
         val startTime = getCurrentTimeMillis()
+        val fullTextBuilder = StringBuilder()
+        var lastThought: String? = null
+        var lastSig: String? = null
+        var interactionId: String? = null
+        var promptTokens: Int? = null
+        var candidatesTokens: Int? = null
+        var totalTokens: Int? = null
+        var rawResponseAggregator: String? = null
 
         return try {
-            val responseString = geminiClient.postInteraction(
+            geminiClient.streamInteraction(
                 url = url,
                 requestBody = requestJson,
                 onLog = { onStatusLog(it) },
-                onRawTraffic = onRawTraffic
+                onRawData = { element ->
+                    if (element is JsonObject) {
+                        val errorObj = element["error"]?.jsonObject
+                        if (errorObj != null) {
+                            val errorMsg = errorObj["message"]?.jsonPrimitive?.contentOrNull ?: "未知接口错误"
+                            val errorCode = errorObj["code"]?.jsonPrimitive?.contentOrNull ?: "error"
+                            val status = errorObj["status"]?.jsonPrimitive?.contentOrNull
+                            val fullErrorDesc = if (!status.isNullOrBlank() && status != errorCode) {
+                                "[$errorCode / $status] $errorMsg"
+                            } else {
+                                "[$errorCode] $errorMsg"
+                            }
+                            throw IllegalStateException(fullErrorDesc)
+                        }
+
+                        val id = element["id"]?.jsonPrimitive?.contentOrNull
+                            ?: element["interaction_id"]?.jsonPrimitive?.contentOrNull
+                        if (!id.isNullOrBlank()) {
+                            interactionId = id
+                        }
+
+                        val usageObj = element["usage_metadata"]?.jsonObject ?: element["usageMetadata"]?.jsonObject
+                        if (usageObj != null) {
+                            usageObj["input_tokens"]?.jsonPrimitive?.intOrNull?.let { promptTokens = it }
+                            usageObj["promptTokenCount"]?.jsonPrimitive?.intOrNull?.let { promptTokens = it }
+                            usageObj["output_tokens"]?.jsonPrimitive?.intOrNull?.let { candidatesTokens = it }
+                            usageObj["candidatesTokenCount"]?.jsonPrimitive?.intOrNull?.let { candidatesTokens = it }
+                            usageObj["total_tokens"]?.jsonPrimitive?.intOrNull?.let { totalTokens = it }
+                            usageObj["totalTokenCount"]?.jsonPrimitive?.intOrNull?.let { totalTokens = it }
+                        }
+                    }
+
+                    val (thought, sig) = geminiClient.extractInteractionThought(element)
+                    if (thought != null || sig != null) {
+                        if (thought != null) lastThought = (lastThought ?: "") + thought
+                        if (sig != null) lastSig = sig
+                        onThought?.invoke(lastThought ?: "", lastSig)
+                    }
+                },
+                onChunk = { chunk ->
+                    fullTextBuilder.append(chunk)
+                    onChunk(chunk)
+                },
+                onRawTraffic = { dir, rawUrl, body ->
+                    if (dir == TrafficDirection.RESP) {
+                        rawResponseAggregator = body
+                    }
+                    onRawTraffic?.invoke(dir, rawUrl, body)
+                }
             )
 
             val durationMs = getCurrentTimeMillis() - startTime
+            val finalExtractedText = fullTextBuilder.toString().ifBlank {
+                // 若流式增量未分发文本，兜底使用视图投影器从完整归档中提取
+                rawResponseAggregator?.let { ChatPayloadViewProjector.projectDisplayContent(it).text } ?: ""
+            }
 
-            // 解析 Interactions API 返回结构并动态投影提取展示内容
-            val respJson = jsonParser.parseToJsonElement(responseString).jsonObject
-            val errorObj = respJson["error"]?.jsonObject
-            if (errorObj != null) {
-                val errorMsg = errorObj["message"]?.jsonPrimitive?.contentOrNull ?: "未知接口错误"
-                val errorCode = errorObj["code"]?.jsonPrimitive?.contentOrNull ?: "error"
-                val status = errorObj["status"]?.jsonPrimitive?.contentOrNull
-                val fullErrorDesc = if (!status.isNullOrBlank() && status != errorCode) {
-                    "[$errorCode / $status] $errorMsg"
-                } else {
-                    "[$errorCode] $errorMsg"
-                }
+            if (finalExtractedText.isBlank() && lastThought.isNullOrBlank()) {
                 val durationMsErr = getCurrentTimeMillis() - startTime
-                AppLogger.e(TAG, "Interactions API 响应错误: $fullErrorDesc")
                 return GeminiChatResult(
                     text = "",
                     modelName = request.model.displayName,
                     durationMs = durationMsErr,
                     isSuccess = false,
-                    errorMessage = fullErrorDesc,
-                    rawResponseJson = responseString
+                    errorMessage = "未收到有效回复内容，请重试",
+                    rawResponseJson = rawResponseAggregator ?: ""
                 )
             }
 
-            val interactionId = respJson["id"]?.jsonPrimitive?.contentOrNull
-                ?: respJson["interaction_id"]?.jsonPrimitive?.contentOrNull
-
-            val usageObj = respJson["usage_metadata"]?.jsonObject ?: respJson["usageMetadata"]?.jsonObject
-            val promptTokens = usageObj?.get("input_tokens")?.jsonPrimitive?.intOrNull
-                ?: usageObj?.get("promptTokenCount")?.jsonPrimitive?.intOrNull
-            val candidatesTokens = usageObj?.get("output_tokens")?.jsonPrimitive?.intOrNull
-                ?: usageObj?.get("candidatesTokenCount")?.jsonPrimitive?.intOrNull
-            val totalTokens = usageObj?.get("total_tokens")?.jsonPrimitive?.intOrNull
-                ?: usageObj?.get("totalTokenCount")?.jsonPrimitive?.intOrNull
-                ?: if (promptTokens != null || candidatesTokens != null) (promptTokens ?: 0) + (candidatesTokens ?: 0) else null
-
-            val projected = ChatPayloadViewProjector.projectDisplayContent(responseString)
-            val extractedText = projected.text
-
-            if (projected.thoughtText != null || projected.thoughtSignature != null) {
-                onThought?.invoke(projected.thoughtText ?: "", projected.thoughtSignature)
-            }
-
-            // 模拟打字机回调给 UI
-            if (extractedText.isNotBlank()) {
-                onChunk(extractedText)
-            }
-
             GeminiChatResult(
-                text = extractedText,
-                thoughtText = projected.thoughtText,
-                thoughtSignature = projected.thoughtSignature,
+                text = finalExtractedText,
+                thoughtText = lastThought,
+                thoughtSignature = lastSig,
                 interactionId = interactionId,
-                rawResponseJson = responseString,
+                rawResponseJson = rawResponseAggregator ?: "",
                 modelName = request.model.displayName,
                 durationMs = durationMs,
                 promptTokens = promptTokens,
                 candidatesTokens = candidatesTokens,
-                totalTokens = totalTokens,
+                totalTokens = totalTokens ?: if (promptTokens != null || candidatesTokens != null) (promptTokens ?: 0) + (candidatesTokens ?: 0) else null,
                 isSuccess = true
             )
         } catch (e: Exception) {
             val durationMs = getCurrentTimeMillis() - startTime
-            AppLogger.e(TAG, "Interactions API 执行失败", e)
+            AppLogger.e(TAG, "Interactions API 流式执行失败", e)
             GeminiChatResult(
-                text = "",
+                text = fullTextBuilder.toString(),
                 modelName = request.model.displayName,
                 durationMs = durationMs,
                 isSuccess = false,
-                errorMessage = e.message ?: "网络通信异常"
+                errorMessage = e.message ?: "网络通信异常",
+                rawResponseJson = rawResponseAggregator ?: ""
             )
         }
     }

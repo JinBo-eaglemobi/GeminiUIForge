@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import org.gemini.ui.forge.extend.getSelectedTextOrNull
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.model.chat.VisualChatMessage
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -224,9 +225,8 @@ fun CommonModelBubble(
                             }
                         } else {
                             SelectionContainer {
-                                Text(
-                                    text = modelText,
-                                    style = MaterialTheme.typography.bodyMedium
+                                AppMarkdown(
+                                    content = modelText
                                 )
                             }
                         }
@@ -300,138 +300,121 @@ fun CommonModelBubble(
                 }
             }
 
-            // 底部元数据状态条 (外置于气泡卡片外部，实现与用户气泡的对称美学)
+            // 底部元数据状态条 (紧凑跟随于气泡左下方，零横向跨屏割裂)
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, start = 2.dp, end = 2.dp),
+                modifier = Modifier.padding(top = 4.dp, start = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // 最开头 (左侧)：当前回复模型名称、耗时与 Token 消耗情况
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.weight(1f, fill = false)
+                // 1. 模型名称胶囊
+                val displayModel = message.modelName?.ifBlank { "Gemini" } ?: "Gemini"
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
                 ) {
-                    // 模型名称胶囊
-                    val displayModel = message.modelName?.ifBlank { "Gemini" } ?: "Gemini"
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                    ) {
-                        Text(
-                            text = displayModel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
-                        )
-                    }
-
-                    // 推理耗时
-                    message.durationMs?.let { ms ->
-                        val timeStr = if (ms >= 1000L) {
-                            "${ms / 1000}.${(ms % 1000) / 100}s"
-                        } else {
-                            "${ms}ms"
-                        }
-                        Text(
-                            text = timeStr,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                    }
-
-                    // Token 消耗情况
-                    val tokenCount = message.totalTokens ?: message.candidatesTokens
-                    if (tokenCount != null && tokenCount > 0) {
-                        Text(
-                            text = "·",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        )
-                        Text(
-                            text = "$tokenCount tokens",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                    }
+                    Text(
+                        text = displayModel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                    )
                 }
 
-                Spacer(Modifier.width(spacing.small))
+                // 2. 推理耗时
+                message.durationMs?.let { ms ->
+                    val timeStr = if (ms >= 1000L) {
+                        "${ms / 1000}.${(ms % 1000) / 100}s"
+                    } else {
+                        "${ms}ms"
+                    }
+                    Text(
+                        text = timeStr,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
 
-                // 在最后 (右侧)：单问多答子对话翻页条 + 外部插槽 + 一键复制所有文案图标
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    // 子对话版本翻页条 (< 1/3 >)
-                    if (hasVariants) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.8f),
-                            modifier = Modifier.height(24.dp).padding(end = 4.dp)
+                // 3. Token 消耗情况
+                val tokenCount = message.totalTokens ?: message.candidatesTokens
+                if (tokenCount != null && tokenCount > 0) {
+                    Text(
+                        text = "·",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    )
+                    Text(
+                        text = "$tokenCount tokens",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+
+                // 4. 子对话版本翻页条 (< 1/3 >)
+                if (hasVariants) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.8f),
+                        modifier = Modifier.height(24.dp).padding(start = 2.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 2.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 2.dp)
+                            IconButton(
+                                onClick = {
+                                    if (currentVariantIdx > 0) {
+                                        onVariantIndexChanged?.invoke(currentVariantIdx - 1)
+                                    }
+                                },
+                                enabled = currentVariantIdx > 0,
+                                modifier = Modifier.size(18.dp).tip("查看上一个回答版本")
                             ) {
-                                IconButton(
-                                    onClick = {
-                                        if (currentVariantIdx > 0) {
-                                            onVariantIndexChanged?.invoke(currentVariantIdx - 1)
-                                        }
-                                    },
-                                    enabled = currentVariantIdx > 0,
-                                    modifier = Modifier.size(18.dp).tip("查看上一个回答版本")
-                                ) {
-                                    Icon(
-                                        Icons.Default.ChevronLeft,
-                                        contentDescription = "上一版",
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-
-                                Text(
-                                    text = "${currentVariantIdx + 1}/${variants.size}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 2.dp)
+                                Icon(
+                                    Icons.Default.ChevronLeft,
+                                    contentDescription = "上一版",
+                                    modifier = Modifier.size(14.dp)
                                 )
+                            }
 
-                                IconButton(
-                                    onClick = {
-                                        if (currentVariantIdx < variants.size - 1) {
-                                            onVariantIndexChanged?.invoke(currentVariantIdx + 1)
-                                        }
-                                    },
-                                    enabled = currentVariantIdx < variants.size - 1,
-                                    modifier = Modifier.size(18.dp).tip("查看下一个回答版本")
-                                ) {
-                                    Icon(
-                                        Icons.Default.ChevronRight,
-                                        contentDescription = "下一版",
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
+                            Text(
+                                text = "${currentVariantIdx + 1}/${variants.size}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 2.dp)
+                            )
+
+                            IconButton(
+                                onClick = {
+                                    if (currentVariantIdx < variants.size - 1) {
+                                        onVariantIndexChanged?.invoke(currentVariantIdx + 1)
+                                    }
+                                },
+                                enabled = currentVariantIdx < variants.size - 1,
+                                modifier = Modifier.size(18.dp).tip("查看下一个回答版本")
+                            ) {
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = "下一版",
+                                    modifier = Modifier.size(14.dp)
+                                )
                             }
                         }
                     }
+                }
 
-                    messageActions(message)
+                messageActions(message)
 
-                    // 一键复制所有文案图标
-                    IconButton(
-                        onClick = { copy(modelText, "已复制全部回复文案") },
-                        modifier = Modifier
-                            .size(20.dp)
-                            .tip("一键复制全部文案")
-                    ) {
-                        Icon(
-                            Icons.Default.ContentCopy,
-                            contentDescription = "复制全部文案",
-                            modifier = Modifier.size(12.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
+                // 5. 一键复制所有文案图标 (紧贴在翻页与信息右侧)
+                IconButton(
+                    onClick = { copy(modelText, "已复制全部回复文案") },
+                    modifier = Modifier.size(20.dp).tip("一键复制全部文案")
+                ) {
+                    Icon(
+                        Icons.Default.ContentCopy,
+                        contentDescription = "复制全部文案",
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
                 }
             }
         }

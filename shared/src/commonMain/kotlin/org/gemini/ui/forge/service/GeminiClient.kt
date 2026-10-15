@@ -5,7 +5,10 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -234,5 +237,173 @@ class GeminiClient {
             AppLogger.e(TAG, "Interactions 通信异常", e)
             throw e
         }
+    }
+
+    /**
+     * 通过 SSE 长连接流式调用 Google Gemini Interactions API。
+     *
+     * 遵循 Google Interactions API 官方流式规范：
+     * 1. 请求 Header 携带 `Accept: text/event-stream`；
+     * 2. 逐行读取 `data: ` 开头的 Server-Sent Events；
+     * 3. 实时提取 step、delta、thought 与 interactionId。
+     */
+    suspend fun streamInteraction(
+        url: String,
+        requestBody: String,
+        onLog: (String) -> Unit = {},
+        onRawData: (JsonElement) -> Unit = {},
+        onChunk: (String) -> Unit = {},
+        onRawTraffic: ((direction: TrafficDirection, url: String, body: String) -> Unit)? = null
+    ) {
+        val client = NetworkClient.shared
+        onRawTraffic?.invoke(TrafficDirection.REQ, url, requestBody)
+        logRequest(url, requestBody, onLog)
+
+        try {
+            client.preparePost(url) {
+                contentType(ContentType.Application.Json)
+                header("Accept", "text/event-stream")
+                setBody(requestBody)
+                timeout {
+                    requestTimeoutMillis = 300_000L
+                    connectTimeoutMillis = 30_000L
+                }
+            }.execute { response ->
+                if (response.status.isSuccess()) {
+                    val channel = response.bodyAsChannel()
+                    val rawResponses = mutableListOf<String>()
+
+                    while (!channel.isClosedForRead) {
+                        val line = channel.readLine() ?: break
+                        val trimmed = line.trim()
+                        if (trimmed.isEmpty()) continue
+
+                        val dataJson = if (trimmed.startsWith("data: ")) {
+                            trimmed.substringAfter("data: ").trim()
+                        } else if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                            trimmed
+                        } else {
+                            null
+                        }
+
+                        if (dataJson.isNullOrEmpty() || dataJson == "[DONE]") continue
+                        rawResponses.add(dataJson)
+
+                        try {
+                            val jsonElement = looseJson.parseToJsonElement(dataJson)
+                            onRawData(jsonElement)
+
+                            val textChunk = extractInteractionText(jsonElement)
+                            if (!textChunk.isNullOrEmpty()) {
+                                onChunk(textChunk)
+                            }
+                        } catch (e: Exception) {
+                            AppLogger.w(TAG, "解析 Interactions payload 异常: ${e.message}")
+                        }
+                    }
+
+                    if (rawResponses.isNotEmpty()) {
+                        val fullRawResp = if (rawResponses.size == 1) rawResponses.first() else "[\n" + rawResponses.joinToString(",\n") + "\n]"
+                        onRawTraffic?.invoke(TrafficDirection.RESP, url, fullRawResp)
+                    }
+                } else {
+                    val errorBody = response.bodyAsText()
+                    onRawTraffic?.invoke(TrafficDirection.RESP, url, errorBody)
+                    AppLogger.e(TAG, "Interactions API 流式响应失败: ${response.status}\n$errorBody")
+                    throw Exception("Interactions API 失败: ${response.status} - $errorBody")
+                }
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Interactions 流式通信异常", e)
+            throw e
+        }
+    }
+
+    /**
+     * 从 Interactions API 单次流式分块中提取输出文本
+     */
+    fun extractInteractionText(jsonElement: JsonElement): String? {
+        val obj = jsonElement.jsonObject ?: return null
+
+        // 1. 尝试匹配 delta 格式
+        obj["delta"]?.jsonObject?.let { delta ->
+            val text = delta["text"]?.jsonPrimitive?.contentOrNull
+                ?: delta["content"]?.jsonPrimitive?.contentOrNull
+            if (!text.isNullOrEmpty()) return text
+        }
+
+        // 2. 尝试匹配单个 step 格式
+        obj["step"]?.jsonObject?.let { step ->
+            if (step["type"]?.jsonPrimitive?.contentOrNull == "model_output") {
+                val content = step["content"]
+                val text = when (content) {
+                    is JsonArray -> content.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull ?: "" }
+                    is JsonObject -> content["text"]?.jsonPrimitive?.contentOrNull
+                    is JsonPrimitive -> content.contentOrNull
+                    else -> null
+                }
+                if (!text.isNullOrEmpty()) return text
+            }
+        }
+
+        // 3. 尝试匹配 steps 数组中的 model_output
+        obj["steps"]?.jsonArray?.let { steps ->
+            val texts = steps.mapNotNull { stepElem ->
+                val step = stepElem.jsonObject
+                if (step["type"]?.jsonPrimitive?.contentOrNull == "model_output") {
+                    val content = step["content"]
+                    when (content) {
+                        is JsonArray -> content.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull ?: "" }
+                        is JsonObject -> content["text"]?.jsonPrimitive?.contentOrNull
+                        is JsonPrimitive -> content.contentOrNull
+                        else -> null
+                    }
+                } else null
+            }.filter { it.isNotBlank() }
+            if (texts.isNotEmpty()) return texts.joinToString("\n\n")
+        }
+
+        // 4. 尝试匹配 outputs
+        obj["outputs"]?.jsonArray?.lastOrNull()?.jsonObject?.let { out ->
+            val text = out["text"]?.jsonPrimitive?.contentOrNull
+            if (!text.isNullOrEmpty()) return text
+        }
+
+        return null
+    }
+
+    /**
+     * 从 Interactions API 分块中提取思维链与签名
+     */
+    fun extractInteractionThought(jsonElement: JsonElement): Pair<String?, String?> {
+        val obj = jsonElement.jsonObject ?: return null to null
+        var thought: String? = null
+        var signature: String? = null
+
+        val checkStep: (JsonObject) -> Unit = { step ->
+            if (step["type"]?.jsonPrimitive?.contentOrNull == "thought") {
+                val t = step["thought"]?.jsonPrimitive?.contentOrNull
+                    ?: step["content"]?.let { c ->
+                        when (c) {
+                            is JsonArray -> c.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull ?: "" }
+                            is JsonObject -> c["text"]?.jsonPrimitive?.contentOrNull
+                            is JsonPrimitive -> c.contentOrNull
+                            else -> null
+                        }
+                    }
+                if (!t.isNullOrBlank()) {
+                    thought = t
+                }
+                val sig = step["signature"]?.jsonPrimitive?.contentOrNull
+                if (!sig.isNullOrBlank()) {
+                    signature = sig
+                }
+            }
+        }
+
+        obj["step"]?.jsonObject?.let { checkStep(it) }
+        obj["steps"]?.jsonArray?.forEach { it.jsonObject?.let { s -> checkStep(s) } }
+
+        return thought to signature
     }
 }

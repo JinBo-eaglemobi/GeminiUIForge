@@ -24,8 +24,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
+import org.gemini.ui.forge.model.chat.MentionItem
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.model.chat.VisualChatSession
+import org.gemini.ui.forge.state.MentionState
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -82,6 +84,8 @@ fun CommonChatStudioContent(
     onSwitchVariant: ((messageId: String, variantIndex: Int) -> Unit)? = null,
     onRegenerate: ((messageId: String) -> Unit)? = null,
     onDeleteMessage: ((messageId: String) -> Unit)? = null,
+    mentionState: MentionState? = null,
+    mentionCandidates: List<MentionItem> = emptyList(),
     topBarActions: @Composable RowScope.() -> Unit = {},
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     inputLeadingActions: @Composable RowScope.() -> Unit = {},
@@ -106,6 +110,7 @@ fun CommonChatStudioContent(
     var inputTextToInject by remember { mutableStateOf<String?>(null) }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        val studioMaxHeight = maxHeight
         val isNarrowMode = config.enableNarrowModeAutoFold && maxWidth < config.narrowBreakpointDp.dp
 
         Row(modifier = Modifier.fillMaxSize()) {
@@ -200,6 +205,7 @@ fun CommonChatStudioContent(
                     CommonChatMessageList(
                         messages = messages,
                         isGenerating = isGenerating,
+                        sessionId = currentSessionId,
                         streamingText = streamingText,
                         emptyTipText = config.emptyTipText,
                         onImageClick = { clickedUri ->
@@ -226,6 +232,11 @@ fun CommonChatStudioContent(
                     )
 
                     // 3. 底部多模态输入控制栏
+                    // 根据宿主剩余可视范围动态计算联想浮层最大高度：取 55% 黄金视口比例，最低 240dp，最高 640dp
+                    val dynamicMentionMaxHeight = remember(studioMaxHeight) {
+                        (studioMaxHeight * 0.55f).coerceIn(240.dp, 640.dp)
+                    }
+
                     CommonChatInputBar(
                         isGenerating = isGenerating,
                         selectedModel = selectedModel,
@@ -243,6 +254,9 @@ fun CommonChatStudioContent(
                                 lightboxImageUri = uri
                             }
                         },
+                        mentionState = mentionState,
+                        mentionCandidates = mentionCandidates,
+                        mentionMaxHeight = dynamicMentionMaxHeight,
                         leadingActions = inputLeadingActions,
                         trailingActions = inputTrailingActions
                     )

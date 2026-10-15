@@ -41,6 +41,19 @@
     2. **语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 做毫秒级文件语法速查；
     3. **兜底通道 (命令行 Gradle)**：回退命令行终端：`./gradlew :desktopApp:compileKotlin`（严格遵循单一终端原则，严禁并列 `:shared`）；
     4. 纯文档、注释或非代码修改不触发编译校验。
+- **Compose Hot Reload 保活优先与严禁滥杀冷启铁律 (Compose Hot Reload First & Anti-Kill Restart Redline)**: **【红线规则】**
+  1. **【保活最高优先级】桌面应用常驻保活，严禁滥杀进程**：
+     接入官方 `compose-hot-reload` 体系的核心价值在于：**桌面窗口常驻保活、内存与导航状态不丢、修改秒级热替换**。在日常开发、调试与多轮会话中，**绝对禁止因局部代码修改、短时工具超时或 MCP 探针瞬时未连上而擅自调用 `Stop-Process`、`kill` 或系统命令强行杀死桌面应用进程**！严禁将“冷重启应用”作为偷懒手段，彻底消除频繁冷启动对开发沉浸流的严重破坏；
+  2. **【重启/重置强制优先通道】优先调用 Hot Reload 自带能力**：
+     当因代码变更生效需要刷新、运行态状态出现异常、或者用户明确要求“重启/重置”时，**必须且仅能优先使用 Compose Hot Reload 官方自带的原生能力**：
+     - **第一优先级（状态级零杀重启）**：优先调用 `compose-hot-reload` 的 `reset_ui()` 工具（`tools["compose-hot-reload"].reset_ui()`）。它会安全丢弃当前的 Composition 树并丢弃所有 `remember` 的运行时状态，在保留进程与窗口的前提下实现毫秒级零破坏纯净重启；
+     - **第二优先级（字节码热加载通道）**：优先通过局部增量编译（`idea_build_project`）生成变动 class，由官方 Compose Hot Reload 机制热注入内存，或调用 `compose-hot-reload.await_reload()` 触发字节码无感替换；
+  3. **【物理冷重启的极限制约定】**：
+     仅当且必须同时满足以下不可逆条件之一时，才允许执行物理关闭与冷启动：
+     - 进程物理崩溃已自行退出（ExitCode != 0，在系统进程表中已彻底消亡）；
+     - 经多维严格探测（CPU 长期恒等于 0、网络端口完全拒绝连接、无任何磁盘日志输出），确凿断定为不可恢复的物理死锁僵尸进程；
+     - 修改了涉及底层 JVM 启动参数、非热更动态链接库（JNI/Native DLL）等官方 Compose Hot Reload 底层明确不支持热更的结构级变更。
+     **凡日常 UI / Composable、ViewModel、Service、业务逻辑与数据流代码迭代，一律且必须在保持应用常驻保活状态下，走 Hot Reload 极速闭环！**
 - **Gradle 单一终端模块编译调用去重红线 (Single Terminal Task Invocation Redline)**: **【红线规则】**
   1. **【严厉禁令】严禁并列上游与下游模块任务**：在任何终端命令行执行、脚本调用、文档指引或 AI 自动校验过程中，**绝对严禁**执行形如 `./gradlew :shared:<task> :<appModule>:<task>` 的复合命令（例如严厉禁止 `./gradlew :shared:compileKotlinWasmJs :webApp:compileKotlinWasmJs`，严禁 `./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`）；
   2. **【单一终端原则】只调度最下游终端模块**：凡涉及 Application 工程的编译验证，**一律且仅指定单一终端模块对应的编译任务**（例如桌面端只需指定 `:desktopApp:compileKotlin`，Web 端只需指定 `:webApp:compileKotlinJs`，Android 端只需指定 `:androidApp:compileDebugKotlin`）。必须充分信任并利用 Gradle 官方原生 DAG 依赖机制自动级联构建上游 `:shared`，彻底杜绝重复执行与冗余任务评估；

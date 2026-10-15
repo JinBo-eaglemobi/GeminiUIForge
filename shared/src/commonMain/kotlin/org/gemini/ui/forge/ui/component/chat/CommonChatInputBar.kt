@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -25,6 +26,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -33,6 +35,10 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.extend.readClipboardImageBytes
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
+import org.gemini.ui.forge.model.chat.MentionItem
+import org.gemini.ui.forge.state.MentionState
+import org.gemini.ui.forge.ui.component.chat.mention.MentionDropdownPanel
+import org.gemini.ui.forge.ui.component.chat.mention.MentionPillBar
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -69,6 +75,9 @@ fun CommonChatInputBar(
     onInputTextConsumed: () -> Unit = {},
     config: CommonChatStudioConfig = CommonChatStudioConfig(),
     onImagePreviewRequested: ((String) -> Unit)? = null,
+    mentionState: MentionState? = null,
+    mentionCandidates: List<MentionItem> = emptyList(),
+    mentionMaxHeight: Dp = 480.dp,
     leadingActions: @Composable RowScope.() -> Unit = {},
     trailingActions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -162,6 +171,15 @@ fun CommonChatInputBar(
             modifier = Modifier.fillMaxWidth()
         ) {
         Column(modifier = Modifier.padding(spacing.medium)) {
+            // 0. 已挂载的「@」工程上下文实体药丸胶囊栏
+            if (mentionState != null && mentionState.attachedMentions.isNotEmpty()) {
+                MentionPillBar(
+                    mentions = mentionState.attachedMentions,
+                    onRemove = { item -> mentionState.removeMention(item) },
+                    modifier = Modifier.padding(bottom = spacing.small)
+                )
+            }
+
             // 1. 已选中的多模态附件预览栏与云端上传选项
             if (attachments.isNotEmpty()) {
                 Column(modifier = Modifier.fillMaxWidth().padding(bottom = spacing.small)) {
@@ -240,15 +258,51 @@ fun CommonChatInputBar(
                 }
             }
 
-            // 2. 自适应多行文本输入框 (默认呈现标准 2 行输入高度)
+            // 2. 智能「@」联想浮层面板：动态置于输入框正上方，确保输入文字100%肉眼可见
+            if (mentionState != null && mentionState.isMentionMenuVisible) {
+                MentionDropdownPanel(
+                    state = mentionState,
+                    candidates = mentionCandidates,
+                    maxHeight = mentionMaxHeight,
+                    onItemSelected = { selected ->
+                        mentionState.attachMention(selected)
+                        val atIndex = inputText.lastIndexOf('@')
+                        if (atIndex >= 0) {
+                            inputText = inputText.substring(0, atIndex)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                )
+            }
+
+            // 3. 自适应多行文本输入框
             OutlinedTextField(
                 value = inputText,
-                onValueChange = { inputText = it },
+                onValueChange = { newText ->
+                    inputText = newText
+                    if (mentionState != null) {
+                        val lastAtIndex = newText.lastIndexOf('@')
+                        if (lastAtIndex >= 0) {
+                            val textAfterAt = newText.substring(lastAtIndex + 1)
+                            if (!textAfterAt.contains(' ') && !textAfterAt.contains('\n')) {
+                                mentionState.openMenu(textAfterAt)
+                            } else {
+                                mentionState.closeMenu()
+                            }
+                        } else {
+                            if (mentionState.isMentionMenuVisible) {
+                                mentionState.closeMenu()
+                            }
+                        }
+                    }
+                },
                 minLines = 2,
                 maxLines = 6,
                 placeholder = {
                     Text(
-                        text = if (config.inputPlaceholder.contains("Ctrl+V")) config.inputPlaceholder else "${config.inputPlaceholder} (支持 Ctrl+V 粘贴截图)",
+                        text = if (config.inputPlaceholder.contains("Ctrl+V")) config.inputPlaceholder else "${config.inputPlaceholder} (输入 @ 引用上下文，支持 Ctrl+V 粘贴截图)",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
@@ -257,6 +311,41 @@ fun CommonChatInputBar(
                     .fillMaxWidth()
                     .onPreviewKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown) {
+                            if (mentionState?.isMentionMenuVisible == true) {
+                                when (event.key) {
+                                    Key.DirectionDown -> {
+                                        if (mentionCandidates.isNotEmpty()) {
+                                            mentionState.selectedIndex = (mentionState.selectedIndex + 1) % mentionCandidates.size
+                                        }
+                                        return@onPreviewKeyEvent true
+                                    }
+                                    Key.DirectionUp -> {
+                                        if (mentionCandidates.isNotEmpty()) {
+                                            mentionState.selectedIndex = if (mentionState.selectedIndex <= 0) {
+                                                mentionCandidates.size - 1
+                                            } else {
+                                                mentionState.selectedIndex - 1
+                                            }
+                                        }
+                                        return@onPreviewKeyEvent true
+                                    }
+                                    Key.Enter, Key.Tab -> {
+                                        if (mentionCandidates.isNotEmpty() && mentionState.selectedIndex in mentionCandidates.indices) {
+                                            val selected = mentionCandidates[mentionState.selectedIndex]
+                                            mentionState.attachMention(selected)
+                                            val atIndex = inputText.lastIndexOf('@')
+                                            if (atIndex >= 0) {
+                                                inputText = inputText.substring(0, atIndex)
+                                            }
+                                            return@onPreviewKeyEvent true
+                                        }
+                                    }
+                                    Key.Escape -> {
+                                        mentionState.closeMenu()
+                                        return@onPreviewKeyEvent true
+                                    }
+                                }
+                            }
                             if (event.key == Key.Enter && !event.isShiftPressed) {
                                 performSend()
                                 true
@@ -288,6 +377,30 @@ fun CommonChatInputBar(
                 ) {
                     // 外部自定义前置动作插槽（如系统人设指令入口、生图预设等）
                     leadingActions()
+
+                    // 「@」工程上下文引用快捷按钮
+                    if (mentionState != null) {
+                        IconButton(
+                            onClick = {
+                                if (mentionState.isMentionMenuVisible) {
+                                    mentionState.closeMenu()
+                                } else {
+                                    if (!inputText.endsWith("@")) {
+                                        inputText = if (inputText.isBlank() || inputText.endsWith(" ")) "${inputText}@" else "$inputText @"
+                                    }
+                                    mentionState.openMenu("")
+                                }
+                            },
+                            modifier = Modifier.size(32.dp).tip("引用工程上下文实体 (@)")
+                        ) {
+                            Icon(
+                                Icons.Default.AlternateEmail,
+                                contentDescription = "引用上下文",
+                                modifier = Modifier.size(18.dp),
+                                tint = if (mentionState.isMentionMenuVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
 
                     // 多模态附件上传按钮
                     if (config.showAttachmentPicker) {
