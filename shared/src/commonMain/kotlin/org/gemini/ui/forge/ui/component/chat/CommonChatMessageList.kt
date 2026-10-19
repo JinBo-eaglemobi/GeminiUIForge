@@ -13,6 +13,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.model.chat.VisualChatMessage
@@ -49,6 +58,7 @@ fun CommonChatMessageList(
     onRegenerateRequested: ((VisualChatMessage) -> Unit)? = null,
     onDeleteRequested: ((VisualChatMessage) -> Unit)? = null,
     onVariantIndexChanged: ((message: VisualChatMessage, newIndex: Int) -> Unit)? = null,
+    onOpenViewRequested: ((String) -> Unit)? = null,
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -67,18 +77,18 @@ fun CommonChatMessageList(
         }
     }
 
-    // 会话进入或布局测量完成时的滚动位置记忆恢复与初次吸底
+    // 会话进入或布局测量完成时的滚动位置记忆恢复：绝不无脑把页面拽到最极限底端
     LaunchedEffect(sessionId, scrollState.maxValue) {
         if (scrollState.maxValue > 0) {
             if (cachedOffset != null) {
-                // 存在历史离开位置：若用户尚未手动介入滚动，精准恢复至上次位置
+                // 存在历史离开位置：若用户尚未手动介入滚动，精准恢复至上次位置（若历史位置大于最大可滚动范围则取合理最大值）
                 if (!isUserInteracted) {
                     scrollState.scrollTo(cachedOffset.coerceIn(0, scrollState.maxValue))
                 }
             } else {
-                // 无历史缓存记录（初次进入）：只要用户未手动向上翻阅，持续贴合至最新内容最底部！
+                // 初次进入全新会话：默认自然停留在首屏顶部（offset = 0），让用户从上往下阅读！绝不强行拽到底部遮盖内容！
                 if (!isUserInteracted) {
-                    scrollState.scrollTo(scrollState.maxValue)
+                    scrollState.scrollTo(0)
                 }
             }
         }
@@ -102,15 +112,16 @@ fun CommonChatMessageList(
     var hasUnseenBottomContent by remember { mutableStateOf(false) }
 
     // 智能平滑吸底：
-    // 1. 新消息数量发生变化时 (自身发送提问或新增回答)
+    // 1. 新消息数量发生变化时 (自身发送提问时吸底；若是大模型生成的大卡片/排版消息，不无脑直接滚到底部遮盖代码开头)
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             val lastMsg = messages.lastOrNull()
-            if (lastMsg?.role == "user" || isNearBottom) {
+            if (lastMsg?.role == "user") {
                 scrollState.animateScrollTo(scrollState.maxValue)
                 hasUnseenBottomContent = false
             } else {
-                hasUnseenBottomContent = true
+                // 模型生成的超长消息：若之前贴近底部，不直接拉到极限底端，避免把下方的画布按钮直接拽出来而跳过了代码开头
+                hasUnseenBottomContent = !isNearBottom
             }
         }
     }
@@ -134,11 +145,51 @@ fun CommonChatMessageList(
         }
     }
 
-    SelectionContainer(modifier = modifier.fillMaxSize()) {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(horizontal = spacing.medium)) {
-            val maxBubbleWidth = (maxWidth * 0.85f).coerceAtLeast(320.dp)
+    val codeCoordinator = remember { org.gemini.ui.forge.ui.component.markdown.CodeBlockScrollCoordinator() }
 
-            if (messages.isEmpty() && !isGenerating) {
+    // 外层手势协调器：统一拦截外层滚轮并在吸顶时移交代码块消费，支持惯性 Fling 接力
+    val nestedScrollConnection = remember(codeCoordinator, scrollState) {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPreScroll(
+                available: androidx.compose.ui.geometry.Offset,
+                source: androidx.compose.ui.input.nestedscroll.NestedScrollSource
+            ): androidx.compose.ui.geometry.Offset {
+                val deltaY = available.y
+                // 动态记录进入吸顶时刻的外层偏移
+                if (codeCoordinator.isReadyToScrollCode && codeCoordinator.targetOuterStickOffset < 0) {
+                    codeCoordinator.targetOuterStickOffset = scrollState.value
+                    org.gemini.ui.forge.utils.AppLogger.i("SCROLL_PROBE", "STICK_POINT_LOCKED -> outerStickOffset=${scrollState.value}")
+                }
+                if (codeCoordinator.shouldTrapScroll(deltaY, scrollState.value)) {
+                    val consumed = codeCoordinator.consumeScroll(deltaY)
+                    return androidx.compose.ui.geometry.Offset(0f, consumed)
+                }
+                org.gemini.ui.forge.utils.AppLogger.i("SCROLL_PROBE", "PASS_TO_OUTER deltaY=$deltaY | outerScroll=${scrollState.value}/${scrollState.maxValue}")
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
+                val flingY = available.y
+                val consumedY = codeCoordinator.consumeFlingNonBlocking(flingY, scrollState.value)
+                if (consumedY != 0f) {
+                    return androidx.compose.ui.unit.Velocity(0f, consumedY)
+                }
+                return androidx.compose.ui.unit.Velocity.Zero
+            }
+        }
+    }
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        SelectionContainer(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(horizontal = spacing.medium)) {
+                val maxBubbleWidth = (maxWidth * 0.85f).coerceAtLeast(320.dp)
+                val currentViewportHeight = maxHeight
+
+                androidx.compose.runtime.CompositionLocalProvider(
+                    org.gemini.ui.forge.ui.component.markdown.LocalChatViewportHeight provides currentViewportHeight,
+                    org.gemini.ui.forge.ui.component.markdown.LocalCodeScrollCoordinator provides codeCoordinator
+                ) {
+                    if (messages.isEmpty() && !isGenerating) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
@@ -156,10 +207,19 @@ fun CommonChatMessageList(
                     }
                 }
             } else {
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { coords ->
+                            val bounds = coords.boundsInWindow()
+                            codeCoordinator.viewportTopInWindow = bounds.top
+                            codeCoordinator.viewportBottomInWindow = bounds.bottom
+                        }
+                        .nestedScroll(nestedScrollConnection)
+                ) {
                     Column(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .fillMaxWidth()
                             .padding(end = 12.dp)
                             .verticalScroll(scrollState),
                         verticalArrangement = Arrangement.spacedBy(spacing.medium)
@@ -193,6 +253,7 @@ fun CommonChatMessageList(
                                     },
                                     onRegenerateRequested = onRegenerateRequested,
                                     onDeleteRequested = onDeleteRequested,
+                                    onOpenViewRequested = onOpenViewRequested,
                                     messageActions = messageActions
                                 )
                             }
@@ -229,4 +290,6 @@ fun CommonChatMessageList(
             }
         }
     }
+}
+}
 }

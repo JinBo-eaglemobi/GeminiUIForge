@@ -4,10 +4,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +24,8 @@ import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.ai.studio.component.StudioSessionLogDialog
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
+import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.ui.component.ToastType
 
 /**
  * UI Studio 专属项目级 AI 智能工作台全景弹窗
@@ -56,6 +58,10 @@ fun UIProjectAiStudioDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        LaunchedEffect(Unit) {
+            viewModel.loadExternalDocs(state.project?.projectId ?: "default")
+            viewModel.loadChatSessions()
+        }
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -93,8 +99,24 @@ fun UIProjectAiStudioDialog(
                     onDeleteMessage = { messageId ->
                         viewModel.deleteChatMessage(messageId)
                     },
+                    onOpenViewRequested = { viewName ->
+                        val matchedPage = state.project?.pages?.find { it.nameStr.equals(viewName, ignoreCase = true) }
+                        if (matchedPage != null) {
+                            viewModel.selectView(matchedPage.id)
+                            onDismiss()
+                            Toast.show("已切换至视图 [${matchedPage.nameStr}]", ToastType.SUCCESS)
+                        } else {
+                            Toast.show("未找到视图: $viewName", ToastType.INFO)
+                        }
+                    },
                     mentionState = viewModel.mentionState,
                     mentionCandidates = viewModel.getMentionCandidates(viewModel.mentionState.searchQuery),
+                    onFilesDropped = { paths ->
+                        paths.forEach { viewModel.handleFileDropped(it) }
+                    },
+                    activeSkills = viewModel.activeSkills,
+                    skillMode = viewModel.skillMode,
+                    onSkillModeChanged = { viewModel.skillMode = it },
                     config = studioConfig,
                     topBarActions = {
                         // 1. 当前视图标签胶囊
@@ -129,7 +151,7 @@ fun UIProjectAiStudioDialog(
                             modifier = Modifier.size(32.dp).tip("查看网络通信报文与 API 真实日志")
                         ) {
                             Icon(
-                                Icons.Default.ReceiptLong,
+                                Icons.AutoMirrored.Filled.ReceiptLong,
                                 contentDescription = "通信报文",
                                 modifier = Modifier.size(18.dp),
                                 tint = MaterialTheme.colorScheme.primary

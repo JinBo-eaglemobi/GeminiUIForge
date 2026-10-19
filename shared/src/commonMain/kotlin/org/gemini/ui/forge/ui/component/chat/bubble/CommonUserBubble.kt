@@ -32,6 +32,7 @@ import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.formatTimestamp
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.ui.component.tip
+import androidx.compose.ui.text.font.FontWeight
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
@@ -98,6 +99,41 @@ fun CommonUserBubble(
                     }
                 ) {
                     Column(modifier = Modifier.padding(spacing.medium)) {
+                        // 0. 本轮提问引用的 @ 外部文件/切片/视图上下文药丸
+                        if (message.attachedMentions.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(spacing.extraSmall),
+                                verticalArrangement = Arrangement.spacedBy(spacing.extraSmall),
+                                modifier = Modifier.padding(bottom = spacing.small)
+                            ) {
+                                message.attachedMentions.forEach { mention ->
+                                    val iconEmoji = when (mention.categoryName) {
+                                        "VIEW" -> "🗖"
+                                        "BLOCK" -> "❖"
+                                        "ASSET" -> "📦"
+                                        else -> "📄"
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color.White.copy(alpha = 0.2f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "$iconEmoji ${mention.title}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         val userBubbleSelectionColors = remember {
                             TextSelectionColors(
                                 handleColor = Color.White,
@@ -227,18 +263,7 @@ fun CommonUserBubble(
                     }
                 }
 
-                // 2. 发送时间
-                val timeStr = remember(message.timestamp) {
-                    formatTimestamp(message.timestamp, "HH:mm:ss")
-                }
-                Text(
-                    text = timeStr,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-                Spacer(Modifier.width(spacing.extraSmall))
-
-                // 3. 一键复制提问
+                // 一键复制提问
                 IconButton(
                     onClick = { copy(userText, "已复制提问内容") },
                     modifier = Modifier.size(20.dp).tip("一键复制提问")

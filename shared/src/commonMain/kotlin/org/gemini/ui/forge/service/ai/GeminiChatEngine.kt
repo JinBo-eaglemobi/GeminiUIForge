@@ -350,7 +350,7 @@ class GeminiChatEngine(
                     if (thought != null || sig != null) {
                         lastThought = (lastThought ?: "") + (thought ?: "")
                         if (sig != null) lastSig = sig
-                        onThought?.invoke(lastThought ?: "", lastSig)
+                        onThought?.invoke(lastThought, lastSig)
                     }
                     if (element is JsonObject) {
                         val usage = element["usageMetadata"]?.jsonObject
@@ -468,6 +468,22 @@ class GeminiChatEngine(
             put("response_modalities", buildJsonArray {
                 add(JsonPrimitive("text"))
             })
+
+            // 5. tools 声明 (Google 官方 Interactions 规范: 平铺包含 type="function", name, description, parameters)
+            if (request.tools.isNotEmpty()) {
+                put("tools", buildJsonArray {
+                    request.tools.forEach { t ->
+                        t.functionDeclarations?.forEach { fn ->
+                            add(buildJsonObject {
+                                put("type", "function")
+                                fn["name"]?.let { put("name", it) }
+                                fn["description"]?.let { put("description", it) }
+                                fn["parameters"]?.let { put("parameters", it) }
+                            })
+                        }
+                    }
+                })
+            }
         }.toString()
 
         onStatusLog("⚡ [Interactions API] 发起流式请求 (${request.model.modelName})...")

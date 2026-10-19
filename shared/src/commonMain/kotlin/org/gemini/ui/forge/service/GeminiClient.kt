@@ -323,7 +323,7 @@ class GeminiClient {
      * 从 Interactions API 单次流式分块中提取输出文本
      */
     fun extractInteractionText(jsonElement: JsonElement): String? {
-        val obj = jsonElement.jsonObject ?: return null
+        val obj = jsonElement.jsonObject
 
         // 1. 尝试匹配 delta 格式
         obj["delta"]?.jsonObject?.let { delta ->
@@ -376,7 +376,7 @@ class GeminiClient {
      * 从 Interactions API 分块中提取思维链与签名
      */
     fun extractInteractionThought(jsonElement: JsonElement): Pair<String?, String?> {
-        val obj = jsonElement.jsonObject ?: return null to null
+        val obj = jsonElement.jsonObject
         var thought: String? = null
         var signature: String? = null
 
@@ -388,7 +388,6 @@ class GeminiClient {
                             is JsonArray -> c.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull ?: "" }
                             is JsonObject -> c["text"]?.jsonPrimitive?.contentOrNull
                             is JsonPrimitive -> c.contentOrNull
-                            else -> null
                         }
                     }
                 if (!t.isNullOrBlank()) {
@@ -402,7 +401,7 @@ class GeminiClient {
         }
 
         obj["step"]?.jsonObject?.let { checkStep(it) }
-        obj["steps"]?.jsonArray?.forEach { it.jsonObject?.let { s -> checkStep(s) } }
+        obj["steps"]?.jsonArray?.forEach { checkStep(it.jsonObject) }
 
         return thought to signature
     }

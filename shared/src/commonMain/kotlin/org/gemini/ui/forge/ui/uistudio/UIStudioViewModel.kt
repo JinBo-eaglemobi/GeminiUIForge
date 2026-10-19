@@ -46,6 +46,14 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Inventory2
+import org.gemini.ui.forge.manager.ExternalDocManager
+import org.gemini.ui.forge.manager.ExternalDocRecord
+import org.gemini.ui.forge.manager.UiStudioSkillManager
+import org.gemini.ui.forge.model.skill.SkillActivationMode
+import org.gemini.ui.forge.model.skill.UiStudioSkill
+import org.gemini.ui.forge.service.studio.UiStudioLayoutService
+import org.gemini.ui.forge.utils.asset.AssetManifestHelper
 import org.gemini.ui.forge.manager.SessionTrafficStore
 import org.gemini.ui.forge.model.chat.TrafficDirection
 import org.gemini.ui.forge.model.chat.TrafficRecord
@@ -114,12 +122,80 @@ class UIStudioViewModel {
     /** AI 输入栏「@」上下文引用状态管理中心 */
     val mentionState = MentionState()
 
+    /** 当前工程引用的外部参考规范文档清单 */
+    var registeredExternalDocs by mutableStateOf<List<ExternalDocRecord>>(emptyList())
+        private set
+
+    /** 当前激活的技能模式 */
+    var skillMode by mutableStateOf(SkillActivationMode.AUTO)
+
+    /** 当前智能判定的激活技能列表 */
+    val activeSkills: List<UiStudioSkill>
+        get() = UiStudioSkillManager.resolveActiveSkills(
+            prompt = mentionState.searchQuery,
+            attachedMentions = mentionState.attachedMentions,
+            mode = skillMode
+        )
+
+    /**
+     * 异步加载当前工程关联的外部参考文档
+     */
+    fun loadExternalDocs(projectId: String) {
+        scope.launch(Dispatchers.Default) {
+            registeredExternalDocs = ExternalDocManager.getDocsForProject(projectId)
+        }
+    }
+
+    /**
+     * 登记新的外部文件并自动在输入栏挂载为药丸
+     */
+    fun registerExternalDoc(filePath: String) {
+        val projId = state.project?.projectId ?: "default"
+        scope.launch(Dispatchers.Default) {
+            val fileName = filePath.substringAfterLast('\\').substringAfterLast('/')
+            val record = ExternalDocManager.registerDoc(
+                projectName = projId,
+                fileName = fileName,
+                absolutePath = filePath
+            )
+            registeredExternalDocs = ExternalDocManager.getDocsForProject(projId)
+            withContext(Dispatchers.Main) {
+                mentionState.attachMention(
+                    MentionItem(
+                        id = "doc_${record.absolutePath}",
+                        title = record.fileName,
+                        subtitle = record.absolutePath,
+                        category = MentionCategory.DOC,
+                        icon = Icons.Default.Description,
+                        payload = MentionPayload.DocPayload(
+                            fileName = record.fileName,
+                            absolutePath = record.absolutePath
+                        )
+                    )
+                )
+                Toast.show("已添加参考文档: $fileName", ToastType.SUCCESS)
+            }
+        }
+    }
+
+    /**
+     * 处理拖入文件的分流与自动挂载
+     */
+    fun handleFileDropped(filePath: String) {
+        registerExternalDoc(filePath)
+    }
+
     /**
      * 获取当前工程中所有可供「@」引用的候选实体列表，支持根据关键词即时过滤
      */
     fun getMentionCandidates(query: String = ""): List<MentionItem> {
         val candidates = mutableListOf<MentionItem>()
         val trimmed = query.trim()
+        val projId = state.project?.projectId ?: "default"
+
+        if (registeredExternalDocs.isEmpty()) {
+            loadExternalDocs(projId)
+        }
 
         // 1. 视图界面 (Views)
         state.project?.pages?.forEach { page ->
@@ -167,6 +243,25 @@ class UIStudioViewModel {
         state.currentView?.blocks?.let { collectBlocks(it) }
 
         // 3. 素材库切片资产 (Assets)
+        if (state.assetLibrary.items.isNotEmpty()) {
+            candidates.add(
+                MentionItem(
+                    id = "all_assets_manifest",
+                    title = "📦 全部素材库清单 (All Assets - 共 ${state.assetLibrary.items.size} 项)",
+                    subtitle = "轻量结构化索引 · 包含全部切片名与物理宽高",
+                    category = MentionCategory.ASSET,
+                    icon = Icons.Default.Inventory2,
+                    payload = MentionPayload.AssetPayload(
+                        assetId = "all_assets",
+                        fileName = "ALL_ASSETS_MANIFEST",
+                        filePath = "ALL",
+                        width = state.assetLibrary.items.size,
+                        height = 0
+                    )
+                )
+            )
+        }
+
         state.assetLibrary.items.forEach { asset ->
             candidates.add(
                 MentionItem(
@@ -182,6 +277,24 @@ class UIStudioViewModel {
                         filePath = asset.relativePath,
                         width = asset.width,
                         height = asset.height
+                    )
+                )
+            )
+        }
+
+        // 4. 外部参考规范文档 (Documents)
+        val allDocs = if (registeredExternalDocs.isNotEmpty()) registeredExternalDocs else ExternalDocManager.getDocsSync(projId)
+        allDocs.forEach { doc ->
+            candidates.add(
+                MentionItem(
+                    id = "doc_${doc.absolutePath}",
+                    title = doc.fileName,
+                    subtitle = doc.absolutePath,
+                    category = MentionCategory.DOC,
+                    icon = Icons.Default.Description,
+                    payload = MentionPayload.DocPayload(
+                        fileName = doc.fileName,
+                        absolutePath = doc.absolutePath
                     )
                 )
             )
@@ -235,6 +348,9 @@ class UIStudioViewModel {
 
         // 异步检查并恢复未完成的切片校对草稿
         checkDraft(effectiveProject.projectId)
+
+        // 异步加载外部参考文档配置 (reference_docs.json)
+        loadExternalDocs(effectiveProject.projectId)
     }
 
     /**
@@ -1705,10 +1821,20 @@ class UIStudioViewModel {
         val modelDisplayName = GeminiModel.fromModelName(state.projectAgentConfig.modelName)?.displayName
             ?: state.projectAgentConfig.modelName.ifBlank { GeminiModel.GEMINI_3_8_FLASH.displayName }
 
+        val attachedMentionsList = mentionState.attachedMentions.toList()
+        val mentionTags = attachedMentionsList.map {
+            org.gemini.ui.forge.model.chat.ChatMentionTag(
+                title = it.title,
+                categoryName = it.category.name,
+                path = (it.payload as? MentionPayload.DocPayload)?.absolutePath
+            )
+        }
+
         val userMsg = VisualChatMessage(
             id = "msg_${now}_user",
             role = "user",
             prompt = userText,
+            attachedMentions = mentionTags,
             inputImageUris = rawAttachments,
             timestamp = now,
             modelName = modelDisplayName
@@ -1817,32 +1943,40 @@ class UIStudioViewModel {
                                 mentionContextBuilder.append("  <block id=\"${p.blockId}\" name=\"${p.blockName}\" type=\"${p.type}\" bounds=\"${p.bounds}\" is_container=\"${p.isContainer}\"/>\n")
                             }
                             is MentionPayload.AssetPayload -> {
-                                mentionContextBuilder.append("  <asset id=\"${p.assetId}\" file_name=\"${p.fileName}\" dimensions=\"${p.width}x${p.height}\" path=\"${p.filePath}\"/>\n")
-                                // 若为切片素材，自动尝试读取本地文件字节流以多模态附件发送
-                                try {
-                                    val assetBytes = readLocalFileBytes(p.filePath)
-                                    if (assetBytes != null && assetBytes.isNotEmpty()) {
-                                        val mime = when {
-                                            p.filePath.endsWith(".png", true) -> "image/png"
-                                            p.filePath.endsWith(".jpg", true) || p.filePath.endsWith(".jpeg", true) -> "image/jpeg"
-                                            p.filePath.endsWith(".webp", true) -> "image/webp"
-                                            else -> "image/png"
-                                        }
-                                        chatAttachments.add(
-                                            GeminiChatAttachment(
-                                                name = p.fileName,
-                                                localUri = p.filePath,
-                                                bytes = assetBytes,
-                                                mimeType = mime
+                                if (p.fileName == "ALL_ASSETS_MANIFEST") {
+                                    val manifest = AssetManifestHelper.buildCompactManifest(state.assetLibrary.items)
+                                    mentionContextBuilder.append("  <asset_library_manifest total=\"${state.assetLibrary.items.size}\">\n$manifest\n  </asset_library_manifest>\n")
+                                } else {
+                                    mentionContextBuilder.append("  <asset id=\"${p.assetId}\" file_name=\"${p.fileName}\" dimensions=\"${p.width}x${p.height}\" path=\"${p.filePath}\"/>\n")
+                                    // 若为切片素材，自动尝试读取本地文件字节流以多模态附件发送
+                                    try {
+                                        val assetBytes = readLocalFileBytes(p.filePath)
+                                        if (assetBytes != null && assetBytes.isNotEmpty()) {
+                                            val mime = when {
+                                                p.filePath.endsWith(".png", true) -> "image/png"
+                                                p.filePath.endsWith(".jpg", true) || p.filePath.endsWith(".jpeg", true) -> "image/jpeg"
+                                                p.filePath.endsWith(".webp", true) -> "image/webp"
+                                                else -> "image/png"
+                                            }
+                                            chatAttachments.add(
+                                                GeminiChatAttachment(
+                                                    name = p.fileName,
+                                                    localUri = p.filePath,
+                                                    bytes = assetBytes,
+                                                    mimeType = mime
+                                                )
                                             )
-                                        )
+                                        }
+                                    } catch (e: Exception) {
+                                        AppLogger.w("UIStudioViewModel", "读取引用素材文件失败: ${p.filePath}, ${e.message}")
                                     }
-                                } catch (e: Exception) {
-                                    AppLogger.w("UIStudioViewModel", "读取引用素材文件失败: ${p.filePath}, ${e.message}")
                                 }
                             }
                             is MentionPayload.DocPayload -> {
-                                mentionContextBuilder.append("  <document name=\"${p.fileName}\">\n${p.content ?: ""}\n  </document>\n")
+                                val content = p.content ?: try {
+                                    readLocalFileBytes(p.absolutePath)?.decodeToString() ?: ""
+                                } catch (e: Exception) { "" }
+                                mentionContextBuilder.append("  <document name=\"${p.fileName}\" path=\"${p.absolutePath}\">\n$content\n  </document>\n")
                             }
                         }
                     }
@@ -1850,6 +1984,20 @@ class UIStudioViewModel {
                     // 发送完毕后清空已挂载实体药丸
                     mentionState.clearMentions()
                 }
+
+                // 智能判定激活的技能并注入工具与系统指令补丁
+                val triggeredSkills = UiStudioSkillManager.resolveActiveSkills(
+                    prompt = userText,
+                    attachedMentions = attachedMentionsList,
+                    mode = skillMode
+                )
+                val skillPromptAddition = triggeredSkills.joinToString("\n\n") { it.systemInstructionAddition }
+                val effectiveSystemPrompt = if (skillPromptAddition.isNotBlank()) {
+                    "$systemPrompt\n\n$skillPromptAddition".trim()
+                } else {
+                    systemPrompt
+                }
+                val toolConfigs = UiStudioSkillManager.buildToolConfigs(triggeredSkills)
 
                 // 注入历史消息
                 val historyItems = activeSession.messages.filter { it.id != userMsg.id }.map { msg ->
@@ -1866,7 +2014,8 @@ class UIStudioViewModel {
                     model = resolvedModel,
                     apiFlavor = apiFlavor,
                     prompt = userText,
-                    systemInstruction = "$systemPrompt\n\n[上下文信息] $contextInfo$mentionContextBuilder",
+                    systemInstruction = "$effectiveSystemPrompt\n\n[上下文信息] $contextInfo$mentionContextBuilder",
+                    tools = toolConfigs,
                     attachments = chatAttachments,
                     preferCloudUpload = preferCloud,
                     history = historyItems,
@@ -1953,11 +2102,147 @@ class UIStudioViewModel {
                 val finalSessions = state.chatSessions.map { if (it.id == sessionAfterReply.id) sessionAfterReply else it }
                 state = state.copy(chatSessions = finalSessions, isAiChatSending = false)
                 saveSession(sessionAfterReply)
+
+                // 自动检查大模型是否发起了 apply_view_layout 工具调用并自动装配
+                if (result.isSuccess) {
+                    checkAndExecuteLayoutTool(result.rawResponseJson, result.text)
+                }
             } catch (e: Exception) {
                 AppLogger.e("UIStudioViewModel", "AI Chat 处理异常", e)
                 state = state.copy(isAiChatSending = false)
             }
         }
+    }
+
+    /**
+     * 检查并自动执行大模型返回的 apply_view_layout 本地装配任务
+     */
+    private fun checkAndExecuteLayoutTool(rawResponseJson: String, responseText: String) {
+        val extractedArgs = extractApplyViewLayoutArgs(rawResponseJson, responseText) ?: return
+        val projId = state.project?.projectId ?: "default"
+        val applyResult = UiStudioLayoutService.assembleViewPage(
+            projectId = projId,
+            assetLibrary = state.assetLibrary,
+            args = extractedArgs
+        )
+        if (applyResult.isSuccess && applyResult.createdPage != null) {
+            val page = applyResult.createdPage
+            val existingPages = state.project?.pages ?: emptyList()
+            val updatedPages = existingPages.filter { it.nameStr != page.nameStr } + page
+            val updatedProject = state.project?.copy(pages = updatedPages)
+            if (updatedProject != null) {
+                state = state.copy(
+                    project = updatedProject,
+                    currentViewId = page.id,
+                    openViewIds = (state.openViewIds + page.id).distinct(),
+                    isDirty = true,
+                    isFitToViewport = true
+                )
+                saveProject(TemplateRepository(storage))
+                scope.launch(Dispatchers.Main) {
+                    Toast.show("🎉 视图 [${page.nameStr}] 已自动装配并在画布呈现！", ToastType.SUCCESS)
+                }
+            }
+        }
+    }
+
+    /**
+     * 从返回报文或正文代码块中鲁棒提取 apply_view_layout 参数
+     */
+    private fun extractApplyViewLayoutArgs(rawJson: String, responseText: String): kotlinx.serialization.json.JsonObject? {
+        // 通道 1: 官方 Function Call 协议检查
+        try {
+            if (rawJson.contains("apply_view_layout")) {
+                val element = jsonHelper.parseToJsonElement(rawJson)
+                val fcObj = findFunctionCallRecursive(element, "apply_view_layout")
+                if (fcObj != null) {
+                    val args = fcObj["args"]?.jsonObject
+                    if (args != null && args.containsKey("blocks")) {
+                        return args
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 通道 2: 文本 Markdown 代码块中嵌入的 JSON 参数检查
+        try {
+            val codeBlockRegex = Regex("```(?:json)?\\s*([\\s\\S]*?)```", RegexOption.IGNORE_CASE)
+            val matches = codeBlockRegex.findAll(responseText)
+            for (match in matches) {
+                val jsonSnippet = match.groupValues[1].trim()
+                if (jsonSnippet.startsWith("{") && (jsonSnippet.contains("blocks") || jsonSnippet.contains("apply_view_layout"))) {
+                    val parsed = jsonHelper.parseToJsonElement(jsonSnippet).jsonObject
+                    if (parsed.containsKey("blocks")) {
+                        return parsed
+                    }
+                    if (parsed.containsKey("args")) {
+                        val inner = parsed["args"]?.jsonObject
+                        if (inner != null && inner.containsKey("blocks")) return inner
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 通道 3: 提取裸输出中包含的 arguments 结构
+        try {
+            val targetKey = "apply_view_layout"
+            val idx = responseText.indexOf(targetKey)
+            if (idx >= 0) {
+                val braceStart = responseText.indexOf('{', idx)
+                if (braceStart >= 0) {
+                    val snippet = extractBalancedJsonObject(responseText, braceStart)
+                    if (snippet != null) {
+                        val parsed = jsonHelper.parseToJsonElement(snippet).jsonObject
+                        if (parsed.containsKey("blocks")) return parsed
+                        val args = parsed["arguments"]?.jsonObject ?: parsed["args"]?.jsonObject
+                        if (args != null && args.containsKey("blocks")) return args
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        return null
+    }
+
+    private fun extractBalancedJsonObject(text: String, startIndex: Int): String? {
+        var depth = 0
+        var start = -1
+        for (i in startIndex until text.length) {
+            val c = text[i]
+            if (c == '{') {
+                if (depth == 0) start = i
+                depth++
+            } else if (c == '}') {
+                depth--
+                if (depth == 0 && start >= 0) {
+                    return text.substring(start, i + 1)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun findFunctionCallRecursive(element: kotlinx.serialization.json.JsonElement, targetName: String): kotlinx.serialization.json.JsonObject? {
+        when (element) {
+            is kotlinx.serialization.json.JsonObject -> {
+                val fc = element["functionCall"]?.jsonObject ?: element["function_call"]?.jsonObject
+                if (fc != null && fc["name"]?.jsonPrimitive?.contentOrNull == targetName) {
+                    return fc
+                }
+                for ((_, v) in element) {
+                    val found = findFunctionCallRecursive(v, targetName)
+                    if (found != null) return found
+                }
+            }
+            is kotlinx.serialization.json.JsonArray -> {
+                for (item in element) {
+                    val found = findFunctionCallRecursive(item, targetName)
+                    if (found != null) return found
+                }
+            }
+            else -> {}
+        }
+        return null
     }
 
     /**

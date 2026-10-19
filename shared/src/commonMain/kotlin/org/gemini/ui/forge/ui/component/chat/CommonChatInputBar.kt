@@ -41,6 +41,11 @@ import org.gemini.ui.forge.ui.component.chat.mention.MentionDropdownPanel
 import org.gemini.ui.forge.ui.component.chat.mention.MentionPillBar
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.component.chat.drop.DropOverlayBox
+import org.gemini.ui.forge.ui.component.chat.drop.onFileDrop
+import org.gemini.ui.forge.ui.component.chat.skill.SkillSelectorPill
+import org.gemini.ui.forge.model.skill.SkillActivationMode
+import org.gemini.ui.forge.model.skill.UiStudioSkill
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.utils.readLocalFileBytes
@@ -78,6 +83,10 @@ fun CommonChatInputBar(
     mentionState: MentionState? = null,
     mentionCandidates: List<MentionItem> = emptyList(),
     mentionMaxHeight: Dp = 480.dp,
+    onFilesDropped: ((List<String>) -> Unit)? = null,
+    activeSkills: List<UiStudioSkill> = emptyList(),
+    skillMode: SkillActivationMode = SkillActivationMode.AUTO,
+    onSkillModeChanged: (SkillActivationMode) -> Unit = {},
     leadingActions: @Composable RowScope.() -> Unit = {},
     trailingActions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -86,6 +95,7 @@ fun CommonChatInputBar(
     var inputText by remember { mutableStateOf("") }
     var preferCloudUpload by remember { mutableStateOf(true) }
     var attachments by remember { mutableStateOf<List<CommonChatAttachment>>(emptyList()) }
+    var isDropHovering by remember { mutableStateOf(false) }
 
     // 回填外部重新编辑的文本
     LaunchedEffect(inputTextOverride) {
@@ -156,7 +166,16 @@ fun CommonChatInputBar(
         onSendMessage(text, currentAttach)
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .onFileDrop(
+                onDragStateChanged = { isDropHovering = it },
+                onFilesDropped = { paths ->
+                    onFilesDropped?.invoke(paths)
+                }
+            )
+    ) {
         val containerWidth = maxWidth
         val effectiveDialogWidth = config.dialogWidth ?: containerWidth
         // ★ 核心动态响应式视口：浮层菜单统一严格按视口宽度的 85% 计算，最大高度占视口高度的 70%
@@ -417,6 +436,13 @@ fun CommonChatInputBar(
                         }
                     }
 
+                    // 技能状态药丸与手动切换 (Spec-to-View 意图自动探测)
+                    SkillSelectorPill(
+                        activeSkills = activeSkills,
+                        currentMode = skillMode,
+                        onModeChanged = onSkillModeChanged
+                    )
+
                     // 动态模型选择器（对齐公用旗舰 DropdownMenu 下拉卡片菜单）
                     if (config.showModelSelector) {
                         var modelBtnWidthPx by remember { mutableStateOf(0) }
@@ -595,6 +621,12 @@ fun CommonChatInputBar(
                 }
             }
         }
+
+        // 外部文件拖拽悬停全域遮罩
+        DropOverlayBox(
+            visible = isDropHovering,
+            modifier = Modifier.matchParentSize()
+        )
     }
 }
 }

@@ -378,7 +378,7 @@ fun UIStudioAssetPanel(
                                             lastPos.x >= canvasRect.left && lastPos.x <= canvasRect.right &&
                                             lastPos.y >= canvasRect.top && lastPos.y <= canvasRect.bottom
 
-                                        if (isOverCanvas && canvasRect != null && lastPos != null) {
+                                        if (isOverCanvas) {
                                             val currentScale = liveState.scale.coerceAtLeast(0.01f)
                                             val logicalX = (((lastPos.x - canvasRect.left) - liveState.panOffset.x) / currentScale) / density
                                             val logicalY = (((lastPos.y - canvasRect.top) - liveState.panOffset.y) / currentScale) / density
@@ -429,7 +429,7 @@ fun UIStudioAssetPanel(
                                     lastPos.x >= canvasRect.left && lastPos.x <= canvasRect.right &&
                                     lastPos.y >= canvasRect.top && lastPos.y <= canvasRect.bottom
 
-                                if (isOverCanvas && canvasRect != null && lastPos != null) {
+                                if (isOverCanvas) {
                                     val currentScale = liveState.scale.coerceAtLeast(0.01f)
                                     val logicalX = (((lastPos.x - canvasRect.left) - liveState.panOffset.x) / currentScale) / density
                                     val logicalY = (((lastPos.y - canvasRect.top) - liveState.panOffset.y) / currentScale) / density

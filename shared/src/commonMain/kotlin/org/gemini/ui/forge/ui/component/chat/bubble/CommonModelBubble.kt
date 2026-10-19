@@ -30,6 +30,7 @@ import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.component.tip
+import androidx.compose.ui.text.font.FontWeight
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
@@ -50,6 +51,7 @@ fun CommonModelBubble(
     onVariantIndexChanged: ((newIndex: Int) -> Unit)? = null,
     onRegenerateRequested: ((VisualChatMessage) -> Unit)? = null,
     onDeleteRequested: ((VisualChatMessage) -> Unit)? = null,
+    onOpenViewRequested: ((String) -> Unit)? = null,
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -228,6 +230,29 @@ fun CommonModelBubble(
                                 AppMarkdown(
                                     content = modelText
                                 )
+                            }
+
+                            // 若该消息包含界面排版方案，紧跟在 Markdown (含 ```json 代码框) 下方提供画布快捷入口
+                            if (modelText.contains("已完成界面排版规划方案") || modelText.contains("apply_view_layout")) {
+                                val viewName = Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(message.prompt)?.groupValues?.get(1)
+                                    ?: Regex("""\[([^\]]+)\]""").find(modelText)?.groupValues?.get(1)
+                                    ?: "FootballSlotMain"
+
+                                Spacer(Modifier.height(8.dp))
+                                Button(
+                                    onClick = { onOpenViewRequested?.invoke(viewName) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                    modifier = Modifier.height(34.dp)
+                                ) {
+                                    Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("在画布中打开视图 [$viewName]", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
 

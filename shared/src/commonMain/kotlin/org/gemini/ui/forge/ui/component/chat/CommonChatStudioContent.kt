@@ -28,6 +28,8 @@ import org.gemini.ui.forge.model.chat.MentionItem
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.model.chat.VisualChatSession
 import org.gemini.ui.forge.state.MentionState
+import org.gemini.ui.forge.model.skill.SkillActivationMode
+import org.gemini.ui.forge.model.skill.UiStudioSkill
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -84,8 +86,13 @@ fun CommonChatStudioContent(
     onSwitchVariant: ((messageId: String, variantIndex: Int) -> Unit)? = null,
     onRegenerate: ((messageId: String) -> Unit)? = null,
     onDeleteMessage: ((messageId: String) -> Unit)? = null,
+    onOpenViewRequested: ((String) -> Unit)? = null,
     mentionState: MentionState? = null,
     mentionCandidates: List<MentionItem> = emptyList(),
+    onFilesDropped: ((List<String>) -> Unit)? = null,
+    activeSkills: List<UiStudioSkill> = emptyList(),
+    skillMode: SkillActivationMode = SkillActivationMode.AUTO,
+    onSkillModeChanged: (SkillActivationMode) -> Unit = {},
     topBarActions: @Composable RowScope.() -> Unit = {},
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     inputLeadingActions: @Composable RowScope.() -> Unit = {},
@@ -227,6 +234,7 @@ fun CommonChatStudioContent(
                         onEditRequested = { textToEdit ->
                             inputTextToInject = textToEdit
                         },
+                        onOpenViewRequested = onOpenViewRequested,
                         messageActions = messageActions,
                         modifier = Modifier.weight(1f)
                     )
@@ -257,6 +265,10 @@ fun CommonChatStudioContent(
                         mentionState = mentionState,
                         mentionCandidates = mentionCandidates,
                         mentionMaxHeight = dynamicMentionMaxHeight,
+                        onFilesDropped = onFilesDropped,
+                        activeSkills = activeSkills,
+                        skillMode = skillMode,
+                        onSkillModeChanged = onSkillModeChanged,
                         leadingActions = inputLeadingActions,
                         trailingActions = inputTrailingActions
                     )

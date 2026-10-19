@@ -43,17 +43,47 @@
     4. 纯文档、注释或非代码修改不触发编译校验。
 - **Compose Hot Reload 保活优先与严禁滥杀冷启铁律 (Compose Hot Reload First & Anti-Kill Restart Redline)**: **【红线规则】**
   1. **【保活最高优先级】桌面应用常驻保活，严禁滥杀进程**：
-     接入官方 `compose-hot-reload` 体系的核心价值在于：**桌面窗口常驻保活、内存与导航状态不丢、修改秒级热替换**。在日常开发、调试与多轮会话中，**绝对禁止因局部代码修改、短时工具超时或 MCP 探针瞬时未连上而擅自调用 `Stop-Process`、`kill` 或系统命令强行杀死桌面应用进程**！严禁将“冷重启应用”作为偷懒手段，彻底消除频繁冷启动对开发沉浸流的严重破坏；
-  2. **【重启/重置强制优先通道】优先调用 Hot Reload 自带能力**：
+     接入官方 `compose-hot-reload` 体系的核心价值在于：**桌面窗口常驻保活、内存与导航状态不丢、修改秒级热替换**。在日常开发、调试与多轮会话中，**绝对禁止因局部代码修改、短时工具超时或 MCP 探针瞬时断开/未连上而擅自调用 `Stop-Process`、`kill` 或系统命令强行杀死桌面应用进程**！严禁将“冷重启应用”作为偷懒手段，彻底消除频繁冷启动对开发沉浸流的严重破坏；
+  2. **【MCP 掉线原生自愈与自动重连铁律 (Native MCP Reconnect Protocol)】**：
+     在开发调试过程中，若发现 `compose-hot-reload`（或其它 MCP 服务）连接断开（例如报错 `Not connected`、`McpServerNotFoundError`、或在工具目录中瞬时缺失）：
+     - **第一动作：执行原生非侵入式自动重连**：
+       智能体必须且仅能通过 OpenCode 原生底层 MCP REST API 发起重连，严禁杀进程：
+       ```powershell
+       opencode api post /api/experimental/mcp/compose-hot-reload/connect --header "x-opencode-directory: D:/WorkSpace/Idea/Kotlin/GeminiUIForge"
+       ```
+     - **有限重试上限**：允许连续执行最多 3 次自动重连尝试（重连后调用 `tools["compose-hot-reload"].status()` 验证握手）；
+     - **不可恢复物理熔断与弹窗仲裁门禁 (Circuit Breaker & Explicit MCP Name Gate)**：
+       **若连续 3 次重连依然无法建立连接（或应用已彻底物理崩溃退出），智能体必须立刻强制中止当前任务！**
+       **绝对禁止擅自执行 kill 强杀进程，绝对禁止私自调度拉起新进程或盲目降级！**
+       必须立即调用 `question` 工具弹出单选卡片向用户详细汇报断连现状并移交决策权，**且问题标题、内容描述以及所有选项（Label 与 Description）中必须清晰、明确指明具体的 MCP 服务名（如【compose-hot-reload】）以及所涉及的具体目标程序（如【GeminiUIForge 桌面客户端 (PID: xxx)】），严禁使用含糊、抽象或让用户产生歧义的代词**：
+       - 弹窗问题格式范式：`"【<具体MCP服务名，如 compose-hot-reload>】自动重连 3 次均失败（原因: ...），已触发物理熔断。请裁决针对【<具体目标程序，如 GeminiUIForge 桌面端>】的后续方案："`；
+       - 选项 1 范式：`"忽略【compose-hot-reload】掉线，继续针对【GeminiUIForge 桌面端】执行开发/排版"`；
+       - 选项 2 范式：`"授权关闭并重启【GeminiUIForge 桌面端】，以重新接入【compose-hot-reload】"`；
+       - 选项 3 范式：`"终止本次针对【GeminiUIForge 桌面端】的全部任务"`；
+  3. **【重启/重置强制优先通道】优先调用 Hot Reload 自带能力**：
      当因代码变更生效需要刷新、运行态状态出现异常、或者用户明确要求“重启/重置”时，**必须且仅能优先使用 Compose Hot Reload 官方自带的原生能力**：
      - **第一优先级（状态级零杀重启）**：优先调用 `compose-hot-reload` 的 `reset_ui()` 工具（`tools["compose-hot-reload"].reset_ui()`）。它会安全丢弃当前的 Composition 树并丢弃所有 `remember` 的运行时状态，在保留进程与窗口的前提下实现毫秒级零破坏纯净重启；
      - **第二优先级（字节码热加载通道）**：优先通过局部增量编译（`idea_build_project`）生成变动 class，由官方 Compose Hot Reload 机制热注入内存，或调用 `compose-hot-reload.await_reload()` 触发字节码无感替换；
-  3. **【物理冷重启的极限制约定】**：
+  4. **【物理冷重启的极限制约定】**：
      仅当且必须同时满足以下不可逆条件之一时，才允许执行物理关闭与冷启动：
      - 进程物理崩溃已自行退出（ExitCode != 0，在系统进程表中已彻底消亡）；
      - 经多维严格探测（CPU 长期恒等于 0、网络端口完全拒绝连接、无任何磁盘日志输出），确凿断定为不可恢复的物理死锁僵尸进程；
-     - 修改了涉及底层 JVM 启动参数、非热更动态链接库（JNI/Native DLL）等官方 Compose Hot Reload 底层明确不支持热更的结构级变更。
+     - 修改了涉及底层 JVM 启动参数、非热更动态链接库（JNI/Native DLL）等官方 Compose Hot Reload 底层明确不支持热更的结构级变更；
+     - **且必须在获得用户通过 question 弹窗的显式授权后方可执行！**
      **凡日常 UI / Composable、ViewModel、Service、业务逻辑与数据流代码迭代，一律且必须在保持应用常驻保活状态下，走 Hot Reload 极速闭环！**
+- **IntelliJ IDEA xdebug 调试模式接入与实机断点取证规范 (IntelliJ IDEA xdebug Debugger & Runtime Data Inspection Specification)**: **【红线规则】**
+  1. **【准入首要硬前提：IDEA MCP 在线 + 调试模式启动】**：
+     - **首要前提门禁**：只要同时满足 **① 当前 IntelliJ IDEA MCP 通信连接可用** 且 **② 应用程序已处于调试模式（Debug）启动或附加运行中**（通过 `tools.idea.xdebug_get_debugger_status` 能探测到活跃会话 `sessionId`），智能体即可直接选择开启断点调试；
+     - **程序未以 Debug 启动时的处理**：若当前程序仅为普通 Run 模式（缺少 JDWP 调试代理支持，断点无法生效），严禁盲目调用 `WAIT_FOR_PAUSE` 等待挂起；智能体应优先提示用户在 IDEA 中切换为 **Debug 模式（小甲虫启动）**，或在获得许可后通过 `tools.idea.xdebug_start_debugger_session` 拉起调试配置（如 `GeminiUIForge [:desktopApp:run]` 或配合 `desktopApp [hot] 🔥` 调试热更）；
+  2. **【核心宗旨：查看运行中的具体数据是否正确 (Inspect Runtime Data)】**：
+     - **取证核心目的**：断点调试的核心价值在于**直接审查运行态内存中的真实物理数据**，杜绝凭空猜测。当需要确认“ViewModel 状态流当前实际值、函数实参及返回值、图元坐标计算绝对数值、复杂数据对象内部深层嵌套字段、或是条件分支走哪一路”时，均可通过断点或表达式求值进行实操验证；
+     - **低干扰日志取证优先 (Logpoint First)**：若仅需观察数据变化轨迹或打印变量数值，优先打设非挂起日志断点（设置 `logExpression` 并指定 `suspendPolicy = "NONE"`），不中断 UI 主线程与动画渲染，通过 `xdebug_control_session(action = "DRAIN_EVENTS")` 极速回捞数据；
+     - **阻断式单步审查**：当必须暂停程序深入钻取多层对象树（`xdebug_get_frame_values`）、或需要在特定堆栈上下文中执行动态表达式求值（`xdebug_evaluate_expression`）来核验数据正确性时，打设精准行断点（推荐附加 `condition` 条件过滤）；
+  3. **【调试-核验-修改-热更闭环工作流 (Debug-Verify-Fix Loop)】**：
+     - **步骤一（断点取证）**：在关键代码行打设断点或日志探针，结合人工交互或接口触发，捕获运行态数据；
+     - **步骤二（数据核验）**：审查变量与内存数据是否与业务预期一致，精准定位导致数据异常的代码根因；
+     - **步骤三（现场恢复与清理）**：**【铁律】** 数据核验完毕后，**必须立即调用 `tools.idea.xdebug_remove_breakpoint(owner = "agent")` 彻底清除所有断点**，并调用 `xdebug_control_session(action = "RESUME")` 恢复程序运行，严禁残留红点污染用户环境；
+     - **步骤四（热更加载生效）**：根据核验出的真实问题修改代码，遵循项目规范通过局部增量编译（`idea_build_project`）交付 Compose Hot Reload 极速热替换生效。
 - **Gradle 单一终端模块编译调用去重红线 (Single Terminal Task Invocation Redline)**: **【红线规则】**
   1. **【严厉禁令】严禁并列上游与下游模块任务**：在任何终端命令行执行、脚本调用、文档指引或 AI 自动校验过程中，**绝对严禁**执行形如 `./gradlew :shared:<task> :<appModule>:<task>` 的复合命令（例如严厉禁止 `./gradlew :shared:compileKotlinWasmJs :webApp:compileKotlinWasmJs`，严禁 `./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`）；
   2. **【单一终端原则】只调度最下游终端模块**：凡涉及 Application 工程的编译验证，**一律且仅指定单一终端模块对应的编译任务**（例如桌面端只需指定 `:desktopApp:compileKotlin`，Web 端只需指定 `:webApp:compileKotlinJs`，Android 端只需指定 `:androidApp:compileDebugKotlin`）。必须充分信任并利用 Gradle 官方原生 DAG 依赖机制自动级联构建上游 `:shared`，彻底杜绝重复执行与冗余任务评估；

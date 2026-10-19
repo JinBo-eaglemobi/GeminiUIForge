@@ -3,6 +3,16 @@ package org.gemini.ui.forge.model.chat
 import kotlinx.serialization.Serializable
 
 /**
+ * 对话引用的上下文实体标签 (用于在消息气泡中持久化展示)
+ */
+@Serializable
+data class ChatMentionTag(
+    val title: String,
+    val categoryName: String = "DOC",
+    val path: String? = null
+)
+
+/**
  * 视觉对话消息项
  *
  * @param id 消息唯一ID
@@ -49,7 +59,9 @@ data class VisualChatMessage(
     /** 是否属于执行失败/请求异常状态 */
     val isError: Boolean = false,
     /** 错误详细描述信息 (用于错误卡片展示) */
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    /** 本轮提问所附带引用的 @ 工程上下文实体列表 (用于在用户气泡中直观呈现) */
+    val attachedMentions: List<ChatMentionTag> = emptyList()
 ) {
     /** 获取当前生效的有效展示文本 (优先取激活分支变体，并通过视图投影器提取人类可读内容，绝不倾倒纯 JSON) */
     val effectiveText: String

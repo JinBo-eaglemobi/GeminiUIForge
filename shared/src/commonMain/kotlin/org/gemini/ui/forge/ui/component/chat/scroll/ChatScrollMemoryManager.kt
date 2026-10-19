@@ -18,8 +18,7 @@ object ChatScrollMemoryManager {
      * @return 缓存的物理滚动偏移量 (px)，若无历史记录返回 null
      */
     fun getScrollOffset(sessionId: String?): Int? {
-        if (sessionId.isNullOrBlank()) return null
-        return scrollPositions[sessionId]
+        return null // 彻底解除历史错误大偏移记忆，防止每次重载被强行拽到最底端
     }
 
     /**
