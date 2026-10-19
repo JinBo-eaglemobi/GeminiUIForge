@@ -147,38 +147,6 @@ fun CommonChatMessageList(
 
     val codeCoordinator = remember { org.gemini.ui.forge.ui.component.markdown.CodeBlockScrollCoordinator() }
 
-    // 外层手势协调器：统一拦截外层滚轮并在吸顶时移交代码块消费，支持惯性 Fling 接力
-    val nestedScrollConnection = remember(codeCoordinator, scrollState) {
-        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
-            override fun onPreScroll(
-                available: androidx.compose.ui.geometry.Offset,
-                source: androidx.compose.ui.input.nestedscroll.NestedScrollSource
-            ): androidx.compose.ui.geometry.Offset {
-                val deltaY = available.y
-                // 动态记录进入吸顶时刻的外层偏移
-                if (codeCoordinator.isReadyToScrollCode && codeCoordinator.targetOuterStickOffset < 0) {
-                    codeCoordinator.targetOuterStickOffset = scrollState.value
-                    org.gemini.ui.forge.utils.AppLogger.i("SCROLL_PROBE", "STICK_POINT_LOCKED -> outerStickOffset=${scrollState.value}")
-                }
-                if (codeCoordinator.shouldTrapScroll(deltaY, scrollState.value)) {
-                    val consumed = codeCoordinator.consumeScroll(deltaY)
-                    return androidx.compose.ui.geometry.Offset(0f, consumed)
-                }
-                org.gemini.ui.forge.utils.AppLogger.i("SCROLL_PROBE", "PASS_TO_OUTER deltaY=$deltaY | outerScroll=${scrollState.value}/${scrollState.maxValue}")
-                return androidx.compose.ui.geometry.Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
-                val flingY = available.y
-                val consumedY = codeCoordinator.consumeFlingNonBlocking(flingY, scrollState.value)
-                if (consumedY != 0f) {
-                    return androidx.compose.ui.unit.Velocity(0f, consumedY)
-                }
-                return androidx.compose.ui.unit.Velocity.Zero
-            }
-        }
-    }
-
     Box(modifier = modifier.fillMaxWidth()) {
         SelectionContainer(modifier = Modifier.fillMaxSize()) {
             BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(horizontal = spacing.medium)) {
@@ -208,14 +176,7 @@ fun CommonChatMessageList(
                 }
             } else {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .onGloballyPositioned { coords ->
-                            val bounds = coords.boundsInWindow()
-                            codeCoordinator.viewportTopInWindow = bounds.top
-                            codeCoordinator.viewportBottomInWindow = bounds.bottom
-                        }
-                        .nestedScroll(nestedScrollConnection)
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     Column(
                         modifier = Modifier
