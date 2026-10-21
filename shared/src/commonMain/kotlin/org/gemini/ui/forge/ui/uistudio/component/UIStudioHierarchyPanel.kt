@@ -32,6 +32,8 @@ import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import org.gemini.ui.forge.ui.uistudio.dialog.UIStudioRenameDialog
+import org.jetbrains.compose.resources.stringResource
+import geminiuiforge.composeapp.generated.resources.*
 
 /**
  * UI Studio 视图图层层级大纲面板组件 (Hierarchy Panel)。
@@ -162,23 +164,6 @@ fun UIStudioHierarchyPanel(
                             modifier = Modifier.size(13.dp)
                         )
                     }
-
-                    // 3. 一键全部展开 / 全部折叠容器 (放最后，对齐下方行项的更多选项)
-                    val allContainerIds = currentView?.blocks?.filter { it.isPureContainer || it.children.isNotEmpty() }?.map { it.id }?.toSet().orEmpty()
-                    val isAllExpanded = state.expandedHierarchyBlockIds.containsAll(allContainerIds) && allContainerIds.isNotEmpty()
-                    IconButton(
-                        onClick = { viewModel.toggleAllHierarchyBlocksExpanded() },
-                        modifier = Modifier
-                            .size(20.dp)
-                            .tip(if (isAllExpanded) "折叠全部容器" else "展开全部容器")
-                    ) {
-                        Icon(
-                            imageVector = if (isAllExpanded) Icons.Default.UnfoldLess else Icons.Default.UnfoldMore,
-                            contentDescription = "展开折叠",
-                            tint = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(spacing.extraSmall))
@@ -202,18 +187,22 @@ fun UIStudioHierarchyPanel(
                                 modifier = Modifier.size(32.dp)
                             )
                             Text(
-                                text = "请先打开一个视图界面",
+                                text = stringResource(Res.string.uistudio_hierarchy_empty_no_view),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline
+                                color = MaterialTheme.colorScheme.outline,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
                     }
                 } else {
-                    val rootBlocks = currentView.blocks.filter { it.parent == null }
+                    val contextBlocks = remember(currentView, state.activeContainerId) {
+                        val activeContainer = state.activeContainerId?.let { cid -> currentView.blocks.findBlockById(cid) }
+                        activeContainer?.children ?: currentView.blocks.filter { it.parent == null }
+                    }
                     val filteredBlocks = if (searchQuery.isBlank()) {
-                        rootBlocks
+                        contextBlocks
                     } else {
-                        rootBlocks.filter {
+                        contextBlocks.filter {
                             it.id.contains(searchQuery, ignoreCase = true) ||
                             it.type.name.contains(searchQuery, ignoreCase = true)
                         }
@@ -223,13 +212,19 @@ fun UIStudioHierarchyPanel(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                            .weight(1f),
+                                .weight(1f),
                             contentAlignment = Alignment.Center
                         ) {
+                            val emptyText = when {
+                                searchQuery.isNotBlank() -> "未匹配到相关组件"
+                                state.activeContainerId != null -> stringResource(Res.string.uistudio_hierarchy_empty_container)
+                                else -> stringResource(Res.string.uistudio_hierarchy_empty_page)
+                            }
                             Text(
-                                text = if (searchQuery.isNotBlank()) "未匹配到相关组件" else "当前视图暂无组件",
+                                text = emptyText,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline
+                                color = MaterialTheme.colorScheme.outline,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
                     } else {
@@ -257,11 +252,7 @@ fun UIStudioHierarchyPanel(
                                     },
                                     onDrag = { windowPos ->
                                         dragPosition = listCoordinates?.windowToLocal(windowPos) ?: windowPos
-                                        val allIds = mutableSetOf<String>()
-                                        fun walk(l: List<UIBlock>) {
-                                            l.forEach { walk(it.children); allIds.add(it.id) }
-                                        }
-                                        walk(currentView.blocks)
+                                        val allIds = contextBlocks.map { it.id }.toSet()
 
                                         // 直接使用窗口物理坐标与 itemBounds 进行 1:1 精准命中碰撞检测
                                         val hit = itemBounds.entries.toList().asReversed()

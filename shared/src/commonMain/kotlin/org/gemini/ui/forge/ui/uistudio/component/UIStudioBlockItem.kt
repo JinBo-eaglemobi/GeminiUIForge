@@ -86,11 +86,20 @@ fun UIStudioBlockItem(
     val displayName = block.userPromptZh.ifBlank { block.userPromptEn.ifBlank { block.id } }
     val isPureContainer = block.isPureContainer || block.type == UIBlockType.CONTAINER
 
+    val typeColor = when (block.type) {
+        UIBlockType.BUTTON, UIBlockType.SPIN_BUTTON -> Color(0xFFF59E0B) // 琥珀金橙
+        UIBlockType.BACKGROUND -> Color(0xFF3B82F6) // 沉稳星空蓝
+        UIBlockType.CONTAINER -> Color(0xFF8B5CF6) // 优雅紫罗兰
+        UIBlockType.TEXT -> Color(0xFF10B981) // 清爽薄荷绿
+        else -> Color(0xFF06B6D4) // 科技青蓝
+    }
+
     val borderColor = when {
         isSelected -> Color(0xFFFF9100) // 鲜明工程金橙色
         block.isLocked -> Color.Gray.copy(alpha = 0.45f)
-        isPureContainer -> Color(0xFF26A69A).copy(alpha = 0.65f) // 青色纯容器
-        else -> Color(0xFF00E5FF).copy(alpha = 0.45f)
+        isPureContainer -> Color(0xFF8B5CF6).copy(alpha = 0.55f) // 柔和紫罗兰纯容器
+        imageBitmap != null -> typeColor.copy(alpha = 0.35f) // 已绑定素材时细微优雅边框，不遮挡素材
+        else -> typeColor.copy(alpha = 0.65f)
     }
 
     Box(
@@ -138,27 +147,27 @@ fun UIStudioBlockItem(
                 } else Modifier
             )
     ) {
-        // 渲染切片图片本体（纯容器不渲染底图，保持透明）
+        // 渲染切片图片本体（纯容器不渲染底图，保持透明；使用 Fit 保持原始纵横比，绝不拉伸变形）
         val bmp = imageBitmap
         if (bmp != null && !isPureContainer) {
             Image(
                 bitmap = bmp,
                 contentDescription = displayName,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.FillBounds
+                contentScale = ContentScale.Fit
             )
         } else if (!isPureContainer) {
-            // 无图普通组件占位
+            // 无图普通组件占位（遵循多维语义化配色）
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xFF00E5FF).copy(alpha = 0.08f)),
+                    .background(typeColor.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = displayName,
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = Color.White.copy(alpha = 0.85f),
                     maxLines = 1
                 )
             }

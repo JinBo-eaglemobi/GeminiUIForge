@@ -54,6 +54,7 @@ object McpToolRegistry {
             // E 组：人机交互与人工授权门禁工具
             AskUserConfirmationTool(),
             AskUserChoiceTool(),
+            AskUserQuestionTool(),
             NotifyUserTool(),
             // F 组：AI 直调工具
             InvokeGeminiTextTool(),

@@ -65,9 +65,9 @@ object AssetSheetAiDetector {
         val storage = LocalFileStorage()
         val promptManager = PromptManager(storage)
         val basePrompt = try {
-            promptManager.getPrompt("detect_asset_sheet_coords")
+            promptManager.getPrompt(org.gemini.ui.forge.model.prompt.PromptKey.DETECT_ASSET_SHEET_COORDS)
         } catch (_: Exception) {
-            "Please detect all discrete UI elements, buttons, symbols, icons, badges in this SpriteSheet image and output a JSON with canvas size [w, h] and elements array with [id, name, type, bounds: [x,y,w,h], description]."
+            promptManager.getDefaultResourcePrompt(org.gemini.ui.forge.model.prompt.PromptKey.DETECT_ASSET_SHEET_COORDS)
         }
 
         onProgress?.invoke(0.25f, "正在准备图集多模态资产与云端分析环境...")

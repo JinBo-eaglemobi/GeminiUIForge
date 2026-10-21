@@ -21,15 +21,10 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Image
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import org.gemini.ui.forge.data.TemplateFile
-import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.assetsheet.AssetImportDraft
@@ -37,6 +32,7 @@ import org.gemini.ui.forge.model.assetsheet.NormalizedAssetItem
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.manager.ConfigManager
+import org.gemini.ui.forge.manager.PromptManager
 import org.gemini.ui.forge.model.chat.MentionCategory
 import org.gemini.ui.forge.model.chat.MentionItem
 import org.gemini.ui.forge.model.chat.MentionPayload
@@ -60,14 +56,7 @@ import org.gemini.ui.forge.model.chat.TrafficRecord
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIPage
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
-import kotlinx.datetime.Clock
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
-import org.gemini.ui.forge.service.GeminiClient
 import org.gemini.ui.forge.service.LocalMattingService
 import org.gemini.ui.forge.service.ai.GeminiChatEngine
 import org.gemini.ui.forge.service.ai.GeminiChatRequest
@@ -102,6 +91,10 @@ import org.gemini.ui.forge.utils.updateBlockInList
  */
 class UIStudioViewModel {
 
+    companion object {
+        private const val CONTEXT_INFO_HEADER = "[上下文信息]"
+    }
+
     /** 专属后台协程作用域 */
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -122,6 +115,12 @@ class UIStudioViewModel {
     /** AI 输入栏「@」上下文引用状态管理中心 */
     val mentionState = MentionState()
 
+    init {
+        scope.launch(Dispatchers.Default) {
+            UiStudioSkillManager.getRegisteredSkills()
+        }
+    }
+
     /** 当前工程引用的外部参考规范文档清单 */
     var registeredExternalDocs by mutableStateOf<List<ExternalDocRecord>>(emptyList())
         private set
@@ -131,7 +130,7 @@ class UIStudioViewModel {
 
     /** 当前智能判定的激活技能列表 */
     val activeSkills: List<UiStudioSkill>
-        get() = UiStudioSkillManager.resolveActiveSkills(
+        get() = UiStudioSkillManager.resolveActiveSkillsSync(
             prompt = mentionState.searchQuery,
             attachedMentions = mentionState.attachedMentions,
             mode = skillMode
@@ -173,16 +172,22 @@ class UIStudioViewModel {
                         )
                     )
                 )
-                Toast.show("已添加参考文档: $fileName", ToastType.SUCCESS)
+                Toast.show("已添加历史引用: $fileName", ToastType.SUCCESS)
             }
         }
     }
 
     /**
-     * 处理拖入文件的分流与自动挂载
+     * 处理拖入文件的分流与自动挂载：
+     * 1. 图片格式切片（png/jpg/webp 等）已由输入栏内部自动挂载为多模态附件；
+     * 2. 规范与文档格式（md/txt/json/yaml 等）在此作为历史引用文档登记并挂载 @ 药丸。
      */
     fun handleFileDropped(filePath: String) {
-        registerExternalDoc(filePath)
+        val ext = filePath.substringAfterLast('.', "").lowercase()
+        val isImage = ext in setOf("png", "jpg", "jpeg", "webp")
+        if (!isImage) {
+            registerExternalDoc(filePath)
+        }
     }
 
     /**
@@ -197,7 +202,76 @@ class UIStudioViewModel {
             loadExternalDocs(projId)
         }
 
-        // 1. 视图界面 (Views)
+        // 1. 历史引用 (Recent References) - 提升为最高第 1 优先级置顶展示，默认最多显示最近引用的 5 项
+        if (registeredExternalDocs.isEmpty()) {
+            loadExternalDocs(projId)
+        }
+        val allDocs = registeredExternalDocs.sortedByDescending { it.lastReferencedAt }
+
+        val displayDocs = if (trimmed.isBlank()) {
+            allDocs.take(5)
+        } else {
+            allDocs.filter { it.fileName.contains(trimmed, ignoreCase = true) || it.absolutePath.contains(trimmed, ignoreCase = true) }
+        }
+
+        displayDocs.forEach { doc ->
+            candidates.add(
+                MentionItem(
+                    id = "doc_${doc.absolutePath}",
+                    title = doc.fileName,
+                    subtitle = doc.absolutePath,
+                    category = MentionCategory.DOC,
+                    icon = Icons.Default.Description,
+                    payload = MentionPayload.DocPayload(
+                        fileName = doc.fileName,
+                        absolutePath = doc.absolutePath
+                    )
+                )
+            )
+        }
+
+        // 2. 素材库切片资产 (Assets) - 拼装首要原材料
+        if (state.assetLibrary.items.isNotEmpty()) {
+            candidates.add(
+                MentionItem(
+                    id = "all_assets_manifest",
+                    title = "📦 全部素材库清单 (All Assets - 共 ${state.assetLibrary.items.size} 项)",
+                    subtitle = "轻量结构化索引 · 包含全部切片名、物理宽高与智能角色标注",
+                    category = MentionCategory.ASSET,
+                    icon = Icons.Default.Inventory2,
+                    payload = MentionPayload.AssetPayload(
+                        assetId = "all_assets",
+                        fileName = "ALL_ASSETS_MANIFEST",
+                        filePath = "ALL",
+                        width = state.assetLibrary.items.size,
+                        height = 0
+                    )
+                )
+            )
+        }
+
+        state.assetLibrary.items.forEach { asset ->
+            val role = AssetManifestHelper.inferAssetRole(asset.name, asset.relativePath)
+            candidates.add(
+                MentionItem(
+                    id = "asset_${asset.id}",
+                    title = asset.name,
+                    subtitle = "尺寸: ${asset.width}x${asset.height} · 角色: $role",
+                    category = MentionCategory.ASSET,
+                    icon = Icons.Default.Image,
+                    previewImagePath = asset.relativePath,
+                    payload = MentionPayload.AssetPayload(
+                        assetId = asset.id,
+                        fileName = asset.name,
+                        filePath = asset.relativePath,
+                        width = asset.width,
+                        height = asset.height
+                    )
+                )
+            )
+        }
+
+        // 3. 视图界面 (Views)
         state.project?.pages?.forEach { page ->
             candidates.add(
                 MentionItem(
@@ -217,22 +291,25 @@ class UIStudioViewModel {
             )
         }
 
-        // 2. 当前视图图层图元 (Blocks - 递归收集整棵组件树)
+        // 4. 当前视图图层图元 (Blocks - 沉底排列，剥离坐标仅保留尺寸)
         fun collectBlocks(blocks: List<UIBlock>) {
             blocks.forEach { block ->
-                val boundsStr = "[${block.bounds.left.toInt()}, ${block.bounds.top.toInt()}, ${block.bounds.width.toInt()}, ${block.bounds.height.toInt()}]"
+                val w = block.bounds.width.toInt()
+                val h = block.bounds.height.toInt()
                 candidates.add(
                     MentionItem(
                         id = "block_${block.id}",
                         title = block.id,
-                        subtitle = "类型: ${block.type.name} · 坐标: $boundsStr",
+                        subtitle = "类型: ${block.type.name} · 尺寸: ${w}x${h}",
                         category = MentionCategory.BLOCK,
                         icon = Icons.Default.Layers,
                         payload = MentionPayload.BlockPayload(
                             blockId = block.id,
                             blockName = block.id,
                             type = block.type.name,
-                            bounds = boundsStr,
+                            bounds = "",
+                            width = w,
+                            height = h,
                             isContainer = block.isPureContainer
                         )
                     )
@@ -241,64 +318,6 @@ class UIStudioViewModel {
             }
         }
         state.currentView?.blocks?.let { collectBlocks(it) }
-
-        // 3. 素材库切片资产 (Assets)
-        if (state.assetLibrary.items.isNotEmpty()) {
-            candidates.add(
-                MentionItem(
-                    id = "all_assets_manifest",
-                    title = "📦 全部素材库清单 (All Assets - 共 ${state.assetLibrary.items.size} 项)",
-                    subtitle = "轻量结构化索引 · 包含全部切片名与物理宽高",
-                    category = MentionCategory.ASSET,
-                    icon = Icons.Default.Inventory2,
-                    payload = MentionPayload.AssetPayload(
-                        assetId = "all_assets",
-                        fileName = "ALL_ASSETS_MANIFEST",
-                        filePath = "ALL",
-                        width = state.assetLibrary.items.size,
-                        height = 0
-                    )
-                )
-            )
-        }
-
-        state.assetLibrary.items.forEach { asset ->
-            candidates.add(
-                MentionItem(
-                    id = "asset_${asset.id}",
-                    title = asset.name,
-                    subtitle = "${asset.width}x${asset.height} · ${asset.relativePath}",
-                    category = MentionCategory.ASSET,
-                    icon = Icons.Default.Image,
-                    previewImagePath = asset.relativePath,
-                    payload = MentionPayload.AssetPayload(
-                        assetId = asset.id,
-                        fileName = asset.name,
-                        filePath = asset.relativePath,
-                        width = asset.width,
-                        height = asset.height
-                    )
-                )
-            )
-        }
-
-        // 4. 外部参考规范文档 (Documents)
-        val allDocs = if (registeredExternalDocs.isNotEmpty()) registeredExternalDocs else ExternalDocManager.getDocsSync(projId)
-        allDocs.forEach { doc ->
-            candidates.add(
-                MentionItem(
-                    id = "doc_${doc.absolutePath}",
-                    title = doc.fileName,
-                    subtitle = doc.absolutePath,
-                    category = MentionCategory.DOC,
-                    icon = Icons.Default.Description,
-                    payload = MentionPayload.DocPayload(
-                        fileName = doc.fileName,
-                        absolutePath = doc.absolutePath
-                    )
-                )
-            )
-        }
 
         if (trimmed.isBlank()) return candidates
         return candidates.filter {
@@ -321,12 +340,12 @@ class UIStudioViewModel {
         val firstPage = effectiveProject.pages.firstOrNull()
         val initialWidth = firstPage?.width?.takeIf { it > 0 } ?: 1920f
         val initialHeight = firstPage?.height?.takeIf { it > 0 } ?: 1080f
-        val initialOpenTabs = firstPage?.let { listOf(it.id) } ?: emptyList()
 
         state = state.copy(
             project = effectiveProject,
-            currentViewId = firstPage?.id,
-            openViewIds = if (state.openViewIds.isEmpty()) initialOpenTabs else state.openViewIds,
+            currentViewId = null,
+            openViewIds = emptyList(),
+            activeContainerId = null,
             canvasWidth = initialWidth,
             canvasHeight = initialHeight,
             scale = 1.0f,
@@ -775,30 +794,6 @@ class UIStudioViewModel {
      */
     fun groupBlocksIntoContainer(draggedId: String, targetId: String) {
         state = state.copy(pendingCreateContainer = draggedId to targetId)
-    }
-
-    /**
-     * 展开/折叠指定图层容器。
-     */
-    fun toggleHierarchyBlockExpanded(blockId: String) {
-        val current = state.expandedHierarchyBlockIds
-        state = state.copy(
-            expandedHierarchyBlockIds = if (current.contains(blockId)) current - blockId else current + blockId
-        )
-    }
-
-    /**
-     * 一键全部展开/全部折叠图层树容器。
-     */
-    fun toggleAllHierarchyBlocksExpanded() {
-        val currentV = state.currentView ?: return
-        val allContainerIds = currentV.blocks.filter { it.isPureContainer || it.children.isNotEmpty() }.map { it.id }.toSet()
-        val isAllExpanded = state.expandedHierarchyBlockIds.containsAll(allContainerIds) && allContainerIds.isNotEmpty()
-        state = state.copy(
-            expandedHierarchyBlockIds = if (isAllExpanded) emptySet() else allContainerIds
-        )
-        val msg = if (isAllExpanded) "已折叠全部容器" else "已展开全部容器"
-        Toast.show(msg, ToastType.INFO)
     }
 
     /**
@@ -1822,11 +1817,19 @@ class UIStudioViewModel {
             ?: state.projectAgentConfig.modelName.ifBlank { GeminiModel.GEMINI_3_8_FLASH.displayName }
 
         val attachedMentionsList = mentionState.attachedMentions.toList()
+
         val mentionTags = attachedMentionsList.map {
+            val resolvedPath = when (val p = it.payload) {
+                is MentionPayload.DocPayload -> p.absolutePath
+                is MentionPayload.AssetPayload -> if (it.id == "all_assets_manifest") "all_assets_manifest" else p.filePath
+                is MentionPayload.ViewPayload -> p.viewId
+                is MentionPayload.BlockPayload -> p.blockId
+                null -> if (it.id == "all_assets_manifest") "all_assets_manifest" else null
+            }
             org.gemini.ui.forge.model.chat.ChatMentionTag(
                 title = it.title,
                 categoryName = it.category.name,
-                path = (it.payload as? MentionPayload.DocPayload)?.absolutePath
+                path = resolvedPath
             )
         }
 
@@ -1912,7 +1915,7 @@ class UIStudioViewModel {
 
                 val apiFlavor = state.projectAgentConfig.apiFlavor
                 val systemPrompt = state.projectAgentConfig.systemPrompt.ifBlank {
-                    "你是一位精通游戏 UI/UX 布局设计的资深架构师，协助开发者在 UI Studio 中完成视图排版、图元尺寸规划与素材建议。"
+                    PromptManager.getUiStudioAgentPrompt()
                 }
                 val selectedModel = state.projectAgentConfig.modelName.ifBlank { GeminiModel.GEMINI_3_8_FLASH.modelName }
                 val view = state.currentView
@@ -1928,26 +1931,27 @@ class UIStudioViewModel {
                     )
                 }.toMutableList()
 
-                // 提取已选中的 @ 上下文实体并组装格式化 XML
-                val attachedMentionsList = mentionState.attachedMentions.toList()
+                // 提取已选中的 @ 上下文实体并组装格式化 XML (仅包含真实存在的物理实体)
                 val mentionContextBuilder = StringBuilder()
 
                 if (attachedMentionsList.isNotEmpty()) {
                     mentionContextBuilder.append("\n\n<context_attachments>\n")
-                    attachedMentionsList.forEach { mention ->
+                    for (mention in attachedMentionsList) {
                         when (val p = mention.payload) {
                             is MentionPayload.ViewPayload -> {
                                 mentionContextBuilder.append("  <view id=\"${p.viewId}\" name=\"${p.viewName}\" resolution=\"${p.width}x${p.height}\" block_count=\"${p.blockCount}\"/>\n")
                             }
                             is MentionPayload.BlockPayload -> {
-                                mentionContextBuilder.append("  <block id=\"${p.blockId}\" name=\"${p.blockName}\" type=\"${p.type}\" bounds=\"${p.bounds}\" is_container=\"${p.isContainer}\"/>\n")
+                                val dim = if (p.width > 0 && p.height > 0) " dimensions=\"${p.width}x${p.height}\"" else ""
+                                mentionContextBuilder.append("  <block id=\"${p.blockId}\" name=\"${p.blockName}\" type=\"${p.type}\"$dim is_container=\"${p.isContainer}\"/>\n")
                             }
                             is MentionPayload.AssetPayload -> {
                                 if (p.fileName == "ALL_ASSETS_MANIFEST") {
                                     val manifest = AssetManifestHelper.buildCompactManifest(state.assetLibrary.items)
                                     mentionContextBuilder.append("  <asset_library_manifest total=\"${state.assetLibrary.items.size}\">\n$manifest\n  </asset_library_manifest>\n")
                                 } else {
-                                    mentionContextBuilder.append("  <asset id=\"${p.assetId}\" file_name=\"${p.fileName}\" dimensions=\"${p.width}x${p.height}\" path=\"${p.filePath}\"/>\n")
+                                    val role = AssetManifestHelper.inferAssetRole(p.fileName, p.filePath)
+                                    mentionContextBuilder.append("  <asset id=\"${p.assetId}\" file_name=\"${p.fileName}\" dimensions=\"${p.width}x${p.height}\" role=\"$role\" path=\"${p.filePath}\"/>\n")
                                     // 若为切片素材，自动尝试读取本地文件字节流以多模态附件发送
                                     try {
                                         val assetBytes = readLocalFileBytes(p.filePath)
@@ -1973,10 +1977,12 @@ class UIStudioViewModel {
                                 }
                             }
                             is MentionPayload.DocPayload -> {
-                                val content = p.content ?: try {
-                                    readLocalFileBytes(p.absolutePath)?.decodeToString() ?: ""
-                                } catch (e: Exception) { "" }
-                                mentionContextBuilder.append("  <document name=\"${p.fileName}\" path=\"${p.absolutePath}\">\n$content\n  </document>\n")
+                                if (org.gemini.ui.forge.data.isFileExistsInternal(p.absolutePath)) {
+                                    val content = p.content ?: try {
+                                        readLocalFileBytes(p.absolutePath)?.decodeToString() ?: ""
+                                    } catch (e: Exception) { "" }
+                                    mentionContextBuilder.append("  <document name=\"${p.fileName}\" path=\"${p.absolutePath}\">\n$content\n  </document>\n")
+                                }
                             }
                         }
                     }
@@ -1991,6 +1997,22 @@ class UIStudioViewModel {
                     attachedMentions = attachedMentionsList,
                     mode = skillMode
                 )
+
+                // 若用户意图涉及界面生成或排版，且素材库不为空且未手动挂载全部素材清单，则自动补充注入素材库切片清单
+                val hasAllAssetsMention = attachedMentionsList.any {
+                    val p = it.payload
+                    p is MentionPayload.AssetPayload && p.fileName == "ALL_ASSETS_MANIFEST"
+                }
+                if (!hasAllAssetsMention && state.assetLibrary.items.isNotEmpty()) {
+                    val isLayoutIntent = triggeredSkills.any { it.id == UiStudioSkillManager.SPEC_TO_VIEW_SKILL_ID } ||
+                            userText.contains("生成界面") || userText.contains("创建界面") || userText.contains("排版") ||
+                            userText.contains("布局") || userText.contains("老虎机") || userText.contains("slot")
+                    if (isLayoutIntent) {
+                        val manifest = AssetManifestHelper.buildCompactManifest(state.assetLibrary.items)
+                        mentionContextBuilder.append("\n<asset_library_manifest total=\"${state.assetLibrary.items.size}\">\n$manifest\n</asset_library_manifest>\n")
+                    }
+                }
+
                 val skillPromptAddition = triggeredSkills.joinToString("\n\n") { it.systemInstructionAddition }
                 val effectiveSystemPrompt = if (skillPromptAddition.isNotBlank()) {
                     "$systemPrompt\n\n$skillPromptAddition".trim()
@@ -2014,7 +2036,7 @@ class UIStudioViewModel {
                     model = resolvedModel,
                     apiFlavor = apiFlavor,
                     prompt = userText,
-                    systemInstruction = "$effectiveSystemPrompt\n\n[上下文信息] $contextInfo$mentionContextBuilder",
+                    systemInstruction = "$effectiveSystemPrompt\n\n$CONTEXT_INFO_HEADER $contextInfo$mentionContextBuilder",
                     tools = toolConfigs,
                     attachments = chatAttachments,
                     preferCloudUpload = preferCloud,
@@ -2126,24 +2148,76 @@ class UIStudioViewModel {
             args = extractedArgs
         )
         if (applyResult.isSuccess && applyResult.createdPage != null) {
-            val page = applyResult.createdPage
-            val existingPages = state.project?.pages ?: emptyList()
-            val updatedPages = existingPages.filter { it.nameStr != page.nameStr } + page
-            val updatedProject = state.project?.copy(pages = updatedPages)
-            if (updatedProject != null) {
-                state = state.copy(
-                    project = updatedProject,
-                    currentViewId = page.id,
-                    openViewIds = (state.openViewIds + page.id).distinct(),
-                    isDirty = true,
-                    isFitToViewport = true
-                )
-                saveProject(TemplateRepository(storage))
-                scope.launch(Dispatchers.Main) {
-                    Toast.show("🎉 视图 [${page.nameStr}] 已自动装配并在画布呈现！", ToastType.SUCCESS)
-                }
-            }
+            // 将待应用的排版结果交由人机交互决策弹窗进行确认，由用户选择替换当前视图还是新建独立视图
+            state = state.copy(pendingLayoutResult = applyResult)
         }
+    }
+
+    /**
+     * 确认应用 AI 生成的界面排版
+     *
+     * @param replaceCurrent 是否覆盖替换当前视图
+     * @param targetName 目标视图名称
+     */
+    fun confirmApplyLayout(replaceCurrent: Boolean, targetName: String) {
+        val result = state.pendingLayoutResult ?: return
+        val rawPage = result.createdPage ?: return
+        val existingPages = state.project?.pages ?: emptyList()
+
+        val finalPage = if (replaceCurrent) {
+            // 替换当前正在编辑的视图，继承当前视图的 id 与 name
+            val currentView = state.currentView ?: existingPages.firstOrNull()
+            val targetId = currentView?.id ?: rawPage.id
+            val targetNameStr = currentView?.nameStr ?: targetName.ifBlank { rawPage.nameStr }
+            rawPage.copy(
+                id = targetId,
+                nameStr = targetNameStr
+            )
+        } else {
+            // 作为新视图创建
+            val cleanName = targetName.ifBlank { rawPage.nameStr }
+            val newId = "page_${cleanName.replace(" ", "_")}_${getCurrentTimeMillis() % 10000}"
+            rawPage.copy(
+                id = newId,
+                nameStr = cleanName
+            )
+        }
+
+        val updatedPages = if (replaceCurrent) {
+            existingPages.map { if (it.id == finalPage.id) finalPage else it }
+        } else {
+            existingPages + finalPage
+        }
+
+        val updatedProject = state.project?.copy(pages = updatedPages)
+        if (updatedProject != null) {
+            state = state.copy(
+                project = updatedProject,
+                currentViewId = finalPage.id,
+                openViewIds = (state.openViewIds + finalPage.id).distinct(),
+                pendingLayoutResult = null,
+                isDirty = true,
+                isFitToViewport = true
+            )
+            saveProject(TemplateRepository(storage))
+            val toastMsg = if (replaceCurrent) {
+                "视图 [${finalPage.nameStr}] 已成功应用 AI 排版！"
+            } else {
+                "🎉 全新视图 [${finalPage.nameStr}] 已创建并在画布呈现！"
+            }
+            scope.launch(Dispatchers.Main) {
+                Toast.show(toastMsg, ToastType.SUCCESS)
+            }
+        } else {
+            state = state.copy(pendingLayoutResult = null)
+        }
+    }
+
+    /**
+     * 放弃或关闭 AI 排版确认弹窗
+     */
+    fun cancelApplyLayout() {
+        state = state.copy(pendingLayoutResult = null)
     }
 
     /**
@@ -2328,7 +2402,7 @@ class UIStudioViewModel {
             try {
                 val apiFlavor = state.projectAgentConfig.apiFlavor
                 val systemPrompt = state.projectAgentConfig.systemPrompt.ifBlank {
-                    "你是一位精通游戏 UI/UX 布局设计的资深架构师，协助开发者在 UI Studio 中完成视图排版、图元尺寸规划与素材建议。"
+                    PromptManager.getUiStudioAgentPrompt()
                 }
                 val selectedModel = state.projectAgentConfig.modelName.ifBlank { GeminiModel.GEMINI_3_8_FLASH.modelName }
                 val view = state.currentView
@@ -2362,7 +2436,7 @@ class UIStudioViewModel {
                     model = resolvedModel,
                     apiFlavor = apiFlavor,
                     prompt = userMsg.prompt,
-                    systemInstruction = "$systemPrompt\n\n[上下文信息] $contextInfo",
+                    systemInstruction = "$systemPrompt\n\n$CONTEXT_INFO_HEADER $contextInfo",
                     attachments = chatAttachments,
                     preferCloudUpload = true,
                     history = historyItems,
@@ -3389,6 +3463,9 @@ class UIStudioViewModel {
         } ?: return
         val updatedProject = state.project?.copy(pages = updatedPages) ?: return
         state = state.copy(project = updatedProject, renamingView = null, isDirty = true)
+        scope.launch {
+            repo.saveTemplate(updatedProject.projectId, updatedProject)
+        }
         Toast.show("视图已重命名为: $newName", ToastType.SUCCESS)
     }
 
@@ -3569,8 +3646,31 @@ class UIStudioViewModel {
         val view = state.currentView ?: return
         val draggedBlock = view.blocks.findBlockById(draggedId) ?: return
 
-        // 目标为 null：移至根列表末尾
+        // 目标为 null：移至列表末尾（容器视口下移至当前激活容器末尾，整页视口下移至根列表末尾）
         if (targetId == null) {
+            val activeContainer = state.activeContainerBlock
+            if (state.activeContainerId != null && activeContainer != null) {
+                val draggedAbsBounds = view.blocks.calculateBlockAbsoluteBounds(draggedId) ?: draggedBlock.bounds
+                val containerAbsBounds = view.blocks.calculateBlockAbsoluteBounds(activeContainer.id) ?: activeContainer.bounds
+                val localBounds = SerialRect(
+                    left = draggedAbsBounds.left - containerAbsBounds.left,
+                    top = draggedAbsBounds.top - containerAbsBounds.top,
+                    right = draggedAbsBounds.right - containerAbsBounds.left,
+                    bottom = draggedAbsBounds.bottom - containerAbsBounds.top
+                )
+                val cleanedBlocks = removeBlockFromTree(view.blocks, draggedId)
+                val updatedDragged = draggedBlock.copy(bounds = localBounds)
+                val newBlocks = updateBlockInTreeRecursively(cleanedBlocks, activeContainer.id) { c ->
+                    val newChildren = c.children.filterNot { it.id == draggedId } + updatedDragged
+                    c.copy(children = newChildren)
+                }.bindParents()
+                val finalBlocks = if (dissolveContainerId != null) {
+                    removeBlockFromTree(newBlocks, dissolveContainerId).bindParents()
+                } else newBlocks
+                updateViewBlocksAndSave(view.id, finalBlocks, repo)
+                return
+            }
+
             val draggedAbsBounds = view.blocks.calculateBlockAbsoluteBounds(draggedId) ?: draggedBlock.bounds
             val cleanedBlocks = removeBlockFromTree(view.blocks, draggedId)
             val updatedDragged = draggedBlock.copy(bounds = draggedAbsBounds)
@@ -3847,17 +3947,63 @@ class UIStudioViewModel {
         updateViewBlocksAndSave(view.id, updatedBlocks, repo)
     }
 
+    /** 兄弟列表内重排动作枚举 */
+    private enum class SiblingReorderAction { MOVE_UP, MOVE_DOWN, TO_FRONT, TO_BACK }
+
+    /**
+     * 在图元树中递归定位 blockId 所在的兄弟列表，并在该列表内执行重排。
+     * 返回重建后的新树；返回 null 表示已在边界无需移动（或未找到）。
+     * 纯平移语义：仅调整列表顺序，绝不改动任何图元 bounds 与宽高。
+     */
+    private fun rerouteWithinSiblings(
+        blocks: List<UIBlock>,
+        blockId: String,
+        action: SiblingReorderAction
+    ): List<UIBlock>? {
+        val index = blocks.indexOfFirst { it.id == blockId }
+        if (index >= 0) {
+            val mutable = blocks.toMutableList()
+            when (action) {
+                SiblingReorderAction.MOVE_UP ->
+                    if (index == mutable.lastIndex) return null else {
+                        val item = mutable.removeAt(index)
+                        mutable.add(index + 1, item)
+                    }
+                SiblingReorderAction.MOVE_DOWN ->
+                    if (index == 0) return null else {
+                        val item = mutable.removeAt(index)
+                        mutable.add(index - 1, item)
+                    }
+                SiblingReorderAction.TO_FRONT -> {
+                    if (index == mutable.lastIndex) return null
+                    val item = mutable.removeAt(index)
+                    mutable.add(item)
+                }
+                SiblingReorderAction.TO_BACK -> {
+                    if (index == 0) return null
+                    val item = mutable.removeAt(index)
+                    mutable.add(0, item)
+                }
+            }
+            return mutable
+        }
+        // 递归深入各容器的 children 子树
+        for (i in blocks.indices) {
+            val child = blocks[i]
+            if (child.children.isEmpty()) continue
+            val newChildren = rerouteWithinSiblings(child.children, blockId, action) ?: continue
+            return blocks.toMutableList().also { it[i] = child.copy(children = newChildren) }
+        }
+        return null
+    }
+
     /**
      * 将指定组件置于顶层（移至渲染列表尾部）。
      */
     fun bringBlockToFront(blockId: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
-        val target = view.blocks.find { it.id == blockId } ?: return
-        val updatedBlocks = view.blocks.filterNot { it.id == blockId } + target
-        val updatedPages = state.project?.pages?.map {
-            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
-        } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
+        val newBlocks = rerouteWithinSiblings(view.blocks, blockId, SiblingReorderAction.TO_FRONT) ?: return
+        updateViewBlocksAndSave(view.id, newBlocks.bindParents(), repo)
         Toast.show("已将组件置于顶层", ToastType.SUCCESS)
     }
 
@@ -3866,12 +4012,8 @@ class UIStudioViewModel {
      */
     fun sendBlockToBack(blockId: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
-        val target = view.blocks.find { it.id == blockId } ?: return
-        val updatedBlocks = listOf(target) + view.blocks.filterNot { it.id == blockId }
-        val updatedPages = state.project?.pages?.map {
-            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
-        } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
+        val newBlocks = rerouteWithinSiblings(view.blocks, blockId, SiblingReorderAction.TO_BACK) ?: return
+        updateViewBlocksAndSave(view.id, newBlocks.bindParents(), repo)
         Toast.show("已将组件置于底层", ToastType.SUCCESS)
     }
 
@@ -3880,15 +4022,8 @@ class UIStudioViewModel {
      */
     fun moveBlockUp(blockId: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
-        val idx = view.blocks.indexOfFirst { it.id == blockId }
-        if (idx == -1 || idx == view.blocks.lastIndex) return
-        val mutable = view.blocks.toMutableList()
-        val item = mutable.removeAt(idx)
-        mutable.add(idx + 1, item)
-        val updatedPages = state.project?.pages?.map {
-            if (it.id == view.id) it.copy(blocks = mutable) else it
-        } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
+        val newBlocks = rerouteWithinSiblings(view.blocks, blockId, SiblingReorderAction.MOVE_UP) ?: return
+        updateViewBlocksAndSave(view.id, newBlocks.bindParents(), repo)
     }
 
     /**
@@ -3896,15 +4031,8 @@ class UIStudioViewModel {
      */
     fun moveBlockDown(blockId: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
-        val idx = view.blocks.indexOfFirst { it.id == blockId }
-        if (idx <= 0) return
-        val mutable = view.blocks.toMutableList()
-        val item = mutable.removeAt(idx)
-        mutable.add(idx - 1, item)
-        val updatedPages = state.project?.pages?.map {
-            if (it.id == view.id) it.copy(blocks = mutable) else it
-        } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
+        val newBlocks = rerouteWithinSiblings(view.blocks, blockId, SiblingReorderAction.MOVE_DOWN) ?: return
+        updateViewBlocksAndSave(view.id, newBlocks.bindParents(), repo)
     }
 
     /**

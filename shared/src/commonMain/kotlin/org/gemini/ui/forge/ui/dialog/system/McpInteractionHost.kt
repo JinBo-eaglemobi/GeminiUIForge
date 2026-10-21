@@ -33,6 +33,7 @@ fun McpInteractionHost(
 ) {
     var pendingConfirmation by remember { mutableStateOf<McpInteractionRequest.Confirmation?>(null) }
     var pendingChoice by remember { mutableStateOf<McpInteractionRequest.Choice?>(null) }
+    var pendingQuestion by remember { mutableStateOf<McpInteractionRequest.Question?>(null) }
     var selectedChoiceIndex by remember { mutableStateOf<Int?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
@@ -60,6 +61,9 @@ fun McpInteractionHost(
                 is McpInteractionRequest.Choice -> {
                     pendingChoice = req
                     selectedChoiceIndex = null
+                }
+                is McpInteractionRequest.Question -> {
+                    pendingQuestion = req
                 }
             }
         }
@@ -251,6 +255,24 @@ fun McpInteractionHost(
                     }
                 }
             } else null
+        )
+    }
+
+    pendingQuestion?.let { req ->
+        AskUserQuestionDialog(
+            header = req.header,
+            question = req.question,
+            options = req.options,
+            multiple = req.multiple,
+            allowCustomAnswer = req.allowCustomAnswer,
+            onAnswer = { answer ->
+                coroutineScope.launch { bridge.completeQuestion(req.id, answer) }
+                pendingQuestion = null
+            },
+            onCancel = {
+                coroutineScope.launch { bridge.completeQuestion(req.id, null) }
+                pendingQuestion = null
+            }
         )
     }
 }

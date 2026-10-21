@@ -25,11 +25,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.extend.getSelectedTextOrNull
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.formatTimestamp
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import org.gemini.ui.forge.model.chat.ChatMentionTag
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.ui.component.tip
 import androidx.compose.ui.text.font.FontWeight
@@ -41,13 +45,15 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
  * 核心特性：
  * 1. 鼠标自由划选与复制支持；
  * 2. 桌面端鼠标右键 / 悬浮唤起功能菜单（复制文本、重新编辑并填入、重新生成、删除本轮）；
- * 3. 关联附件图片缩略图网格。
+ * 3. 关联附件图片缩略图网格；
+ * 4. 附件/提及标签具备深色高对比度、悬停提亮与点击查看文档/图片大图能力。
  */
 @Composable
 fun CommonUserBubble(
     message: VisualChatMessage,
     maxBubbleWidth: Dp,
     onImageClick: ((String) -> Unit)? = null,
+    onMentionClick: ((ChatMentionTag) -> Unit)? = null,
     onEditRequested: ((String) -> Unit)? = null,
     onRegenerateRequested: ((VisualChatMessage) -> Unit)? = null,
     onDeleteRequested: ((VisualChatMessage) -> Unit)? = null,
@@ -74,10 +80,11 @@ fun CommonUserBubble(
         ) {
             Box {
                 Surface(
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    color = Color(0xFF26213B), // 沉稳深色石板暗紫，告别浅粉紫色块的突兀与刺眼
+                    contentColor = Color(0xFFF1F5F9), // 纯净柔和高亮白
                     shape = RoundedCornerShape(16.dp, 4.dp, 16.dp, 16.dp),
-                    shadowElevation = 1.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.35f)),
+                    shadowElevation = 2.dp,
                     modifier = Modifier.pointerInput(message.id) {
                         awaitPointerEventScope {
                             while (true) {
@@ -99,7 +106,7 @@ fun CommonUserBubble(
                     }
                 ) {
                     Column(modifier = Modifier.padding(spacing.medium)) {
-                        // 0. 本轮提问引用的 @ 外部文件/切片/视图上下文药丸
+                        // 0. 本轮提问引用的 @ 外部文件/切片/视图上下文药丸（高对比度深色磨砂胶囊 + 点击查看预览 + 杜绝重复Emoji）
                         if (message.attachedMentions.isNotEmpty()) {
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(spacing.extraSmall),
@@ -113,20 +120,39 @@ fun CommonUserBubble(
                                         "ASSET" -> "📦"
                                         else -> "📄"
                                     }
+
+                                    // 彻底剥离原始 title 中可能自带的各类 Emoji，根除 "📦 📦" 重复堆叠缺陷
+                                    val cleanTitle = mention.title.trim()
+                                        .removePrefix("📦").trim()
+                                        .removePrefix("📄").trim()
+                                        .removePrefix("❖").trim()
+                                        .removePrefix("🗖").trim()
+
                                     Surface(
                                         shape = RoundedCornerShape(6.dp),
-                                        color = Color.White.copy(alpha = 0.2f),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                                        color = Color(0xFF0F172A).copy(alpha = 0.85f), // 深邃磨砂底色，与暗紫气泡高阶融洽
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF6366F1).copy(alpha = 0.45f)), // 科技紫蓝细边框
+                                        modifier = Modifier
+                                            .pointerHoverIcon(PointerIcon.Hand)
+                                            .clickable { onMentionClick?.invoke(mention) }
+                                            .tip("点击预览文件或查看详情")
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                         ) {
                                             Text(
-                                                text = "$iconEmoji ${mention.title}",
+                                                text = "$iconEmoji $cleanTitle",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontWeight = FontWeight.Medium,
-                                                color = Color.White
+                                                color = Color(0xFFF8FAFC)
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Default.OpenInNew,
+                                                contentDescription = "预览文件",
+                                                tint = Color(0xFFA5B4FC),
+                                                modifier = Modifier.size(11.dp)
                                             )
                                         }
                                     }
@@ -136,15 +162,18 @@ fun CommonUserBubble(
 
                         val userBubbleSelectionColors = remember {
                             TextSelectionColors(
-                                handleColor = Color.White,
-                                backgroundColor = Color.White.copy(alpha = 0.35f)
+                                handleColor = Color(0xFFA855F7),
+                                backgroundColor = Color(0xFFA855F7).copy(alpha = 0.35f)
                             )
                         }
                         CompositionLocalProvider(LocalTextSelectionColors provides userBubbleSelectionColors) {
                             SelectionContainer {
                                 Text(
                                     text = userText,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        color = Color(0xFFF1F5F9),
+                                        lineHeight = 22.sp
+                                    )
                                 )
                             }
                         }
@@ -281,7 +310,7 @@ fun CommonUserBubble(
         Spacer(Modifier.width(spacing.small))
         Surface(
             shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
+            color = Color(0xFF4C1D95),
             modifier = Modifier.size(32.dp).tip("用户")
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -289,7 +318,7 @@ fun CommonUserBubble(
                     Icons.Default.Person,
                     contentDescription = "用户",
                     modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    tint = Color.White
                 )
             }
         }

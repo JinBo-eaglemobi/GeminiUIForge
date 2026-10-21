@@ -33,8 +33,15 @@ fun AppMarkdown(
     )
 
     val typography = markdownTypography(
+        h1 = MaterialTheme.typography.headlineSmall,
+        h2 = MaterialTheme.typography.titleLarge,
+        h3 = MaterialTheme.typography.titleMedium,
+        h4 = MaterialTheme.typography.titleSmall,
+        h5 = MaterialTheme.typography.titleSmall,
+        h6 = MaterialTheme.typography.titleSmall,
         text = MaterialTheme.typography.bodyMedium,
         code = MaterialTheme.typography.bodySmall,
+        quote = MaterialTheme.typography.bodyMedium,
         paragraph = MaterialTheme.typography.bodyMedium
     )
 

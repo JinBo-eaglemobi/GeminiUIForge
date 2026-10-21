@@ -36,6 +36,8 @@ import org.gemini.ui.forge.extend.readClipboardImageBytes
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
 import org.gemini.ui.forge.model.chat.MentionItem
+import org.gemini.ui.forge.model.chat.MentionPayload
+import org.gemini.ui.forge.data.isFileExistsInternal
 import org.gemini.ui.forge.state.MentionState
 import org.gemini.ui.forge.ui.component.chat.mention.MentionDropdownPanel
 import org.gemini.ui.forge.ui.component.chat.mention.MentionPillBar
@@ -84,6 +86,8 @@ fun CommonChatInputBar(
     mentionCandidates: List<MentionItem> = emptyList(),
     mentionMaxHeight: Dp = 480.dp,
     onFilesDropped: ((List<String>) -> Unit)? = null,
+    externalDroppedFiles: List<String>? = null,
+    onExternalDroppedFilesConsumed: () -> Unit = {},
     activeSkills: List<UiStudioSkill> = emptyList(),
     skillMode: SkillActivationMode = SkillActivationMode.AUTO,
     onSkillModeChanged: (SkillActivationMode) -> Unit = {},
@@ -135,23 +139,54 @@ fun CommonChatInputBar(
         }
     }
 
+    // 统一将文件物理路径转换为会话附件并追加到列表
+    fun addFilesAsAttachments(paths: List<String>) {
+        if (paths.isEmpty()) return
+        scope.launch {
+            val newAttachments = paths.mapNotNull { filePath ->
+                try {
+                    val fileName = filePath.substringAfterLast('\\').substringAfterLast('/')
+                    val bytes = readLocalFileBytes(filePath)
+                    val mime = when {
+                        fileName.endsWith(".png", true) -> "image/png"
+                        fileName.endsWith(".jpg", true) || fileName.endsWith(".jpeg", true) -> "image/jpeg"
+                        fileName.endsWith(".webp", true) -> "image/webp"
+                        fileName.endsWith(".gif", true) -> "image/gif"
+                        fileName.endsWith(".bmp", true) -> "image/bmp"
+                        fileName.endsWith(".json", true) -> "application/json"
+                        fileName.endsWith(".xml", true) -> "application/xml"
+                        fileName.endsWith(".yaml", true) || fileName.endsWith(".yml", true) -> "text/yaml"
+                        fileName.endsWith(".md", true) -> "text/markdown"
+                        fileName.endsWith(".kt", true) || fileName.endsWith(".kts", true) -> "text/x-kotlin"
+                        fileName.endsWith(".txt", true) || fileName.endsWith(".log", true) -> "text/plain"
+                        else -> "application/octet-stream"
+                    }
+                    CommonChatAttachment(name = fileName, localUri = filePath, bytes = bytes, mimeType = mime)
+                } catch (_: Throwable) {
+                    null
+                }
+            }
+            if (newAttachments.isNotEmpty()) {
+                attachments = attachments + newAttachments
+            }
+        }
+    }
+
+    // 监听外部注入的文件（如从聊天主视口拖入）
+    LaunchedEffect(externalDroppedFiles) {
+        val files = externalDroppedFiles
+        if (!files.isNullOrEmpty()) {
+            addFilesAsAttachments(files)
+            onExternalDroppedFilesConsumed()
+        }
+    }
+
     // 本地附件选择器
     val filePicker = rememberFilePicker(
-        extensions = listOf("png", "jpg", "jpeg", "webp", "json", "txt")
+        extensions = listOf("png", "jpg", "jpeg", "webp", "json", "txt", "md", "yaml", "xml")
     ) { path ->
         path?.takeIf { it.isNotBlank() }?.let { filePath ->
-            scope.launch {
-                val fileName = filePath.substringAfterLast('\\').substringAfterLast('/')
-                val bytes = readLocalFileBytes(filePath)
-                val mime = when {
-                    fileName.endsWith(".png", true) -> "image/png"
-                    fileName.endsWith(".jpg", true) || fileName.endsWith(".jpeg", true) -> "image/jpeg"
-                    fileName.endsWith(".webp", true) -> "image/webp"
-                    fileName.endsWith(".json", true) -> "application/json"
-                    else -> "text/plain"
-                }
-                attachments = attachments + CommonChatAttachment(name = fileName, localUri = filePath, bytes = bytes, mimeType = mime)
-            }
+            addFilesAsAttachments(listOf(filePath))
         }
     }
 
@@ -172,6 +207,7 @@ fun CommonChatInputBar(
             .onFileDrop(
                 onDragStateChanged = { isDropHovering = it },
                 onFilesDropped = { paths ->
+                    addFilesAsAttachments(paths)
                     onFilesDropped?.invoke(paths)
                 }
             )
@@ -284,10 +320,33 @@ fun CommonChatInputBar(
                     candidates = mentionCandidates,
                     maxHeight = mentionMaxHeight,
                     onItemSelected = { selected ->
-                        mentionState.attachMention(selected)
-                        val atIndex = inputText.lastIndexOf('@')
-                        if (atIndex >= 0) {
-                            inputText = inputText.substring(0, atIndex)
+                        val docPayload = selected.payload as? MentionPayload.DocPayload
+                        if (docPayload != null) {
+                            scope.launch {
+                                if (!isFileExistsInternal(docPayload.absolutePath)) {
+                                    mentionState.closeMenu()
+                                    val atIndex = inputText.lastIndexOf('@')
+                                    if (atIndex >= 0) {
+                                        inputText = inputText.substring(0, atIndex)
+                                    }
+                                    Toast.show(
+                                        "引用的文件已在磁盘被删除，已自动清理缓存",
+                                        ToastType.INFO
+                                    )
+                                } else {
+                                    mentionState.attachMention(selected)
+                                    val atIndex = inputText.lastIndexOf('@')
+                                    if (atIndex >= 0) {
+                                        inputText = inputText.substring(0, atIndex)
+                                    }
+                                }
+                            }
+                        } else {
+                            mentionState.attachMention(selected)
+                            val atIndex = inputText.lastIndexOf('@')
+                            if (atIndex >= 0) {
+                                inputText = inputText.substring(0, atIndex)
+                            }
                         }
                     },
                     modifier = Modifier

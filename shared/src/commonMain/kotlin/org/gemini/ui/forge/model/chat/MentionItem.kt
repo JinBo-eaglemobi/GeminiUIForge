@@ -6,10 +6,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
  * 上下文引用类型分类
  */
 enum class MentionCategory(val titleZh: String, val titleEn: String) {
-    VIEW("视图界面", "Views"),
-    BLOCK("图元图层", "Layer Blocks"),
+    DOC("历史引用", "Recent References"),
     ASSET("切片素材", "Assets"),
-    DOC("参考文档", "Documents")
+    VIEW("视图界面", "Views"),
+    BLOCK("图元图层", "Layer Blocks")
 }
 
 /**
@@ -43,7 +43,9 @@ sealed interface MentionPayload {
         val blockId: String,
         val blockName: String,
         val type: String,
-        val bounds: String,
+        val bounds: String = "",
+        val width: Int = 0,
+        val height: Int = 0,
         val isContainer: Boolean
     ) : MentionPayload
 

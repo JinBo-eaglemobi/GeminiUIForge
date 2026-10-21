@@ -7,6 +7,7 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.model.api.ChatMessage
 import org.gemini.ui.forge.model.app.PromptLanguage
+import org.gemini.ui.forge.model.prompt.PromptKey
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
@@ -489,7 +490,11 @@ class LayoutEditorDelegate(
             
             task.execute {
                 val logger = { msg: String -> addLog(msg); log(msg) }
-                val systemInstruction = if (lang == PromptLanguage.EN) aiService.promptManager.getPrompt("optimize_instruction_en") else aiService.promptManager.getPrompt("optimize_instruction_zh")
+                val systemInstruction = if (lang == PromptLanguage.EN) {
+                    aiService.promptManager.getPrompt(PromptKey.OPTIMIZE_INSTRUCTION_EN)
+                } else {
+                    aiService.promptManager.getPrompt(PromptKey.OPTIMIZE_INSTRUCTION_ZH)
+                }
                 val historyKey = "PROMPT_$blockId"
                 val history = if (useChatContext) getState().chatHistories[historyKey] ?: emptyList() else emptyList()
                 

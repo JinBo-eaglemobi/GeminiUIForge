@@ -224,29 +224,28 @@ object AssetSheetNormalizer {
         apiKey: String,
         baseUrl: String? = null
     ): AssetSheetParseResult {
-        val systemPrompt = """
-            你是一个专业的高精度游戏 UI 图集标注清洗与标准化引擎。
-            你的任务是将用户提供的非标图集数据严格清洗转化为符合标准的 JSON 格式：
-            {
-              "canvas": { "width": 1280, "height": 720 },
-              "assets": [
-                {
-                  "id": "T01",
-                  "name": "Back_Button",
-                  "category": "Top Navigation",
-                  "x": 31, "y": 26, "w": 80, "h": 84,
-                  "description": "说明"
-                }
-              ]
-            }
-            请直接输出纯净合法 JSON，严禁任何 markdown 标记或解释文字。
-        """.trimIndent()
+        val promptManager = org.gemini.ui.forge.manager.PromptManager(org.gemini.ui.forge.utils.LocalFileStorage())
+        val systemPrompt = try {
+            promptManager.getPrompt(org.gemini.ui.forge.model.prompt.PromptKey.NORMALIZE_ASSET_SHEET)
+        } catch (_: Exception) {
+            promptManager.getDefaultResourcePrompt(org.gemini.ui.forge.model.prompt.PromptKey.NORMALIZE_ASSET_SHEET)
+        }
+        val userPromptTemplate = try {
+            promptManager.getPrompt(org.gemini.ui.forge.model.prompt.PromptKey.NORMALIZE_ASSET_SHEET_USER)
+        } catch (_: Exception) {
+            promptManager.getDefaultResourcePrompt(org.gemini.ui.forge.model.prompt.PromptKey.NORMALIZE_ASSET_SHEET_USER)
+        }
+        val effectivePrompt = if (userPromptTemplate.contains("%s")) {
+            userPromptTemplate.replace("%s", jsonText)
+        } else {
+            "$userPromptTemplate\n$jsonText"
+        }
 
         val chatEngine = GeminiChatEngine()
         val request = GeminiChatRequest(
             apiKey = apiKey,
             model = org.gemini.ui.forge.model.GeminiModel.GEMINI_2_5_FLASH,
-            prompt = "请清洗并规范化以下数据：\n$jsonText",
+            prompt = effectivePrompt,
             systemInstruction = systemPrompt,
             generationConfig = GeminiGenerationConfig(
                 temperature = 0.1

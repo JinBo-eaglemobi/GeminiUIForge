@@ -5,6 +5,7 @@ import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.GeminiModel
+import org.gemini.ui.forge.model.prompt.PromptKey
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.service.AIGenerationService
 import org.gemini.ui.forge.service.LocalMattingService
@@ -133,7 +134,13 @@ class ChatRefineImageTool(
         val mattingService = LocalMattingService(storage)
 
         onProgress?.invoke(0.3f, "正在执行多模态微调重绘...")
-        val promptToSend = "${block.userPromptEn.ifBlank { block.userPromptZh }}, refined with instruction: $instruction"
+        val basePrompt = block.userPromptEn.ifBlank { block.userPromptZh }
+        val template = aiService.promptManager.getPrompt(PromptKey.CHAT_REFINE_INSTRUCTION)
+        val promptToSend = if (template.isNotBlank()) {
+            template.replace("{basePrompt}", basePrompt).replace("{instruction}", instruction)
+        } else {
+            "$basePrompt, refined with instruction: $instruction"
+        }
         var rawResultUri: String? = null
 
         try {

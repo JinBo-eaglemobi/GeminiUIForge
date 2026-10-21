@@ -50,7 +50,39 @@ sealed interface McpInteractionRequest {
         val type: String,
         val durationMillis: Long
     ) : McpInteractionRequest
+
+    /**
+     * 结构化问询请求：向用户展示带描述的选项卡片并挂起等待作答（对齐 OpenCode question 工具体验）
+     */
+    data class Question(
+        override val id: Long,
+        val header: String,
+        val question: String,
+        val options: List<QuestionOption>,
+        val multiple: Boolean,
+        val allowCustomAnswer: Boolean,
+        val timeoutMs: Long
+    ) : McpInteractionRequest
 }
+
+/**
+ * 结构化问询选项定义
+ */
+data class QuestionOption(
+    val label: String,
+    val description: String = "",
+    val recommended: Boolean = false
+)
+
+/**
+ * 问询交互的返回结果封装：自由输入或选项选择
+ */
+data class QuestionAnswer(
+    val isCustom: Boolean,
+    val selectedIndices: List<Int> = emptyList(),
+    val selectedLabels: List<String> = emptyList(),
+    val customText: String? = null
+)
 
 /**
  * 确认交互的返回结果封装
@@ -86,6 +118,7 @@ object McpInteractionBridge {
     private val mapMutex = Mutex()
     private val confirmationDeferreds = LinkedHashMap<Long, CompletableDeferred<Boolean>>()
     private val choiceDeferreds = LinkedHashMap<Long, CompletableDeferred<Int?>>()
+    private val questionDeferreds = LinkedHashMap<Long, CompletableDeferred<QuestionAnswer?>>()
 
     @Volatile
     private var isHostActive: Boolean = false
@@ -249,5 +282,66 @@ object McpInteractionBridge {
             choiceDeferreds.remove(requestId)
         } ?: return false
         return deferred.complete(selectedIndex)
+    }
+
+    /**
+     * 发起结构化问询请求并挂起等待用户作答
+     * @return 用户答案；取消/超时/UI 不可达时返回 null
+     */
+    suspend fun requestQuestion(
+        header: String,
+        question: String,
+        options: List<QuestionOption>,
+        multiple: Boolean = false,
+        allowCustomAnswer: Boolean = true,
+        timeoutMs: Long = 240_000L
+    ): QuestionAnswer? {
+        if (!isHostActive) {
+            return null
+        }
+
+        val reqId = getCurrentTimeMillis()
+        val deferred = CompletableDeferred<QuestionAnswer?>()
+        mapMutex.withLock {
+            questionDeferreds[reqId] = deferred
+        }
+
+        val request = McpInteractionRequest.Question(
+            id = reqId,
+            header = header,
+            question = question,
+            options = options,
+            multiple = multiple,
+            allowCustomAnswer = allowCustomAnswer,
+            timeoutMs = timeoutMs
+        )
+
+        val emitted = _requests.tryEmit(request)
+        if (!emitted) {
+            mapMutex.withLock {
+                questionDeferreds.remove(reqId)
+            }
+            return null
+        }
+
+        return try {
+            withTimeoutOrNull(timeoutMs) {
+                deferred.await()
+            }
+        } finally {
+            mapMutex.withLock {
+                questionDeferreds.remove(reqId)
+            }
+        }
+    }
+
+    /**
+     * 前台 UI 宿主提交问询结果（answer 为 null 表示用户取消）
+     */
+    suspend fun completeQuestion(requestId: Long, answer: QuestionAnswer?): Boolean {
+        val deferred = mapMutex.withLock {
+            questionDeferreds.remove(requestId)
+        } ?: return false
+        return deferred.complete(answer)
     }
 }

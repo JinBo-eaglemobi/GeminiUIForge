@@ -74,14 +74,14 @@ data class UIAssetLibrary(
  * UI Studio 针对当前项目独立配置的 Agent 架构模型。
  *
  * @property apiFlavor 底层通信协议架构（默认采用新一代链式交互 API INTERACTIONS）
- * @property systemPrompt 专属于当前项目的角色定义与排版规范指令
+ * @property systemPrompt 专属于当前项目的角色定义与排版规范指令（为空时自动从外部资源 prompts/ui_studio_agent_prompt.md 动态读取）
  * @property modelName 默认使用的模型名称（默认采用最新旗舰 Gemini 3.8 Flash）
  * @property temperature 采样温度
  */
 @Serializable
 data class ProjectAgentConfig(
     val apiFlavor: ApiFlavor = ApiFlavor.INTERACTIONS,
-    val systemPrompt: String = "你是一位专属于本项目的 UI/UX 智能排版架构师。根据当前视图界面规格与素材库已有的切片资源，为用户规划符合 8pt 空间网格、对齐严密的高质感组件布局。",
+    val systemPrompt: String = "",
     val modelName: String = GeminiModel.GEMINI_3_8_FLASH.modelName,
     val temperature: Float = 0.7f
 )

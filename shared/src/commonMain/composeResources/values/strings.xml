@@ -574,6 +574,14 @@
     <string name="mcp_choice_confirm_btn">Confirm</string>
     <string name="mcp_choice_cancel_btn">Cancel</string>
     <string name="mcp_interaction_countdown">Awaiting action (%1$ds)</string>
+    <string name="question_title_default">Please answer</string>
+    <string name="question_badge_recommended">Recommended</string>
+    <string name="question_custom_answer_label">Type your own answer</string>
+    <string name="question_custom_answer_hint">Enter a custom answer instead of the preset options</string>
+    <string name="question_custom_answer_placeholder">Your custom answer…</string>
+    <string name="question_submit_single">Confirm</string>
+    <string name="question_submit_multi">Submit %1$d selections</string>
+    <string name="question_cancel">Cancel</string>
 
     <!-- MCP Follow Navigation -->
     <string name="mcp_follow_nav_title">Visual UI Follow Mode</string>
@@ -628,4 +636,25 @@
     <string name="project_duplicate_msg">A project folder named \"%1$s\" already exists. Would you like to open the existing project, or change the new project name to continue?</string>
     <string name="project_duplicate_open_existing">Open Existing Project</string>
     <string name="project_duplicate_rename">Change Project Name</string>
+
+    <!-- UI Studio Apply Layout Confirm Dialog -->
+    <string name="apply_layout_dialog_title">Apply AI View Layout</string>
+    <string name="apply_layout_dialog_subtitle">The AI model generated a new layout plan. Choose how to apply it to your workspace.</string>
+    <string name="apply_layout_stats_summary">Resolution: %1$dx%2$d | Total Blocks: %3$d</string>
+    <string name="apply_layout_stats_assets">Matched Assets: %1$d / %2$d</string>
+    <string name="apply_layout_mode_replace_title">Overwrite Current View</string>
+    <string name="apply_layout_mode_replace_desc">Replace blocks and layout in \"%1$s\" with the AI generated layout.</string>
+    <string name="apply_layout_mode_new_title">Create as New View</string>
+    <string name="apply_layout_mode_new_desc">Keep existing views intact and create a brand new view page.</string>
+    <string name="apply_layout_input_view_name">New View Name</string>
+    <string name="apply_layout_input_view_name_placeholder">Enter new view name...</string>
+    <string name="apply_layout_btn_confirm">Apply Layout</string>
+    <string name="apply_layout_btn_cancel">Discard</string>
+    <string name="apply_layout_toast_replace_success">View [%1$s] updated with AI layout</string>
+    <string name="apply_layout_toast_new_success">New view [%1$s] created and active on canvas</string>
+
+    <!-- UI Studio Hierarchy Panel Flat Context Empty States -->
+    <string name="uistudio_hierarchy_empty_no_view">Please select or open a view from the Views panel</string>
+    <string name="uistudio_hierarchy_empty_container">Current container has no child blocks\nDrag assets or add blocks to this container</string>
+    <string name="uistudio_hierarchy_empty_page">Current view has no root blocks\nDrag assets or add blocks to start layout</string>
 </resources>

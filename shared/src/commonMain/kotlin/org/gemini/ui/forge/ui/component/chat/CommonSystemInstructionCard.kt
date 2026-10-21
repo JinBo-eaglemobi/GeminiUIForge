@@ -1,21 +1,32 @@
 package org.gemini.ui.forge.ui.component.chat
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -40,6 +51,12 @@ fun CommonSystemInstructionCard(
     val spacing = LocalAppSpacing.current
     var editingText by remember(currentInstruction) { mutableStateOf(currentInstruction) }
     var selectedTab by remember { mutableIntStateOf(0) } // 0: 编辑, 1: 预览
+    val copyToClipboard = rememberClipboardAction()
+
+    val cardModifier = modifier
+        .fillMaxWidth(0.96f)
+        .fillMaxHeight(0.95f)
+        .clickable(enabled = false) {}
 
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -47,12 +64,11 @@ fun CommonSystemInstructionCard(
         tonalElevation = 6.dp,
         shadowElevation = 16.dp,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = modifier
-            .width(spacing.dialogMediumWidth)
-            .wrapContentHeight()
-            .clickable(enabled = false) {}
+        modifier = cardModifier
     ) {
-        Column(modifier = Modifier.padding(spacing.large)) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(spacing.large)
+        ) {
             // 1. 顶部 Header 与模式切换
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -82,37 +98,131 @@ fun CommonSystemInstructionCard(
                     )
                 }
 
-                // 「编辑 / 预览」分段切换控制条
-                SingleChoiceSegmentedButtonRow {
-                    SegmentedButton(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("编辑", style = MaterialTheme.typography.labelSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 预览模式下一键复制全文快捷按钮
+                    if (selectedTab == 1 && editingText.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF1E1B2E),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                            modifier = Modifier
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .clickable { copyToClipboard(editingText, "已复制系统人设指令全文") }
+                                .tip("一键复制系统人设指令全文到剪贴板")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.ContentCopy,
+                                    contentDescription = "复制全文",
+                                    modifier = Modifier.size(13.dp),
+                                    tint = Color(0xFFCBD5E1)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "复制全文",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFCBD5E1),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(spacing.small))
                     }
-                    SegmentedButton(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+
+                    // 「编辑 / 预览」锐利高对比度胶囊切换控制器（彻底根除 M3 SegmentedButton 默认勾选图标挤压与亚像素抗锯齿底影模糊缺陷）
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF1E1B2E),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                        modifier = Modifier.height(32.dp)
                     ) {
-                        Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("预览", style = MaterialTheme.typography.labelSmall)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(2.dp)
+                    ) {
+                        // 编辑按钮
+                        val isEditSelected = selectedTab == 0
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isEditSelected) Color(0xFF8B5CF6) else Color.Transparent,
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(6.dp))
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .clickable { selectedTab = 0 }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(horizontal = 10.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(13.dp),
+                                    tint = if (isEditSelected) Color.White else Color(0xFFCBD5E1)
+                                )
+                                Spacer(Modifier.width(5.dp))
+                                Text(
+                                    text = "编辑",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isEditSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (isEditSelected) Color.White else Color(0xFFCBD5E1)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(2.dp))
+
+                        // 预览按钮
+                        val isPreviewSelected = selectedTab == 1
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isPreviewSelected) Color(0xFF8B5CF6) else Color.Transparent,
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(6.dp))
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .clickable { selectedTab = 1 }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(horizontal = 10.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Visibility,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(13.dp),
+                                    tint = if (isPreviewSelected) Color.White else Color(0xFFCBD5E1)
+                                )
+                                Spacer(Modifier.width(5.dp))
+                                Text(
+                                    text = "预览",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isPreviewSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (isPreviewSelected) Color.White else Color(0xFFCBD5E1)
+                                )
+                            }
+                        }
                     }
                 }
             }
+        }
 
             Spacer(Modifier.height(spacing.medium))
 
             // 2. 主体内容区：编辑多行文本 vs Markdown 渲染视图
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(340.dp)
-            ) {
+            val contentBoxModifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+
+            Box(modifier = contentBoxModifier) {
                 if (selectedTab == 0) {
                     OutlinedTextField(
                         value = editingText,
@@ -120,13 +230,13 @@ fun CommonSystemInstructionCard(
                         placeholder = {
                             Text(
                                 text = "输入 Markdown 格式的 System Prompt 指令（如 # Role, ## Rules）...",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
                         },
                         modifier = Modifier.fillMaxSize(),
                         shape = RoundedCornerShape(10.dp),
-                        textStyle = MaterialTheme.typography.bodySmall,
+                        textStyle = MaterialTheme.typography.bodyMedium,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
                             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
@@ -153,7 +263,9 @@ fun CommonSystemInstructionCard(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                 )
                             } else {
-                                AppMarkdown(content = editingText)
+                                SelectionContainer {
+                                    AppMarkdown(content = editingText)
+                                }
                             }
                         }
                     }

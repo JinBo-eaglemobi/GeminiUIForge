@@ -92,8 +92,8 @@ fun UIStudioHierarchyItem(
     val state = viewModel.state
     val isSelected = state.selectedBlockId == block.id
     var showContextMenu by remember { mutableStateOf(false) }
-    val isContainerExpanded = state.expandedHierarchyBlockIds.contains(block.id)
     val hasChildren = block.children.isNotEmpty()
+    val isContainer = block.isPureContainer || hasChildren || block.type == UIBlockType.CONTAINER
     val isEffectiveHidden = isAncestorHidden || !block.isVisible
     val isDragged = draggedBlockId == block.id
     val isHovered = hoveredBlockId == block.id
@@ -251,23 +251,6 @@ fun UIStudioHierarchyItem(
                                 }
                             }
                     ) {
-                        // 折叠 / 展开手柄
-                        if (hasChildren) {
-                            IconButton(
-                                onClick = { viewModel.toggleHierarchyBlockExpanded(block.id) },
-                                modifier = Modifier.size(18.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isContainerExpanded) Icons.Default.ArrowDropDown else Icons.AutoMirrored.Filled.ArrowRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.outline.copy(alpha = contentAlpha),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        } else {
-                            Spacer(modifier = Modifier.width(18.dp))
-                        }
-
                         // 图层真实图片缩略图 (若无图片则优雅回退为类型图标)
                         if (bitmap != null) {
                             Box(
@@ -441,7 +424,7 @@ fun UIStudioHierarchyItem(
                 )
 
                 // 容器操作：移入移出纯拖拽化，彻底移除移出父容器选项
-                if (block.isPureContainer || hasChildren) {
+                if (isContainer) {
                     DropdownMenuItem(
                         text = { Text("打开容器独立视图", fontSize = 13.sp) },
                         leadingIcon = { Icon(Icons.Default.Layers, null, modifier = Modifier.size(16.dp)) },
@@ -482,27 +465,6 @@ fun UIStudioHierarchyItem(
                         viewModel.requestDeleteBlock(block.id, templateRepo)
                         showContextMenu = false
                     }
-                )
-            }
-        }
-
-        // 递归渲染子组件
-        if (hasChildren && isContainerExpanded) {
-            block.children.forEach { child ->
-                UIStudioHierarchyItem(
-                    block = child,
-                    depth = depth + 1,
-                    isAncestorHidden = isEffectiveHidden,
-                    viewModel = viewModel,
-                    templateRepo = templateRepo,
-                    parentBlock = block,
-                    draggedBlockId = draggedBlockId,
-                    hoveredBlockId = hoveredBlockId,
-                    dropPosition = dropPosition,
-                    onPositioned = onPositioned,
-                    onStartDrag = onStartDrag,
-                    onDrag = onDrag,
-                    onDragEnd = onDragEnd
                 )
             }
         }

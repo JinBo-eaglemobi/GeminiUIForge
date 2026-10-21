@@ -1,12 +1,16 @@
 package org.gemini.ui.forge.manager
 
-import org.jetbrains.compose.resources.InternalResourceApi
-import org.jetbrains.compose.resources.readResourceBytes
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.gemini.ui.forge.manager.resource.ExternalResourceLoader
+import org.gemini.ui.forge.model.prompt.PromptKey
+import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
 
 /**
- * 提示词模板元数据
+ * 提示词模板元数据（供设置界面与 MCP 列举说明展示使用）
  *
  * @param id 提示词唯一标识符（对应文件名）
  * @param displayNameZh 中文业务显示名称
@@ -20,23 +24,32 @@ data class PromptMeta(
     val isMarkdown: Boolean = false
 ) {
     val fileName: String
-        get() = if (isMarkdown) "$id.md" else "$id.txt"
+        get() {
+            val key = PromptKey.fromId(id)
+            return key?.fileName ?: if (isMarkdown) "$id.md" else "$id.txt"
+        }
 }
 
 /**
  * AI 提示词管理器
  *
  * 核心架构原则：
- * 1. 外部本地存储 (~/.geminiuiforge/prompts/$name.txt / .md) 具有最高优先级；
- * 2. 只有在外部缓存不存在时，才读取内置资源作为出厂兜底；
- * 3. 用户在设置界面修改后，一律写入外部本地存储；
- * 4. 用户点击"恢复出厂预设"时，删除外部缓存，回滚至内置资源。
+ * 1. 复用统一的公用基础加载器 ExternalResourceLoader，外部本地存储 (~/.geminiuiforge/prompts/$name) 绝对优先；
+ * 2. 外部文件不存在时，按需回退读取内置资源作为出厂预设；
+ * 3. 彻底按需懒加载 (On-Demand Loading)，启动期零全量扫描与预载，使用时自动进入内存轻量缓存；
+ * 4. 强类型枚举 PromptKey 优先，杜绝魔法字符串传参。
  */
-class PromptManager(private val storage: LocalFileStorage) {
+class PromptManager(
+    private val storage: LocalFileStorage,
+    val resourceLoader: ExternalResourceLoader = ExternalResourceLoader(storage)
+) {
     private val TAG = "PromptManager"
     private val PROMPTS_DIR = "prompts"
 
-    /** 全案注册的核心提示词与规范模板清单 */
+    /** 内存图元默认提示词解析缓存 */
+    private var blockTypePromptsCache: Map<String, String>? = null
+
+    /** 全案注册的核心提示词与规范模板清单（用于设置界面与系统自检展示） */
     val promptMetas = listOf(
         PromptMeta("analyze_template", "整页 UI 识别与结构化分析", "用于 Gemini 视觉大模型首次分析参考图并自动推断页面所有 UI 模块结构与坐标"),
         PromptMeta("refine_template", "局部区域重构与结构微调", "用于对页面局部区域进行二次重塑与结构化调整"),
@@ -46,26 +59,151 @@ class PromptManager(private val storage: LocalFileStorage) {
         PromptMeta("optimize_instruction_en", "英文生图提示词优化指令", "针对英文生图意图的高清材质与渲染风格系统约束指令"),
         PromptMeta("refine_instruction_update", "模块局部修改默认指令", "在局部重塑时，针对已有模块进行修改的默认指令模板"),
         PromptMeta("refine_instruction_new", "模块新增生成默认指令", "在局部重塑时，针对新选区生成新模块的默认指令模板"),
-        PromptMeta("audit_visual_diff", "通用全景视觉对账与几何差分审计", "用于 Gemini 视觉大模型对比参考原图与全景标注图，自动识别漏框、底座截断与虚框，生成增删改纠偏建议"),
-        PromptMeta("image_gen_transparent", "透明背景生图引导指令", "指导视觉模型直接生成纯白/纯黑/可抠图背景的引导提示词"),
+        PromptMeta("chat_refine_instruction", "AI 改图指令组装模板", "用于在会话中根据用户微调指令扩充和组装图元生图提示词"),
         PromptMeta("gemini_image_gen", "Gemini 图像生成组装模板", "调用 Gemini 视觉模型生成单体 UI 图像时的顶层提示词组装结构"),
-        PromptMeta("detect_asset_sheet_coords", "图集 SpriteSheet AI 视觉坐标检测", "用于调用 Gemini 视觉模型深度识别素材图集中的全部独立组件并提取精准外切坐标与类型")
+        PromptMeta("detect_asset_sheet_coords", "图集 SpriteSheet AI 视觉坐标检测", "用于调用 Gemini 视觉模型深度识别素材图集中的全部独立组件并提取精准外切坐标与类型"),
+        PromptMeta("normalize_asset_sheet", "图集标注清洗系统提示词", "将非标图集数据清洗转化为标准 JSON 格式的系统人设"),
+        PromptMeta("normalize_asset_sheet_user", "图集标注清洗用户前缀模板", "提交给图集清洗引擎的用户提示词前缀"),
+        PromptMeta("block_type_prompts", "图元组件默认生图提示词字典", "定义各类游戏 UI 组件的标准英文出厂提示词")
     )
 
     private fun resolveFileName(functionName: String): String {
+        val key = PromptKey.fromId(functionName)
+        if (key != null) return key.fileName
         return promptMetas.find { it.id == functionName }?.fileName ?: "$functionName.txt"
     }
 
     /**
-     * 启动时将 IMAGE_TO_UI_SPEC 规范自动同步到本地物理缓存目录
+     * 文本换行符归一化与两端空白修剪。
      */
-    @OptIn(InternalResourceApi::class)
+    fun normalizeText(text: String): String {
+        return text.replace("\r\n", "\n").trim()
+    }
+
+    // ==========================================
+    // 强类型枚举 API（优先通道）
+    // ==========================================
+
+    /**
+     * 按需获取指定枚举键的提示词内容（外部本地优先 -> 内置资源兜底 -> 内存缓存）
+     */
+    suspend fun getPrompt(key: PromptKey): String {
+        return resourceLoader.loadText(PROMPTS_DIR, key.fileName)
+    }
+
+    /**
+     * 按需获取内置打包出厂预设提示词内容
+     */
+    suspend fun getDefaultResourcePrompt(key: PromptKey): String {
+        return resourceLoader.loadDefaultResourceText(PROMPTS_DIR, key.fileName)
+    }
+
+    /**
+     * 保存用户定制的提示词到外部本地文件并即时更新缓存
+     */
+    suspend fun savePrompt(key: PromptKey, content: String): Boolean {
+        if (key == PromptKey.BLOCK_TYPE_PROMPTS) {
+            blockTypePromptsCache = null
+        }
+        return resourceLoader.saveExternalText(PROMPTS_DIR, key.fileName, content)
+    }
+
+    /**
+     * 重置提示词，删除外部定制文件并回滚出厂
+     */
+    suspend fun resetPrompt(key: PromptKey): Boolean {
+        if (key == PromptKey.BLOCK_TYPE_PROMPTS) {
+            blockTypePromptsCache = null
+        }
+        return resourceLoader.deleteExternalText(PROMPTS_DIR, key.fileName)
+    }
+
+    /**
+     * 判断指定提示词是否存在外部本地文件
+     */
+    suspend fun hasPhysicalExternalFile(key: PromptKey): Boolean {
+        return resourceLoader.hasExternalFile(PROMPTS_DIR, key.fileName)
+    }
+
+    /**
+     * 判断提示词是否被用户实质定制过
+     */
+    suspend fun isCustomized(key: PromptKey): Boolean {
+        if (!hasPhysicalExternalFile(key)) return false
+        val cachedContent = resourceLoader.loadText(PROMPTS_DIR, key.fileName, bypassCache = true)
+        val defaultContent = getDefaultResourcePrompt(key)
+        return normalizeText(cachedContent) != normalizeText(defaultContent)
+    }
+
+    // ==========================================
+    // 字符串 API（兼容通道，供设置界面与 MCP 调用）
+    // ==========================================
+
+    suspend fun getPrompt(functionName: String): String {
+        val key = PromptKey.fromId(functionName)
+        if (key != null) return getPrompt(key)
+        val fileName = resolveFileName(functionName)
+        return resourceLoader.loadText(PROMPTS_DIR, fileName)
+    }
+
+    suspend fun getDefaultResourcePrompt(functionName: String): String {
+        val key = PromptKey.fromId(functionName)
+        if (key != null) return getDefaultResourcePrompt(key)
+        val fileName = resolveFileName(functionName)
+        return resourceLoader.loadDefaultResourceText(PROMPTS_DIR, fileName)
+    }
+
+    suspend fun savePrompt(functionName: String, content: String): Boolean {
+        val key = PromptKey.fromId(functionName)
+        if (key != null) return savePrompt(key, content)
+        val fileName = resolveFileName(functionName)
+        return resourceLoader.saveExternalText(PROMPTS_DIR, fileName, content)
+    }
+
+    suspend fun resetPrompt(functionName: String): Boolean {
+        val key = PromptKey.fromId(functionName)
+        if (key != null) return resetPrompt(key)
+        val fileName = resolveFileName(functionName)
+        return resourceLoader.deleteExternalText(PROMPTS_DIR, fileName)
+    }
+
+    suspend fun hasPhysicalExternalFile(functionName: String): Boolean {
+        val key = PromptKey.fromId(functionName)
+        if (key != null) return hasPhysicalExternalFile(key)
+        val fileName = resolveFileName(functionName)
+        return resourceLoader.hasExternalFile(PROMPTS_DIR, fileName)
+    }
+
+    suspend fun isCustomized(functionName: String): Boolean {
+        val key = PromptKey.fromId(functionName)
+        if (key != null) return isCustomized(key)
+        if (!hasPhysicalExternalFile(functionName)) return false
+        val fileName = resolveFileName(functionName)
+        val cachedContent = resourceLoader.loadText(PROMPTS_DIR, fileName, bypassCache = true)
+        val defaultContent = getDefaultResourcePrompt(functionName)
+        return normalizeText(cachedContent) != normalizeText(defaultContent)
+    }
+
+    // ==========================================
+    // 业务特化方法（按需加载与解耦）
+    // ==========================================
+
+    /**
+     * 按需获取 IMAGE_TO_UI_SPEC 规范内容（外部缓存优先）
+     */
+    suspend fun getImageToUiSpec(): String {
+        return getPrompt(PromptKey.IMAGE_TO_UI_SPEC)
+    }
+
+    /**
+     * 启动时同步 IMAGE_TO_UI_SPEC（仅在外部不存在时同步一次）
+     */
     suspend fun ensureSpecSyncedToCache() {
-        val relPath = "$PROMPTS_DIR/IMAGE_TO_UI_SPEC.md"
+        val relPath = "$PROMPTS_DIR/${PromptKey.IMAGE_TO_UI_SPEC.fileName}"
         try {
             if (!storage.exists(relPath)) {
-                val bytes = readResourceBytes("prompts/IMAGE_TO_UI_SPEC.md")
-                storage.saveToFile(relPath, bytes.decodeToString())
+                val content = getDefaultResourcePrompt(PromptKey.IMAGE_TO_UI_SPEC)
+                storage.saveToFile(relPath, content)
                 AppLogger.i(TAG, "已在应用启动时将 IMAGE_TO_UI_SPEC 规范自动同步到本地缓存: $relPath")
             }
         } catch (e: Exception) {
@@ -74,139 +212,37 @@ class PromptManager(private val storage: LocalFileStorage) {
     }
 
     /**
-     * 获取 IMAGE_TO_UI_SPEC 规范内容（外部缓存优先）
+     * 按需获取特定图元类型的默认英文生图提示词
      */
-    @OptIn(InternalResourceApi::class)
-    suspend fun getImageToUiSpec(): String {
-        val relPath = "$PROMPTS_DIR/IMAGE_TO_UI_SPEC.md"
-        try {
-            if (storage.exists(relPath)) {
-                val cached = storage.readFromFile(relPath)
-                if (!cached.isNullOrBlank()) {
-                    return cached
-                }
+    suspend fun getBlockTypePrompt(type: UIBlockType): String {
+        val cache = blockTypePromptsCache ?: run {
+            try {
+                val jsonText = getPrompt(PromptKey.BLOCK_TYPE_PROMPTS)
+                val json = Json.parseToJsonElement(jsonText).jsonObject
+                val map = json.mapValues { it.value.jsonPrimitive.content }
+                blockTypePromptsCache = map
+                map
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "解析 block_type_prompts.json 失败", e)
+                emptyMap()
             }
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "读取外部缓存 IMAGE_TO_UI_SPEC 失败", e)
         }
-
-        return try {
-            readResourceBytes("prompts/IMAGE_TO_UI_SPEC.md").decodeToString()
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "读取内置出厂 IMAGE_TO_UI_SPEC 失败", e)
-            ""
-        }
+        return cache[type.name] ?: ""
     }
 
-    /**
-     * 文本换行符归一化与两端空白修剪。
-     * 用于消除 Windows 换行符（\r\n）与 Unix 换行符（\n）以及末尾空行导致的虚假差异。
-     */
-    fun normalizeText(text: String): String {
-        return text.replace("\r\n", "\n").trim()
-    }
-
-    /**
-     * 获取提示词内容（外部存储绝对优先）。
-     * 逻辑：优先从外部本地存储读取；若不存在，则从内置 Resource 中读取。
-     * 若两者均不存在或内容为空白，直接抛出 IllegalStateException，绝不做任何保底或兜底！
-     *
-     * @param functionName 提示词标识符
-     * @return 最终生效的有效提示词文本内容
-     * @throws IllegalStateException 当提示词文件缺失或内容为空白时直接抛出异常
-     */
-    @OptIn(InternalResourceApi::class)
-    suspend fun getPrompt(functionName: String): String {
-        val fileName = resolveFileName(functionName)
-        val relativePath = "$PROMPTS_DIR/$fileName"
-
-        // 1. 优先尝试从外部本地存储目录读取（用户修改过的配置即时生效）
-        try {
-            if (storage.exists(relativePath)) {
-                val cachedContent = storage.readFromFile(relativePath)
-                if (!cachedContent.isNullOrBlank()) {
-                    return cachedContent
-                }
+    companion object {
+        /**
+         * 读取 UI Studio 项目专属 Agent 的出厂默认系统人设提示词。
+         * 提示词完全外部化存储于内置资源 prompts/ui_studio_agent_prompt.md 中，严禁在代码中硬编码长字符串。
+         */
+        suspend fun getUiStudioAgentPrompt(storage: LocalFileStorage = LocalFileStorage()): String {
+            return try {
+                val loader = ExternalResourceLoader(storage)
+                loader.loadText("prompts", PromptKey.UI_STUDIO_AGENT_PROMPT.fileName)
+            } catch (e: Exception) {
+                AppLogger.e("PromptManager", "读取 ui_studio_agent_prompt.md 失败", e)
+                ""
             }
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to read cached prompt: $fileName", e)
         }
-
-        // 2. 外部缓存不存在时，从内部 Resource 读取出厂预设
-        val defaultContent = getDefaultResourcePrompt(functionName)
-        if (defaultContent.isBlank()) {
-            throw IllegalStateException("提示词模板 [$functionName] 在外部缓存与内部资源中均未找到或内容为空白！")
-        }
-        return defaultContent
-    }
-
-    /**
-     * 获取应用内部打包的原始出厂预设提示词（不读外部缓存）。
-     * 若资源不存在或内容为空，直接抛出 IllegalStateException。
-     */
-    @OptIn(InternalResourceApi::class)
-    suspend fun getDefaultResourcePrompt(functionName: String): String {
-        val fileName = resolveFileName(functionName)
-        val resourcePath = "prompts/$fileName"
-        return try {
-            val content = readResourceBytes(resourcePath).decodeToString()
-            if (content.isBlank()) {
-                throw IllegalStateException("内置提示词资源 [$resourcePath] 内容为空！")
-            }
-            content
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to read default prompt from resource: $resourcePath", e)
-            throw IllegalStateException("内置提示词资源 [$resourcePath] 读取失败: ${e.message}", e)
-        }
-    }
-
-    /**
-     * 将用户修改后的提示词保存到外部本地存储中（一律保存在外部）。
-     */
-    suspend fun savePrompt(functionName: String, content: String): Boolean {
-        val fileName = resolveFileName(functionName)
-        val relativePath = "$PROMPTS_DIR/$fileName"
-        return try {
-            storage.saveToFile(relativePath, content)
-            AppLogger.i(TAG, "Successfully saved custom prompt to external storage: $fileName")
-            true
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to save custom prompt to external storage: $fileName", e)
-            false
-        }
-    }
-
-    /**
-     * 清除外部本地缓存的提示词，回滚至内部默认资源。
-     */
-    suspend fun resetPrompt(functionName: String): Boolean {
-        val fileName = resolveFileName(functionName)
-        val relativePath = "$PROMPTS_DIR/$fileName"
-        return storage.deleteFile(relativePath)
-    }
-
-    /**
-     * 判断当前提示词在外部本地磁盘上是否存在物理文件。
-     */
-    suspend fun hasPhysicalExternalFile(functionName: String): Boolean {
-        val fileName = resolveFileName(functionName)
-        val relativePath = "$PROMPTS_DIR/$fileName"
-        return storage.exists(relativePath)
-    }
-
-    /**
-     * 判断当前提示词是否被用户实质定制过。
-     *
-     * 精准判定准则：
-     * 1. 外部本地存储存在该文件；
-     * 2. 外部文件内容经换行符归一化（\r\n -> \n）与空白修剪后，与出厂内置默认内容存在实质差异。
-     */
-    suspend fun isCustomized(functionName: String): Boolean {
-        val fileName = resolveFileName(functionName)
-        val relativePath = "$PROMPTS_DIR/$fileName"
-        if (!storage.exists(relativePath)) return false
-        val cachedContent = storage.readFromFile(relativePath) ?: return false
-        val defaultContent = getDefaultResourcePrompt(functionName)
-        return normalizeText(cachedContent) != normalizeText(defaultContent)
     }
 }

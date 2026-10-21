@@ -584,6 +584,14 @@
     <string name="mcp_choice_confirm_btn">确认选择</string>
     <string name="mcp_choice_cancel_btn">取消</string>
     <string name="mcp_interaction_countdown">等待操作 (%1$d秒)</string>
+    <string name="question_title_default">请作答</string>
+    <string name="question_badge_recommended">推荐</string>
+    <string name="question_custom_answer_label">自定义答案</string>
+    <string name="question_custom_answer_hint">不选预设方案，输入你自己的答案</string>
+    <string name="question_custom_answer_placeholder">输入你的自定义答案…</string>
+    <string name="question_submit_single">确认选择</string>
+    <string name="question_submit_multi">提交 %1$d 项选择</string>
+    <string name="question_cancel">取消</string>
 
     <!-- MCP 前台视觉跟随 -->
     <string name="mcp_follow_nav_title">AI 执行前台界面视觉跟随</string>
@@ -638,4 +646,25 @@
     <string name="project_duplicate_msg">检测到已存在同名项目文件夹“%1$s”。请选择打开已有项目，或返回修改新项目名称后继续创建。</string>
     <string name="project_duplicate_open_existing">打开已有项目</string>
     <string name="project_duplicate_rename">修改项目名称</string>
+
+    <!-- UI Studio 应用界面排版确认弹窗 -->
+    <string name="apply_layout_dialog_title">应用 AI 界面排版方案</string>
+    <string name="apply_layout_dialog_subtitle">大模型已完成界面排版规划，请选择如何应用到当前工程画布：</string>
+    <string name="apply_layout_stats_summary">画布分辨率：%1$dx%2$d ｜ 图元总数：%3$d</string>
+    <string name="apply_layout_stats_assets">已精准拼装素材：%1$d / %2$d</string>
+    <string name="apply_layout_mode_replace_title">替换当前视图</string>
+    <string name="apply_layout_mode_replace_desc">直接覆盖当前视图“%1$s”的图元与排版结构</string>
+    <string name="apply_layout_mode_new_title">作为新视图创建</string>
+    <string name="apply_layout_mode_new_desc">保留当前已有视图不变，独立创建全新视图并打开</string>
+    <string name="apply_layout_input_view_name">新视图名称</string>
+    <string name="apply_layout_input_view_name_placeholder">输入新视图名称...</string>
+    <string name="apply_layout_btn_confirm">确认应用排版</string>
+    <string name="apply_layout_btn_cancel">放弃</string>
+    <string name="apply_layout_toast_replace_success">视图 [%1$s] 已成功应用 AI 排版！</string>
+    <string name="apply_layout_toast_new_success">🎉 全新视图 [%1$s] 已创建并在画布呈现！</string>
+
+    <!-- UI Studio 图层树扁平化与上下文感知空态 -->
+    <string name="uistudio_hierarchy_empty_no_view">请在上方界面列表中选择或打开一个视图</string>
+    <string name="uistudio_hierarchy_empty_container">当前容器内暂无子组件\n可从素材库拖入或添加子组件</string>
+    <string name="uistudio_hierarchy_empty_page">当前视图暂无根图元\n可从素材库拖入切片开始排版</string>
 </resources>

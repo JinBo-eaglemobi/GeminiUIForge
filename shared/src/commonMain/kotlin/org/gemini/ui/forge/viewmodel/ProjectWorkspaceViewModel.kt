@@ -15,6 +15,7 @@ import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.app.PromptLanguage
 import org.gemini.ui.forge.model.app.ReferenceDisplayMode
+import org.gemini.ui.forge.model.prompt.PromptKey
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
@@ -137,8 +138,8 @@ class ProjectWorkspaceViewModel(
     init {
         // 加载初始 AI 提示词模板与工作区持久化配置
         viewModelScope.launch {
-            val updateInstruction = aiService.promptManager.getPrompt("refine_instruction_update")
-            val newInstruction = aiService.promptManager.getPrompt("refine_instruction_new")
+            val updateInstruction = aiService.promptManager.getPrompt(PromptKey.REFINE_INSTRUCTION_UPDATE)
+            val newInstruction = aiService.promptManager.getPrompt(PromptKey.REFINE_INSTRUCTION_NEW)
             val wsConfig = templateRepo.loadWorkspaceConfig(initialProjectName)
             val currentProject = _state.value.project
             val initialRefUri = currentProject.styleReferenceUri

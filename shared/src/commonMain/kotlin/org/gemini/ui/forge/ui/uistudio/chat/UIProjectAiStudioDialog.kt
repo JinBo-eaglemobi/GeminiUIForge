@@ -24,6 +24,8 @@ import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.ai.studio.component.StudioSessionLogDialog
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
+import org.gemini.ui.forge.ui.uistudio.dialog.ApplyLayoutConfirmDialog
+import org.gemini.ui.forge.manager.PromptManager
 import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.ui.component.ToastType
 
@@ -186,9 +188,14 @@ fun UIProjectAiStudioDialog(
 
             // 项目系统人设指令模态覆盖层（绝对居中置顶，零窗口竞争冲突）
             if (state.isSystemInstructionDialogVisible) {
+                var defaultInstruction by remember { mutableStateOf("") }
+                LaunchedEffect(Unit) {
+                    defaultInstruction = PromptManager.getUiStudioAgentPrompt()
+                }
+
                 CommonSystemInstructionModalOverlay(
-                    currentInstruction = state.projectAgentConfig.systemPrompt,
-                    defaultInstruction = "你是一位精通游戏 UI/UX 布局设计的资深架构师，协助开发者在 UI Studio 中完成视图排版、图元尺寸规划与素材建议。",
+                    currentInstruction = state.projectAgentConfig.systemPrompt.ifBlank { defaultInstruction },
+                    defaultInstruction = defaultInstruction,
                     onConfirm = { newPrompt ->
                         viewModel.updateProjectSystemPrompt(newPrompt)
                     },
@@ -217,6 +224,19 @@ fun UIProjectAiStudioDialog(
                     sessionId = currentSession?.id ?: "default_sess",
                     trafficStore = viewModel.trafficStore,
                     onDismiss = { showTrafficLogDialog = false }
+                )
+            }
+
+            // AI 界面排版方案应用确认弹窗
+            val pendingLayout = state.pendingLayoutResult
+            if (pendingLayout != null) {
+                ApplyLayoutConfirmDialog(
+                    layoutResult = pendingLayout,
+                    currentViewName = state.currentView?.nameStr ?: "当前视图",
+                    onDismiss = { viewModel.cancelApplyLayout() },
+                    onConfirm = { replaceCurrent, customName ->
+                        viewModel.confirmApplyLayout(replaceCurrent, customName)
+                    }
                 )
             }
         }

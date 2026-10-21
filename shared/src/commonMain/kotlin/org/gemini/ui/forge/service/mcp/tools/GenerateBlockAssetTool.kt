@@ -304,7 +304,7 @@ class GenerateBlockAssetTool(
             val promptToSend = customPrompt?.ifBlank { null }
                 ?: block.userPromptEn.ifBlank { null }
                 ?: block.userPromptZh.ifBlank { null }
-                ?: "Game UI element, high quality, transparent background"
+                ?: org.gemini.ui.forge.model.ui.BlockTypePromptProvider.getPrompt(block.type)
 
             val selectedModel = GeminiModel.entries.firstOrNull { it.modelName == modelName }
                 ?: GeminiModel.GEMINI_2_5_FLASH_IMAGE

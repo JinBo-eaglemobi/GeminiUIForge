@@ -14,7 +14,8 @@ class AskUserChoiceTool : McpToolDefinition {
     override val name: String = "ask_user_choice"
 
     override val description: String =
-        "向真实用户展示单选抉择弹窗并挂起等待用户做出选择。当 AI 面临多个可行方案、生成风格或设计分支时，可主动询问用户意向。"
+        "向真实用户展示单选抉择弹窗并挂起等待用户做出选择。当 AI 面临多个可行方案、生成风格或设计分支时，可主动询问用户意向。" +
+        "建议优先使用 ask_user_question 工具以获得带描述卡片、推荐置顶、多选及自定义输入的完整问询体验。"
 
     override val annotations: McpToolAnnotations = McpToolAnnotations(
         readOnlyHint = true,

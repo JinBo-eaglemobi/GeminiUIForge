@@ -28,8 +28,10 @@ import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.UIPage
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
+import org.gemini.ui.forge.ui.uistudio.dialog.UIStudioRenameDialog
 
 /**
  * UI Studio 左上侧视图界面管理面板
@@ -178,5 +180,29 @@ fun UIStudioViewsPanel(
                 }
             }
         }
+    }
+
+    // 挂载重命名视图弹窗
+    state.renamingView?.let { page ->
+        UIStudioRenameDialog(
+            title = "重命名视图",
+            initialName = page.nameStr,
+            onConfirm = { newName ->
+                viewModel.commitRenameView(page.id, newName, templateRepo)
+            },
+            onDismiss = { viewModel.cancelRenameView() }
+        )
+    }
+
+    // 挂载删除视图确认弹窗（破坏性操作二次确认安全门禁）
+    state.deletingView?.let { page ->
+        AppConfirmDialog(
+            title = "删除视图",
+            message = "确定要删除视图「${page.nameStr}」吗？该视图下的所有图元将被物理移除且不可撤销。",
+            confirmText = "删除",
+            isDestructive = true,
+            onConfirm = { viewModel.confirmDeleteView(templateRepo) },
+            onDismiss = { viewModel.cancelDeleteView() }
+        )
     }
 }

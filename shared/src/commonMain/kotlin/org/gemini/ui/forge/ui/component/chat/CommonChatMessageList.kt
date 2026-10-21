@@ -59,6 +59,7 @@ fun CommonChatMessageList(
     onDeleteRequested: ((VisualChatMessage) -> Unit)? = null,
     onVariantIndexChanged: ((message: VisualChatMessage, newIndex: Int) -> Unit)? = null,
     onOpenViewRequested: ((String) -> Unit)? = null,
+    onMentionClick: ((org.gemini.ui.forge.model.chat.ChatMentionTag) -> Unit)? = null,
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -200,6 +201,7 @@ fun CommonChatMessageList(
                                     message = msg,
                                     maxBubbleWidth = maxBubbleWidth,
                                     onImageClick = onImageClick,
+                                    onMentionClick = onMentionClick,
                                     onEditRequested = onEditRequested,
                                     onRegenerateRequested = onRegenerateRequested,
                                     onDeleteRequested = onDeleteRequested

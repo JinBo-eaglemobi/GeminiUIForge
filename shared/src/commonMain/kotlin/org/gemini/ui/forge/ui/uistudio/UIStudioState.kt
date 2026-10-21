@@ -125,14 +125,14 @@ data class UIStudioState(
     val pendingDragRemoveLastChild: DragRemoveLastChildContext? = null,
     val openContainerTabs: List<String> = emptyList(),
     val activeContainerId: String? = null,
-    val expandedHierarchyBlockIds: Set<String> = emptySet(),
     val draggedAssetId: String? = null,
     val hoveredFolderId: String? = null,
     val viewViewportCache: Map<String, ViewportState> = emptyMap(),
     val dragCursorPosition: androidx.compose.ui.geometry.Offset? = null,
     val undoStack: List<UIStudioHistoryEntry> = emptyList(),
     val redoStack: List<UIStudioHistoryEntry> = emptyList(),
-    val clipboardBlock: UIBlock? = null
+    val clipboardBlock: UIBlock? = null,
+    val pendingLayoutResult: org.gemini.ui.forge.service.studio.UiStudioLayoutService.ApplyLayoutResult? = null
 ) {
     val canUndo: Boolean get() = undoStack.isNotEmpty()
     val canRedo: Boolean get() = redoStack.isNotEmpty()

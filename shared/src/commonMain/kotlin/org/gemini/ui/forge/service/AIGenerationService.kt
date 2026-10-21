@@ -17,6 +17,7 @@ import org.gemini.ui.forge.manager.ScriptManager
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.api.ChatMessage
 import org.gemini.ui.forge.model.chat.TrafficDirection
+import org.gemini.ui.forge.model.prompt.PromptKey
 import org.gemini.ui.forge.model.ui.UIPage
 import org.gemini.ui.forge.service.ai.GeminiChatEngine
 import org.gemini.ui.forge.service.ai.GeminiChatRequest
@@ -249,7 +250,7 @@ class AIGenerationService(
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
         val client = NetworkClient.shared
 
-        val basePrompt = promptManager.getPrompt("analyze_template")
+        val basePrompt = promptManager.getPrompt(PromptKey.ANALYZE_TEMPLATE)
         val specText = promptManager.getImageToUiSpec()
         val promptText = if (specText.isNotBlank()) {
             "$basePrompt\n\n--- MANDATORY SPECIFICATION (IMAGE_TO_UI_SPEC) ---\n$specText"
@@ -437,7 +438,7 @@ class AIGenerationService(
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
 
-        val promptTemplate = promptManager.getPrompt("refine_template")
+        val promptTemplate = promptManager.getPrompt(PromptKey.REFINE_TEMPLATE)
         val basePrompt = promptTemplate.replace($$"${USER_INSTRUCTION}", userInstruction)
         val specText = promptManager.getImageToUiSpec()
         val fullPrompt = if (specText.isNotBlank()) {
@@ -540,7 +541,7 @@ class AIGenerationService(
         if (apiKey.isBlank()) throw Exception("API 密钥缺失")
         val url = ApiConfig.getStreamGenerateContentEndpoint(apiKey)
 
-        val promptTemplate = promptManager.getPrompt("ai_optimize_prompt")
+        val promptTemplate = promptManager.getPrompt(PromptKey.AI_OPTIMIZE_PROMPT)
         val fullPrompt = promptTemplate.replace("{0}", originalPrompt)
 
         val historyItems = history.map { msg ->

@@ -24,15 +24,29 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
+import org.gemini.ui.forge.model.chat.ChatMentionTag
 import org.gemini.ui.forge.model.chat.MentionItem
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.model.chat.VisualChatSession
 import org.gemini.ui.forge.state.MentionState
 import org.gemini.ui.forge.model.skill.SkillActivationMode
 import org.gemini.ui.forge.model.skill.UiStudioSkill
+import org.gemini.ui.forge.model.chat.MentionCategory
+import org.gemini.ui.forge.model.chat.MentionPayload
+import org.gemini.ui.forge.ui.component.chat.drop.onFileDrop
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.dialog.doc.DocumentPreviewDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+
+/**
+ * 附件文档与详情预览数据载荷
+ */
+private data class DocumentPreviewData(
+    val title: String,
+    val filePath: String? = null,
+    val content: String? = null
+)
 
 /**
  * 全场景通用 AI 对话工作室响应式纯净内容容器
@@ -110,13 +124,30 @@ fun CommonChatStudioContent(
     // 沉浸式图片灯箱激活状态（内置开箱即用）
     var lightboxImageUri by remember { mutableStateOf<String?>(null) }
 
+    // 附件文档/详情预览弹窗数据载荷
+    var previewDocumentData by remember { mutableStateOf<DocumentPreviewData?>(null) }
+
     // 宽屏模式下会话侧栏拖拽宽度（自由拖拽，安全范围 180dp ~ 420dp，默认 240dp）
     var sidebarWidthDp by remember { mutableStateOf(240.dp) }
 
     // 重新编辑消息回填至输入框的中间状态
     var inputTextToInject by remember { mutableStateOf<String?>(null) }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    // 全局拖拽文件透传至底部输入框附件的中间状态
+    var filesToInject by remember { mutableStateOf<List<String>?>(null) }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .onFileDrop(
+                onDragStateChanged = {},
+                onFilesDropped = { paths ->
+                    filesToInject = paths
+                    onFilesDropped?.invoke(paths)
+                }
+            )
+    ) {
         val studioMaxHeight = maxHeight
         val isNarrowMode = config.enableNarrowModeAutoFold && maxWidth < config.narrowBreakpointDp.dp
 
@@ -235,6 +266,85 @@ fun CommonChatStudioContent(
                             inputTextToInject = textToEdit
                         },
                         onOpenViewRequested = onOpenViewRequested,
+                        onMentionClick = { tag ->
+                            val rawPath = tag.path.orEmpty()
+                            val rawTitle = tag.title.trim()
+
+                            // 1. 判断是否是素材库全量清单 (无论是新发送的标记还是历史消息的标题)
+                            val isAllAssetsManifest = rawTitle.contains("全部素材库清单", ignoreCase = true) ||
+                                                      rawTitle.contains("All Assets", ignoreCase = true) ||
+                                                      rawPath.equals("all_assets_manifest", ignoreCase = true) ||
+                                                      rawPath.equals("ALL", ignoreCase = true)
+
+                            if (isAllAssetsManifest) {
+                                val assetItems = mentionCandidates.filter { it.category == MentionCategory.ASSET && it.id != "all_assets_manifest" }
+                                val sb = StringBuilder()
+                                sb.appendLine("# 📦 项目素材库切片全量清单\n")
+                                sb.appendLine("> 共计 **${assetItems.size}** 个已切片资产，可直接拼装到游戏画布各图元。\n")
+                                sb.appendLine("| 序号 | 切片文件名 | 尺寸 (WxH) | 智能推断角色 | 磁盘相对路径 |")
+                                sb.appendLine("|:---:|:---|:---:|:---|:---|")
+                                assetItems.forEachIndexed { index, item ->
+                                    val p = item.payload as? MentionPayload.AssetPayload
+                                    val dims = if (p != null && p.width > 0 && p.height > 0) "${p.width}x${p.height}" else "未知"
+                                    val role = item.subtitle?.substringAfterLast("·")?.trim().orEmpty().ifBlank { "普通切片" }
+                                    val path = p?.filePath.orEmpty().ifBlank { item.subtitle.orEmpty() }
+                                    sb.appendLine("| ${index + 1} | `${item.title.removePrefix("📦").trim()}` | $dims | $role | `$path` |")
+                                }
+                                previewDocumentData = DocumentPreviewData(
+                                    title = "项目素材库清单 (共 ${assetItems.size} 项)",
+                                    content = sb.toString()
+                                )
+                                return@CommonChatMessageList
+                            }
+
+                            // 2. 匹配候选列表尝试自愈真实实体 (兼容历史消息丢失路径的自愈)
+                            val matchedCandidate = mentionCandidates.find {
+                                it.title.equals(rawTitle, ignoreCase = true) ||
+                                it.title.contains(rawTitle, ignoreCase = true) ||
+                                rawTitle.contains(it.title, ignoreCase = true) ||
+                                (it.payload as? MentionPayload.DocPayload)?.fileName.equals(rawTitle, ignoreCase = true)
+                            }
+
+                            // 3. 判断是否是切片图片素材
+                            val isExplicitImage = rawPath.endsWith(".png", ignoreCase = true) ||
+                                                  rawPath.endsWith(".webp", ignoreCase = true) ||
+                                                  rawPath.endsWith(".jpg", ignoreCase = true) ||
+                                                  rawPath.endsWith(".jpeg", ignoreCase = true)
+                            val candidateAssetPath = (matchedCandidate?.payload as? MentionPayload.AssetPayload)?.filePath
+
+                            val finalImagePath = if (isExplicitImage && rawPath.isNotBlank()) {
+                                rawPath
+                            } else if (!candidateAssetPath.isNullOrBlank() && (candidateAssetPath.endsWith(".png", ignoreCase = true) || candidateAssetPath.endsWith(".webp", ignoreCase = true))) {
+                                candidateAssetPath
+                            } else null
+
+                            if (!finalImagePath.isNullOrBlank()) {
+                                if (onImageClick != null) {
+                                    onImageClick(finalImagePath)
+                                } else {
+                                    lightboxImageUri = finalImagePath
+                                }
+                                return@CommonChatMessageList
+                            }
+
+                            // 4. 判断是否是视图跳转
+                            val viewId = (matchedCandidate?.payload as? MentionPayload.ViewPayload)?.viewId ?: if (tag.categoryName == "VIEW") rawPath else null
+                            if (!viewId.isNullOrBlank() && onOpenViewRequested != null) {
+                                onOpenViewRequested(viewId)
+                                return@CommonChatMessageList
+                            }
+
+                            // 5. 普通外部规范文档查看 (如 UX_LAYOUT_SPEC.md)
+                            val resolvedDocPath = (matchedCandidate?.payload as? MentionPayload.DocPayload)?.absolutePath
+                                ?.ifBlank { null }
+                                ?: rawPath.ifBlank { null }
+
+                            previewDocumentData = DocumentPreviewData(
+                                title = rawTitle.removePrefix("📄").removePrefix("📦").trim(),
+                                filePath = resolvedDocPath,
+                                content = if (resolvedDocPath == null && matchedCandidate == null) "附件信息：\n- 名称：$rawTitle\n- 类型：${tag.categoryName}\n（未能解析到本地磁盘路径）" else null
+                            )
+                        },
                         messageActions = messageActions,
                         modifier = Modifier.weight(1f)
                     )
@@ -266,6 +376,8 @@ fun CommonChatStudioContent(
                         mentionCandidates = mentionCandidates,
                         mentionMaxHeight = dynamicMentionMaxHeight,
                         onFilesDropped = onFilesDropped,
+                        externalDroppedFiles = filesToInject,
+                        onExternalDroppedFilesConsumed = { filesToInject = null },
                         activeSkills = activeSkills,
                         skillMode = skillMode,
                         onSkillModeChanged = onSkillModeChanged,
@@ -329,6 +441,16 @@ fun CommonChatStudioContent(
             CommonImageLightbox(
                 imageUri = uri,
                 onDismiss = { lightboxImageUri = null }
+            )
+        }
+
+        // 附件文档与详情预览弹窗
+        previewDocumentData?.let { data ->
+            DocumentPreviewDialog(
+                title = data.title,
+                filePath = data.filePath,
+                content = data.content,
+                onDismissRequest = { previewDocumentData = null }
             )
         }
     }

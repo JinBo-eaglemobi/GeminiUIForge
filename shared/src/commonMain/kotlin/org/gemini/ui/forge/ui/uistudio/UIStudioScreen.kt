@@ -400,5 +400,18 @@ fun UIStudioScreen(
                 }
             )
         }
+
+        // 挂载 AI 生成界面排版应用确认弹窗 (当 AI 全景弹窗关闭时的全局宿主兜底)
+        val pendingLayout = state.pendingLayoutResult
+        if (pendingLayout != null && !state.isAiChatDialogVisible) {
+            ApplyLayoutConfirmDialog(
+                layoutResult = pendingLayout,
+                currentViewName = state.currentView?.nameStr ?: "当前视图",
+                onDismiss = { viewModel.cancelApplyLayout() },
+                onConfirm = { replaceCurrent, customName ->
+                    viewModel.confirmApplyLayout(replaceCurrent, customName)
+                }
+            )
+        }
     }
 }

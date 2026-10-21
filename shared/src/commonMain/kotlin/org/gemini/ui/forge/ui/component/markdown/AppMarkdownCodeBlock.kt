@@ -35,7 +35,7 @@ import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.extend.rememberClipboardAction
-import org.gemini.ui.forge.ui.component.scroll.VerticalScrollbarAdapter
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import kotlin.math.abs
 

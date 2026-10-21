@@ -3,6 +3,7 @@ package org.gemini.ui.forge.manager
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.gemini.ui.forge.data.isFileExistsInternal
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
@@ -86,12 +87,17 @@ object ExternalDocManager {
     }
 
     /**
-     * 获取指定工程所有已登记的外部文档。
+     * 获取指定工程所有已登记且物理磁盘文件仍然存在的外部文档。
+     *
+     * 【静默自愈铁律】：若发现外部原文件已被用户删除，自动从缓存与持久化索引中静默剔除并刷盘，
+     * 绝不在界面弹出侵扰性错误提示，实现零负担垃圾回收。
      */
     suspend fun getDocsForProject(projectName: String): List<ExternalDocRecord> {
         val safeName = projectName.trim().replace(" ", "_").ifBlank { "default" }
         val cached = memoryCache[safeName]
-        if (!cached.isNullOrEmpty()) return cached
+        if (!cached.isNullOrEmpty()) {
+            return pruneInvalidDocsInternal(safeName, cached)
+        }
 
         val storage = LocalFileStorage()
         val path = getPersistPath(safeName)
@@ -106,9 +112,49 @@ object ExternalDocManager {
         } else {
             emptyList()
         }
-        val mutable = loaded.toMutableList()
-        memoryCache[safeName] = mutable
-        return mutable
+
+        return pruneInvalidDocsInternal(safeName, loaded)
+    }
+
+    /**
+     * 内部静默剔除磁盘已物理删除的失效记录
+     */
+    private suspend fun pruneInvalidDocsInternal(
+        projectName: String,
+        records: List<ExternalDocRecord>
+    ): List<ExternalDocRecord> {
+        val validList = mutableListOf<ExternalDocRecord>()
+        var hasPruned = false
+
+        for (record in records) {
+            val exists = isFileExistsInternal(record.absolutePath)
+            if (exists) {
+                validList.add(record)
+            } else {
+                hasPruned = true
+                AppLogger.i(TAG, "物理文件已失效，静默清理索引: ${record.fileName} (${record.absolutePath})")
+            }
+        }
+
+        memoryCache[projectName] = validList
+        if (hasPruned) {
+            saveDocsForProject(projectName, validList)
+        }
+        return validList
+    }
+
+    /**
+     * 显式或自愈移除指定绝对路径的文档记录。
+     */
+    suspend fun removeDocByPath(projectName: String, path: String) {
+        val safeName = projectName.trim().replace(" ", "_").ifBlank { "default" }
+        val current = (memoryCache[safeName] ?: getDocsForProject(safeName)).toMutableList()
+        val removed = current.removeAll { it.absolutePath.equals(path, ignoreCase = true) }
+        if (removed) {
+            memoryCache[safeName] = current
+            saveDocsForProject(safeName, current)
+            AppLogger.i(TAG, "已从工程 [$safeName] 永久剔除失效外部文档: $path")
+        }
     }
 
     /**

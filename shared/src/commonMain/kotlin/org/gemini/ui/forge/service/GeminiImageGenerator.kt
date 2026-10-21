@@ -5,6 +5,7 @@ import org.gemini.ui.forge.data.remote.ApiConfig
 import org.gemini.ui.forge.manager.*
 import org.gemini.ui.forge.model.app.ApiFlavor
 import org.gemini.ui.forge.model.chat.TrafficDirection
+import org.gemini.ui.forge.model.prompt.PromptKey
 import org.gemini.ui.forge.service.ai.UnifiedAiResult
 import org.gemini.ui.forge.utils.looseJson
 import org.gemini.ui.forge.utils.readLocalFileBytes
@@ -103,7 +104,7 @@ class GeminiImageGenerator(
         }
 
         val aspectRatio = calculateAspectRatio(params.targetWidth, params.targetHeight)
-        val template = promptManager.getPrompt("gemini_image_gen")
+        val template = promptManager.getPrompt(PromptKey.GEMINI_IMAGE_GEN)
         val fullPrompt = template
             .replace("{0}", params.blockType)
             .replace("{1}", stylePart)

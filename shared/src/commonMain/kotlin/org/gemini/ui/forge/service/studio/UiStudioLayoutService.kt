@@ -6,6 +6,8 @@ import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
 import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.utils.asset.AssetManifestHelper
+import org.gemini.ui.forge.utils.asset.AssetManifestHelper.AssetSemanticCategory
 import org.gemini.ui.forge.utils.bindParents
 
 /**
@@ -27,6 +29,7 @@ object UiStudioLayoutService {
         val isSuccess: Boolean,
         val viewName: String,
         val blockCount: Int,
+        val matchedAssetCount: Int = 0,
         val createdPage: UIPage? = null,
         val summary: String = "",
         val errorMessage: String? = null
@@ -56,11 +59,20 @@ object UiStudioLayoutService {
                 assetMap[cleanName] = asset
             }
 
-            // 递归解析图元列表
+            // 递归解析图元列表与插槽角色映射
             val assembledBlocks = mutableListOf<UIBlock>()
+            val slotRoleMap = mutableMapOf<String, String>()
             for (element in rawBlocks) {
                 val blockObj = element as? JsonObject ?: continue
-                parseBlockRecursive(blockObj, projectId, assetMap, assembledBlocks)
+                parseBlockRecursive(blockObj, projectId, assetMap, slotRoleMap, assembledBlocks)
+            }
+
+            // 【阶段二：全自动素材智能装配流水线】
+            // 若素材库非空，针对骨架中尚未绑定素材的插槽，按语义角色、网格顺序与纵横比智能填充切片
+            val finalBlocks = if (assetLibrary.items.isNotEmpty()) {
+                autoFitAssetsToSlots(assembledBlocks, slotRoleMap, assetLibrary, projectId)
+            } else {
+                assembledBlocks
             }
 
             // 构建 UIPage 并执行全屏背景等自愈治理
@@ -69,7 +81,7 @@ object UiStudioLayoutService {
                 nameStr = viewName,
                 width = width,
                 height = height,
-                blocks = assembledBlocks
+                blocks = finalBlocks
             )
 
             // 执行核心规范自愈：贯彻全屏游戏背景底图规范，绑定父级引用
@@ -77,14 +89,16 @@ object UiStudioLayoutService {
             postProcessedPage.blocks.bindParents()
 
             val totalBlocksCount = countAllBlocks(postProcessedPage.blocks)
-            AppLogger.i(TAG, "成功为工程 [$projectId] 装配视图 [$viewName]，包含 $totalBlocksCount 个图元")
+            val matchedAssetCount = countMatchedAssets(postProcessedPage.blocks)
+            AppLogger.i(TAG, "成功为工程 [$projectId] 装配视图 [$viewName]，包含 $totalBlocksCount 个图元 (匹配素材: $matchedAssetCount)")
 
             ApplyLayoutResult(
                 isSuccess = true,
                 viewName = viewName,
                 blockCount = totalBlocksCount,
+                matchedAssetCount = matchedAssetCount,
                 createdPage = postProcessedPage,
-                summary = "成功装配视图 [$viewName] ($width x $height)，包含 $totalBlocksCount 个组件图元"
+                summary = "成功装配视图 [$viewName] ($width x $height)，包含 $totalBlocksCount 个组件图元 (已精准拼装 $matchedAssetCount 个切片素材)"
             )
         } catch (e: Exception) {
             AppLogger.e(TAG, "执行 apply_view_layout 装配异常", e)
@@ -92,6 +106,7 @@ object UiStudioLayoutService {
                 isSuccess = false,
                 viewName = "ErrorView",
                 blockCount = 0,
+                matchedAssetCount = 0,
                 errorMessage = e.message ?: "未知排版解析异常"
             )
         }
@@ -104,6 +119,7 @@ object UiStudioLayoutService {
         obj: JsonObject,
         projectId: String,
         assetMap: Map<String, UIAssetItem>,
+        slotRoleMap: MutableMap<String, String>,
         outList: MutableList<UIBlock>
     ) {
         val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: "block_${outList.size + 1}"
@@ -114,22 +130,57 @@ object UiStudioLayoutService {
         val y = obj["y"]?.jsonPrimitive?.floatOrNull ?: 0f
         val w = obj["width"]?.jsonPrimitive?.floatOrNull ?: 100f
         val h = obj["height"]?.jsonPrimitive?.floatOrNull ?: 100f
-        val bounds = SerialRect(x, y, w, h)
 
-        val isPureContainer = obj["isPureContainer"]?.jsonPrimitive?.booleanOrNull
-            ?: (type == UIBlockType.CONTAINER)
+        // 收集大模型可能显式指定的插槽语义角色
+        obj["slotRole"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }?.let {
+            slotRoleMap[id] = it
+        }
 
         // 匹配素材库切片
         val assetFileName = obj["assetFileName"]?.jsonPrimitive?.contentOrNull?.trim()
         var boundFile: TemplateFile? = null
+        var matchedAsset: UIAssetItem? = null
         if (!assetFileName.isNullOrBlank()) {
-            val matchedAsset = assetMap[assetFileName.lowercase()]
+            matchedAsset = assetMap[assetFileName.lowercase()]
                 ?: assetMap[assetFileName.substringBeforeLast('.').lowercase()]
             if (matchedAsset != null) {
-                val path = "templates/$projectId/assets/${matchedAsset.relativePath}"
-                boundFile = TemplateFile(path)
+                val cleanRel = matchedAsset.relativePath.replace("\\", "/")
+                val resolvedPath = when {
+                    cleanRel.startsWith("templates/") -> cleanRel
+                    cleanRel.startsWith("assets/") -> "templates/$projectId/$cleanRel"
+                    else -> "templates/$projectId/assets/$cleanRel"
+                }
+                boundFile = TemplateFile(resolvedPath)
             }
         }
+
+        // 若成功绑定切片素材，强制不能为纯容器（否则画布不渲染底图本体）
+        val isPureContainer = if (boundFile != null) {
+            false
+        } else {
+            obj["isPureContainer"]?.jsonPrimitive?.booleanOrNull ?: (type == UIBlockType.CONTAINER)
+        }
+
+        // 若绑定了切片素材，保证宽高严格守恒真实切片的纵横比（Aspect Ratio），彻底杜绝拉伸变形
+        val (finalW, finalH) = if (matchedAsset != null && matchedAsset.width > 0 && matchedAsset.height > 0) {
+            val assetW = matchedAsset.width.toFloat()
+            val assetH = matchedAsset.height.toFloat()
+            val assetRatio = assetW / assetH
+            if (w <= 0f || h <= 0f || (w == 100f && h == 100f)) {
+                assetW to assetH
+            } else {
+                val modelRatio = w / h
+                if (kotlin.math.abs(modelRatio - assetRatio) > 0.05f) {
+                    w to (w / assetRatio)
+                } else {
+                    w to h
+                }
+            }
+        } else {
+            (if (w <= 0f) 100f else w) to (if (h <= 0f) 100f else h)
+        }
+
+        val bounds = SerialRect(x, y, x + finalW, y + finalH)
 
         // 解析嵌套子组件
         val childBlocks = mutableListOf<UIBlock>()
@@ -137,7 +188,7 @@ object UiStudioLayoutService {
         if (rawChildren != null && rawChildren.isNotEmpty()) {
             for (childElement in rawChildren) {
                 val childObj = childElement as? JsonObject ?: continue
-                parseBlockRecursive(childObj, projectId, assetMap, childBlocks)
+                parseBlockRecursive(childObj, projectId, assetMap, slotRoleMap, childBlocks)
             }
         }
 
@@ -151,6 +202,166 @@ object UiStudioLayoutService {
             children = childBlocks
         )
         outList.add(block)
+    }
+
+    /**
+     * 【阶段二核心引擎】：将素材库中的视觉切片全自动智能装配到线框插槽中。
+     *
+     * 匹配策略：
+     * 1. 语义分类池：背景底图、Spin核心按键、滚轴图案(Symbols)、常规控制按键、HUD/底栏、标题Logo；
+     * 2. 插槽角色路由：根据 slotRole、type、id 及父级上下文智能推断；
+     * 3. 滚轴符号轮播：按顺序轮播丰富图案，避免千篇一律；
+     * 4. 纵横比守恒与居中：严格遵循素材物理尺寸与比例，解除纯容器遮盖。
+     */
+    private fun autoFitAssetsToSlots(
+        blocks: List<UIBlock>,
+        slotRoleMap: Map<String, String>,
+        assetLibrary: UIAssetLibrary,
+        projectId: String
+    ): List<UIBlock> {
+        // 收集已显式绑定的素材，避免重复分配
+        val usedAssetNames = mutableSetOf<String>()
+        fun collectBound(list: List<UIBlock>) {
+            for (b in list) {
+                b.referenceImage?.let {
+                    val fileName = it.relativePath.substringAfterLast('/').substringAfterLast('\\')
+                    usedAssetNames.add(fileName.lowercase())
+                }
+                collectBound(b.children)
+            }
+        }
+        collectBound(blocks)
+
+        // 语义分类池
+        val classified = assetLibrary.items.groupBy { AssetManifestHelper.categorizeAsset(it.name, it.relativePath) }
+        val backgrounds = classified[AssetSemanticCategory.BACKGROUND].orEmpty().sortedByDescending { it.width * it.height }
+        val spinButtons = classified[AssetSemanticCategory.SPIN_BUTTON].orEmpty()
+        val reelSymbols = classified[AssetSemanticCategory.REEL_SYMBOL].orEmpty()
+        val generalButtons = classified[AssetSemanticCategory.BUTTON].orEmpty()
+        val hudFrames = classified[AssetSemanticCategory.HUD_FRAME].orEmpty()
+        val titleLogos = classified[AssetSemanticCategory.TITLE_LOGO].orEmpty()
+
+        var symbolCursor = 0
+        val usedButtons = mutableSetOf<String>()
+
+        fun fitRecursive(blockList: List<UIBlock>, parentId: String = ""): List<UIBlock> {
+            return blockList.map { block ->
+                // 如果当前节点已有切片绑定，仅递归处理子组件
+                if (block.referenceImage != null) {
+                    return@map block.copy(children = fitRecursive(block.children, block.id))
+                }
+
+                val explicitRole = slotRoleMap[block.id]
+                val idLower = block.id.lowercase()
+                val parentLower = parentId.lowercase()
+
+                // 推断该插槽的最佳语义角色
+                val targetCategory: AssetSemanticCategory? = when {
+                    explicitRole.equals("BACKGROUND", true) || block.type == UIBlockType.BACKGROUND || idLower.contains("bg") ->
+                        AssetSemanticCategory.BACKGROUND
+                    explicitRole.equals("SPIN_BUTTON", true) || block.type == UIBlockType.SPIN_BUTTON || idLower.contains("spin") ->
+                        AssetSemanticCategory.SPIN_BUTTON
+                    explicitRole.equals("REEL_SYMBOL", true) || idLower.contains("sym") || idLower.contains("slot_") || parentLower.contains("col_") || parentLower.contains("reel_") ->
+                        AssetSemanticCategory.REEL_SYMBOL
+                    explicitRole.equals("BUTTON", true) || explicitRole.equals("BET_CONTROL", true) || block.type == UIBlockType.BUTTON || idLower.contains("btn") ->
+                        AssetSemanticCategory.BUTTON
+                    explicitRole.equals("HUD_FRAME", true) || idLower.contains("hud") || idLower.contains("balance") || idLower.contains("bar") || idLower.contains("jackpot") ->
+                        AssetSemanticCategory.HUD_FRAME
+                    explicitRole.equals("TITLE_LOGO", true) || idLower.contains("logo") || idLower.contains("title") ->
+                        AssetSemanticCategory.TITLE_LOGO
+                    else -> null
+                }
+
+                // 从对应分类池挑选切片
+                val candidateAsset: UIAssetItem? = when (targetCategory) {
+                    AssetSemanticCategory.BACKGROUND -> {
+                        backgrounds.firstOrNull { it.name.lowercase() !in usedAssetNames } ?: backgrounds.firstOrNull()
+                    }
+                    AssetSemanticCategory.SPIN_BUTTON -> {
+                        spinButtons.firstOrNull { it.name.lowercase() !in usedAssetNames }
+                            ?: generalButtons.firstOrNull { it.name.lowercase().contains("spin") }
+                            ?: spinButtons.firstOrNull()
+                    }
+                    AssetSemanticCategory.REEL_SYMBOL -> {
+                        if (reelSymbols.isNotEmpty()) {
+                            val pick = reelSymbols[symbolCursor % reelSymbols.size]
+                            symbolCursor++
+                            pick
+                        } else null
+                    }
+                    AssetSemanticCategory.BUTTON -> {
+                        val matched = generalButtons.firstOrNull { btn ->
+                            val bName = btn.name.lowercase()
+                            bName !in usedButtons && when {
+                                idLower.contains("line") -> bName.contains("line")
+                                idLower.contains("bet") -> bName.contains("bet")
+                                idLower.contains("plus") || idLower.contains("add") -> bName.contains("plus") || bName.contains("add")
+                                idLower.contains("minus") || idLower.contains("sub") -> bName.contains("minus") || bName.contains("sub")
+                                idLower.contains("max") -> bName.contains("max")
+                                idLower.contains("auto") -> bName.contains("auto")
+                                else -> false
+                            }
+                        } ?: generalButtons.firstOrNull { it.name.lowercase() !in usedButtons }
+                        matched?.also { usedButtons.add(it.name.lowercase()) }
+                    }
+                    AssetSemanticCategory.HUD_FRAME -> {
+                        hudFrames.firstOrNull { it.name.lowercase() !in usedAssetNames } ?: hudFrames.firstOrNull()
+                    }
+                    AssetSemanticCategory.TITLE_LOGO -> {
+                        titleLogos.firstOrNull { it.name.lowercase() !in usedAssetNames } ?: titleLogos.firstOrNull()
+                    }
+                    else -> null
+                }
+
+                // 执行物理装配
+                if (candidateAsset != null) {
+                    val cleanRel = candidateAsset.relativePath.replace("\\", "/")
+                    val resolvedPath = when {
+                        cleanRel.startsWith("templates/") -> cleanRel
+                        cleanRel.startsWith("assets/") -> "templates/$projectId/$cleanRel"
+                        else -> "templates/$projectId/assets/$cleanRel"
+                    }
+                    val boundFile = TemplateFile(resolvedPath)
+                    usedAssetNames.add(candidateAsset.name.lowercase())
+
+                    // 保持素材原生纵横比，纠偏大模型失真的长宽比
+                    val newBounds = if (candidateAsset.width > 0 && candidateAsset.height > 0) {
+                        val assetW = candidateAsset.width.toFloat()
+                        val assetH = candidateAsset.height.toFloat()
+                        val assetRatio = assetW / assetH
+                        val curW = block.bounds.width
+                        val curH = block.bounds.height
+
+                        val finalW = if (curW <= 0f || (curW == 100f && curH == 100f)) assetW else curW
+                        val finalH = if (curW <= 0f || curH <= 0f || (curW == 100f && curH == 100f)) {
+                            assetH
+                        } else {
+                            val curRatio = curW / curH
+                            if (kotlin.math.abs(curRatio - assetRatio) > 0.05f) {
+                                curW / assetRatio
+                            } else {
+                                curH
+                            }
+                        }
+                        SerialRect(block.bounds.left, block.bounds.top, block.bounds.left + finalW, block.bounds.top + finalH)
+                    } else {
+                        block.bounds
+                    }
+
+                    block.copy(
+                        referenceImage = boundFile,
+                        currentImageUri = boundFile,
+                        isPureContainer = false,
+                        bounds = newBounds,
+                        children = fitRecursive(block.children, block.id)
+                    )
+                } else {
+                    block.copy(children = fitRecursive(block.children, block.id))
+                }
+            }
+        }
+
+        return fitRecursive(blocks)
     }
 
     /**
@@ -180,6 +391,22 @@ object UiStudioLayoutService {
         for (b in blocks) {
             if (b.children.isNotEmpty()) {
                 count += countAllBlocks(b.children)
+            }
+        }
+        return count
+    }
+
+    /**
+     * 递归统计已成功绑定切片素材的图元总数
+     */
+    fun countMatchedAssets(blocks: List<UIBlock>): Int {
+        var count = 0
+        for (b in blocks) {
+            if (b.currentImageUri != null || b.referenceImage != null) {
+                count++
+            }
+            if (b.children.isNotEmpty()) {
+                count += countMatchedAssets(b.children)
             }
         }
         return count
