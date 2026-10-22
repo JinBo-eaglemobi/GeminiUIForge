@@ -416,7 +416,7 @@ fun UIStudioCanvasArea(
             }
         }
 
-        // 独立覆盖层：右下角悬浮「✨ AI Chat」智能排版按钮（完全免疫底层画布平移缩放手势）
+        // 独立覆盖层：右下角悬浮「✨ AI Chat 智能排版」按钮（完全免疫底层画布平移缩放手势）
         if (currentView != null) {
             Box(
                 modifier = Modifier

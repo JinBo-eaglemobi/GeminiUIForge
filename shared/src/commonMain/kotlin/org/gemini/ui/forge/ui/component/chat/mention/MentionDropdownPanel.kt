@@ -28,7 +28,8 @@ fun MentionDropdownPanel(
     candidates: List<MentionItem>,
     onItemSelected: (MentionItem) -> Unit,
     modifier: Modifier = Modifier,
-    maxHeight: Dp = 480.dp
+    maxHeight: Dp = 480.dp,
+    onDeleteItem: ((MentionItem) -> Unit)? = null
 ) {
     if (!state.isMentionMenuVisible) return
 
@@ -102,7 +103,8 @@ fun MentionDropdownPanel(
                         MentionItemRow(
                             item = item,
                             isFocused = isFocused,
-                            onClick = { onItemSelected(item) }
+                            onClick = { onItemSelected(item) },
+                            onDelete = onDeleteItem?.let { del -> { del(item) } }
                         )
                     }
                 }

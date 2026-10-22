@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
@@ -35,6 +36,7 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.extend.readClipboardImageBytes
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
+import org.gemini.ui.forge.model.chat.MentionCategory
 import org.gemini.ui.forge.model.chat.MentionItem
 import org.gemini.ui.forge.model.chat.MentionPayload
 import org.gemini.ui.forge.data.isFileExistsInternal
@@ -69,6 +71,13 @@ import org.gemini.ui.forge.utils.rememberFilePicker
  * @param trailingActions 发送按钮旁后置自定义动作插槽
  * @param modifier 修饰符
  */
+private val IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp", "gif", "bmp")
+
+private fun isImageFile(path: String): Boolean {
+    val ext = path.substringAfterLast('.', "").lowercase()
+    return ext in IMAGE_EXTENSIONS
+}
+
 @Composable
 fun CommonChatInputBar(
     isGenerating: Boolean,
@@ -88,7 +97,11 @@ fun CommonChatInputBar(
     onFilesDropped: ((List<String>) -> Unit)? = null,
     externalDroppedFiles: List<String>? = null,
     onExternalDroppedFilesConsumed: () -> Unit = {},
+    onDeleteMentionItem: ((MentionItem) -> Unit)? = null,
     activeSkills: List<UiStudioSkill> = emptyList(),
+    allSkills: List<UiStudioSkill> = emptyList(),
+    enabledSkillIds: Set<String> = emptySet(),
+    onToggleSkill: (String, Boolean) -> Unit = { _, _ -> },
     skillMode: SkillActivationMode = SkillActivationMode.AUTO,
     onSkillModeChanged: (SkillActivationMode) -> Unit = {},
     leadingActions: @Composable RowScope.() -> Unit = {},
@@ -172,21 +185,62 @@ fun CommonChatInputBar(
         }
     }
 
+    // 核心统一分流接入管道：将拖拽或选择的文件按图片/文档精准路由
+    fun handleIncomingFiles(paths: List<String>) {
+        if (paths.isEmpty()) return
+        val (imagePaths, docPaths) = paths.partition { isImageFile(it) }
+
+        // A. 图片资产：无论是否有 mentionState，统统作为多模态图片附件处理
+        if (imagePaths.isNotEmpty()) {
+            addFilesAsAttachments(imagePaths)
+        }
+
+        // B. 文档与非图片格式：
+        if (docPaths.isNotEmpty()) {
+            if (onFilesDropped != null) {
+                // 宿主提供业务级文件处理（例如 UIStudioViewModel.handleFileDropped 会挂载为 @Mention 参考文档）
+                onFilesDropped.invoke(docPaths)
+            } else if (mentionState != null) {
+                // 宿主启用了工程上下文实体系统（@Mention）：直接挂载为 DOC 胶囊，严禁再进入 attachments！
+                docPaths.forEach { docPath ->
+                    val fileName = docPath.substringAfterLast('\\').substringAfterLast('/')
+                    mentionState.attachMention(
+                        MentionItem(
+                            id = "doc_$docPath",
+                            title = fileName,
+                            subtitle = docPath,
+                            category = MentionCategory.DOC,
+                            icon = Icons.Default.Description,
+                            payload = MentionPayload.DocPayload(
+                                fileName = fileName,
+                                absolutePath = docPath
+                            )
+                        )
+                    )
+                }
+                Toast.show("已挂载 ${docPaths.size} 份参考文档", ToastType.INFO)
+            } else {
+                // 纯通用对话场景兜底：作为普通二进制文件附件
+                addFilesAsAttachments(docPaths)
+            }
+        }
+    }
+
     // 监听外部注入的文件（如从聊天主视口拖入）
     LaunchedEffect(externalDroppedFiles) {
         val files = externalDroppedFiles
         if (!files.isNullOrEmpty()) {
-            addFilesAsAttachments(files)
+            handleIncomingFiles(files)
             onExternalDroppedFilesConsumed()
         }
     }
 
     // 本地附件选择器
     val filePicker = rememberFilePicker(
-        extensions = listOf("png", "jpg", "jpeg", "webp", "json", "txt", "md", "yaml", "xml")
+        extensions = listOf("png", "jpg", "jpeg", "webp", "json", "txt", "md", "yaml", "xml", "kt", "kts", "sql", "log")
     ) { path ->
         path?.takeIf { it.isNotBlank() }?.let { filePath ->
-            addFilesAsAttachments(listOf(filePath))
+            handleIncomingFiles(listOf(filePath))
         }
     }
 
@@ -207,8 +261,7 @@ fun CommonChatInputBar(
             .onFileDrop(
                 onDragStateChanged = { isDropHovering = it },
                 onFilesDropped = { paths ->
-                    addFilesAsAttachments(paths)
-                    onFilesDropped?.invoke(paths)
+                    handleIncomingFiles(paths)
                 }
             )
     ) {
@@ -231,6 +284,17 @@ fun CommonChatInputBar(
                 MentionPillBar(
                     mentions = mentionState.attachedMentions,
                     onRemove = { item -> mentionState.removeMention(item) },
+                    onItemClick = { item ->
+                        when (val payload = item.payload) {
+                            is MentionPayload.DocPayload -> {
+                                onImagePreviewRequested?.invoke(payload.absolutePath)
+                            }
+                            is MentionPayload.AssetPayload -> {
+                                onImagePreviewRequested?.invoke(payload.filePath)
+                            }
+                            else -> {}
+                        }
+                    },
                     modifier = Modifier.padding(bottom = spacing.small)
                 )
             }
@@ -319,6 +383,7 @@ fun CommonChatInputBar(
                     state = mentionState,
                     candidates = mentionCandidates,
                     maxHeight = mentionMaxHeight,
+                    onDeleteItem = onDeleteMentionItem,
                     onItemSelected = { selected ->
                         val docPayload = selected.payload as? MentionPayload.DocPayload
                         if (docPayload != null) {
@@ -495,11 +560,17 @@ fun CommonChatInputBar(
                         }
                     }
 
-                    // 技能状态药丸与手动切换 (Spec-to-View 意图自动探测)
+                    // 技能状态药丸与手动切换 (Spec-to-View 意图自动探测，对齐旗舰自适应尺寸规范)
                     SkillSelectorPill(
+                        skills = allSkills,
+                        enabledSkillIds = enabledSkillIds,
+                        onToggleSkill = onToggleSkill,
                         activeSkills = activeSkills,
                         currentMode = skillMode,
-                        onModeChanged = onSkillModeChanged
+                        onModeChanged = onSkillModeChanged,
+                        minMenuWidth = 340.dp,
+                        maxMenuWidth = adaptiveMenuWidth,
+                        maxMenuHeight = dynamicMenuMaxHeight
                     )
 
                     // 动态模型选择器（对齐公用旗舰 DropdownMenu 下拉卡片菜单）

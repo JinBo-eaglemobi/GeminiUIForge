@@ -74,10 +74,12 @@ object UiStudioSkillManager {
     suspend fun resolveActiveSkills(
         prompt: String,
         attachedMentions: List<MentionItem>,
-        mode: SkillActivationMode = SkillActivationMode.AUTO
+        mode: SkillActivationMode = SkillActivationMode.AUTO,
+        enabledSkillIds: Set<String>? = null
     ): List<UiStudioSkill> {
         val allSkills = getRegisteredSkills()
-        return resolveFromSkills(allSkills, prompt, attachedMentions, mode)
+        val filtered = if (enabledSkillIds != null) allSkills.filter { it.id in enabledSkillIds } else allSkills
+        return resolveFromSkills(filtered, prompt, attachedMentions, mode)
     }
 
     /**
@@ -86,10 +88,12 @@ object UiStudioSkillManager {
     fun resolveActiveSkillsSync(
         prompt: String,
         attachedMentions: List<MentionItem>,
-        mode: SkillActivationMode = SkillActivationMode.AUTO
+        mode: SkillActivationMode = SkillActivationMode.AUTO,
+        enabledSkillIds: Set<String>? = null
     ): List<UiStudioSkill> {
         val allSkills = getCachedSkills()
-        return resolveFromSkills(allSkills, prompt, attachedMentions, mode)
+        val filtered = if (enabledSkillIds != null) allSkills.filter { it.id in enabledSkillIds } else allSkills
+        return resolveFromSkills(filtered, prompt, attachedMentions, mode)
     }
 
     private fun resolveFromSkills(

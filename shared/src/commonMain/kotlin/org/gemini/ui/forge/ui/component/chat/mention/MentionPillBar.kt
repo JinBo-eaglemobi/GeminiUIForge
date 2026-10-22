@@ -14,7 +14,8 @@ import org.gemini.ui.forge.model.chat.MentionItem
 fun MentionPillBar(
     mentions: List<MentionItem>,
     onRemove: (MentionItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onItemClick: ((MentionItem) -> Unit)? = null
 ) {
     if (mentions.isEmpty()) return
 
@@ -28,7 +29,8 @@ fun MentionPillBar(
         mentions.forEach { item ->
             MentionPillChip(
                 item = item,
-                onRemove = { onRemove(item) }
+                onRemove = { onRemove(item) },
+                onClick = onItemClick?.let { click -> { click(item) } }
             )
         }
     }

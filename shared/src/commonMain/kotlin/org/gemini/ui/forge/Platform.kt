@@ -75,6 +75,10 @@ fun formatTimestamp(timeMillis: Long, format: String = "yyyy-MM-dd HH:mm:ss"): S
         "${year}_${month}_$day"
     } else if (format == "yyyy-MM-dd") {
         "$year-$month-$day"
+    } else if (format == "MM-dd HH:mm") {
+        "$month-$day $hour:$minute"
+    } else if (format == "MM-dd") {
+        "$month-$day"
     } else {
         "$year-$month-$day $hour:$minute:$second"
     }

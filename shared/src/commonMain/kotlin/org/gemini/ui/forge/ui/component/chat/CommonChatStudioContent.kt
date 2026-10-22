@@ -104,7 +104,11 @@ fun CommonChatStudioContent(
     mentionState: MentionState? = null,
     mentionCandidates: List<MentionItem> = emptyList(),
     onFilesDropped: ((List<String>) -> Unit)? = null,
+    onDeleteExternalDoc: ((filePath: String) -> Unit)? = null,
     activeSkills: List<UiStudioSkill> = emptyList(),
+    allSkills: List<UiStudioSkill> = emptyList(),
+    enabledSkillIds: Set<String> = emptySet(),
+    onToggleSkill: (String, Boolean) -> Unit = { _, _ -> },
     skillMode: SkillActivationMode = SkillActivationMode.AUTO,
     onSkillModeChanged: (SkillActivationMode) -> Unit = {},
     topBarActions: @Composable RowScope.() -> Unit = {},
@@ -144,7 +148,6 @@ fun CommonChatStudioContent(
                 onDragStateChanged = {},
                 onFilesDropped = { paths ->
                     filesToInject = paths
-                    onFilesDropped?.invoke(paths)
                 }
             )
     ) {
@@ -355,6 +358,24 @@ fun CommonChatStudioContent(
                         (studioMaxHeight * 0.55f).coerceIn(240.dp, 640.dp)
                     }
 
+                    val handleFileOrImagePreview: (String) -> Unit = { uriOrPath ->
+                        val ext = uriOrPath.substringAfterLast('.', "").lowercase()
+                        val isImage = ext in setOf("png", "jpg", "jpeg", "webp", "gif", "bmp", "svg")
+                        if (isImage) {
+                            if (onImageClick != null) {
+                                onImageClick(uriOrPath)
+                            } else {
+                                lightboxImageUri = uriOrPath
+                            }
+                        } else {
+                            val fileName = uriOrPath.replace('\\', '/').substringAfterLast('/')
+                            previewDocumentData = DocumentPreviewData(
+                                title = fileName.ifBlank { "文档预览" },
+                                filePath = uriOrPath
+                            )
+                        }
+                    }
+
                     CommonChatInputBar(
                         isGenerating = isGenerating,
                         selectedModel = selectedModel,
@@ -365,11 +386,11 @@ fun CommonChatStudioContent(
                         config = config,
                         inputTextOverride = inputTextToInject,
                         onInputTextConsumed = { inputTextToInject = null },
-                        onImagePreviewRequested = { uri ->
-                            if (onImageClick != null) {
-                                onImageClick(uri)
-                            } else {
-                                lightboxImageUri = uri
+                        onImagePreviewRequested = handleFileOrImagePreview,
+                        onDeleteMentionItem = { item ->
+                            val docPayload = item.payload as? MentionPayload.DocPayload
+                            if (docPayload != null && docPayload.absolutePath.isNotBlank()) {
+                                onDeleteExternalDoc?.invoke(docPayload.absolutePath)
                             }
                         },
                         mentionState = mentionState,
@@ -379,6 +400,9 @@ fun CommonChatStudioContent(
                         externalDroppedFiles = filesToInject,
                         onExternalDroppedFilesConsumed = { filesToInject = null },
                         activeSkills = activeSkills,
+                        allSkills = allSkills,
+                        enabledSkillIds = enabledSkillIds,
+                        onToggleSkill = onToggleSkill,
                         skillMode = skillMode,
                         onSkillModeChanged = onSkillModeChanged,
                         leadingActions = inputLeadingActions,

@@ -1,36 +1,47 @@
 package org.gemini.ui.forge.ui.component.chat
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.model.chat.VisualChatSession
-import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.Toast
 
@@ -86,13 +97,13 @@ fun CommonChatSessionSidebar(
                     )
                     Spacer(Modifier.width(6.dp))
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
                     ) {
                         Text(
                             text = "${sessions.size}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
                         )
                     }
@@ -101,16 +112,19 @@ fun CommonChatSessionSidebar(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     headerActions()
 
-                    IconButton(
+                    FilledTonalButton(
                         onClick = onNewSession,
-                        modifier = Modifier.size(28.dp).tip("新建对话")
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(28.dp).tip("新建对话")
                     ) {
                         Icon(
                             Icons.Default.Add,
                             contentDescription = "新建对话",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            modifier = Modifier.size(14.dp)
                         )
+                        Spacer(Modifier.width(3.dp))
+                        Text("新建", style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
@@ -150,7 +164,7 @@ fun CommonChatSessionSidebar(
                 Spacer(Modifier.height(spacing.small))
             }
 
-            // 3. 会话卡片列表
+            // 3. 会话卡片列表（调用独立的 CommonChatSessionItem 保持一文件一 Composable 铁律）
             if (filteredSessions.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
@@ -165,123 +179,19 @@ fun CommonChatSessionSidebar(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     filteredSessions.forEach { session ->
-                        val isSelected = session.id == currentSessionId
-                        val interactionSource = remember { MutableInteractionSource() }
-                        val isHovered by interactionSource.collectIsHoveredAsState()
-
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = when {
-                                isSelected -> Color(0xFF282046)
-                                isHovered -> Color.White.copy(alpha = 0.04f)
-                                else -> Color.Transparent
-                            },
-                            border = when {
-                                isSelected -> androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.45f))
-                                isHovered -> androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
-                                else -> null
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .pointerHoverIcon(PointerIcon.Hand)
-                                .clickable(
-                                    interactionSource = interactionSource,
-                                    indication = null,
-                                    onClick = { onSessionSelected(session.id) }
-                                )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // 选中状态指示器小胶囊
-                                if (isSelected) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(3.dp)
-                                            .height(28.dp)
-                                            .clip(RoundedCornerShape(2.dp))
-                                            .background(Color(0xFFA855F7))
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                }
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = session.title,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
-                                    )
-
-                                    Spacer(Modifier.height(4.dp))
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = "${session.messages.size} 条",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontSize = 11.sp,
-                                            color = if (isSelected) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
-                                        )
-
-                                        // 显式呈现当前会话的通信协议/模式徽章（精细化防变形胶囊）
-                                        Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color = if (isSelected) Color(0xFF6366F1).copy(alpha = 0.25f)
-                                            else Color.White.copy(alpha = 0.06f),
-                                            border = androidx.compose.foundation.BorderStroke(
-                                                0.5.dp,
-                                                if (isSelected) Color(0xFF818CF8).copy(alpha = 0.4f) else Color.White.copy(alpha = 0.1f)
-                                            )
-                                        ) {
-                                            Text(
-                                                text = when (config.defaultApiFlavor) {
-                                                    org.gemini.ui.forge.model.app.ApiFlavor.INTERACTIONS -> "⚡ Interactions"
-                                                    org.gemini.ui.forge.model.app.ApiFlavor.GENERATE_CONTENT -> "⚡ generateContent"
-                                                },
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    lineHeight = 12.sp
-                                                ),
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = if (isSelected) Color(0xFFC7D2FE) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // 单项删除按钮（二次确认保护，悬停或选中时更清晰）
-                                IconButton(
-                                    onClick = { sessionToDelete = session },
-                                    modifier = Modifier.size(24.dp).tip("删除会话")
-                                ) {
-                                    Icon(
-                                        Icons.Default.DeleteOutline,
-                                        contentDescription = "删除",
-                                        modifier = Modifier.size(14.dp),
-                                        tint = if (isHovered || isSelected) MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                                    )
-                                }
-                            }
-                        }
+                        CommonChatSessionItem(
+                            session = session,
+                            isSelected = session.id == currentSessionId,
+                            onSelect = { onSessionSelected(session.id) },
+                            onDeleteRequest = { sessionToDelete = session }
+                        )
                     }
                 }
             }
         }
     }
 
-    // 删除会话二次确认弹窗
+    // 4. 删除会话二次确认弹窗
     sessionToDelete?.let { session ->
         AppConfirmDialog(
             title = "删除对话确认",

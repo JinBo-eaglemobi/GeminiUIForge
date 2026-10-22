@@ -24,7 +24,8 @@ import org.gemini.ui.forge.ui.component.tip
 fun MentionPillChip(
     item: MentionItem,
     onRemove: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
 ) {
     val containerColor = when (item.category) {
         MentionCategory.VIEW -> MaterialTheme.colorScheme.secondaryContainer
@@ -45,6 +46,9 @@ fun MentionPillChip(
         if (!item.subtitle.isNullOrBlank()) {
             append(" · ${item.subtitle}")
         }
+        if (onClick != null) {
+            append(" (点击预览)")
+        }
     }
 
     Surface(
@@ -58,23 +62,30 @@ fun MentionPillChip(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
         ) {
-            if (item.icon != null) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = contentColor
-                )
-                Spacer(Modifier.width(4.dp))
-            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            ) {
+                if (item.icon != null) {
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = contentColor
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
 
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 140.dp)
-            )
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 140.dp)
+                )
+            }
 
             Spacer(Modifier.width(4.dp))
 

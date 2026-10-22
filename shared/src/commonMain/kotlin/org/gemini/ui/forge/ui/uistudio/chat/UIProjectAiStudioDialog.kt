@@ -116,7 +116,11 @@ fun UIProjectAiStudioDialog(
                     onFilesDropped = { paths ->
                         paths.forEach { viewModel.handleFileDropped(it) }
                     },
+                    onDeleteExternalDoc = { viewModel.deleteExternalDoc(it) },
                     activeSkills = viewModel.activeSkills,
+                    allSkills = viewModel.allSkills,
+                    enabledSkillIds = viewModel.enabledSkillIds,
+                    onToggleSkill = { skillId, isEnabled -> viewModel.toggleSkill(skillId, isEnabled) },
                     skillMode = viewModel.skillMode,
                     onSkillModeChanged = { viewModel.skillMode = it },
                     config = studioConfig,

@@ -117,13 +117,39 @@ class UIStudioViewModel {
 
     init {
         scope.launch(Dispatchers.Default) {
-            UiStudioSkillManager.getRegisteredSkills()
+            val skills = UiStudioSkillManager.getRegisteredSkills()
+            allSkills = skills
+            enabledSkillIds = skills.map { it.id }.toSet()
         }
     }
 
     /** 当前工程引用的外部参考规范文档清单 */
     var registeredExternalDocs by mutableStateOf<List<ExternalDocRecord>>(emptyList())
         private set
+
+    /** 所有已探测并注册的 UI Studio 技能清单 */
+    var allSkills by mutableStateOf<List<UiStudioSkill>>(emptyList())
+        private set
+
+    /** 当前处于启用/加载状态的技能 ID 集合（默认全启用） */
+    var enabledSkillIds by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** 切换单个技能的加载状态 */
+    fun toggleSkill(skillId: String, isEnabled: Boolean) {
+        enabledSkillIds = if (isEnabled) {
+            enabledSkillIds + skillId
+        } else {
+            enabledSkillIds - skillId
+        }
+        val targetSkill = allSkills.find { it.id == skillId }
+        val skillName = targetSkill?.name ?: skillId
+        if (isEnabled) {
+            Toast.show("已加载技能: $skillName", ToastType.INFO)
+        } else {
+            Toast.show("已停用技能: $skillName", ToastType.INFO)
+        }
+    }
 
     /** 当前激活的技能模式 */
     var skillMode by mutableStateOf(SkillActivationMode.AUTO)
@@ -133,7 +159,8 @@ class UIStudioViewModel {
         get() = UiStudioSkillManager.resolveActiveSkillsSync(
             prompt = mentionState.searchQuery,
             attachedMentions = mentionState.attachedMentions,
-            mode = skillMode
+            mode = skillMode,
+            enabledSkillIds = enabledSkillIds
         )
 
     /**
@@ -146,47 +173,61 @@ class UIStudioViewModel {
     }
 
     /**
-     * 登记新的外部文件并自动在输入栏挂载为药丸
+     * 正式登记外部参考文档到当前工程历史引用库
      */
     fun registerExternalDoc(filePath: String) {
         val projId = state.project?.projectId ?: "default"
         scope.launch(Dispatchers.Default) {
             val fileName = filePath.substringAfterLast('\\').substringAfterLast('/')
-            val record = ExternalDocManager.registerDoc(
+            ExternalDocManager.registerDoc(
                 projectName = projId,
                 fileName = fileName,
                 absolutePath = filePath
             )
             registeredExternalDocs = ExternalDocManager.getDocsForProject(projId)
-            withContext(Dispatchers.Main) {
-                mentionState.attachMention(
-                    MentionItem(
-                        id = "doc_${record.absolutePath}",
-                        title = record.fileName,
-                        subtitle = record.absolutePath,
-                        category = MentionCategory.DOC,
-                        icon = Icons.Default.Description,
-                        payload = MentionPayload.DocPayload(
-                            fileName = record.fileName,
-                            absolutePath = record.absolutePath
-                        )
-                    )
-                )
-                Toast.show("已添加历史引用: $fileName", ToastType.SUCCESS)
-            }
+        }
+    }
+
+    /**
+     * 从当前工程历史引用库中移除指定的外部参考文档
+     */
+    fun deleteExternalDoc(filePath: String) {
+        val projId = state.project?.projectId ?: "default"
+        scope.launch(Dispatchers.Default) {
+            val fileName = filePath.substringAfterLast('\\').substringAfterLast('/')
+            ExternalDocManager.removeDocByPath(
+                projectName = projId,
+                path = filePath
+            )
+            registeredExternalDocs = ExternalDocManager.getDocsForProject(projId)
+            Toast.show("已清除历史引用: $fileName", ToastType.INFO)
         }
     }
 
     /**
      * 处理拖入文件的分流与自动挂载：
      * 1. 图片格式切片（png/jpg/webp 等）已由输入栏内部自动挂载为多模态附件；
-     * 2. 规范与文档格式（md/txt/json/yaml 等）在此作为历史引用文档登记并挂载 @ 药丸。
+     * 2. 规范与文档格式（md/txt/json/yaml 等）在此作为待发送的参考文档在输入栏挂载为 @ 药丸（暂不写入历史库，消息发送时才正式沉淀）。
      */
     fun handleFileDropped(filePath: String) {
         val ext = filePath.substringAfterLast('.', "").lowercase()
         val isImage = ext in setOf("png", "jpg", "jpeg", "webp")
         if (!isImage) {
-            registerExternalDoc(filePath)
+            val fileName = filePath.substringAfterLast('\\').substringAfterLast('/')
+            mentionState.attachMention(
+                MentionItem(
+                    id = "doc_$filePath",
+                    title = fileName,
+                    subtitle = filePath,
+                    category = MentionCategory.DOC,
+                    icon = Icons.Default.Description,
+                    payload = MentionPayload.DocPayload(
+                        fileName = fileName,
+                        absolutePath = filePath
+                    )
+                )
+            )
+            Toast.show("已挂载参考文档: $fileName", ToastType.INFO)
         }
     }
 
@@ -1982,6 +2023,18 @@ class UIStudioViewModel {
                                         readLocalFileBytes(p.absolutePath)?.decodeToString() ?: ""
                                     } catch (e: Exception) { "" }
                                     mentionContextBuilder.append("  <document name=\"${p.fileName}\" path=\"${p.absolutePath}\">\n$content\n  </document>\n")
+                                    // 随消息真实发送后，正式登记沉淀为该工程的历史引用记录
+                                    try {
+                                        val projId = state.project?.projectId ?: "default"
+                                        ExternalDocManager.registerDoc(
+                                            projectName = projId,
+                                            fileName = p.fileName,
+                                            absolutePath = p.absolutePath
+                                        )
+                                        registeredExternalDocs = ExternalDocManager.getDocsForProject(projId)
+                                    } catch (e: Exception) {
+                                        AppLogger.w("UIStudioViewModel", "登记历史文档失败: ${p.absolutePath}, ${e.message}")
+                                    }
                                 }
                             }
                         }
@@ -1995,7 +2048,8 @@ class UIStudioViewModel {
                 val triggeredSkills = UiStudioSkillManager.resolveActiveSkills(
                     prompt = userText,
                     attachedMentions = attachedMentionsList,
-                    mode = skillMode
+                    mode = skillMode,
+                    enabledSkillIds = enabledSkillIds
                 )
 
                 // 若用户意图涉及界面生成或排版，且素材库不为空且未手动挂载全部素材清单，则自动补充注入素材库切片清单

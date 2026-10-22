@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,7 +19,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.gemini.ui.forge.model.chat.MentionCategory
 import org.gemini.ui.forge.model.chat.MentionItem
+import org.gemini.ui.forge.ui.component.tip
 
 /**
  * 联想浮层单个条目行项组件 (一文件一 Composable)
@@ -28,7 +31,8 @@ fun MentionItemRow(
     item: MentionItem,
     isFocused: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDelete: (() -> Unit)? = null
 ) {
     val bgColor = if (isFocused) {
         MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
@@ -89,7 +93,27 @@ fun MentionItemRow(
             }
         }
 
-        // 3. 聚焦态快捷提示
+        // 3. 历史引用删除按钮（仅 DOC 类别显示）
+        if (item.category == MentionCategory.DOC && onDelete != null) {
+            Spacer(Modifier.width(4.dp))
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable { onDelete() }
+                    .tip("清除历史引用")
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "清除历史引用",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+
+        // 4. 聚焦态快捷提示
         if (isFocused) {
             Spacer(Modifier.width(8.dp))
             Icon(
