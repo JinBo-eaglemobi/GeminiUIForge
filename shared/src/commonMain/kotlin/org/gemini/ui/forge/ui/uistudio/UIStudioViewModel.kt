@@ -112,7 +112,19 @@ class UIStudioViewModel {
     private val storage = LocalFileStorage()
     private val mattingService = LocalMattingService(storage)
     private val configManager = ConfigManager()
-    val trafficStore = SessionTrafficStore()
+
+    /** 当前项目私有的会话与通信统一根目录 (templates/{proj}/sessions) */
+    val projectSessionsDir: String? get() {
+        val proj = state.project ?: return null
+        val sanitized = proj.projectId.trim().replace(" ", "_")
+        return "templates/$sanitized/sessions"
+    }
+
+    /** 绑定至当前项目私有路径的通信归档管理器 */
+    val trafficStore = SessionTrafficStore(
+        storage = storage,
+        customRootDirProvider = { projectSessionsDir }
+    )
     val trafficScopeId: String get() = "uistudio_${state.project?.projectId?.ifBlank { "default" } ?: "default"}"
     val chatEngine = GeminiChatEngine()
 
@@ -1725,6 +1737,9 @@ class UIStudioViewModel {
         val sessionsDirRel = "templates/$sanitized/sessions"
         scope.launch(Dispatchers.Default) {
             try {
+                // 1. 自动自愈迁移历史遗留在全局根目录 sessions/uistudio_xxx 的外溢通信档案至项目私有目录
+                migrateLegacyGlobalTraffic(sanitized)
+
                 val root = org.gemini.ui.forge.utils.GlobalAppEnv.currentRootPath.trimEnd('/', '\\')
                 val fullDirPath = "$root/$sessionsDirRel"
                 val files = org.gemini.ui.forge.utils.listFilesInLocalDirectory(fullDirPath)
@@ -1842,6 +1857,19 @@ class UIStudioViewModel {
         }
     }
 
+    /**
+     * 自愈迁移历史遗留在全局根目录 sessions/uistudio_{projectId} 下的外溢通信档案至项目私有目录。
+     */
+    private suspend fun migrateLegacyGlobalTraffic(sanitizedProjId: String) {
+        val legacyScopeId = "uistudio_$sanitizedProjId"
+        val targetRootDir = "templates/$sanitizedProjId/sessions"
+        try {
+            trafficStore.migrateLegacyTraffic(legacyScopeId, targetRootDir)
+        } catch (e: Exception) {
+            AppLogger.w("UIStudioViewModel", "自愈迁移全局遗留通信报文失败: ${e.message}")
+        }
+    }
+
     fun createNewChatSession(title: String = "新布局讨论") {
         val proj = state.project ?: return
         val sanitized = proj.projectId.trim().replace(" ", "_")
@@ -1874,6 +1902,8 @@ class UIStudioViewModel {
         scope.launch(Dispatchers.Default) {
             try {
                 TemplateFile(path).delete()
+                // 同步彻底清理该会话在项目目录内的通信报文归档 (traffic/)
+                trafficStore.deleteAll(trafficScopeId, sessionId)
             } catch (e: Exception) {
                 AppLogger.w("UIStudioViewModel", "删除会话文件失败: $sessionId", e)
             }
@@ -4215,6 +4245,9 @@ class UIStudioViewModel {
             chatSessions = state.chatSessions.map { if (it.id == updated.id) updated else it }
         )
         saveSession(updated)
+        scope.launch(Dispatchers.Default) {
+            trafficStore.deleteAll(trafficScopeId, current.id)
+        }
         Toast.show("当前会话消息已清空", ToastType.INFO)
     }
 

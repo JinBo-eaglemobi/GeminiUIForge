@@ -43,20 +43,23 @@ mode: all
 
 ---
 
-## 二、 执行指令超时防重杀与防中断红线 (Execution Anti-Interruption Guard) 【红线铁律】
+## 二、 运行配置统一调度规范与防中断红线 (Run Configuration Specification & Anti-Interruption Guard) 【红线铁律】
 
-当调度 IDEA 运行配置（`idea_execute_run_configuration`）或执行终端命令时，必须绝对严格遵守以下防重杀防中断铁律：
+### 1. 桌面端运行配置统一调度规范 (Desktop App Run Configuration Specification)
+- **运行配置智能路由准则**：当调度 IDEA MCP（`idea_execute_run_configuration`）拉起或重启桌面应用时，**一律按当前环境 MCP 挂载状态严格分流**：
+  - **热更优先通道（当前会话挂载了 `compose-hot-reload` MCP）**：**必须且仅能调度 `desktopApp [hot] 🔥`**，以注入热重载探针代理；
+  - **常规运行通道（未挂载热更 MCP 或探针离线）**：调度原生配置 `GeminiUIForge [:desktopApp:run]`；
+- **常驻应用非阻塞调度**：无论命中哪种运行配置，**强制且必须设置 `waitForExit = false`**，严禁设置 `waitForExit = true` 导致死等超时。
+*(注：后续章节涉及拉起或重启桌面应用时，一律遵循本规范引用，不再赘述重复细节)*
 
-1. **常驻桌面应用非阻塞调度铁律 (Non-Blocking Launch for Desktop App)**：
-   - 调度常驻长效桌面应用运行配置（如 `GeminiUIForge [:desktopApp:run]` 或 `desktopApp [hot] 🔥`）时，**强制且必须设置 `waitForExit = false`**；
-   - 严禁设置 `waitForExit = true`，杜绝因进程长期运行不退出而无意义阻塞死等并触发超时报错；
-2. **超时非终结原则 (Timeout != Process Termination)**：
+### 2. 执行超时防重杀与防中断铁律
+1. **超时非终结原则 (Timeout != Process Termination)**：
    - 当调用 `idea_execute_run_configuration` 由于设置的 `timeout` 到期返回超时通知时，**绝对禁止盲目立即发起同名命令的第二次运行**；
    - **底层机制警示**：IDEA 接收到同名运行配置会被判定为“重新运行（Rerun）”，IDEA 会立刻向后台正在全力编译/运行的旧进程发送 `SIGTERM` 强行杀死，导致前序编译前功尽弃、守护进程死锁并陷入恶性循环；
-3. **后台活跃态巡检铁律 (Active Process Inspection)**：
+2. **后台活跃态巡检铁律 (Active Process Inspection)**：
    - 触发超时后，AI 必须优先通过 `Get-Process`、CPU 占用监控或物理读取临时日志文件（`D:\WorkSpace\Idea\.IntelliJIdea\system\tmp\ij_run__*.log`）的最后追加行，判断后台进程是否仍在全力运行；
    - **若进程仍在活跃执行**：AI 必须**挂起继续等待其自然收口**，绝对严禁发起新调用！
-4. **僵死判定特权 (Deadlock Termination)**：
+3. **僵死判定特权 (Deadlock Termination)**：
    - 只有当确凿探测到进程彻底死锁（CPU 长期为 0、无任何日志输出、端口完全无响应的僵尸进程），才允许执行显式清理（如 `./gradlew --stop`），在旧进程完全清除后方可重新发起执行。
    - **在执行编译构建命令的情况下，绝对严禁在命令执行中途发起第二次编译调用！**
 
@@ -101,7 +104,7 @@ mode: all
      - **通道 A（极速热更通道）**：若当前会话存在 `compose-hot-reload` 工具且仅改动纯 UI / Composable，直接调用 `tools["compose-hot-reload"].reload()` 毫秒级热替换；
      - **通道 B（稳健重启通道）**：若涉及数据模型（如 `UIPage`、`UIBlock` 数据字段）、全局状态流、生命周期架构变动，或热更探针离线时，自动走重启通道：
        1. 通过 Shell 优雅停止旧应用进程：`Stop-Process -Id <pid> -Force`；
-       2. 通过 IDEA MCP 调度真实运行配置后台拉起应用：`idea_execute_run_configuration(configurationName = "GeminiUIForge [:desktopApp:run]", waitForExit = false)`（或 `desktopApp [hot] 🔥`）；
+       2. 通过 IDEA MCP 调度桌面端运行配置后台拉起应用（**严格遵循【桌面端运行配置统一调度规范】**）；
        3. 轮询等待 18330 业务端口重新就绪（`gemini-ui-forge.get_runtime_status` 返回 `uiReachable: true`）；
        4. 若当前处于主页模板列表，自动调用 `gemini-ui-forge.click_ui_node` 点击对应项目卡片自动进入工作区；
 4. **【核心覆盖】实机物理窗口审查与二元截图铁律 (Dual-Mode Visual Inspection & Echo)**：
@@ -128,7 +131,7 @@ mode: all
      - 严禁执行任何全量 Gradle 构建任务；
    - **通道 B：核心数据模型、全局状态流、生命周期或热更失效时（稳健重启通道）**：
      - 执行 `idea_build_project(filesToRebuild = [...])` 增量编译；
-     - 原生 Shell 关闭旧进程并调用 IDEA 真实运行配置 `GeminiUIForge [:desktopApp:run]`（`waitForExit = false`）后台拉起；
+     - 原生 Shell 关闭旧进程并按【桌面端运行配置统一调度规范】后台拉起；
      - 轮询等待应用进程与 18330 业务端口重新就绪；
 3. **继续推进实机闭环测试 (Continuous Closed-Loop Testing)**：
    - 在热替换或重启就绪后，调用 `gemini-ui-forge_get_semantic_tree` 动态校验节点状态；
