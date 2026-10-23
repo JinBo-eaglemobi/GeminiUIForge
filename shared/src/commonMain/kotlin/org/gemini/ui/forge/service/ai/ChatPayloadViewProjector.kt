@@ -1,6 +1,9 @@
 package org.gemini.ui.forge.service.ai
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -58,7 +61,7 @@ object ChatPayloadViewProjector {
         }
 
         // 优先拦截排版布局数据报文：提取纯净排版数据并使用标准 Markdown ```json 代码框包裹呈现
-        if (rawPayload.contains("apply_view_layout") || rawPayload.contains("assetFileName") || rawPayload.contains("arguments_delta")) {
+        if (rawPayload.contains("apply_view_layout") || (rawPayload.contains("assetFileName") && rawPayload.contains("viewName"))) {
             val viewNameMatch = Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1) ?: "FootballSlotMain"
             val descMatch = Regex("""(?:\\?"|")description(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
                 ?: "已根据参考规范与素材库完成界面结构规划与图元排版。"
@@ -75,109 +78,143 @@ object ChatPayloadViewProjector {
             return ProjectedChatContent(text = customMarkdown)
         }
 
-        val firstBrace = rawPayload.indexOf('{')
-        val lastBrace = rawPayload.lastIndexOf('}')
-        if (firstBrace < 0 || lastBrace <= firstBrace) {
+        val trimmed = rawPayload.trim()
+        val isExplicitJson = (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+            (trimmed.startsWith("[") && trimmed.endsWith("]"))
+
+        if (!isExplicitJson) {
+            // 文本内容（即便包含内嵌代码块或局部大括号），直接作为排版好的正文返回，严禁误提取局部代码块导致正文被清空
             return ProjectedChatContent(text = rawPayload)
         }
 
-        val jsonCandidate = rawPayload.substring(firstBrace, lastBrace + 1).trim()
+        val rootElement = try {
+            jsonParser.parseToJsonElement(trimmed)
+        } catch (_: Exception) {
+            null
+        }
+
+        if (rootElement == null) {
+            return ProjectedChatContent(text = rawPayload)
+        }
 
         val projected = try {
-            val rootObj = jsonParser.parseToJsonElement(jsonCandidate).jsonObject
-
             var extractedText = ""
             var extractedThought: String? = null
             var extractedSignature: String? = null
+            var hasToolCall = false
 
-            // 0. 优先拦截 Google 官方错误对象 (error: { message, code, status })
-            val errorObj = rootObj["error"]?.jsonObject
-            if (errorObj != null) {
-                val errMsg = errorObj["message"]?.jsonPrimitive?.contentOrNull
-                    ?: rootObj["message"]?.jsonPrimitive?.contentOrNull
-                    ?: "未知服务端错误"
-                val errCode = errorObj["code"]?.jsonPrimitive?.contentOrNull
-                    ?: errorObj["status"]?.jsonPrimitive?.contentOrNull
-                val formattedError = if (!errCode.isNullOrBlank()) "[$errCode] $errMsg" else errMsg
-                return ProjectedChatContent(text = formattedError)
+            fun processStep(stepObj: JsonObject) {
+                val stepType = stepObj["type"]?.jsonPrimitive?.contentOrNull
+                if (stepType == "model_output") {
+                    val contentArr = stepObj["content"]?.jsonArray
+                    val stepText = contentArr?.mapNotNull { c ->
+                        c.jsonObject["text"]?.jsonPrimitive?.contentOrNull
+                    }?.joinToString("\n") ?: ""
+
+                    if (stepText.isNotBlank()) {
+                        extractedText = if (extractedText.isBlank()) stepText else "$extractedText\n$stepText"
+                    }
+                } else if (stepType == "thought") {
+                    val sig = stepObj["signature"]?.jsonPrimitive?.contentOrNull
+                    if (!sig.isNullOrBlank()) extractedSignature = sig
+
+                    val thoughtStr = stepObj["thought"]?.jsonPrimitive?.contentOrNull
+                        ?: stepObj["text"]?.jsonPrimitive?.contentOrNull
+                    if (!thoughtStr.isNullOrBlank()) {
+                        extractedThought = (extractedThought ?: "") + thoughtStr
+                    }
+                } else if (stepType == "function_call" || stepType == "tool_call") {
+                    hasToolCall = true
+                }
             }
 
-            // 1. 优先解析 Google Interactions API 官方真实标准：steps 数组
-            val steps = rootObj["steps"]?.jsonArray
-                ?: rootObj["interaction"]?.jsonObject?.get("steps")?.jsonArray
-            if (steps != null) {
-                for (step in steps) {
-                    val stepObj = step.jsonObject
-                    val stepType = stepObj["type"]?.jsonPrimitive?.contentOrNull
+            fun processJsonObject(obj: JsonObject) {
+                // 0. 优先拦截 Google 官方错误对象 (error: { message, code, status })
+                val errorObj = obj["error"]?.jsonObject
+                if (errorObj != null) {
+                    val errMsg = errorObj["message"]?.jsonPrimitive?.contentOrNull
+                        ?: obj["message"]?.jsonPrimitive?.contentOrNull
+                        ?: "未知服务端错误"
+                    val errCode = errorObj["code"]?.jsonPrimitive?.contentOrNull
+                        ?: errorObj["status"]?.jsonPrimitive?.contentOrNull
+                    val formattedError = if (!errCode.isNullOrBlank()) "[$errCode] $errMsg" else errMsg
+                    extractedText = formattedError
+                    return
+                }
 
-                    if (stepType == "model_output") {
-                        val contentArr = stepObj["content"]?.jsonArray
-                        val stepText = contentArr?.mapNotNull { c ->
-                            c.jsonObject["text"]?.jsonPrimitive?.contentOrNull
-                        }?.joinToString("\n") ?: ""
+                // 1. Google Interactions API 官方真实标准：steps 数组或单个 step
+                obj["step"]?.jsonObject?.let { processStep(it) }
 
-                        if (stepText.isNotBlank()) {
-                            extractedText = if (extractedText.isBlank()) stepText else "$extractedText\n$stepText"
+                val steps = obj["steps"]?.jsonArray
+                    ?: obj["interaction"]?.jsonObject?.get("steps")?.jsonArray
+                if (steps != null) {
+                    for (step in steps) {
+                        if (step is JsonObject) {
+                            processStep(step)
                         }
-                    } else if (stepType == "thought") {
-                        val sig = stepObj["signature"]?.jsonPrimitive?.contentOrNull
-                        if (!sig.isNullOrBlank()) extractedSignature = sig
+                    }
+                }
 
-                        val thoughtStr = stepObj["thought"]?.jsonPrimitive?.contentOrNull
-                            ?: stepObj["text"]?.jsonPrimitive?.contentOrNull
-                        if (!thoughtStr.isNullOrBlank()) {
-                            extractedThought = (extractedThought ?: "") + thoughtStr
-                        }
-                    } else if (stepType == "function_call") {
-                        val fnName = stepObj["name"]?.jsonPrimitive?.contentOrNull ?: ""
-                        val argsObj = stepObj["arguments"]?.jsonObject ?: stepObj["args"]?.jsonObject
-                        val desc = argsObj?.get("description")?.jsonPrimitive?.contentOrNull
-                        val vName = argsObj?.get("viewName")?.jsonPrimitive?.contentOrNull ?: "新视图"
-                        val customText = "🛠️ **AI 已自动执行本地排版装配: [$vName]**\n\n${desc ?: "已根据规范与素材清单完成布局装配，请在画布中查验。"}"
-                        extractedText = if (extractedText.isBlank()) customText else "$extractedText\n\n$customText"
+                // 2. 兼容兜底：outputs 数组
+                if (extractedText.isBlank()) {
+                    val outputs = obj["outputs"]?.jsonArray
+                    val outText = outputs?.mapNotNull { item ->
+                        item.jsonObject["text"]?.jsonPrimitive?.contentOrNull
+                    }?.joinToString("\n") ?: ""
+                    if (outText.isNotBlank()) extractedText = outText
+                }
+
+                // 3. 兼容兜底：candidates 数组 (官方标准 generateContent 格式)
+                if (extractedText.isBlank()) {
+                    val candidates = obj["candidates"]?.jsonArray
+                    val candText = candidates?.firstOrNull()?.jsonObject
+                        ?.get("content")?.jsonObject
+                        ?.get("parts")?.jsonArray
+                        ?.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull }
+                        ?.joinToString("\n") ?: ""
+                    if (candText.isNotBlank()) extractedText = candText
+
+                    // 检查 generateContent 的 functionCall
+                    val hasFc = candidates?.firstOrNull()?.jsonObject
+                        ?.get("content")?.jsonObject
+                        ?.get("parts")?.jsonArray
+                        ?.any { it.jsonObject.containsKey("functionCall") } == true
+                    if (hasFc) hasToolCall = true
+                }
+
+                // 4. 若上述特定字段均未命中，检查直接 text 字段
+                if (extractedText.isBlank()) {
+                    val directText = obj["text"]?.jsonPrimitive?.contentOrNull
+                    if (!directText.isNullOrBlank()) {
+                        extractedText = directText
                     }
                 }
             }
 
-            // 2. 兼容兜底：outputs 数组 (旧格式或第三方网关转换)
-            if (extractedText.isBlank()) {
-                val outputs = rootObj["outputs"]?.jsonArray
-                extractedText = outputs?.mapNotNull { item ->
-                    item.jsonObject["text"]?.jsonPrimitive?.contentOrNull
-                }?.joinToString("\n") ?: ""
-            }
-
-            // 3. 兼容兜底：candidates 数组 (官方标准 generateContent 格式)
-            if (extractedText.isBlank()) {
-                val candidates = rootObj["candidates"]?.jsonArray
-                extractedText = candidates?.firstOrNull()?.jsonObject
-                    ?.get("content")?.jsonObject
-                    ?.get("parts")?.jsonArray
-                    ?.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull }
-                    ?.joinToString("\n") ?: ""
-            }
-
-            // 4. 若上述特定字段均未命中，但存在顶层 text 字段
-            if (extractedText.isBlank()) {
-                val directText = rootObj["text"]?.jsonPrimitive?.contentOrNull
-                if (!directText.isNullOrBlank()) {
-                    extractedText = directText
+            when (rootElement) {
+                is JsonObject -> processJsonObject(rootElement)
+                is JsonArray -> {
+                    for (item in rootElement) {
+                        if (item is JsonObject) {
+                            processJsonObject(item)
+                        }
+                    }
                 }
+                else -> {}
             }
 
-            // 若依然提取不出特定字段，说明该 JSON 可能是其它格式或错误信息，兜底使用原文本
-            if (extractedText.isBlank()) {
-                ProjectedChatContent(text = rawPayload)
-            } else {
-                ProjectedChatContent(
-                    text = extractedText,
-                    thoughtText = extractedThought,
-                    thoughtSignature = extractedSignature
-                )
-            }
+            ProjectedChatContent(
+                text = extractedText,
+                thoughtText = extractedThought,
+                thoughtSignature = extractedSignature
+            )
         } catch (_: Exception) {
-            // 解析失败（非合法 JSON），直接原样展示
-            ProjectedChatContent(text = rawPayload)
+            // 解析失败（非合法 JSON），且若包含大括号等特征时避免原样倾倒整段 JSON
+            if (rawPayload.contains("\"event_type\"") || rawPayload.contains("\"interaction\"")) {
+                ProjectedChatContent(text = "")
+            } else {
+                ProjectedChatContent(text = rawPayload)
+            }
         }
 
         return projected
@@ -187,7 +224,7 @@ object ChatPayloadViewProjector {
      * 智能识别并解析排版方案工坊卡片数据 (用于对标 Claude Artifacts 的主流呈现方式)
      */
     fun parseLayoutArtifact(rawPayload: String): LayoutArtifactData? {
-        if (!rawPayload.contains("assetFileName") && !rawPayload.contains("apply_view_layout") && !rawPayload.contains("arguments_delta")) {
+        if (!rawPayload.contains("apply_view_layout") && !(rawPayload.contains("assetFileName") && rawPayload.contains("viewName"))) {
             return null
         }
 

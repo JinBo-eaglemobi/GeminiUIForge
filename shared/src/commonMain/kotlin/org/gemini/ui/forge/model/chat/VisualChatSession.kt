@@ -13,6 +13,26 @@ data class ChatMentionTag(
 )
 
 /**
+ * 结构化 AI 工具调用记录
+ *
+ * @param id 调用的唯一ID
+ * @param toolName 工具函数名 (如 get_current_time, calculate_geometry)
+ * @param argumentsJson 入参的格式化 JSON 字符串
+ * @param resultSummary 执行返回的内容概要摘要
+ * @param isSuccess 是否成功执行
+ * @param durationMs 工具耗时 (毫秒)
+ */
+@Serializable
+data class ChatToolCallRecord(
+    val id: String = "",
+    val toolName: String,
+    val argumentsJson: String = "",
+    val resultSummary: String? = null,
+    val isSuccess: Boolean = true,
+    val durationMs: Long = 0L
+)
+
+/**
  * 视觉对话消息项
  *
  * @param id 消息唯一ID
@@ -61,7 +81,9 @@ data class VisualChatMessage(
     /** 错误详细描述信息 (用于错误卡片展示) */
     val errorMessage: String? = null,
     /** 本轮提问所附带引用的 @ 工程上下文实体列表 (用于在用户气泡中直观呈现) */
-    val attachedMentions: List<ChatMentionTag> = emptyList()
+    val attachedMentions: List<ChatMentionTag> = emptyList(),
+    /** 本轮 AI 执行的工具调用清单与结果记录 */
+    val toolCalls: List<ChatToolCallRecord> = emptyList()
 ) {
     /** 获取当前生效的有效展示文本 (优先取激活分支变体，并通过视图投影器提取人类可读内容，绝不倾倒纯 JSON) */
     val effectiveText: String

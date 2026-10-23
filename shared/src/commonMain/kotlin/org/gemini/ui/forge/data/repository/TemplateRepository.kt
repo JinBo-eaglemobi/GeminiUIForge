@@ -248,8 +248,9 @@ class TemplateRepository(
 
         // 兜底扫描：若直接定位未命中，在已有工程列表中做不区分大小写与下划线/空格的宽容匹配
         val all = getTemplates()
-        return all.firstOrNull { (title, _) ->
-            sanitizeName(title).equals(sanitizedName, ignoreCase = true)
+        return all.firstOrNull { (title, projState) ->
+            sanitizeName(title).equals(sanitizedName, ignoreCase = true) ||
+            sanitizeName(projState.projectId).equals(sanitizedName, ignoreCase = true)
         }?.second
     }
 
@@ -263,8 +264,9 @@ class TemplateRepository(
             return sanitized to direct
         }
         val all = getTemplates()
-        val match = all.firstOrNull { (title, _) ->
-            sanitizeName(title).equals(sanitized, ignoreCase = true)
+        val match = all.firstOrNull { (title, projState) ->
+            sanitizeName(title).equals(sanitized, ignoreCase = true) ||
+            sanitizeName(projState.projectId).equals(sanitized, ignoreCase = true)
         } ?: return null
         return sanitizeName(match.first) to match.second
     }

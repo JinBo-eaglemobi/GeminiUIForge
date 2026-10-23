@@ -55,7 +55,8 @@ fun UIProjectAiStudioDialog(
         title = "UI Studio 智能设计助理",
         emptyTipText = "我是当前工程专属 AI 架构师，向我提问页面布局、样式规划或组件生成建议...",
         defaultModel = currentModel,
-        defaultApiFlavor = state.projectAgentConfig.apiFlavor
+        defaultApiFlavor = state.projectAgentConfig.apiFlavor,
+        showCanvasSnapshotAction = true
     )
 
     // LIFO 模态栈智能分流器：按视觉层级自顶向下逐层消费 Esc 键关闭请求
@@ -157,6 +158,12 @@ fun UIProjectAiStudioDialog(
                     onSkillModeChanged = { viewModel.skillMode = it },
                     onFallbackFlashModelRequested = { msg -> viewModel.fallbackToFlashAndRetry(msg) },
                     onSwitchProtocolRequested = { msg -> viewModel.fallbackProtocolAndRetry(msg) },
+                    onCaptureCanvasSnapshotRequested = { mode, onAttachmentReady ->
+                        viewModel.captureAndAttachCanvas(mode) { attachment ->
+                            onAttachmentReady(attachment)
+                        }
+                    },
+                    isCapturingCanvasSnapshot = viewModel.isCapturingCanvasSnapshot,
                     viewName = state.currentView?.nameStr ?: "",
                     viewSizeText = if (state.currentView != null) "${state.currentView?.width?.toInt() ?: 0} × ${state.currentView?.height?.toInt() ?: 0}" else "",
                     readyAssetCount = state.assetLibrary.items.size,

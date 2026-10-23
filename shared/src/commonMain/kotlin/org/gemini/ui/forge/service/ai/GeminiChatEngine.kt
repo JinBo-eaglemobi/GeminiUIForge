@@ -28,6 +28,7 @@ class GeminiChatEngine(
 ) {
     private val TAG = "GeminiChatEngine"
     private val jsonParser = Json { ignoreUnknownKeys = true; isLenient = true; prettyPrint = false }
+    private val CLOUD_UPLOAD_THRESHOLD_BYTES = 5 * 1024 * 1024L
 
     /**
      * 解析生效的 API Key (优先显式入参，其次配置中心，最后全局环境变量)
@@ -188,11 +189,15 @@ class GeminiChatEngine(
         if (attachments.isEmpty()) return emptyList()
 
         return attachments.map { attach ->
+            val bytesSize = attach.bytes?.size?.toLong() ?: 0L
+            val isLarge = bytesSize >= CLOUD_UPLOAD_THRESHOLD_BYTES
+
             if (attach.fileUri != null) {
                 // 已有云端 URI，直接复用
                 attach.copy(isCloudUploaded = true)
-            } else if (preferCloudUpload && attach.bytes != null) {
-                onStatusLog("☁️ 正在通过 Google File API 同步附件: ${attach.name}...")
+            } else if (preferCloudUpload && isLarge && attach.bytes != null) {
+                val sizeMb = ((bytesSize / (1024.0 * 1024.0) * 10).toInt() / 10.0)
+                onStatusLog("☁️ 检测到大文件 (${sizeMb}MB)，正在通过 Google File API 同步: ${attach.name}...")
                 val uploadedUri = try {
                     cloudAssetManager.getOrUploadFile(
                         displayName = attach.name,
@@ -212,7 +217,8 @@ class GeminiChatEngine(
                     attach.copy(isCloudUploaded = false)
                 }
             } else {
-                attach
+                // 小于 5MB 的普通文件/小图片，坚决不走云端上传，直接保留 bytes 作为 inline 嵌入
+                attach.copy(isCloudUploaded = false)
             }
         }
     }
@@ -431,7 +437,7 @@ class GeminiChatEngine(
                 put("previous_interaction_id", request.previousInteractionId)
             }
 
-            // 3. 官方输入项规范 (input: text / image / file)
+            // 3. 官方输入项规范 (input: text / image / document / audio / video)
             put("input", buildJsonArray {
                 add(buildJsonObject {
                     put("type", "text")
@@ -439,19 +445,22 @@ class GeminiChatEngine(
                 })
 
                 request.attachments.forEach { attach ->
-                    if (!attach.fileUri.isNullOrBlank()) {
-                        add(buildJsonObject {
-                            put("type", "file")
-                            put("file_uri", attach.fileUri)
-                            put("mime_type", attach.mimeType)
-                        })
-                    } else if (attach.bytes != null) {
-                        add(buildJsonObject {
-                            put("type", "image")
-                            put("data", Base64.encode(attach.bytes))
-                            put("mime_type", attach.mimeType)
-                        })
+                    val targetType = when {
+                        attach.mimeType.startsWith("image/") -> "image"
+                        attach.mimeType.startsWith("audio/") -> "audio"
+                        attach.mimeType.startsWith("video/") -> "video"
+                        else -> "document"
                     }
+                    add(buildJsonObject {
+                        put("type", targetType)
+                        if (!attach.fileUri.isNullOrBlank()) {
+                            // Google 官方 Interactions API 规范：云端定位字段为 "uri"，严禁使用 "file_uri"
+                            put("uri", attach.fileUri)
+                        } else if (attach.bytes != null) {
+                            put("data", Base64.encode(attach.bytes))
+                        }
+                        put("mime_type", attach.mimeType)
+                    })
                 }
             })
 
@@ -465,23 +474,43 @@ class GeminiChatEngine(
                 genConfig.thinkingConfig?.thinkingLevel?.let { put("thinking_level", it.lowercase()) }
             })
 
+            val isImageGenModel = request.model.modelName.contains("image", ignoreCase = true)
             put("response_modalities", buildJsonArray {
                 add(JsonPrimitive("text"))
+                if (isImageGenModel) {
+                    add(JsonPrimitive("image"))
+                }
             })
 
             // 5. tools 声明 (Google 官方 Interactions 规范: 平铺包含 type="function", name, description, parameters)
-            if (request.tools.isNotEmpty()) {
+            // 注意: Google Interactions API 严格禁止 function 与 google_search 在同一请求中并存 (否则必定触发 400 invalid_request)
+            val allFunctions = mutableListOf<JsonObject>()
+            var hasGoogleSearch = false
+            request.tools.forEach { t ->
+                t.functionDeclarations?.forEach { fn ->
+                    allFunctions.add(fn)
+                }
+                if (t.googleSearch != null) {
+                    hasGoogleSearch = true
+                }
+            }
+
+            if (allFunctions.isNotEmpty()) {
+                // 优先使用业务系统与项目 Function Calling 工具
                 put("tools", buildJsonArray {
-                    request.tools.forEach { t ->
-                        t.functionDeclarations?.forEach { fn ->
-                            add(buildJsonObject {
-                                put("type", "function")
-                                fn["name"]?.let { put("name", it) }
-                                fn["description"]?.let { put("description", it) }
-                                fn["parameters"]?.let { put("parameters", it) }
-                            })
-                        }
+                    allFunctions.forEach { fn ->
+                        add(buildJsonObject {
+                            put("type", "function")
+                            fn["name"]?.let { put("name", it) }
+                            fn["description"]?.let { put("description", it) }
+                            fn["parameters"]?.let { put("parameters", it) }
+                        })
                     }
+                })
+            } else if (hasGoogleSearch) {
+                // 仅当没有任何自定义函数工具时，才独立使用 google_search
+                put("tools", buildJsonArray {
+                    add(buildJsonObject { put("type", "google_search") })
                 })
             }
         }.toString()
@@ -559,7 +588,11 @@ class GeminiChatEngine(
                 rawResponseAggregator?.let { ChatPayloadViewProjector.projectDisplayContent(it).text } ?: ""
             }
 
-            if (finalExtractedText.isBlank() && lastThought.isNullOrBlank()) {
+            val hasToolCallInResponse = rawResponseAggregator?.let {
+                it.contains("\"function_call\"") || it.contains("\"functionCall\"") || it.contains("\"tool_call\"")
+            } ?: false
+
+            if (finalExtractedText.isBlank() && lastThought.isNullOrBlank() && !hasToolCallInResponse) {
                 val durationMsErr = getCurrentTimeMillis() - startTime
                 return GeminiChatResult(
                     text = "",

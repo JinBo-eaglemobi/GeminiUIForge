@@ -133,11 +133,29 @@ fun CommonModelBubble(
                             )
                         }
 
+                        // 1.5 工具调用状态与结果卡片
+                        if (message.toolCalls.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier.padding(bottom = spacing.small),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                message.toolCalls.forEach { record ->
+                                    ToolExecutionStatusCard(record = record)
+                                }
+                            }
+                        }
+
                         // 2. 模型核心正文 或 专属错误卡片
                         // 必须以当前选中的具体回答版本 (modelText) 判定，严禁被历史整体消息的 isError 误伤成功版本
-                        val isCurrentVariantFailed = (modelText.isBlank() && message.thought.isNullOrBlank()) ||
-                            modelText.startsWith("⚠️") ||
-                            (message.isError && modelText.isBlank())
+                        // 核心防误判铁律：若本轮消息成功执行了系统/MCP工具调用，正文为空属于合法正常现象，严禁误报为服务异常卡片
+                        val hasToolCalls = message.toolCalls.isNotEmpty()
+                        val isCurrentVariantFailed = if (hasToolCalls) {
+                            message.isError && message.toolCalls.all { !it.isSuccess }
+                        } else {
+                            (modelText.isBlank() && message.thought.isNullOrBlank()) ||
+                                modelText.startsWith("⚠️") ||
+                                (message.isError && modelText.isBlank())
+                        }
                         if (isCurrentVariantFailed) {
                             val errDetail = message.errorMessage?.ifBlank { null }
                                 ?: modelText.ifBlank { null }

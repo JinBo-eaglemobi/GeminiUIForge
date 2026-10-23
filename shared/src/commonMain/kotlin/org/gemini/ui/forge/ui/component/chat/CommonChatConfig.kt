@@ -77,6 +77,7 @@ data class CommonChatStudioConfig(
     val showModelSelector: Boolean = true,
     val showApiFlavorSelector: Boolean = true,
     val showAttachmentPicker: Boolean = true,
+    val showCanvasSnapshotAction: Boolean = false,
     val showSessionSearch: Boolean = true,
     val enableNarrowModeAutoFold: Boolean = true,
     val narrowBreakpointDp: Float = 640f,

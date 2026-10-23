@@ -35,7 +35,7 @@
 ## 质量与校验（红线规则）
 
 - **IntelliJ IDEA 研发编译与局部增量初筛校验规范**: **【红线规则】**
-  - **【热重载与增量开发互斥阻断铁律】**：**若当前处于 `@forge-loop` 智能体接管、Compose 热重载开发模式或纯 UI 排版迭代场景下，严禁调用任何全量编译任务（如 `compileDesktop` 或全量 `:desktopApp:compileKotlin`）**；代码改动必须先通过 `idea_build_project(filesToRebuild = listOf(...))` 对修改文件执行精准毫秒级局部增量编译，确认 0 错误后交付热重载通道（官方 Compose Hot Reload MCP 极速热更或 IDEA 托管重启推进通道）。
+  - **【热重载与增量开发互斥阻断铁律】**：**若当前处于 `@forge-loop` 智能体接管、Compose 热重载开发模式或纯 UI 排版迭代场景下，严禁调用任何全量编译任务（如 `compileDesktop` 或全量 `:desktopApp:compileKotlin`）**；代码改动必须先通过 `idea_build_project(filesToRebuild = listOf(...))` 对修改文件执行精准毫秒级局部增量编译，确认 0 错误后交付热重载通道（优先通过官方 Compose Hot Reload MCP 极速热更；若涉及不可热更的结构级变更，**强制遵循第 4 条规范先执行 Hot Reload 热编译再结束进程极速重启**）。
   - **常规冷编译模式执行通道**：仅在明确处于**非热重载开发模式**（如底层平台配置变更、Gradle 依赖增删、KMP 多模块架构重构等无法热替换且未处于 `@forge-loop` 模式时），如果影响项目代码编译，才允许执行桌面端真实编译校验：
     1. **首选通道 (IDEA 局部增量构建)**：优先调用 `idea_build_project(filesToRebuild = [...])` 对变动文件毫秒级编译；
     2. **语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 做毫秒级文件语法速查；
@@ -64,13 +64,20 @@
      当因代码变更生效需要刷新、运行态状态出现异常、或者用户明确要求“重启/重置”时，**必须且仅能优先使用 Compose Hot Reload 官方自带的原生能力**：
      - **第一优先级（状态级零杀重启）**：优先调用 `compose-hot-reload` 的 `reset_ui()` 工具（`tools["compose-hot-reload"].reset_ui()`）。它会安全丢弃当前的 Composition 树并丢弃所有 `remember` 的运行时状态，在保留进程与窗口的前提下实现毫秒级零破坏纯净重启；
      - **第二优先级（字节码热加载通道）**：优先通过局部增量编译（`idea_build_project`）生成变动 class，由官方 Compose Hot Reload 机制热注入内存，或调用 `compose-hot-reload.await_reload()` 触发字节码无感替换；
-  4. **【物理冷重启的极限制约定】**：
-     仅当且必须同时满足以下不可逆条件之一时，才允许执行物理关闭与冷启动：
-     - 进程物理崩溃已自行退出（ExitCode != 0，在系统进程表中已彻底消亡）；
-     - 经多维严格探测（CPU 长期恒等于 0、网络端口完全拒绝连接、无任何磁盘日志输出），确凿断定为不可恢复的物理死锁僵尸进程；
-     - 修改了涉及底层 JVM 启动参数、非热更动态链接库（JNI/Native DLL）等官方 Compose Hot Reload 底层明确不支持热更的结构级变更；
-     - **且必须在获得用户通过 question 弹窗的显式授权后方可执行！**
-     **凡日常 UI / Composable、ViewModel、Service、业务逻辑与数据流代码迭代，一律且必须在保持应用常驻保活状态下，走 Hot Reload 极速闭环！**
+  4. **【物理冷重启与必须重启场景的标准执行规范 (Mandatory Pre-Restart Hot Reload & Warm Compile Protocol)】**：
+     - **适用场景**：
+       仅在遇到官方 Compose Hot Reload 底层不支持热更的结构级变更时（如：① 添加了全新类/文件；② 修改了核心数据模型/架构契约字段；③ 修改底层 JVM 启动参数、JNI 原生库或 Gradle 依赖；④ 进程彻底崩溃已自行消亡）才允许执行重启；
+     - **核心分流判断：先检查当前是否连接了 `compose-hot-reload` MCP**：
+       在准备重启程序前，智能体**必须首先检查当前运行环境是否连接了 `compose-hot-reload` MCP 且桌面端应用进程存活**：
+       - **分支 A（Hot MCP 连接中 & 桌面进程存活）：【重启前强制执行 Hot Reload 热更编译门禁 (Pre-Restart Hot Reload Gate)】**：
+         1. **第一步（热更增量编译落盘，核心红线）**：在调用 `Stop-Process` 结束旧进程前，**必须且仅能优先通过 Compose Hot Reload 执行一次更新（`tools["compose-hot-reload"].reload()`）**！借由后台常驻的热编译守护进程在毫秒级内将改动/新增代码编译为 `.class` 字节码并写入编译缓存；
+         2. **第二步（优雅结束旧进程）**：待热更新/热编译触发完成后，通过 Shell 执行 `Stop-Process -Id <pid> -Force` 优雅结束旧应用进程；
+         3. **第三步（免编译极速拉起）**：通过 IDEA MCP 调度运行配置 **`desktopApp [hot] 🔥`**（**强制且必须设置 `waitForExit = false`**）后台拉起。由于字节码已在第一步热更时提前就绪，Gradle 任务瞬间判定 `UP-TO-DATE`，直接跳过漫长冷编译，实现数秒内极速拉起！
+         4. **第四步（恢复通信与保活）**：轮询等待 18330 业务端口重新就绪，拉起后保持常驻保活，杜绝二次冷重启。
+       - **分支 B（Hot MCP 离线 或 应用此前已处于关闭状态）：【离线增量初筛通道】**：
+         1. 若程序此前已关闭或热更 MCP 未连接，在拉起前优先调用 `tools.idea.build_project(filesToRebuild = listOf(...))` 进行毫秒级语法与文件初筛；
+         2. 调度 IDEA MCP 运行配置必须且仅能调度 **`desktopApp [hot] 🔥`**（`waitForExit = false`），启动后重新接入 Compose Hot Reload 探针。
+     - **全项目统一引导铁律**：全项目任何涉及重启桌面端的操作（包括模型架构变更重启、调试代理重新挂载、开发阶段重启等），**一律强制且必须严格遵循上述标准规范执行，绝对禁止绕过步骤一直接强杀进程冷启**！
 - **IntelliJ IDEA xdebug 调试模式接入与实机断点取证规范 (IntelliJ IDEA xdebug Debugger & Runtime Data Inspection Specification)**: **【红线规则】**
   1. **【准入首要硬前提：IDEA MCP 在线 + 调试模式启动】**：
      - **首要前提门禁**：只要同时满足 **① 当前 IntelliJ IDEA MCP 通信连接可用** 且 **② 应用程序已处于调试模式（Debug）启动或附加运行中**（通过 `tools.idea.xdebug_get_debugger_status` 能探测到活跃会话 `sessionId`），智能体即可直接选择开启断点调试；

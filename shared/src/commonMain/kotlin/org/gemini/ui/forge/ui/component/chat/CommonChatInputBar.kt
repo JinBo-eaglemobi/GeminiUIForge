@@ -10,11 +10,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -50,6 +52,7 @@ import org.gemini.ui.forge.ui.component.chat.drop.onFileDrop
 import org.gemini.ui.forge.ui.component.chat.skill.SkillSelectorPill
 import org.gemini.ui.forge.model.skill.SkillActivationMode
 import org.gemini.ui.forge.model.skill.UiStudioSkill
+import org.gemini.ui.forge.service.canvas.CanvasSnapshotMode
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.utils.readLocalFileBytes
@@ -71,6 +74,9 @@ import org.gemini.ui.forge.utils.rememberFilePicker
  * @param trailingActions 发送按钮旁后置自定义动作插槽
  * @param modifier 修饰符
  */
+// 大文件云端上传物理阈值：5MB (5 * 1024 * 1024 字节)
+private const val CLOUD_UPLOAD_THRESHOLD_BYTES = 5 * 1024 * 1024L
+
 private val IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp", "gif", "bmp")
 
 private fun isImageFile(path: String): Boolean {
@@ -107,6 +113,8 @@ fun CommonChatInputBar(
     skillMode: SkillActivationMode = SkillActivationMode.AUTO,
     onSkillModeChanged: (SkillActivationMode) -> Unit = {},
     onStopGeneration: (() -> Unit)? = null,
+    onCaptureCanvasSnapshotRequested: ((CanvasSnapshotMode, (CommonChatAttachment) -> Unit) -> Unit)? = null,
+    isCapturingCanvasSnapshot: Boolean = false,
     leadingActions: @Composable RowScope.() -> Unit = {},
     trailingActions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -116,6 +124,8 @@ fun CommonChatInputBar(
     var preferCloudUpload by remember { mutableStateOf(true) }
     var attachments by remember { mutableStateOf<List<CommonChatAttachment>>(emptyList()) }
     var isDropHovering by remember { mutableStateOf(false) }
+    var previewSnapshotAttachment by remember { mutableStateOf<CommonChatAttachment?>(null) }
+    var isSnapshotMenuExpanded by remember { mutableStateOf(false) }
 
     // 回填外部重新编辑的文本
     LaunchedEffect(inputTextOverride) {
@@ -252,7 +262,10 @@ fun CommonChatInputBar(
     fun performSend() {
         if (!canSend) return
         val text = inputText.trim()
-        val currentAttach = attachments.map { it.copy(preferCloudUpload = preferCloudUpload) }
+        val currentAttach = attachments.map { attach ->
+            val isLarge = (attach.bytes?.size?.toLong() ?: 0L) >= CLOUD_UPLOAD_THRESHOLD_BYTES
+            attach.copy(preferCloudUpload = isLarge && preferCloudUpload)
+        }
         inputText = ""
         attachments = emptyList()
         onSendMessage(text, currentAttach)
@@ -311,71 +324,104 @@ fun CommonChatInputBar(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         attachments.forEachIndexed { index, attach ->
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                shape = RoundedCornerShape(8.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                modifier = Modifier.clickable {
-                                    attach.localUri?.let { uri -> onImagePreviewRequested?.invoke(uri) }
-                                }
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                                ) {
-                                    if (attach.mimeType.startsWith("image/")) {
-                                        val imageModel: Any? = attach.localUri ?: attach.bytes
-                                        if (imageModel != null) {
-                                            AsyncImage(
-                                                model = imageModel,
-                                                contentDescription = null,
-                                                modifier = Modifier
-                                                    .size(36.dp)
-                                                    .clip(RoundedCornerShape(6.dp)),
-                                                contentScale = ContentScale.Crop
-                                            )
-                                        } else {
-                                            Icon(Icons.Default.Image, null, modifier = Modifier.size(24.dp))
-                                        }
-                                        Spacer(Modifier.width(8.dp))
+                            if (attach.name.contains("画布快照")) {
+                                CanvasSnapshotAttachmentPill(
+                                    attachment = attach,
+                                    onRemove = {
+                                        attachments = attachments.toMutableList().apply { removeAt(index) }
+                                    },
+                                    onPreview = {
+                                        previewSnapshotAttachment = attach
                                     }
-                                    Text(
-                                        text = attach.name,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "移除附件",
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .clickable {
-                                                attachments = attachments.toMutableList().apply { removeAt(index) }
-                                            },
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
+                                )
+                            } else {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    modifier = Modifier.clickable {
+                                        attach.localUri?.let { uri -> onImagePreviewRequested?.invoke(uri) }
+                                    }
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                    ) {
+                                        if (attach.mimeType.startsWith("image/")) {
+                                            val imageModel: Any? = attach.localUri ?: attach.bytes
+                                            if (imageModel != null) {
+                                                AsyncImage(
+                                                    model = imageModel,
+                                                    contentDescription = null,
+                                                    modifier = Modifier
+                                                        .size(36.dp)
+                                                        .clip(RoundedCornerShape(6.dp)),
+                                                    contentScale = ContentScale.Crop
+                                                )
+                                            } else {
+                                                Icon(Icons.Default.Image, null, modifier = Modifier.size(24.dp))
+                                            }
+                                            Spacer(Modifier.width(8.dp))
+                                        }
+                                        Text(
+                                            text = attach.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "移除附件",
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .clickable {
+                                                    attachments = attachments.toMutableList().apply { removeAt(index) }
+                                                },
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { preferCloudUpload = !preferCloudUpload }
-                    ) {
-                        Checkbox(
-                            checked = preferCloudUpload,
-                            onCheckedChange = { preferCloudUpload = it },
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = "优先上传至云端服务 (Google File API)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    val maxAttachmentBytes = remember(attachments) {
+                        attachments.maxOfOrNull { it.bytes?.size?.toLong() ?: 0L } ?: 0L
+                    }
+                    val hasLargeAttachment = maxAttachmentBytes >= CLOUD_UPLOAD_THRESHOLD_BYTES
+
+                    // 仅当存在 >= 5MB 的大文件附件时才弹出 Google File API 选项；小文件直接 Base64 嵌入，保持输入栏清爽
+                    if (hasLargeAttachment) {
+                        Spacer(Modifier.height(4.dp))
+                        val formattedMb = ((maxAttachmentBytes / (1024.0 * 1024.0) * 10).toInt() / 10.0)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { preferCloudUpload = !preferCloudUpload }
+                        ) {
+                            Checkbox(
+                                checked = preferCloudUpload,
+                                onCheckedChange = { preferCloudUpload = it },
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "优先上传至云端服务 (Google File API)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "⚠️ 包含大文件 (${formattedMb}MB)，建议云端上传",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -421,6 +467,44 @@ fun CommonChatInputBar(
                         .fillMaxWidth()
                         .padding(bottom = 6.dp)
                 )
+            }
+
+            // 2.5 视觉审查意图感知胶囊气泡 (当输入涉及排版/布局且未挂载快照时提示)
+            val visualIntentKeywords = remember { setOf("排版", "布局", "界面", "视觉", "重叠", "好看", "效果", "对齐") }
+            val hasVisualIntent = remember(inputText, attachments) {
+                visualIntentKeywords.any { inputText.contains(it) } && attachments.none { it.name.contains("画布快照") }
+            }
+
+            if (config.showCanvasSnapshotAction && onCaptureCanvasSnapshotRequested != null && hasVisualIntent) {
+                Surface(
+                    modifier = Modifier
+                        .padding(bottom = 6.dp)
+                        .clickable {
+                            onCaptureCanvasSnapshotRequested(CanvasSnapshotMode.OFFSCREEN_COMPOSITE) { newAttach ->
+                                attachments = attachments + newAttach
+                            }
+                        },
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "检测到排版视觉咨询，点击一键挂载当前画布截图 📷",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
             }
 
             // 3. 自适应多行文本输入框
@@ -564,6 +648,74 @@ fun CommonChatInputBar(
                                 modifier = Modifier.size(18.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                    }
+
+                    // 画布快照多模态挂载按钮 (📷)
+                    if (config.showCanvasSnapshotAction && onCaptureCanvasSnapshotRequested != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    onCaptureCanvasSnapshotRequested(CanvasSnapshotMode.OFFSCREEN_COMPOSITE) { newAttach ->
+                                        attachments = attachments + newAttach
+                                    }
+                                },
+                                enabled = !isCapturingCanvasSnapshot,
+                                modifier = Modifier.size(32.dp).tip("挂载当前画布多模态截图 (纯净整页合成)")
+                            ) {
+                                if (isCapturingCanvasSnapshot) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Default.PhotoCamera,
+                                        contentDescription = "挂载画布快照",
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Box {
+                                Icon(
+                                    Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "切换快照模式",
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .clip(CircleShape)
+                                        .clickable { isSnapshotMenuExpanded = true }
+                                        .tip("切换快照模式"),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
+                                DropdownMenu(
+                                    expanded = isSnapshotMenuExpanded,
+                                    onDismissRequest = { isSnapshotMenuExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("纯净整页合成 (100% 原始分辨率)") },
+                                        onClick = {
+                                            isSnapshotMenuExpanded = false
+                                            onCaptureCanvasSnapshotRequested(CanvasSnapshotMode.OFFSCREEN_COMPOSITE) { newAttach ->
+                                                attachments = attachments + newAttach
+                                            }
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("当前视口截图 (所见即所得)") },
+                                        onClick = {
+                                            isSnapshotMenuExpanded = false
+                                            onCaptureCanvasSnapshotRequested(CanvasSnapshotMode.VIEWPORT_CLIP) { newAttach ->
+                                                attachments = attachments + newAttach
+                                            }
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -786,6 +938,14 @@ fun CommonChatInputBar(
                     }
                 }
             }
+        }
+
+        // 画布快照高清大图预览弹窗
+        previewSnapshotAttachment?.let { snapshot ->
+            CanvasSnapshotPreviewDialog(
+                attachment = snapshot,
+                onDismiss = { previewSnapshotAttachment = null }
+            )
         }
 
         // 外部文件拖拽悬停全域遮罩

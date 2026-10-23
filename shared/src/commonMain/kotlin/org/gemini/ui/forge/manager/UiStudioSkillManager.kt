@@ -8,6 +8,7 @@ import org.gemini.ui.forge.model.skill.SkillActivationMode
 import org.gemini.ui.forge.model.skill.SkillMarkdownParser
 import org.gemini.ui.forge.model.skill.UiStudioSkill
 import org.gemini.ui.forge.service.ai.GeminiToolConfig
+import org.gemini.ui.forge.service.ai.UniversalAiToolRegistry
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
 
@@ -69,6 +70,7 @@ object UiStudioSkillManager {
             val files = storage.listFiles(SKILLS_DIR)
             for (fileName in files) {
                 if (fileName.equals("$SPEC_TO_VIEW_SKILL_ID.md", ignoreCase = true)) continue
+                if (fileName.equals("disabled_skills.json", ignoreCase = true) || fileName.startsWith(".")) continue
                 val relativePath = "$SKILLS_DIR/$fileName"
                 try {
                     val content = storage.readFromFile(relativePath)
@@ -169,22 +171,26 @@ object UiStudioSkillManager {
 
     /**
      * 构建 Gemini 官方标准的 ToolConfig 工具声明
+     *
+     * 接入 UniversalAiToolRegistry，全面开放全量 MCP 工具、通用内置 AI 标配工具、
+     * 专属界面排版装配工具 (apply_view_layout) 以及 Google 官方实时联网搜索。
      */
-    fun buildToolConfigs(skills: List<UiStudioSkill>): List<GeminiToolConfig> {
-        if (skills.isEmpty()) return emptyList()
-
-        val declaredTools = skills.flatMap { it.effectiveTools }.toSet()
+    fun buildToolConfigs(skills: List<UiStudioSkill> = emptyList(), enableGoogleSearch: Boolean = true): List<GeminiToolConfig> {
+        val fullConfigs = UniversalAiToolRegistry.buildFullGeminiTools(enableGoogleSearch = enableGoogleSearch)
         val declarations = mutableListOf<JsonObject>()
 
-        if ("apply_view_layout" in declaredTools || skills.any { it.id == SPEC_TO_VIEW_SKILL_ID }) {
-            declarations.add(buildApplyViewLayoutDeclaration())
-        }
+        // 注入 apply_view_layout 专有视图排版工具
+        declarations.add(buildApplyViewLayoutDeclaration())
 
-        if (declarations.isEmpty()) return emptyList()
+        // 注入 MCP + 通用内置工具
+        fullConfigs.forEach { config ->
+            config.functionDeclarations?.let { declarations.addAll(it) }
+        }
 
         return listOf(
             GeminiToolConfig(
-                functionDeclarations = declarations
+                functionDeclarations = declarations,
+                googleSearch = if (enableGoogleSearch) buildJsonObject {} else null
             )
         )
     }

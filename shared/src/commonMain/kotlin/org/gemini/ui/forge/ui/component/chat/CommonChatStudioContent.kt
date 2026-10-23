@@ -38,6 +38,7 @@ import org.gemini.ui.forge.ui.component.chat.drop.onFileDrop
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.doc.DocumentPreviewDialog
+import org.gemini.ui.forge.service.canvas.CanvasSnapshotMode
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
@@ -122,6 +123,8 @@ fun CommonChatStudioContent(
     onSwitchProtocolRequested: ((VisualChatMessage) -> Unit)? = null,
     designMemoryContext: String? = null,
     onCompressRequested: (() -> Unit)? = null,
+    onCaptureCanvasSnapshotRequested: ((CanvasSnapshotMode, (CommonChatAttachment) -> Unit) -> Unit)? = null,
+    isCapturingCanvasSnapshot: Boolean = false,
     topBarActions: @Composable RowScope.() -> Unit = {},
     chatNoticeContent: @Composable ColumnScope.() -> Unit = {},
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
@@ -468,6 +471,8 @@ fun CommonChatStudioContent(
                         skillMode = skillMode,
                         onSkillModeChanged = onSkillModeChanged,
                         onStopGeneration = onStopGeneration,
+                        onCaptureCanvasSnapshotRequested = onCaptureCanvasSnapshotRequested,
+                        isCapturingCanvasSnapshot = isCapturingCanvasSnapshot,
                         leadingActions = inputLeadingActions,
                         trailingActions = inputTrailingActions
                     )

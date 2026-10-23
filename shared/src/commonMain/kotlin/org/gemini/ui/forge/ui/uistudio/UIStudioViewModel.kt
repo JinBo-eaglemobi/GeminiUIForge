@@ -20,10 +20,15 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Image
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import org.gemini.ui.forge.utils.looseJson
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
@@ -38,6 +43,8 @@ import org.gemini.ui.forge.model.chat.MentionItem
 import org.gemini.ui.forge.model.chat.MentionPayload
 import org.gemini.ui.forge.state.MentionState
 import kotlinx.coroutines.Job
+import org.gemini.ui.forge.model.chat.ChatToolCallRecord
+import org.gemini.ui.forge.service.ai.AiToolExecutionDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import org.gemini.ui.forge.getPlatform
@@ -79,6 +86,9 @@ import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.model.chat.VisualChatSession
+import org.gemini.ui.forge.service.canvas.CanvasScreenshotService
+import org.gemini.ui.forge.service.canvas.CanvasSnapshotMode
+import org.gemini.ui.forge.ui.component.chat.CommonChatAttachment
 import org.gemini.ui.forge.ui.uistudio.model.ProjectAgentConfig
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
@@ -125,15 +135,85 @@ class UIStudioViewModel {
     )
     val trafficScopeId: String get() = "uistudio_${state.project?.projectId?.ifBlank { "default" } ?: "default"}"
     val chatEngine = GeminiChatEngine()
+    val toolDispatcher = AiToolExecutionDispatcher()
 
     /** AI 输入栏「@」上下文引用状态管理中心 */
     val mentionState = MentionState()
+
+    /** 画布多模态快照核心服务 */
+    val canvasScreenshotService = CanvasScreenshotService()
+
+    /** 当前是否正在捕获画布快照 */
+    var isCapturingCanvasSnapshot by mutableStateOf(false)
+        private set
+
+    /**
+     * 捕获画布快照并挂载到聊天附件
+     */
+    fun captureAndAttachCanvas(
+        mode: CanvasSnapshotMode = CanvasSnapshotMode.OFFSCREEN_COMPOSITE,
+        onSuccess: (CommonChatAttachment) -> Unit
+    ) {
+        val project = state.project ?: return
+        val currentView = state.currentView ?: return
+
+        scope.launch(Dispatchers.Default) {
+            isCapturingCanvasSnapshot = true
+            try {
+                val attachment = canvasScreenshotService.captureSnapshot(
+                    projectName = project.projectId,
+                    currentPage = currentView,
+                    windowBounds = state.canvasWindowBounds,
+                    mode = mode
+                )
+                if (attachment != null) {
+                    onSuccess(attachment)
+                    Toast.show("📸 画布快照已挂载", ToastType.SUCCESS)
+                } else {
+                    Toast.show("❌ 快照生成失败", ToastType.ERROR)
+                }
+            } catch (e: Exception) {
+                AppLogger.e("UIStudioViewModel", "捕获画布快照失败", e)
+                Toast.show("快照失败: ${e.message}", ToastType.ERROR)
+            } finally {
+                isCapturingCanvasSnapshot = false
+            }
+        }
+    }
+
+    private val disabledSkillsFile = "skills/disabled_skills.json"
+
+    /**
+     * 从本地磁盘读取被用户显式禁用的技能 ID 集合
+     */
+    private suspend fun loadDisabledSkillIds(): Set<String> {
+        val content = storage.readFromFile(disabledSkillsFile) ?: return emptySet()
+        return runCatching {
+            looseJson.decodeFromString<Set<String>>(content)
+        }.getOrDefault(emptySet())
+    }
+
+    /**
+     * 将被用户显式禁用的技能 ID 集合持久化落盘
+     */
+    private suspend fun saveDisabledSkillIds(disabledIds: Set<String>) {
+        try {
+            val jsonStr = looseJson.encodeToString(disabledIds)
+            storage.saveToFile(disabledSkillsFile, jsonStr)
+        } catch (e: Exception) {
+            AppLogger.w("UIStudioViewModel", "持久化禁用技能配置失败: ${e.message}")
+        }
+    }
 
     init {
         scope.launch(Dispatchers.Default) {
             val skills = UiStudioSkillManager.getRegisteredSkills(bypassCache = true)
             allSkills = skills
-            enabledSkillIds = skills.filter { it.isSkillEnabled }.map { it.id }.toSet()
+            val disabledIds = loadDisabledSkillIds()
+            enabledSkillIds = skills
+                .filter { it.id !in disabledIds && it.isSkillEnabled }
+                .map { it.id }
+                .toSet()
         }
     }
 
@@ -158,6 +238,10 @@ class UIStudioViewModel {
             enabledSkillIds + skillId
         } else {
             enabledSkillIds - skillId
+        }
+        val disabledIds = allSkills.map { it.id }.filterNot { it in enabledSkillIds }.toSet()
+        scope.launch(Dispatchers.Default) {
+            saveDisabledSkillIds(disabledIds)
         }
         val targetSkill = allSkills.find { it.id == skillId }
         val skillName = targetSkill?.name ?: skillId
@@ -1552,10 +1636,11 @@ class UIStudioViewModel {
             val newSkills = UiStudioSkillManager.getRegisteredSkills(bypassCache = true)
             allSkills = newSkills
             val validIds = newSkills.map { it.id }.toSet()
-            enabledSkillIds = enabledSkillIds.filter { it in validIds }.toSet()
-            if (enabledSkillIds.isEmpty() && newSkills.isNotEmpty()) {
-                enabledSkillIds = newSkills.filter { it.isSkillEnabled }.map { it.id }.toSet()
-            }
+            val disabledIds = loadDisabledSkillIds()
+            enabledSkillIds = newSkills
+                .filter { it.id in validIds && it.id !in disabledIds && it.isSkillEnabled }
+                .map { it.id }
+                .toSet()
             if (userInitiated) {
                 Toast.show("已重新扫描技能目录 (共 ${newSkills.size} 个技能)", ToastType.INFO)
             }
@@ -1602,10 +1687,11 @@ class UIStudioViewModel {
                     val newSkills = UiStudioSkillManager.getRegisteredSkills(bypassCache = true)
                     allSkills = newSkills
                     val validIds = newSkills.map { it.id }.toSet()
-                    enabledSkillIds = enabledSkillIds.filter { it in validIds }.toSet()
-                    if (enabledSkillIds.isEmpty() && newSkills.isNotEmpty()) {
-                        enabledSkillIds = newSkills.filter { it.isSkillEnabled }.map { it.id }.toSet()
-                    }
+                    val disabledIds = loadDisabledSkillIds()
+                    enabledSkillIds = newSkills
+                        .filter { it.id in validIds && it.id !in disabledIds && it.isSkillEnabled }
+                        .map { it.id }
+                        .toSet()
                     Toast.show("检测到外部技能文件变动，已自动同步", ToastType.INFO)
                 }
             }
@@ -2224,13 +2310,19 @@ class UIStudioViewModel {
                     }
                 }
 
+                val snapshotAttachment = attachmentsList.find { it.name.contains("画布") }
+                val canvasSnapshotMeta = if (snapshotAttachment != null) {
+                    "已随附当前视图【${state.currentView?.nameStr ?: "当前视图"}】的画布快照 (${snapshotAttachment.name})。\n请结合该图片直接审视各图元的真实视觉渲染、切片重叠与层次关系、文字排版可读性与边距留白，并在回复中给出具象的视觉评估与改进建议。"
+                } else null
+
                 val assembledPayload = ChatPayloadAssembler.assemble(
                     baseSystemPrompt = effectiveSystemPrompt,
                     userRawText = userText,
                     workspaceContextXml = workspaceContextXml,
                     attachedMentions = processedMentions,
                     autoAssetManifestXml = autoAssetManifestXml,
-                    priorDesignMemoryXml = sessionToUse.designMemoryContext
+                    priorDesignMemoryXml = sessionToUse.designMemoryContext,
+                    canvasSnapshotMeta = canvasSnapshotMeta
                 )
 
                 // 注入历史消息（过滤已被压缩的消息）
@@ -2299,8 +2391,17 @@ class UIStudioViewModel {
                     }
                 }
 
+                val executedToolRecords = if (result.isSuccess) {
+                    executeDetectedAiTools(result.rawResponseJson, result.text)
+                } else emptyList()
+
                 val finalAssistantText = if (result.text.isNotBlank()) {
                     result.text
+                } else if (executedToolRecords.isNotEmpty()) {
+                    val successSummary = executedToolRecords.joinToString("\n") {
+                        "🛠️ 已执行工具 `[${it.toolName}]`: ${it.resultSummary ?: "完成"}"
+                    }
+                    "已为您调用并执行系统工具：\n\n$successSummary"
                 } else if (!result.isSuccess) {
                     result.errorMessage ?: "服务端未返回错误详情"
                 } else {
@@ -2323,7 +2424,8 @@ class UIStudioViewModel {
                     totalTokens = result.totalTokens,
                     timestamp = getCurrentTimeMillis(),
                     isError = !result.isSuccess,
-                    errorMessage = result.errorMessage
+                    errorMessage = result.errorMessage,
+                    toolCalls = executedToolRecords
                 )
 
                 val sessionAfterReply = (state.chatSessions.find { it.id == activeSession.id } ?: activeSession).let { cur ->
@@ -2431,6 +2533,44 @@ class UIStudioViewModel {
                 Toast.show("长对话压缩失败: ${e.message}", ToastType.ERROR)
             }
         }
+    }
+
+    /**
+     * 自动检测并执行大模型调用的全量系统工具（MCP + 内置通用标配工具）
+     */
+    private suspend fun executeDetectedAiTools(rawResponseJson: String, responseText: String): List<ChatToolCallRecord> {
+        val records = mutableListOf<ChatToolCallRecord>()
+        val detected = toolDispatcher.extractFunctionCalls(rawResponseJson, responseText)
+        for ((name, args) in detected) {
+            // 自动注入当前 UI Studio 工作区的工程与视图上下文（兜底纠偏模型可能缺省或虚构的工程名）
+            val enrichedArgs = buildJsonObject {
+                args.forEach { (k, v) -> put(k, v) }
+                val currentProj = state.project?.projectId
+                if (!currentProj.isNullOrBlank()) {
+                    put("projectName", currentProj)
+                }
+                if (!args.containsKey("viewName")) {
+                    state.currentView?.nameStr?.let { put("viewName", it) }
+                }
+            }
+
+            if (name == "apply_view_layout") {
+                checkAndExecuteLayoutTool(rawResponseJson, responseText)
+                continue
+            }
+            val t0 = getCurrentTimeMillis()
+            val toolResult = toolDispatcher.dispatchToolCall(name, enrichedArgs)
+            val dur = getCurrentTimeMillis() - t0
+            val record = toolDispatcher.buildToolCallRecord(
+                id = "tool_${getCurrentTimeMillis()}_$name",
+                toolName = name,
+                arguments = enrichedArgs,
+                result = toolResult,
+                durationMs = dur
+            )
+            records.add(record)
+        }
+        return records
     }
 
     /**
@@ -2793,12 +2933,15 @@ class UIStudioViewModel {
                     priorDesignMemoryXml = activeSession.designMemoryContext
                 )
 
+                val toolConfigs = UiStudioSkillManager.buildToolConfigs(enableGoogleSearch = true)
+
                 val chatRequest = GeminiChatRequest(
                     apiKey = effectiveApiKey,
                     model = resolvedModel,
                     apiFlavor = apiFlavor,
                     prompt = assembledPayload.compositeUserPrompt,
                     systemInstruction = assembledPayload.pureSystemInstruction,
+                    tools = toolConfigs,
                     attachments = chatAttachments,
                     preferCloudUpload = true,
                     history = historyItems,
@@ -2828,8 +2971,17 @@ class UIStudioViewModel {
                     }
                 )
 
+                val executedToolRecords = if (result.isSuccess) {
+                    executeDetectedAiTools(result.rawResponseJson, result.text)
+                } else emptyList()
+
                 val finalResultText = if (result.text.isNotBlank()) {
                     result.text
+                } else if (executedToolRecords.isNotEmpty()) {
+                    val successSummary = executedToolRecords.joinToString("\n") {
+                        "🛠️ 已执行工具 `[${it.toolName}]`: ${it.resultSummary ?: "完成"}"
+                    }
+                    "已为您调用并执行系统工具：\n\n$successSummary"
                 } else if (!result.isSuccess) {
                     result.errorMessage ?: "服务端未返回错误详情"
                 } else {
@@ -2853,7 +3005,8 @@ class UIStudioViewModel {
                         totalTokens = result.totalTokens,
                         timestamp = getCurrentTimeMillis(),
                         isError = !result.isSuccess,
-                        errorMessage = result.errorMessage
+                        errorMessage = result.errorMessage,
+                        toolCalls = executedToolRecords
                     )
                 } else {
                     VisualChatMessage(
@@ -2872,7 +3025,8 @@ class UIStudioViewModel {
                         totalTokens = result.totalTokens,
                         timestamp = getCurrentTimeMillis(),
                         isError = !result.isSuccess,
-                        errorMessage = result.errorMessage
+                        errorMessage = result.errorMessage,
+                        toolCalls = executedToolRecords
                     )
                 }
 

@@ -48,7 +48,8 @@ object ChatPayloadAssembler {
         attachedMentions: List<MentionItem> = emptyList(),
         autoAssetManifestXml: String? = null,
         priorDesignMemoryXml: String? = null,
-        extraReferenceXml: String? = null
+        extraReferenceXml: String? = null,
+        canvasSnapshotMeta: String? = null
     ): AssembledPayload {
         // 1. 第一层：纯净系统指令（绝对不拼接任何动态环境与文档，保证 100% 静态缓存命中）
         val pureSystem = baseSystemPrompt.trim()
@@ -56,10 +57,16 @@ object ChatPayloadAssembler {
         // 2. 第三层与第四层：在用户提问载荷中建立清晰的结构化分层
         val userPromptBuilder = StringBuilder()
 
-        // [环境观察层] 注入当前工作区视口与图元状态
-        if (workspaceContextXml.isNotBlank()) {
+        // [环境观察层] 注入当前工作区视口与图元状态及视觉多模态快照说明
+        if (workspaceContextXml.isNotBlank() || !canvasSnapshotMeta.isNullOrBlank()) {
             userPromptBuilder.append("<workspace_observation>\n")
-            userPromptBuilder.append(workspaceContextXml.trim()).append("\n")
+            if (workspaceContextXml.isNotBlank()) {
+                userPromptBuilder.append(workspaceContextXml.trim()).append("\n")
+            }
+            if (!canvasSnapshotMeta.isNullOrBlank()) {
+                userPromptBuilder.append("\n[Multimodal Visual Context]:\n")
+                userPromptBuilder.append(canvasSnapshotMeta.trim()).append("\n")
+            }
             userPromptBuilder.append("</workspace_observation>\n\n")
         }
 
@@ -75,7 +82,7 @@ object ChatPayloadAssembler {
             // 优先注入前序设计记忆结晶（隔离保护）
             if (hasMemory) {
                 userPromptBuilder.append("  <prior_design_memory note=\"前序长对话已提炼的设计决策、规范约束与核心图元拓扑\">\n")
-                userPromptBuilder.append(priorDesignMemoryXml!!.trim().prependIndent("    ")).append("\n")
+                userPromptBuilder.append(priorDesignMemoryXml.trim().prependIndent("    ")).append("\n")
                 userPromptBuilder.append("  </prior_design_memory>\n")
             }
 

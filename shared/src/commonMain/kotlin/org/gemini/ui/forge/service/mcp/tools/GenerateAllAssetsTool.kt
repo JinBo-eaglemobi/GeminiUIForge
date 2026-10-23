@@ -89,8 +89,7 @@ class GenerateAllAssetsTool(
         val modelName = arguments["modelName"]?.jsonPrimitive?.contentOrNull ?: "gemini-2.5-flash-image"
 
         onProgress?.invoke(0.02f, "正在检索待生成图元清单...")
-        val templates = repository.getTemplates()
-        val match = templates.firstOrNull { it.first.equals(projectName, ignoreCase = true) }
+        val match = repository.findTemplatePair(projectName)
             ?: return McpToolResult.error("未找到工程 '$projectName'")
 
         val state = match.second
@@ -167,7 +166,12 @@ class GenerateAllAssetsTool(
             }
         }
 
-        onProgress?.invoke(1.0f, "全量批量生图与对齐自愈流程全部完成")
+        if (successCount == 0 && targetBlocks.isNotEmpty()) {
+            val firstErr = results.firstOrNull { !it.success }?.errorMessage ?: "未知错误"
+            onProgress?.invoke(1.0f, "全量批量生图完成，但所有图元均失败: $firstErr")
+        } else {
+            onProgress?.invoke(1.0f, "全量批量生图与对齐自愈流程全部完成 (成功: $successCount/${targetBlocks.size})")
+        }
 
         val resultJson = buildJsonObject {
             put("success", successCount > 0)

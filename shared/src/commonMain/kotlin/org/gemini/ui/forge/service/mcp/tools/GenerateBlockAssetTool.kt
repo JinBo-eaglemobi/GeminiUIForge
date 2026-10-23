@@ -129,8 +129,7 @@ class GenerateBlockAssetTool(
         val modelName = arguments["modelName"]?.jsonPrimitive?.contentOrNull ?: "gemini-2.5-flash-image"
 
         onProgress?.invoke(0.05f, "正在读取图元属性与参考工程配置...")
-        val templates = repository.getTemplates()
-        val match = templates.firstOrNull { it.first.equals(projectName, ignoreCase = true) }
+        val match = repository.findTemplatePair(projectName)
             ?: return McpToolResult.error("未找到工程 '$projectName'")
 
         val state = match.second
@@ -291,16 +290,13 @@ class GenerateBlockAssetTool(
                 }
             }
 
-            // MCP 前置切片质量校验门禁：必须确保持有非空的切片数据
+            // 2. 检查专属参考图，若缺失则自动从设计原图切片兜底；无参考原图时自适应降级为纯文生图
             val refBytesToUse = effectiveRefFile?.getAbsolutePath()?.let { readLocalFileBytes(it) }
-            if (refBytesToUse == null || refBytesToUse.isEmpty()) {
-                return Pair(workingState, BlockAssetGenerationResult(
-                    false, blockId, errorMessage = "图元 [$blockId] 参考底图校验未通过：未找到有效参考切片数据"
-                ))
-            }
+            val isTextToImage = refBytesToUse == null || refBytesToUse.isEmpty()
+            val isBackground = block.type == UIBlockType.BACKGROUND
 
             // 3. 向 Gemini 发起生图请求
-            onProgress?.invoke(0.3f, "正在向 Gemini 发起生图请求 ($modelName)...")
+            onProgress?.invoke(0.3f, if (isTextToImage) "正在向 Gemini 发起纯文本生图请求 ($modelName)..." else "正在向 Gemini 发起生图请求 ($modelName)...")
             val promptToSend = customPrompt?.ifBlank { null }
                 ?: block.userPromptEn.ifBlank { null }
                 ?: block.userPromptZh.ifBlank { null }
@@ -319,7 +315,7 @@ class GenerateBlockAssetTool(
                     targetWidth = block.bounds.width,
                     targetHeight = block.bounds.height,
                     isPng = isPng,
-                    referenceImageUri = effectiveRefFile.getAbsolutePath(),
+                    referenceImageUri = if (isTextToImage) null else effectiveRefFile?.getAbsolutePath(),
                     generationCount = 1,
                     onLog = { logMsg -> onProgress?.invoke(0.5f, logMsg) },
                     onImageGenerated = { uri -> rawResultUri = uri }
@@ -341,9 +337,10 @@ class GenerateBlockAssetTool(
                 readLocalFileBytes(finalRaw)
             } ?: return Pair(workingState, BlockAssetGenerationResult(false, blockId, errorMessage = "无法解析生成的图像字节数据"))
 
-            // 4. 本地离线 AI 抠图去除背景
-            onProgress?.invoke(0.65f, if (isPng) "正在执行本地离线 AI 抠图去除背景..." else "正在归档图像...")
-            val noBgBytes = if (isPng) {
+            // 4. 本地离线 AI 抠图去除背景（背景图强制跳过抠图以保留全幅风景与底色）
+            val shouldMatte = isPng && !isBackground
+            onProgress?.invoke(0.65f, if (shouldMatte) "正在执行本地离线 AI 抠图去除背景..." else "正在归档图像...")
+            val noBgBytes = if (shouldMatte) {
                 try {
                     mattingService.removeBackground(rawBytes) ?: rawBytes
                 } catch (_: Throwable) {
@@ -353,8 +350,8 @@ class GenerateBlockAssetTool(
 
             // 5. 分析非透明主体并按等比对齐实际尺寸重采样 (Ground Truth 绝对尺寸基准)
             onProgress?.invoke(0.8f, "正在紧凑裁剪多余透明边缘并按设计底图绝对尺寸重采样...")
-            // ★ 核心防虚胖优化：先紧凑裁掉外部空白透明边，只保留真实非透明主体
-            val croppedNoBgBytes = if (isPng) {
+            // ★ 核心防虚胖优化：先紧凑裁掉外部空白透明边，只保留真实非透明主体（背景图保持全幅尺寸）
+            val croppedNoBgBytes = if (shouldMatte) {
                 cropToOpaqueBounds(noBgBytes, alphaThreshold = 20, padding = 0)
             } else noBgBytes
 
@@ -363,59 +360,77 @@ class GenerateBlockAssetTool(
             val srcH = (skiaSrc?.height ?: 1).toFloat().coerceAtLeast(1f)
 
             val opaqueBox = detectOpaqueBoundingBox(croppedNoBgBytes, alphaThreshold = 20)
-            val refOpaqueBox = detectOpaqueBoundingBox(refBytesToUse, alphaThreshold = 20)
+            val refOpaqueBox = if (refBytesToUse != null) detectOpaqueBoundingBox(refBytesToUse, alphaThreshold = 20) else null
 
             val targetW = block.bounds.width.coerceAtLeast(1f)
             val targetH = block.bounds.height.coerceAtLeast(1f)
 
-            // ★ 核心真理基准：以参考切片上的真实非透明主体尺寸作为 Ground Truth，杜绝被动适应错误 bounds
-            val baseTargetW = if (refOpaqueBox != null && refOpaqueBox.width > 4f) refOpaqueBox.width else targetW
-            val baseTargetH = if (refOpaqueBox != null && refOpaqueBox.height > 4f) refOpaqueBox.height else targetH
-
-            val s = if (opaqueBox != null) {
-                minOf(baseTargetW / opaqueBox.width.coerceAtLeast(1f), baseTargetH / opaqueBox.height.coerceAtLeast(1f))
+            data class RescaledLayout(val imgW: Int, val imgH: Int, val offX: Float, val offY: Float, val bytes: ByteArray)
+            val layout = if (isBackground) {
+                // 背景图必须贴合全屏物理尺寸，零偏移对齐
+                val bgW = targetW.roundToInt().coerceAtLeast(1)
+                val bgH = targetH.roundToInt().coerceAtLeast(1)
+                val scaled = rescaleImageBytes(croppedNoBgBytes, bgW, bgH) ?: croppedNoBgBytes
+                RescaledLayout(bgW, bgH, 0f, 0f, scaled)
             } else {
-                minOf(baseTargetW / srcW, baseTargetH / srcH)
+                // ★ 核心真理基准：以参考切片上的真实非透明主体尺寸作为 Ground Truth，杜绝被动适应错误 bounds
+                val baseTargetW = if (refOpaqueBox != null && refOpaqueBox.width > 4f) refOpaqueBox.width else targetW
+                val baseTargetH = if (refOpaqueBox != null && refOpaqueBox.height > 4f) refOpaqueBox.height else targetH
+
+                val s = if (opaqueBox != null) {
+                    minOf(baseTargetW / opaqueBox.width.coerceAtLeast(1f), baseTargetH / opaqueBox.height.coerceAtLeast(1f))
+                } else {
+                    minOf(baseTargetW / srcW, baseTargetH / srcH)
+                }
+
+                // 缩放后的物理像素宽高（此时物理像素宽高即为主体缩放后的真实尺寸）
+                val imgW = (srcW * s).roundToInt().coerceAtLeast(1)
+                val imgH = (srcH * s).roundToInt().coerceAtLeast(1)
+
+                // ★ 核心用户指令：经过等比缩放校验完成后，按当前缩放大小的实际宽高物理保存图片
+                val scaled = rescaleImageBytes(croppedNoBgBytes, imgW, imgH) ?: croppedNoBgBytes
+
+                // 计算缩放后在 targetW x targetH 模块范围内的正向居中偏移
+                val finalOpaqueBox = detectOpaqueBoundingBox(scaled, alphaThreshold = 20)
+                    ?: SerialRect(0f, 0f, imgW.toFloat(), imgH.toFloat())
+                var offX = (targetW - finalOpaqueBox.width) / 2f - finalOpaqueBox.left
+                var offY = (targetH - finalOpaqueBox.height) / 2f - finalOpaqueBox.top
+                RescaledLayout(imgW, imgH, offX, offY, scaled)
             }
 
-            // 缩放后的物理像素宽高（此时物理像素宽高即为主体缩放后的真实尺寸）
-            val targetImgW = (srcW * s).roundToInt().coerceAtLeast(1)
-            val targetImgH = (srcH * s).roundToInt().coerceAtLeast(1)
-
-            // ★ 核心用户指令：经过等比缩放校验完成后，按当前缩放大小的实际宽高物理保存图片
-            val rescaledBytes = rescaleImageBytes(croppedNoBgBytes, targetImgW, targetImgH) ?: croppedNoBgBytes
-
-            // 计算缩放后在 targetW x targetH 模块范围内的正向居中偏移
-            val finalOpaqueBox = detectOpaqueBoundingBox(rescaledBytes, alphaThreshold = 20)
-                ?: SerialRect(0f, 0f, targetImgW.toFloat(), targetImgH.toFloat())
-            var calcOffsetX = (targetW - finalOpaqueBox.width) / 2f - finalOpaqueBox.left
-            var calcOffsetY = (targetH - finalOpaqueBox.height) / 2f - finalOpaqueBox.top
+            val targetImgW = layout.imgW
+            val targetImgH = layout.imgH
+            val rescaledBytes = layout.bytes
+            var finalOffsetX = layout.offX
+            var finalOffsetY = layout.offY
 
             // 6. CV 图案重叠与对齐评估 (PatternOverlapEvaluator)
-            var ratingResult = "VERIFIED"
+            var ratingResult = if (isTextToImage) "TEXT_TO_IMAGE" else "VERIFIED"
             var casScore = 1.0f
-            try {
-                val cvEval = PatternOverlapEvaluator.evaluate(
-                    renderBytes = rescaledBytes,
-                    referenceBytes = refBytesToUse,
-                    maxDriftWindow = 12,
-                    generateDiffImage = false
-                )
-                casScore = cvEval.compositeAlignmentScore
-                ratingResult = cvEval.rating
-                if (cvEval.driftVectorX != 0 || cvEval.driftVectorY != 0) {
-                    calcOffsetX += cvEval.driftVectorX
-                    calcOffsetY += cvEval.driftVectorY
+            if (!isTextToImage && !isBackground && refBytesToUse != null) {
+                try {
+                    val cvEval = PatternOverlapEvaluator.evaluate(
+                        renderBytes = rescaledBytes,
+                        referenceBytes = refBytesToUse,
+                        maxDriftWindow = 12,
+                        generateDiffImage = false
+                    )
+                    casScore = cvEval.compositeAlignmentScore
+                    ratingResult = cvEval.rating
+                    if (cvEval.driftVectorX != 0 || cvEval.driftVectorY != 0) {
+                        finalOffsetX += cvEval.driftVectorX
+                        finalOffsetY += cvEval.driftVectorY
+                    }
+                } catch (e: Throwable) {
+                    AppLogger.w("GenerateBlockAssetTool", "CV 对齐评估略过: ${e.message}")
                 }
-            } catch (e: Throwable) {
-                AppLogger.w("GenerateBlockAssetTool", "CV 对齐评估略过: ${e.message}")
             }
 
             val finalScaleConfig = ImageScaleConfig(
                 scaleX = 1.0f,
                 scaleY = 1.0f,
-                offsetX = calcOffsetX,
-                offsetY = calcOffsetY,
+                offsetX = finalOffsetX,
+                offsetY = finalOffsetY,
                 lockAspectRatio = true,
                 enabled = true,
                 opaqueBounds = SerialRect(0f, 0f, targetImgW.toFloat(), targetImgH.toFloat())
