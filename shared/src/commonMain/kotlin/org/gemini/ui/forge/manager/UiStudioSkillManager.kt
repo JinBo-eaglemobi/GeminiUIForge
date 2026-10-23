@@ -5,19 +5,21 @@ import org.gemini.ui.forge.manager.resource.ExternalResourceLoader
 import org.gemini.ui.forge.model.chat.MentionCategory
 import org.gemini.ui.forge.model.chat.MentionItem
 import org.gemini.ui.forge.model.skill.SkillActivationMode
+import org.gemini.ui.forge.model.skill.SkillMarkdownParser
 import org.gemini.ui.forge.model.skill.UiStudioSkill
 import org.gemini.ui.forge.service.ai.GeminiToolConfig
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
 
 /**
- * UI Studio 技能与智能体能力调度管理器。
+ * UI Studio 技能与智能体能力调度管理器（标准 AI 智能体 Markdown 规范）
  *
  * 【核心架构原则】：
- * 1. 技能配置文件与人设指令 100% 外部文件化（位于 skills 目录下的 json 文件），代码中 0 技能数据硬编码；
- * 2. 复用通用 ExternalResourceLoader 基础加载器，外部优先 -> 内置出厂预设兜底；
- * 3. 严格遵循完全按需懒加载原则（On-Demand Loading），使用时异步加载并进入内存缓存，启动期零 I/O；
- * 4. 独立于 PromptManager，专职于技能结构反序列化与运行时工具调度。
+ * 1. 技能配置文件与人设指令 100% 外部 Markdown 文件化（YAML Frontmatter + Markdown Instructions），代码中 0 技能数据硬编码；
+ * 2. 复用通用 ExternalResourceLoader 基础加载器，外部优先 -> 内置出厂预设兜底，Cache Miss 时自动释放落盘到磁盘；
+ * 3. 动态扫描支持：自动感知 ~/.geminiuiforge/skills/ 目录下新增的 *.md 技能并动态挂载；
+ * 4. 严格遵循完全按需懒加载原则（On-Demand Loading），使用时异步加载并进入内存缓存，启动期零 I/O；
+ * 5. 独立于 PromptManager，专职于技能结构反序列化与运行时工具调度。
  */
 object UiStudioSkillManager {
     private const val TAG = "UiStudioSkillManager"
@@ -34,23 +36,66 @@ object UiStudioSkillManager {
     private var cachedSkills: List<UiStudioSkill>? = null
 
     /**
-     * 按需获取已注册的全部技能列表（外部本地优先 -> 内置出厂资源 -> 内存缓存）
+     * 按需获取已注册的全部技能列表（标准 Markdown 优先 + 出厂自愈释放 + 外部扫描）
+     * 【自愈铁律】：若外部磁盘不存在实体文件，自动触发强制释放落盘建立外部目录
      */
-    suspend fun getRegisteredSkills(): List<UiStudioSkill> {
-        cachedSkills?.let { return it }
-        val loaded = mutableListOf<UiStudioSkill>()
-
-        // 按需加载核心 Spec-to-View 技能
-        try {
-            val jsonContent = resourceLoader.loadText(SKILLS_DIR, "$SPEC_TO_VIEW_SKILL_ID.json")
-            val skill = json.decodeFromString<UiStudioSkill>(jsonContent)
-            loaded.add(skill)
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "加载技能 [$SPEC_TO_VIEW_SKILL_ID.json] 失败", e)
+    suspend fun getRegisteredSkills(bypassCache: Boolean = false): List<UiStudioSkill> {
+        val hasExternalFile = storage.exists("$SKILLS_DIR/$SPEC_TO_VIEW_SKILL_ID.md")
+        if (!bypassCache && cachedSkills != null && hasExternalFile) {
+            return cachedSkills!!
         }
 
-        cachedSkills = loaded
-        return loaded
+        // 清理旧版历史残留的 spec_to_view.json（如有）
+        try {
+            if (storage.exists("$SKILLS_DIR/$SPEC_TO_VIEW_SKILL_ID.json")) {
+                storage.deleteFile("$SKILLS_DIR/$SPEC_TO_VIEW_SKILL_ID.json")
+                AppLogger.i(TAG, "已安全清理旧版非标 JSON 技能文件: $SPEC_TO_VIEW_SKILL_ID.json")
+            }
+        } catch (_: Exception) {}
+
+        val loadedMap = LinkedHashMap<String, UiStudioSkill>()
+
+        // 1. 加载核心 Spec-to-View Markdown 技能（若外部磁盘不存在，通过 loadText 自动触发强制释放落盘）
+        try {
+            val mdContent = resourceLoader.loadText(SKILLS_DIR, "$SPEC_TO_VIEW_SKILL_ID.md", bypassCache = !hasExternalFile)
+            val skill = SkillMarkdownParser.parse(mdContent, defaultId = SPEC_TO_VIEW_SKILL_ID)
+            loadedMap[skill.id] = skill
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "加载技能 [$SPEC_TO_VIEW_SKILL_ID.md] 失败", e)
+        }
+
+        // 2. 扫描外部 skills/ 目录下的所有 *.md 与 *.json 自定义技能
+        try {
+            val files = storage.listFiles(SKILLS_DIR)
+            for (fileName in files) {
+                if (fileName.equals("$SPEC_TO_VIEW_SKILL_ID.md", ignoreCase = true)) continue
+                val relativePath = "$SKILLS_DIR/$fileName"
+                try {
+                    val content = storage.readFromFile(relativePath)
+                    if (!content.isNullOrBlank()) {
+                        val skill = if (fileName.endsWith(".md", ignoreCase = true)) {
+                            val defaultId = fileName.substringBeforeLast(".")
+                            SkillMarkdownParser.parse(content, defaultId = defaultId)
+                        } else if (fileName.endsWith(".json", ignoreCase = true)) {
+                            json.decodeFromString<UiStudioSkill>(content)
+                        } else null
+
+                        if (skill != null && !loadedMap.containsKey(skill.id)) {
+                            loadedMap[skill.id] = skill
+                            AppLogger.i(TAG, "✨ 成功动态加载外部技能: ${skill.name} (${skill.id}) [来自 $fileName]")
+                        }
+                    }
+                } catch (e: Exception) {
+                    AppLogger.w(TAG, "解析外部技能 [$fileName] 失败: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "扫描外部技能目录失败", e)
+        }
+
+        val allList = loadedMap.values.toList()
+        cachedSkills = allList
+        return allList
     }
 
     /**
@@ -113,7 +158,7 @@ object UiStudioSkillManager {
         val hasAllAssetsMention = attachedMentions.any { it.id == "all_assets_manifest" }
 
         for (skill in skills) {
-            val matchesKeywords = skill.triggerKeywords.any { lowerPrompt.contains(it.lowercase()) }
+            val matchesKeywords = skill.effectiveTriggers.any { lowerPrompt.contains(it.lowercase()) }
             if (hasDocMention || hasAllAssetsMention || matchesKeywords) {
                 active.add(skill)
             }
@@ -128,8 +173,10 @@ object UiStudioSkillManager {
     fun buildToolConfigs(skills: List<UiStudioSkill>): List<GeminiToolConfig> {
         if (skills.isEmpty()) return emptyList()
 
+        val declaredTools = skills.flatMap { it.effectiveTools }.toSet()
         val declarations = mutableListOf<JsonObject>()
-        if (skills.any { it.id == SPEC_TO_VIEW_SKILL_ID }) {
+
+        if ("apply_view_layout" in declaredTools || skills.any { it.id == SPEC_TO_VIEW_SKILL_ID }) {
             declarations.add(buildApplyViewLayoutDeclaration())
         }
 
@@ -187,7 +234,7 @@ object UiStudioSkillManager {
                                     put("type", "ARRAY")
                                     put("description", "嵌套子图元列表")
                                     put("items", buildJsonObject { put("type", "OBJECT") })
-                                    })
+                                })
                             })
                             put("required", buildJsonArray {
                                 add("id")

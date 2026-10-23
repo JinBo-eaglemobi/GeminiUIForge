@@ -39,6 +39,8 @@ fun SkillSelectorPill(
     skills: List<UiStudioSkill> = emptyList(),
     enabledSkillIds: Set<String> = emptySet(),
     onToggleSkill: (skillId: String, isEnabled: Boolean) -> Unit = { _, _ -> },
+    onRefreshSkills: (() -> Unit)? = null,
+    onOpenSkillsDirectory: (() -> Unit)? = null,
     activeSkills: List<UiStudioSkill> = emptyList(),
     currentMode: SkillActivationMode = SkillActivationMode.AUTO,
     onModeChanged: ((SkillActivationMode) -> Unit)? = null,
@@ -89,7 +91,10 @@ fun SkillSelectorPill(
                 if (hasAnySkillEnabled) MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f) else Color.Transparent
             ),
             modifier = Modifier
-                .clickable { isMenuOpen = true }
+                .clickable {
+                    isMenuOpen = true
+                    onRefreshSkills?.invoke()
+                }
                 .tip("查看与配置界面工程技能 (当前: $statusText)")
         ) {
             Row(
@@ -120,6 +125,8 @@ fun SkillSelectorPill(
             enabledSkillIds = enabledSkillIds,
             onToggleSkill = onToggleSkill,
             onDismissRequest = { isMenuOpen = false },
+            onRefresh = onRefreshSkills,
+            onOpenDirectory = onOpenSkillsDirectory,
             minMenuWidth = maxOf(minMenuWidth, pillWidthDp),
             maxMenuWidth = maxMenuWidth,
             maxMenuHeight = maxMenuHeight,

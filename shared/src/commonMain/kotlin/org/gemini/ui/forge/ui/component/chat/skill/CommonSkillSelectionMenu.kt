@@ -12,6 +12,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import org.gemini.ui.forge.ui.component.tip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -44,6 +51,8 @@ fun CommonSkillSelectionMenu(
     enabledSkillIds: Set<String>,
     onToggleSkill: (skillId: String, isEnabled: Boolean) -> Unit,
     onDismissRequest: () -> Unit,
+    onRefresh: (() -> Unit)? = null,
+    onOpenDirectory: (() -> Unit)? = null,
     minMenuWidth: Dp = 380.dp,
     maxMenuWidth: Dp = 500.dp,
     maxMenuHeight: Dp = 520.dp,
@@ -114,6 +123,38 @@ fun CommonSkillSelectionMenu(
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                         color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    if (onRefresh != null) {
+                        IconButton(
+                            onClick = onRefresh,
+                            modifier = Modifier.size(26.dp).tip("重新扫描外部技能目录")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh Skills",
+                                modifier = Modifier.size(15.dp),
+                                tint = colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (onOpenDirectory != null) {
+                        IconButton(
+                            onClick = onOpenDirectory,
+                            modifier = Modifier.size(26.dp).tip("打开本地技能配置目录")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = "Open Skills Folder",
+                                modifier = Modifier.size(15.dp),
+                                tint = colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
 

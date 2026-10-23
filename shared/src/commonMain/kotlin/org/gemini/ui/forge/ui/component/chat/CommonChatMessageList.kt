@@ -29,6 +29,7 @@ import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.chat.bubble.CommonGeneratingBubble
 import org.gemini.ui.forge.ui.component.chat.bubble.CommonModelBubble
 import org.gemini.ui.forge.ui.component.chat.bubble.CommonUserBubble
+import org.gemini.ui.forge.ui.component.chat.empty.CommonChatEmptyWelcomeView
 import org.gemini.ui.forge.ui.component.chat.scroll.ChatScrollMemoryManager
 import org.gemini.ui.forge.ui.component.chat.scroll.ChatScrollToBottomButton
 import org.gemini.ui.forge.ui.component.chat.scroll.ChatTimeDivider
@@ -53,6 +54,10 @@ fun CommonChatMessageList(
     sessionId: String? = null,
     streamingText: String = "",
     emptyTipText: String = "开始与 AI 助手对话，探索无限创意...",
+    viewName: String = "",
+    viewSizeText: String = "",
+    readyAssetCount: Int = 0,
+    onSuggestionClick: (String) -> Unit = {},
     onImageClick: ((String) -> Unit)? = null,
     onEditRequested: ((String) -> Unit)? = null,
     onRegenerateRequested: ((VisualChatMessage) -> Unit)? = null,
@@ -159,23 +164,13 @@ fun CommonChatMessageList(
                     org.gemini.ui.forge.ui.component.markdown.LocalCodeScrollCoordinator provides codeCoordinator
                 ) {
                     if (messages.isEmpty() && !isGenerating) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            modifier = Modifier.size(44.dp),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                        CommonChatEmptyWelcomeView(
+                            viewName = viewName,
+                            viewSizeText = viewSizeText,
+                            readyAssetCount = readyAssetCount,
+                            onSuggestionClick = onSuggestionClick
                         )
-                        Spacer(Modifier.height(spacing.small))
-                        Text(
-                            text = emptyTipText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            } else {
+                    } else {
                 Box(
                     modifier = Modifier.fillMaxSize()
                 ) {

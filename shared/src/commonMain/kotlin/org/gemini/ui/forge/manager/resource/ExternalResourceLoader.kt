@@ -47,8 +47,16 @@ class ExternalResourceLoader(private val storage: LocalFileStorage) {
             AppLogger.e(TAG, "读取外部本地文件失败: $relativePath", e)
         }
 
-        // 2. 外部无则读取内部内置打包资源出厂预设
+        // 2. 外部无则读取内部内置打包资源出厂预设，并【强制释放拷贝到本地磁盘缓存】形成外部实体文件
         val defaultContent = loadDefaultResourceText(subDir, fileName)
+        try {
+            // 自动补齐自愈：将内置出厂备份物理落盘到外部缓存目录，形成有效文件夹与出厂文件
+            storage.saveToFile(relativePath, defaultContent)
+            AppLogger.i(TAG, "🌱 成功将出厂备份资源释放至外部缓存: $relativePath")
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "释放出厂资源至外部缓存失败: $relativePath, ${e.message}")
+        }
+
         memoryCache[cacheKey] = defaultContent
         return defaultContent
     }

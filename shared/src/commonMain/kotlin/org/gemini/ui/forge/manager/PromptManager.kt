@@ -196,6 +196,23 @@ class PromptManager(
     }
 
     /**
+     * 启动时自检并同步核心规范与 Agent 人设（仅在外部不存在时自愈释放出厂备份）
+     */
+    suspend fun ensurePromptsSyncedToCache() {
+        ensureSpecSyncedToCache()
+        val agentPromptRel = "$PROMPTS_DIR/${PromptKey.UI_STUDIO_AGENT_PROMPT.fileName}"
+        try {
+            if (!storage.exists(agentPromptRel)) {
+                val content = getDefaultResourcePrompt(PromptKey.UI_STUDIO_AGENT_PROMPT)
+                storage.saveToFile(agentPromptRel, content)
+                AppLogger.i(TAG, "🌱 成功将出厂 Agent 人设释放至外部缓存: $agentPromptRel")
+            }
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "启动同步 Agent 人设失败: $agentPromptRel", e)
+        }
+    }
+
+    /**
      * 启动时同步 IMAGE_TO_UI_SPEC（仅在外部不存在时同步一次）
      */
     suspend fun ensureSpecSyncedToCache() {
@@ -231,17 +248,46 @@ class PromptManager(
     }
 
     companion object {
+        private const val PROMPTS_DIR = "prompts"
+        private val AGENT_PROMPT_FILE = PromptKey.UI_STUDIO_AGENT_PROMPT.fileName // "ui_studio_agent_prompt.md"
+
         /**
-         * 读取 UI Studio 项目专属 Agent 的出厂默认系统人设提示词。
-         * 提示词完全外部化存储于内置资源 prompts/ui_studio_agent_prompt.md 中，严禁在代码中硬编码长字符串。
+         * 读取 UI Studio 项目专属 Agent 的全局系统人设提示词（外部缓存优先 -> 内置出厂种子）。
+         * 提示词完全外部化存储于 prompts/ui_studio_agent_prompt.md 中，严禁在代码中硬编码长字符串。
          */
         suspend fun getUiStudioAgentPrompt(storage: LocalFileStorage = LocalFileStorage()): String {
             return try {
                 val loader = ExternalResourceLoader(storage)
-                loader.loadText("prompts", PromptKey.UI_STUDIO_AGENT_PROMPT.fileName)
+                loader.loadText(PROMPTS_DIR, AGENT_PROMPT_FILE)
             } catch (e: Exception) {
-                AppLogger.e("PromptManager", "读取 ui_studio_agent_prompt.md 失败", e)
+                AppLogger.e("PromptManager", "读取 $AGENT_PROMPT_FILE 失败", e)
                 ""
+            }
+        }
+
+        /**
+         * 保存用户定制的 UI Studio 智能设计助理 Agent 系统提示词到全局外部缓存 (~/.geminiuiforge/prompts/ui_studio_agent_prompt.md)
+         */
+        suspend fun saveUiStudioAgentPrompt(newPrompt: String, storage: LocalFileStorage = LocalFileStorage()): Boolean {
+            return try {
+                val loader = ExternalResourceLoader(storage)
+                loader.saveExternalText(PROMPTS_DIR, AGENT_PROMPT_FILE, newPrompt)
+            } catch (e: Exception) {
+                AppLogger.e("PromptManager", "保存 $AGENT_PROMPT_FILE 失败", e)
+                false
+            }
+        }
+
+        /**
+         * 重置 UI Studio 智能设计助理 Agent 系统提示词为出厂预设
+         */
+        suspend fun resetUiStudioAgentPrompt(storage: LocalFileStorage = LocalFileStorage()): Boolean {
+            return try {
+                val loader = ExternalResourceLoader(storage)
+                loader.deleteExternalText(PROMPTS_DIR, AGENT_PROMPT_FILE)
+            } catch (e: Exception) {
+                AppLogger.e("PromptManager", "重置 $AGENT_PROMPT_FILE 失败", e)
+                false
             }
         }
     }

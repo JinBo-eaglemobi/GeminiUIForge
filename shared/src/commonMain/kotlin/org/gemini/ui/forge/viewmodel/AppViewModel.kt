@@ -203,11 +203,12 @@ class AppViewModel(
                 )
             }
 
-            // ★ 应用启动自检：确保 IMAGE_TO_UI_SPEC 规范同步至本地外部缓存目录
+            // ★ 应用启动自检：确保核心提示词规范、Agent 人设与技能出厂种子同步释放至本地外部缓存目录
             try {
-                org.gemini.ui.forge.manager.PromptManager(templateRepo.fileStorage).ensureSpecSyncedToCache()
+                org.gemini.ui.forge.manager.PromptManager(templateRepo.fileStorage).ensurePromptsSyncedToCache()
+                org.gemini.ui.forge.manager.UiStudioSkillManager.getRegisteredSkills(bypassCache = true)
             } catch (e: Exception) {
-                AppLogger.w("AppViewModel", "启动同步 IMAGE_TO_UI_SPEC 失败", e)
+                AppLogger.w("AppViewModel", "启动同步出厂种子资源失败", e)
             }
         }
     }

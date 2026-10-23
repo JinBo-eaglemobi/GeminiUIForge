@@ -96,6 +96,9 @@ fun CommonChatStudioContent(
     onSendMessage: (text: String, attachments: List<CommonChatAttachment>) -> Unit,
     modifier: Modifier = Modifier,
     config: CommonChatStudioConfig = CommonChatStudioConfig(),
+    viewName: String = "",
+    viewSizeText: String = "",
+    readyAssetCount: Int = 0,
     onImageClick: ((String) -> Unit)? = null,
     onSwitchVariant: ((messageId: String, variantIndex: Int) -> Unit)? = null,
     onRegenerate: ((messageId: String) -> Unit)? = null,
@@ -109,6 +112,8 @@ fun CommonChatStudioContent(
     allSkills: List<UiStudioSkill> = emptyList(),
     enabledSkillIds: Set<String> = emptySet(),
     onToggleSkill: (String, Boolean) -> Unit = { _, _ -> },
+    onRefreshSkills: (() -> Unit)? = null,
+    onOpenSkillsDirectory: (() -> Unit)? = null,
     skillMode: SkillActivationMode = SkillActivationMode.AUTO,
     onSkillModeChanged: (SkillActivationMode) -> Unit = {},
     topBarActions: @Composable RowScope.() -> Unit = {},
@@ -249,6 +254,12 @@ fun CommonChatStudioContent(
                         sessionId = currentSessionId,
                         streamingText = streamingText,
                         emptyTipText = config.emptyTipText,
+                        viewName = viewName,
+                        viewSizeText = viewSizeText,
+                        readyAssetCount = readyAssetCount,
+                        onSuggestionClick = { suggestion ->
+                            inputTextToInject = suggestion
+                        },
                         onImageClick = { clickedUri ->
                             if (onImageClick != null) {
                                 onImageClick(clickedUri)
@@ -403,6 +414,8 @@ fun CommonChatStudioContent(
                         allSkills = allSkills,
                         enabledSkillIds = enabledSkillIds,
                         onToggleSkill = onToggleSkill,
+                        onRefreshSkills = onRefreshSkills,
+                        onOpenSkillsDirectory = onOpenSkillsDirectory,
                         skillMode = skillMode,
                         onSkillModeChanged = onSkillModeChanged,
                         leadingActions = inputLeadingActions,

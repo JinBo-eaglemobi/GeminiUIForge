@@ -1,28 +1,57 @@
 package org.gemini.ui.forge.model.skill
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * UI Studio 专属技能定义实体
+ * UI Studio 技能定义实体（标准 AI 智能体规范）
  *
- * @param id 技能唯一标识
- * @param name 技能显示名称
- * @param description 技能作用描述
- * @param triggerKeywords 意图自动触发关键词列表
- * @param systemInstructionAddition 技能专属系统人设指令补丁
- * @param toolNames 挂载的本地工具名称列表 (如 "apply_view_layout")
- * @param isEnabled 是否默认启用
+ * 采用业界标准命名规范：
+ * - [instructions]: 技能提示词指令正文 (Markdown Instructions)
+ * - [tools]: 挂载工具名称列表
+ * - [triggers]: 意图自动触发关键词列表
+ * - [enabled]: 默认启用状态 (默认 true)
+ *
+ * 保持对旧 JSON 命名与旧属性的完全向后兼容。
  */
 @Serializable
 data class UiStudioSkill(
     val id: String,
     val name: String,
     val description: String,
-    val triggerKeywords: List<String> = emptyList(),
-    val systemInstructionAddition: String = "",
-    val toolNames: List<String> = emptyList(),
-    val isEnabled: Boolean = true
-)
+    val instructions: String = "",
+    val tools: List<String> = emptyList(),
+    val triggers: List<String> = emptyList(),
+    val enabled: Boolean = true,
+
+    // 历史命名序列化兼容
+    @SerialName("systemInstructionAddition")
+    val legacyInstructionAddition: String? = null,
+    @SerialName("toolNames")
+    val legacyToolNames: List<String>? = null,
+    @SerialName("triggerKeywords")
+    val legacyTriggerKeywords: List<String>? = null,
+    @SerialName("isEnabled")
+    val legacyIsEnabled: Boolean? = null
+) {
+    val effectiveInstructions: String
+        get() = instructions.ifBlank { legacyInstructionAddition.orEmpty() }
+
+    val effectiveTools: List<String>
+        get() = tools.ifEmpty { legacyToolNames.orEmpty() }
+
+    val effectiveTriggers: List<String>
+        get() = triggers.ifEmpty { legacyTriggerKeywords.orEmpty() }
+
+    val isSkillEnabled: Boolean
+        get() = legacyIsEnabled ?: enabled
+
+    // 历史字段调用兼容
+    val systemInstructionAddition: String get() = effectiveInstructions
+    val toolNames: List<String> get() = effectiveTools
+    val triggerKeywords: List<String> get() = effectiveTriggers
+    val isEnabled: Boolean get() = isSkillEnabled
+}
 
 /**
  * 技能激活模式枚举

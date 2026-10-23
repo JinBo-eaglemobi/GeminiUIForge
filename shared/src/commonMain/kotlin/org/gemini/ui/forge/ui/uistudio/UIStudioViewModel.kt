@@ -37,6 +37,10 @@ import org.gemini.ui.forge.model.chat.MentionCategory
 import org.gemini.ui.forge.model.chat.MentionItem
 import org.gemini.ui.forge.model.chat.MentionPayload
 import org.gemini.ui.forge.state.MentionState
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import org.gemini.ui.forge.getPlatform
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Layers
@@ -117,9 +121,9 @@ class UIStudioViewModel {
 
     init {
         scope.launch(Dispatchers.Default) {
-            val skills = UiStudioSkillManager.getRegisteredSkills()
+            val skills = UiStudioSkillManager.getRegisteredSkills(bypassCache = true)
             allSkills = skills
-            enabledSkillIds = skills.map { it.id }.toSet()
+            enabledSkillIds = skills.filter { it.isSkillEnabled }.map { it.id }.toSet()
         }
     }
 
@@ -1511,10 +1515,88 @@ class UIStudioViewModel {
         state = state.copy(isAiChatDialogVisible = true)
         loadProjectAgentConfig()
         loadChatSessions()
+        refreshSkills(userInitiated = false)
+        startSkillsDirectoryWatcher()
     }
 
     fun closeAiChatDialog() {
         state = state.copy(isAiChatDialogVisible = false)
+        stopSkillsDirectoryWatcher()
+    }
+
+    private var skillsWatcherJob: Job? = null
+
+    /**
+     * 重新扫描技能目录，并自动执行失活技能 ID 清除与状态对齐
+     */
+    fun refreshSkills(userInitiated: Boolean = false) {
+        scope.launch(Dispatchers.Default) {
+            val newSkills = UiStudioSkillManager.getRegisteredSkills(bypassCache = true)
+            allSkills = newSkills
+            val validIds = newSkills.map { it.id }.toSet()
+            enabledSkillIds = enabledSkillIds.filter { it in validIds }.toSet()
+            if (enabledSkillIds.isEmpty() && newSkills.isNotEmpty()) {
+                enabledSkillIds = newSkills.filter { it.isSkillEnabled }.map { it.id }.toSet()
+            }
+            if (userInitiated) {
+                Toast.show("已重新扫描技能目录 (共 ${newSkills.size} 个技能)", ToastType.INFO)
+            }
+        }
+    }
+
+    /**
+     * 在本地系统文件管理器中打开外部技能配置目录
+     */
+    fun openSkillsDirectory() {
+        scope.launch(Dispatchers.Default) {
+            val path = storage.getFilePath("skills")
+            getPlatform().openInFileExplorer(path)
+        }
+    }
+
+    private suspend fun computeSkillsDirectoryFingerprint(): String {
+        return try {
+            val fileNames = storage.listFiles("skills").sorted()
+            if (fileNames.isEmpty()) return "empty"
+            val sb = StringBuilder()
+            for (name in fileNames) {
+                val hash = storage.readFromFile("skills/$name")?.hashCode() ?: 0
+                sb.append(name).append(':').append(hash).append(';')
+            }
+            sb.toString()
+        } catch (_: Exception) {
+            "error"
+        }
+    }
+
+    /**
+     * 启动针对外部技能目录的动态变动感知监视循环
+     */
+    private fun startSkillsDirectoryWatcher() {
+        skillsWatcherJob?.cancel()
+        skillsWatcherJob = scope.launch(Dispatchers.Default) {
+            var lastFingerprint = computeSkillsDirectoryFingerprint()
+            while (isActive) {
+                delay(2500L) // 2.5 秒轻量检测
+                val currentFingerprint = computeSkillsDirectoryFingerprint()
+                if (currentFingerprint != lastFingerprint) {
+                    lastFingerprint = currentFingerprint
+                    val newSkills = UiStudioSkillManager.getRegisteredSkills(bypassCache = true)
+                    allSkills = newSkills
+                    val validIds = newSkills.map { it.id }.toSet()
+                    enabledSkillIds = enabledSkillIds.filter { it in validIds }.toSet()
+                    if (enabledSkillIds.isEmpty() && newSkills.isNotEmpty()) {
+                        enabledSkillIds = newSkills.filter { it.isSkillEnabled }.map { it.id }.toSet()
+                    }
+                    Toast.show("检测到外部技能文件变动，已自动同步", ToastType.INFO)
+                }
+            }
+        }
+    }
+
+    private fun stopSkillsDirectoryWatcher() {
+        skillsWatcherJob?.cancel()
+        skillsWatcherJob = null
     }
 
     fun openSystemInstructionDialog() {
@@ -1569,20 +1651,25 @@ class UIStudioViewModel {
     fun loadProjectAgentConfig() {
         val proj = state.project ?: return
         val sanitized = proj.projectId.trim().replace(" ", "_")
-        val path = "templates/$sanitized/agent_config.json"
+        val legacyPath = "templates/$sanitized/agent_config.json"
         scope.launch(Dispatchers.Default) {
             try {
-                val file = TemplateFile(path)
-                if (file.exists()) {
-                    val text = file.readBytes()?.decodeToString()
-                    if (!text.isNullOrBlank()) {
-                        val jsonFormat = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-                        val config = jsonFormat.decodeFromString(ProjectAgentConfig.serializer(), text)
-                        state = state.copy(projectAgentConfig = config)
-                    }
+                // 1. 系统人设统一从全局 Markdown 文件 prompts/ui_studio_agent_prompt.md 加载
+                val globalPrompt = PromptManager.getUiStudioAgentPrompt()
+                if (globalPrompt.isNotBlank()) {
+                    state = state.copy(
+                        projectAgentConfig = state.projectAgentConfig.copy(systemPrompt = globalPrompt)
+                    )
+                }
+
+                // 2. 无感平滑清理：检测并安全删除单项目目录下遗留的旧版 agent_config.json
+                val legacyFile = TemplateFile(legacyPath)
+                if (legacyFile.exists()) {
+                    legacyFile.delete()
+                    AppLogger.i("UIStudioViewModel", "🧹 已清理项目私有遗留配置文件: $legacyPath")
                 }
             } catch (e: Exception) {
-                AppLogger.e("UIStudioViewModel", "加载项目 Agent 配置失败", e)
+                AppLogger.e("UIStudioViewModel", "加载全局 Agent 人设配置失败", e)
             }
         }
     }
@@ -1592,14 +1679,12 @@ class UIStudioViewModel {
     }
 
     fun updateProjectModel(modelName: String) {
-        val updated = state.projectAgentConfig.copy(modelName = modelName)
-        saveProjectAgentConfig(updated, notifyUser = false)
+        state = state.copy(projectAgentConfig = state.projectAgentConfig.copy(modelName = modelName))
         Toast.show("已切换模型: $modelName", ToastType.SUCCESS)
     }
 
     fun updateProjectModel(model: GeminiModel) {
-        val updated = state.projectAgentConfig.copy(modelName = model.modelName)
-        saveProjectAgentConfig(updated, notifyUser = false)
+        state = state.copy(projectAgentConfig = state.projectAgentConfig.copy(modelName = model.modelName))
         Toast.show("已切换模型: ${model.displayName}", ToastType.SUCCESS)
     }
 
@@ -1609,30 +1694,25 @@ class UIStudioViewModel {
     }
 
     fun updateProjectApiFlavor(apiFlavor: ApiFlavor) {
-        val updated = state.projectAgentConfig.copy(apiFlavor = apiFlavor)
-        saveProjectAgentConfig(updated, notifyUser = false)
+        state = state.copy(projectAgentConfig = state.projectAgentConfig.copy(apiFlavor = apiFlavor))
         Toast.show("已切换通信协议: ${apiFlavor.displayNameZh}", ToastType.SUCCESS)
     }
 
     fun saveProjectAgentConfig(config: ProjectAgentConfig, notifyUser: Boolean = true) {
         state = state.copy(projectAgentConfig = config)
-        val proj = state.project ?: return
-        val sanitized = proj.projectId.trim().replace(" ", "_")
-        val path = "templates/$sanitized/agent_config.json"
         scope.launch(Dispatchers.Default) {
             try {
-                val jsonFormat = kotlinx.serialization.json.Json {
-                    encodeDefaults = true
-                    prettyPrint = true
-                    ignoreUnknownKeys = true
-                }
-                val text = jsonFormat.encodeToString(ProjectAgentConfig.serializer(), config)
-                TemplateFile(path).writeBytes(text.encodeToByteArray())
+                // 系统人设统一持久化到全局 Markdown 文件 (ui_studio_agent_prompt.md)
+                val isSuccess = PromptManager.saveUiStudioAgentPrompt(config.systemPrompt)
                 if (notifyUser) {
-                    Toast.show("项目 Agent 配置已更新", ToastType.SUCCESS)
+                    if (isSuccess) {
+                        Toast.show("智能设计助理全局人设已更新", ToastType.SUCCESS)
+                    } else {
+                        Toast.show("保存人设配置失败", ToastType.ERROR)
+                    }
                 }
             } catch (e: Exception) {
-                AppLogger.e("UIStudioViewModel", "保存项目 Agent 配置失败", e)
+                AppLogger.e("UIStudioViewModel", "保存全局 Agent 人设失败", e)
             }
         }
     }
@@ -1675,17 +1755,11 @@ class UIStudioViewModel {
 
                 // 首次进入无会话，生成默认初始会话并持久化
                 val now = getCurrentTimeMillis()
-                val welcomeMsg = VisualChatMessage(
-                    id = "msg_${now}_welcome",
-                    role = "model",
-                    prompt = "🤖 你好！我是当前工程的专属「UI Studio 智能设计助理」。当前视图:「${state.currentView?.nameStr ?: "未选择"}」(${state.currentView?.width?.toInt() ?: 0} × ${state.currentView?.height?.toInt() ?: 0})，素材库已就绪 ${state.assetLibrary.items.size} 个切片资产。你可以向我描述界面排版构想、上传原型草图或让我在当前视图规划组件布局！",
-                    timestamp = now
-                )
                 val initialSession = VisualChatSession(
                     id = "session_${now}",
                     scopeId = sanitized,
                     title = "主界面架构与排版规划",
-                    messages = listOf(welcomeMsg),
+                    messages = emptyList(),
                     createdAt = now,
                     updatedAt = now
                 )
@@ -1717,6 +1791,15 @@ class UIStudioViewModel {
 
     private suspend fun healSessionErrors(sessions: List<VisualChatSession>): List<VisualChatSession> {
         return sessions.map { session ->
+            // 若该会话仅有 1 条消息且为历史生成的欢迎消息，将其过滤清洗为纯净空会话
+            val isSingleLegacyWelcome = session.messages.size == 1 &&
+                    session.messages.first().let { it.id.contains("welcome") || it.prompt.contains("已开启新的排版讨论会话") || it.prompt.contains("UI Studio 智能设计助理") || it.prompt.contains("UI Studio 智能排版设计助理") }
+            if (isSingleLegacyWelcome) {
+                val cleaned = session.copy(messages = emptyList())
+                saveSession(cleaned)
+                return@map cleaned
+            }
+
             val hasUnresolvedError = session.messages.any { msg ->
                 msg.role == "model" && (msg.effectiveText.isBlank() || msg.isError) && msg.errorMessage.isNullOrBlank()
             }
@@ -1763,17 +1846,11 @@ class UIStudioViewModel {
         val proj = state.project ?: return
         val sanitized = proj.projectId.trim().replace(" ", "_")
         val now = getCurrentTimeMillis()
-        val welcomeMsg = VisualChatMessage(
-            id = "msg_${now}_welcome",
-            role = "model",
-            prompt = "✨ 已开启新的排版讨论会话。请告诉我你想在视图「${state.currentView?.nameStr ?: "当前视图"}」中实现什么样的 UI 布局或业务功能？",
-            timestamp = now
-        )
         val newSession = VisualChatSession(
             id = "session_${now}",
             scopeId = sanitized,
             title = title,
-            messages = listOf(welcomeMsg),
+            messages = emptyList(),
             createdAt = now,
             updatedAt = now
         )
@@ -1865,7 +1942,6 @@ class UIStudioViewModel {
                 is MentionPayload.AssetPayload -> if (it.id == "all_assets_manifest") "all_assets_manifest" else p.filePath
                 is MentionPayload.ViewPayload -> p.viewId
                 is MentionPayload.BlockPayload -> p.blockId
-                null -> if (it.id == "all_assets_manifest") "all_assets_manifest" else null
             }
             org.gemini.ui.forge.model.chat.ChatMentionTag(
                 title = it.title,
@@ -2067,7 +2143,7 @@ class UIStudioViewModel {
                     }
                 }
 
-                val skillPromptAddition = triggeredSkills.joinToString("\n\n") { it.systemInstructionAddition }
+                val skillPromptAddition = triggeredSkills.joinToString("\n\n") { it.effectiveInstructions }
                 val effectiveSystemPrompt = if (skillPromptAddition.isNotBlank()) {
                     "$systemPrompt\n\n$skillPromptAddition".trim()
                 } else {
@@ -2764,7 +2840,7 @@ class UIStudioViewModel {
             try {
                 val sanitizedName = proj.projectId.trim().replace(" ", "_")
                 val draftPath = "templates/$sanitizedName/import_draft.json"
-                TemplateFile(draftPath).writeBytes(ByteArray(0)) // 清空草稿
+                TemplateFile(draftPath).delete() // 物理删除草稿文件
             } catch (_: Exception) {}
             state = state.copy(
                 importDraft = null,
@@ -3357,10 +3433,10 @@ class UIStudioViewModel {
                     items = state.assetLibrary.items.filterNot { old -> newAssetItems.any { it.id == old.id } } + newAssetItems
                 )
 
-                // 5. 清理切片校对草稿文件
+                // 5. 物理清理切片校对草稿文件
                 try {
                     val draftPath = "templates/$sanitizedName/import_draft.json"
-                    TemplateFile(draftPath).writeBytes(ByteArray(0))
+                    TemplateFile(draftPath).delete()
                 } catch (_: Exception) {}
 
                 state = state.copy(

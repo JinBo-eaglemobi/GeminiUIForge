@@ -121,8 +121,13 @@ fun UIProjectAiStudioDialog(
                     allSkills = viewModel.allSkills,
                     enabledSkillIds = viewModel.enabledSkillIds,
                     onToggleSkill = { skillId, isEnabled -> viewModel.toggleSkill(skillId, isEnabled) },
+                    onRefreshSkills = { viewModel.refreshSkills(userInitiated = true) },
+                    onOpenSkillsDirectory = { viewModel.openSkillsDirectory() },
                     skillMode = viewModel.skillMode,
                     onSkillModeChanged = { viewModel.skillMode = it },
+                    viewName = state.currentView?.nameStr ?: "",
+                    viewSizeText = if (state.currentView != null) "${state.currentView?.width?.toInt() ?: 0} × ${state.currentView?.height?.toInt() ?: 0}" else "",
+                    readyAssetCount = state.assetLibrary.items.size,
                     config = studioConfig,
                     topBarActions = {
                         // 1. 当前视图标签胶囊
