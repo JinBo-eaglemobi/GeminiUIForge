@@ -14,7 +14,21 @@ import org.gemini.ui.forge.ui.uistudio.model.ProjectAgentConfig
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetFolder
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
+import org.gemini.ui.forge.service.studio.LayoutDiffResult
 import kotlinx.serialization.Serializable
+
+/**
+ * AI 布局变更撤销保护快照
+ */
+data class LayoutUndoSnapshot(
+    val viewId: String,
+    val viewName: String,
+    val isReplaced: Boolean,
+    val oldBlocks: List<UIBlock>,
+    val newBlocks: List<UIBlock>,
+    val diff: LayoutDiffResult,
+    val timestamp: Long = org.gemini.ui.forge.getCurrentTimeMillis()
+)
 
 /**
  * UI Studio 左侧边栏下半部分 Tab 分类枚举。
@@ -132,7 +146,8 @@ data class UIStudioState(
     val undoStack: List<UIStudioHistoryEntry> = emptyList(),
     val redoStack: List<UIStudioHistoryEntry> = emptyList(),
     val clipboardBlock: UIBlock? = null,
-    val pendingLayoutResult: org.gemini.ui.forge.service.studio.UiStudioLayoutService.ApplyLayoutResult? = null
+    val pendingLayoutResult: org.gemini.ui.forge.service.studio.UiStudioLayoutService.ApplyLayoutResult? = null,
+    val lastLayoutUndoSnapshot: LayoutUndoSnapshot? = null
 ) {
     val canUndo: Boolean get() = undoStack.isNotEmpty()
     val canRedo: Boolean get() = redoStack.isNotEmpty()

@@ -106,6 +106,7 @@ fun CommonChatInputBar(
     onOpenSkillsDirectory: (() -> Unit)? = null,
     skillMode: SkillActivationMode = SkillActivationMode.AUTO,
     onSkillModeChanged: (SkillActivationMode) -> Unit = {},
+    onStopGeneration: (() -> Unit)? = null,
     leadingActions: @Composable RowScope.() -> Unit = {},
     trailingActions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -491,6 +492,10 @@ fun CommonChatInputBar(
                                     }
                                 }
                             }
+                            if (isGenerating && onStopGeneration != null && event.key == Key.Escape) {
+                                onStopGeneration()
+                                return@onPreviewKeyEvent true
+                            }
                             if (event.key == Key.Enter && !event.isShiftPressed) {
                                 performSend()
                                 true
@@ -727,28 +732,55 @@ fun CommonChatInputBar(
                 ) {
                     trailingActions()
 
-                    Button(
-                        onClick = { performSend() },
-                        enabled = canSend,
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                        modifier = Modifier.height(34.dp).tip("发送消息 (Enter)")
-                    ) {
-                        if (isGenerating) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        } else {
+                    if (isGenerating && onStopGeneration != null) {
+                        Button(
+                            onClick = { onStopGeneration() },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            modifier = Modifier.height(34.dp).tip("中止本次 AI 生成 (Esc)")
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "发送",
+                                    Icons.Default.Close,
+                                    contentDescription = "中止",
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
-                                Text(text = "发送", style = MaterialTheme.typography.labelMedium)
+                                Text(
+                                    text = "中止",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = { performSend() },
+                            enabled = canSend,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                            modifier = Modifier.height(34.dp).tip("发送消息 (Enter)")
+                        ) {
+                            if (isGenerating) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Send,
+                                        contentDescription = "发送",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(text = "发送", style = MaterialTheme.typography.labelMedium)
+                                }
                             }
                         }
                     }

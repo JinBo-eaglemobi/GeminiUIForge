@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import org.gemini.ui.forge.extend.getSelectedTextOrNull
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.model.chat.VisualChatMessage
+import org.gemini.ui.forge.service.chat.ChatErrorClassifier
 import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.component.tip
 import androidx.compose.ui.text.font.FontWeight
@@ -52,13 +53,14 @@ fun CommonModelBubble(
     onRegenerateRequested: ((VisualChatMessage) -> Unit)? = null,
     onDeleteRequested: ((VisualChatMessage) -> Unit)? = null,
     onOpenViewRequested: ((String) -> Unit)? = null,
+    onFallbackFlashModelRequested: ((VisualChatMessage) -> Unit)? = null,
+    onSwitchProtocolRequested: ((VisualChatMessage) -> Unit)? = null,
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
     val density = LocalDensity.current
     val copy = rememberClipboardAction()
-    var isThoughtExpanded by remember { mutableStateOf(false) }
     var showContextMenu by remember { mutableStateOf(false) }
     var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
     var selectedTextSnapshot by remember { mutableStateOf<String?>(null) }
@@ -121,49 +123,14 @@ fun CommonModelBubble(
                     }
                 ) {
                     Column(modifier = Modifier.padding(spacing.medium)) {
-                        // 1. 思维链思考过程 (Thought Chain，可折叠)
+                        // 1. 思维链思考过程 (Thought Chain，高阶折叠与耗时呈现)
                         if (!message.thought.isNullOrBlank()) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth().padding(bottom = spacing.small)
-                            ) {
-                                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().clickable { isThoughtExpanded = !isThoughtExpanded },
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Psychology,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(
-                                            text = if (isThoughtExpanded) "收起思考过程" else "查看深度思考过程",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                        Spacer(Modifier.weight(1f))
-                                        Icon(
-                                            if (isThoughtExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-
-                                    AnimatedVisibility(visible = isThoughtExpanded) {
-                                        Text(
-                                            text = message.thought,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                            modifier = Modifier.padding(top = 6.dp)
-                                        )
-                                    }
-                                }
-                            }
+                            ThinkingProcessCard(
+                                thought = message.thought,
+                                isThinking = false,
+                                durationMs = message.durationMs,
+                                modifier = Modifier.padding(bottom = spacing.small)
+                            )
                         }
 
                         // 2. 模型核心正文 或 专属错误卡片
@@ -172,59 +139,16 @@ fun CommonModelBubble(
                             modelText.startsWith("⚠️") ||
                             (message.isError && modelText.isBlank())
                         if (isCurrentVariantFailed) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.ErrorOutline,
-                                            contentDescription = "错误",
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(
-                                            text = "服务响应异常 (API Error)",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                    val errDetail = message.errorMessage?.ifBlank { null }
-                                        ?: modelText.ifBlank { null }
-                                        ?: "未捕获到服务正文（可点击顶部工具栏查看网络通信档案核验原始响应）"
-                                    Spacer(Modifier.height(4.dp))
-                                    SelectionContainer {
-                                        Text(
-                                            text = errDetail,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onErrorContainer
-                                        )
-                                    }
-                                    Spacer(Modifier.height(8.dp))
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Button(
-                                            onClick = { onRegenerateRequested?.invoke(message) },
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.error,
-                                                contentColor = MaterialTheme.colorScheme.onError
-                                            ),
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                            modifier = Modifier.height(28.dp)
-                                        ) {
-                                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("重新生成", style = MaterialTheme.typography.labelSmall)
-                                        }
-                                    }
-                                }
-                            }
+                            val errDetail = message.errorMessage?.ifBlank { null }
+                                ?: modelText.ifBlank { null }
+                                ?: "未捕获到服务正文（可点击顶部工具栏查看网络通信档案核验原始响应）"
+                            val classified = remember(errDetail) { ChatErrorClassifier.classify(errDetail) }
+                            ChatErrorActionCard(
+                                classifiedError = classified,
+                                onRetry = { onRegenerateRequested?.invoke(message) },
+                                onFallbackFlashModel = onFallbackFlashModelRequested?.let { cb -> { cb(message) } },
+                                onSwitchProtocol = onSwitchProtocolRequested?.let { cb -> { cb(message) } }
+                            )
                         } else {
                             SelectionContainer {
                                 AppMarkdown(

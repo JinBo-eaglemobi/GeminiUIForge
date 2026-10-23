@@ -64,6 +64,8 @@ fun CommonChatStudioDialog(
     onSwitchVariant: ((messageId: String, variantIndex: Int) -> Unit)? = null,
     onRegenerate: ((messageId: String) -> Unit)? = null,
     onDeleteMessage: ((messageId: String) -> Unit)? = null,
+    onFallbackFlashModelRequested: ((VisualChatMessage) -> Unit)? = null,
+    onSwitchProtocolRequested: ((VisualChatMessage) -> Unit)? = null,
     topBarActions: @Composable RowScope.() -> Unit = {},
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     inputLeadingActions: @Composable RowScope.() -> Unit = {},
@@ -102,6 +104,8 @@ fun CommonChatStudioDialog(
                 onSwitchVariant = onSwitchVariant,
                 onRegenerate = onRegenerate,
                 onDeleteMessage = onDeleteMessage,
+                onFallbackFlashModelRequested = onFallbackFlashModelRequested,
+                onSwitchProtocolRequested = onSwitchProtocolRequested,
                 topBarActions = {
                     topBarActions()
                     IconButton(

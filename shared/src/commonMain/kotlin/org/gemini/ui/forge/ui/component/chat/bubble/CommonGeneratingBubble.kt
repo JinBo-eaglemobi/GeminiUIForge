@@ -52,13 +52,10 @@ fun CommonGeneratingBubble(
                         content = streamingText
                     )
                 } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "AI 正在深度思考与组织回复中...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
-                    }
+                    ThinkingProcessCard(
+                        thought = "",
+                        isThinking = true
+                    )
                 }
             }
         }

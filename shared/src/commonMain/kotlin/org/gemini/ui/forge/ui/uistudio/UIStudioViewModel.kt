@@ -62,6 +62,8 @@ import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIPage
 import kotlin.random.Random
 import org.gemini.ui.forge.service.LocalMattingService
+import org.gemini.ui.forge.service.ai.ChatCompressionManager
+import org.gemini.ui.forge.service.ai.ChatPayloadAssembler
 import org.gemini.ui.forge.service.ai.GeminiChatEngine
 import org.gemini.ui.forge.service.ai.GeminiChatRequest
 import org.gemini.ui.forge.service.ai.GeminiChatAttachment
@@ -94,10 +96,6 @@ import org.gemini.ui.forge.utils.updateBlockInList
  * 负责画布交互、视口变换矩阵、工程生命周期、素材库联动、草稿暂存自愈与切片入库。
  */
 class UIStudioViewModel {
-
-    companion object {
-        private const val CONTEXT_INFO_HEADER = "[上下文信息]"
-    }
 
     /** 专属后台协程作用域 */
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -146,6 +144,9 @@ class UIStudioViewModel {
     /** 所有已探测并注册的 UI Studio 技能清单 */
     var allSkills by mutableStateOf<List<UiStudioSkill>>(emptyList())
         private set
+
+    /** 当前活跃的 AI 流式生成后台作业，用于支持实时中止 */
+    private var activeChatJob: Job? = null
 
     /** 当前处于启用/加载状态的技能 ID 集合（默认全启用） */
     var enabledSkillIds by mutableStateOf<Set<String>>(emptySet())
@@ -1532,7 +1533,12 @@ class UIStudioViewModel {
     }
 
     fun closeAiChatDialog() {
-        state = state.copy(isAiChatDialogVisible = false)
+        state = state.copy(
+            isAiChatDialogVisible = false,
+            isSystemInstructionDialogVisible = false,
+            isClearingCurrentSession = false,
+            pendingLayoutResult = null
+        )
         stopSkillsDirectoryWatcher()
     }
 
@@ -1708,6 +1714,22 @@ class UIStudioViewModel {
     fun updateProjectApiFlavor(apiFlavor: ApiFlavor) {
         state = state.copy(projectAgentConfig = state.projectAgentConfig.copy(apiFlavor = apiFlavor))
         Toast.show("已切换通信协议: ${apiFlavor.displayNameZh}", ToastType.SUCCESS)
+    }
+
+    /**
+     * 智能自愈：平滑降级至 Gemini 3.8 Flash 模型并重试生成
+     */
+    fun fallbackToFlashAndRetry(message: VisualChatMessage) {
+        updateProjectModel(GeminiModel.GEMINI_3_8_FLASH)
+        regenerateChatMessage(message.id)
+    }
+
+    /**
+     * 智能自愈：平滑降级至标准 GenerateContent 协议并重试生成
+     */
+    fun fallbackProtocolAndRetry(message: VisualChatMessage) {
+        updateProjectApiFlavor(ApiFlavor.GENERATE_CONTENT)
+        regenerateChatMessage(message.id)
     }
 
     fun saveProjectAgentConfig(config: ProjectAgentConfig, notifyUser: Boolean = true) {
@@ -2005,7 +2027,7 @@ class UIStudioViewModel {
         )
         saveSession(updatedSession)
 
-        scope.launch(Dispatchers.Default) {
+        activeChatJob = scope.launch(Dispatchers.Default) {
             try {
                 // 若存在无 localUri 仅有 bytes 的内存附件，协程内异步落盘并补齐持久化 URI
                 if (attachmentsList.any { it.localUri.isNullOrBlank() && it.bytes != null && it.bytes.isNotEmpty() }) {
@@ -2065,8 +2087,6 @@ class UIStudioViewModel {
                     PromptManager.getUiStudioAgentPrompt()
                 }
                 val selectedModel = state.projectAgentConfig.modelName.ifBlank { GeminiModel.GEMINI_3_8_FLASH.modelName }
-                val view = state.currentView
-                val contextInfo = "当前视图: ${view?.nameStr ?: "无"} (${view?.width ?: 0f} x ${view?.height ?: 0f})，素材库共有 ${state.assetLibrary.items.size} 个资产。"
 
                 val preferCloud = attachmentsList.any { it.preferCloudUpload }
                 val chatAttachments = attachmentsList.map { attach ->
@@ -2078,28 +2098,28 @@ class UIStudioViewModel {
                     )
                 }.toMutableList()
 
-                // 提取已选中的 @ 上下文实体并组装格式化 XML (仅包含真实存在的物理实体)
-                val mentionContextBuilder = StringBuilder()
+                // 若用户引用了切片素材，提取其本地文件以附件发送；若引用了文档且尚未填充内容，则预读文档
+                val processedMentions = attachedMentionsList.map { mention ->
+                    when (val p = mention.payload) {
+                        is MentionPayload.DocPayload -> {
+                            if (p.content.isNullOrBlank() && org.gemini.ui.forge.data.isFileExistsInternal(p.absolutePath)) {
+                                val content = try {
+                                    readLocalFileBytes(p.absolutePath)?.decodeToString() ?: ""
+                                } catch (_: Exception) { "" }
+                                mention.copy(payload = p.copy(content = content))
+                            } else {
+                                mention
+                            }
+                        }
+                        else -> mention
+                    }
+                }
 
                 if (attachedMentionsList.isNotEmpty()) {
-                    mentionContextBuilder.append("\n\n<context_attachments>\n")
                     for (mention in attachedMentionsList) {
                         when (val p = mention.payload) {
-                            is MentionPayload.ViewPayload -> {
-                                mentionContextBuilder.append("  <view id=\"${p.viewId}\" name=\"${p.viewName}\" resolution=\"${p.width}x${p.height}\" block_count=\"${p.blockCount}\"/>\n")
-                            }
-                            is MentionPayload.BlockPayload -> {
-                                val dim = if (p.width > 0 && p.height > 0) " dimensions=\"${p.width}x${p.height}\"" else ""
-                                mentionContextBuilder.append("  <block id=\"${p.blockId}\" name=\"${p.blockName}\" type=\"${p.type}\"$dim is_container=\"${p.isContainer}\"/>\n")
-                            }
                             is MentionPayload.AssetPayload -> {
-                                if (p.fileName == "ALL_ASSETS_MANIFEST") {
-                                    val manifest = AssetManifestHelper.buildCompactManifest(state.assetLibrary.items)
-                                    mentionContextBuilder.append("  <asset_library_manifest total=\"${state.assetLibrary.items.size}\">\n$manifest\n  </asset_library_manifest>\n")
-                                } else {
-                                    val role = AssetManifestHelper.inferAssetRole(p.fileName, p.filePath)
-                                    mentionContextBuilder.append("  <asset id=\"${p.assetId}\" file_name=\"${p.fileName}\" dimensions=\"${p.width}x${p.height}\" role=\"$role\" path=\"${p.filePath}\"/>\n")
-                                    // 若为切片素材，自动尝试读取本地文件字节流以多模态附件发送
+                                if (p.fileName != "ALL_ASSETS_MANIFEST") {
                                     try {
                                         val assetBytes = readLocalFileBytes(p.filePath)
                                         if (assetBytes != null && assetBytes.isNotEmpty()) {
@@ -2125,11 +2145,6 @@ class UIStudioViewModel {
                             }
                             is MentionPayload.DocPayload -> {
                                 if (org.gemini.ui.forge.data.isFileExistsInternal(p.absolutePath)) {
-                                    val content = p.content ?: try {
-                                        readLocalFileBytes(p.absolutePath)?.decodeToString() ?: ""
-                                    } catch (e: Exception) { "" }
-                                    mentionContextBuilder.append("  <document name=\"${p.fileName}\" path=\"${p.absolutePath}\">\n$content\n  </document>\n")
-                                    // 随消息真实发送后，正式登记沉淀为该工程的历史引用记录
                                     try {
                                         val projId = state.project?.projectId ?: "default"
                                         ExternalDocManager.registerDoc(
@@ -2143,9 +2158,9 @@ class UIStudioViewModel {
                                     }
                                 }
                             }
+                            else -> {}
                         }
                     }
-                    mentionContextBuilder.append("</context_attachments>\n")
                     // 发送完毕后清空已挂载实体药丸
                     mentionState.clearMentions()
                 }
@@ -2159,6 +2174,7 @@ class UIStudioViewModel {
                 )
 
                 // 若用户意图涉及界面生成或排版，且素材库不为空且未手动挂载全部素材清单，则自动补充注入素材库切片清单
+                var autoAssetManifestXml: String? = null
                 val hasAllAssetsMention = attachedMentionsList.any {
                     val p = it.payload
                     p is MentionPayload.AssetPayload && p.fileName == "ALL_ASSETS_MANIFEST"
@@ -2169,8 +2185,11 @@ class UIStudioViewModel {
                             userText.contains("布局") || userText.contains("老虎机") || userText.contains("slot")
                     if (isLayoutIntent) {
                         val manifest = AssetManifestHelper.buildCompactManifest(state.assetLibrary.items)
-                        mentionContextBuilder.append("\n<asset_library_manifest total=\"${state.assetLibrary.items.size}\">\n$manifest\n</asset_library_manifest>\n")
+                        autoAssetManifestXml = "  <asset_library_manifest total=\"${state.assetLibrary.items.size}\">\n$manifest\n  </asset_library_manifest>"
                     }
+                } else if (hasAllAssetsMention) {
+                    val manifest = AssetManifestHelper.buildCompactManifest(state.assetLibrary.items)
+                    autoAssetManifestXml = "  <asset_library_manifest total=\"${state.assetLibrary.items.size}\">\n$manifest\n  </asset_library_manifest>"
                 }
 
                 val skillPromptAddition = triggeredSkills.joinToString("\n\n") { it.effectiveInstructions }
@@ -2181,8 +2200,41 @@ class UIStudioViewModel {
                 }
                 val toolConfigs = UiStudioSkillManager.buildToolConfigs(triggeredSkills)
 
-                // 注入历史消息
-                val historyItems = activeSession.messages.filter { it.id != userMsg.id }.map { msg ->
+                // 构建四层解耦的多层载荷：系统指令保持纯净静态，环境与参考数据注入当前轮次用户提问载荷中
+                val currentView = state.currentView
+                val workspaceContextXml = if (currentView != null) {
+                    "  <current_view name=\"${currentView.nameStr}\" resolution=\"${currentView.width}x${currentView.height}\" block_count=\"${currentView.blocks.size}\" total_assets=\"${state.assetLibrary.items.size}\"/>"
+                } else ""
+
+                // 长对话智能上下文自愈与自动压缩：达到阈值时自动提炼设计记忆并压缩历史
+                var sessionToUse = activeSession
+                if (ChatCompressionManager.shouldCompress(activeSession)) {
+                    AppLogger.i("UIStudioViewModel", "达到长对话阈值，正在自动提炼设计记忆...")
+                    try {
+                        sessionToUse = ChatCompressionManager.compressSession(
+                            session = activeSession,
+                            apiFlavor = apiFlavor,
+                            chatEngine = chatEngine,
+                            apiKey = effectiveApiKey,
+                            customSystemPrompt = effectiveSystemPrompt
+                        )
+                        saveSession(sessionToUse)
+                    } catch (e: Exception) {
+                        AppLogger.w("UIStudioViewModel", "自动压缩失败，继续使用未压缩上下文", e)
+                    }
+                }
+
+                val assembledPayload = ChatPayloadAssembler.assemble(
+                    baseSystemPrompt = effectiveSystemPrompt,
+                    userRawText = userText,
+                    workspaceContextXml = workspaceContextXml,
+                    attachedMentions = processedMentions,
+                    autoAssetManifestXml = autoAssetManifestXml,
+                    priorDesignMemoryXml = sessionToUse.designMemoryContext
+                )
+
+                // 注入历史消息（过滤已被压缩的消息）
+                val historyItems = sessionToUse.messages.filter { !it.isCompressed && it.id != userMsg.id }.map { msg ->
                     GeminiChatHistoryItem(
                         role = msg.role,
                         text = msg.effectiveText
@@ -2195,13 +2247,13 @@ class UIStudioViewModel {
                     apiKey = effectiveApiKey,
                     model = resolvedModel,
                     apiFlavor = apiFlavor,
-                    prompt = userText,
-                    systemInstruction = "$effectiveSystemPrompt\n\n$CONTEXT_INFO_HEADER $contextInfo$mentionContextBuilder",
+                    prompt = assembledPayload.compositeUserPrompt,
+                    systemInstruction = assembledPayload.pureSystemInstruction,
                     tools = toolConfigs,
                     attachments = chatAttachments,
                     preferCloudUpload = preferCloud,
                     history = historyItems,
-                    previousInteractionId = activeSession.latestInteractionId,
+                    previousInteractionId = sessionToUse.latestInteractionId,
                     generationConfig = GeminiGenerationConfig(
                         temperature = state.projectAgentConfig.temperature.toDouble()
                     )
@@ -2292,6 +2344,91 @@ class UIStudioViewModel {
             } catch (e: Exception) {
                 AppLogger.e("UIStudioViewModel", "AI Chat 处理异常", e)
                 state = state.copy(isAiChatSending = false)
+            } finally {
+                activeChatJob = null
+            }
+        }
+    }
+
+    /**
+     * 主动中止当前正在进行的 AI 流式生成或网络长请求
+     */
+    fun cancelCurrentChatGeneration() {
+        val job = activeChatJob
+        if (job != null && job.isActive) {
+            job.cancel()
+            activeChatJob = null
+        }
+        val currentStreamText = state.streamingAiText
+        val activeSession = state.currentChatSession
+        if (currentStreamText.isNotBlank() && activeSession != null) {
+            val truncatedText = "$currentStreamText\n\n*(⏹ 用户已主动中止本次生成)*"
+            val now = getCurrentTimeMillis()
+            val stoppedMsg = VisualChatMessage(
+                id = "msg_${now}_assistant_stopped",
+                role = "model",
+                prompt = truncatedText,
+                variants = listOf(truncatedText),
+                activeVariantIndex = 0,
+                timestamp = now
+            )
+            val updatedMessages = activeSession.messages + stoppedMsg
+            val updatedSession = activeSession.copy(
+                messages = updatedMessages,
+                updatedAt = now
+            )
+            val updatedSessions = state.chatSessions.map { if (it.id == updatedSession.id) updatedSession else it }
+            state = state.copy(
+                chatSessions = updatedSessions,
+                isAiChatSending = false,
+                streamingAiText = ""
+            )
+            saveSession(updatedSession)
+        } else {
+            state = state.copy(
+                isAiChatSending = false,
+                streamingAiText = ""
+            )
+        }
+        Toast.show("已停止 AI 生成", ToastType.INFO)
+    }
+
+    /**
+     * 手动触发长对话上下文压缩与设计记忆结晶
+     */
+    fun compressCurrentSession() {
+        val currentSession = state.currentChatSession ?: return
+        if (currentSession.messages.size <= ChatCompressionManager.PRESERVE_RECENT_ROUNDS) {
+            Toast.show("当前会话消息较少，无需压缩", ToastType.INFO)
+            return
+        }
+
+        scope.launch(Dispatchers.Default) {
+            val effectiveApiKey = configManager.loadKey("GEMINI_API_KEY") ?: configManager.loadGlobalGeminiKey() ?: ""
+            if (effectiveApiKey.isBlank()) {
+                Toast.show("请先在设置中配置有效 API Key", ToastType.ERROR)
+                return@launch
+            }
+            Toast.show("正在提炼设计记忆并压缩上下文...", ToastType.INFO)
+            try {
+                val updatedSession = ChatCompressionManager.compressSession(
+                    session = currentSession,
+                    apiFlavor = state.projectAgentConfig.apiFlavor,
+                    chatEngine = chatEngine,
+                    apiKey = effectiveApiKey,
+                    customSystemPrompt = state.projectAgentConfig.systemPrompt
+                )
+                state = state.copy(
+                    chatSessions = state.chatSessions.map {
+                        if (it.id == updatedSession.id) updatedSession else it
+                    }
+                )
+                saveSession(updatedSession)
+                val stats = ChatCompressionManager.calculateStats(updatedSession)
+                Toast.show("长对话压缩成功！已提炼设计记忆，预估节省约 ${stats.estimatedTokensSaved} Tokens", ToastType.SUCCESS)
+            } catch (e: Exception) {
+                AppLogger.e("UIStudioViewModel", "长对话压缩失败", e)
+                Toast.show("长对话压缩失败: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -2324,9 +2461,9 @@ class UIStudioViewModel {
         val rawPage = result.createdPage ?: return
         val existingPages = state.project?.pages ?: emptyList()
 
+        val currentView = state.currentView ?: existingPages.firstOrNull()
         val finalPage = if (replaceCurrent) {
             // 替换当前正在编辑的视图，继承当前视图的 id 与 name
-            val currentView = state.currentView ?: existingPages.firstOrNull()
             val targetId = currentView?.id ?: rawPage.id
             val targetNameStr = currentView?.nameStr ?: targetName.ifBlank { rawPage.nameStr }
             rawPage.copy(
@@ -2343,6 +2480,18 @@ class UIStudioViewModel {
             )
         }
 
+        val oldBlocks = if (replaceCurrent) currentView?.blocks ?: emptyList() else emptyList()
+        val newBlocks = finalPage.blocks
+        val diffResult = org.gemini.ui.forge.service.studio.LayoutDiffCalculator.calculateDiff(oldBlocks, newBlocks)
+        val undoSnapshot = LayoutUndoSnapshot(
+            viewId = finalPage.id,
+            viewName = finalPage.nameStr,
+            isReplaced = replaceCurrent,
+            oldBlocks = oldBlocks,
+            newBlocks = newBlocks,
+            diff = diffResult
+        )
+
         val updatedPages = if (replaceCurrent) {
             existingPages.map { if (it.id == finalPage.id) finalPage else it }
         } else {
@@ -2356,6 +2505,7 @@ class UIStudioViewModel {
                 currentViewId = finalPage.id,
                 openViewIds = (state.openViewIds + finalPage.id).distinct(),
                 pendingLayoutResult = null,
+                lastLayoutUndoSnapshot = undoSnapshot,
                 isDirty = true,
                 isFitToViewport = true
             )
@@ -2370,6 +2520,48 @@ class UIStudioViewModel {
             }
         } else {
             state = state.copy(pendingLayoutResult = null)
+        }
+    }
+
+    /**
+     * 撤销上一次 AI 应用的界面排版变更，无损还原图元树或新建的视图
+     */
+    fun undoLastLayoutChanges() {
+        val snapshot = state.lastLayoutUndoSnapshot ?: run {
+            Toast.show("当前没有可撤回的 AI 排版变更", ToastType.INFO)
+            return
+        }
+        val existingPages = state.project?.pages ?: return
+        val updatedPages = if (snapshot.isReplaced) {
+            // 还原被替换视图的图元树
+            existingPages.map { page ->
+                if (page.id == snapshot.viewId) {
+                    page.copy(blocks = snapshot.oldBlocks)
+                } else page
+            }
+        } else {
+            // 新建视图场景，直接删除该新建页面
+            existingPages.filter { it.id != snapshot.viewId }
+        }
+
+        val fallbackViewId = if (snapshot.isReplaced) {
+            snapshot.viewId
+        } else {
+            updatedPages.firstOrNull()?.id
+        }
+
+        val updatedProject = state.project?.copy(pages = updatedPages)
+        if (updatedProject != null) {
+            state = state.copy(
+                project = updatedProject,
+                currentViewId = fallbackViewId,
+                openViewIds = (state.openViewIds.filter { it != snapshot.viewId } + listOfNotNull(fallbackViewId)).distinct(),
+                lastLayoutUndoSnapshot = null,
+                isDirty = true,
+                isFitToViewport = true
+            )
+            saveProject(TemplateRepository(storage))
+            Toast.show("↩️ 已成功撤回 AI 布局调整，画布已还原", ToastType.SUCCESS)
         }
     }
 
@@ -2550,7 +2742,7 @@ class UIStudioViewModel {
 
         state = state.copy(isAiChatSending = true, streamingAiText = "")
 
-        scope.launch(Dispatchers.Default) {
+        activeChatJob = scope.launch(Dispatchers.Default) {
             val effectiveApiKey = configManager.loadKey("GEMINI_API_KEY") ?: configManager.loadGlobalGeminiKey() ?: ""
             if (effectiveApiKey.isBlank()) {
                 withContext(Dispatchers.Main) {
@@ -2565,8 +2757,6 @@ class UIStudioViewModel {
                     PromptManager.getUiStudioAgentPrompt()
                 }
                 val selectedModel = state.projectAgentConfig.modelName.ifBlank { GeminiModel.GEMINI_3_8_FLASH.modelName }
-                val view = state.currentView
-                val contextInfo = "当前视图: ${view?.nameStr ?: "无"} (${view?.width ?: 0f} x ${view?.height ?: 0f})，素材库共有 ${state.assetLibrary.items.size} 个资产。"
 
                 val chatAttachments = userMsg.inputImageUris.map { uri ->
                     GeminiChatAttachment(
@@ -2577,7 +2767,7 @@ class UIStudioViewModel {
                     )
                 }
 
-                val historyItems = activeSession.messages.take(targetIndex).filter { it.id != userMsg.id }.map { msg ->
+                val historyItems = activeSession.messages.take(targetIndex).filter { !it.isCompressed && it.id != userMsg.id }.map { msg ->
                     GeminiChatHistoryItem(
                         role = msg.role,
                         text = msg.effectiveText
@@ -2591,12 +2781,24 @@ class UIStudioViewModel {
                     .lastOrNull { !it.interactionId.isNullOrBlank() }
                     ?.interactionId ?: activeSession.latestInteractionId
 
+                // 构建四层解耦的多层载荷：系统指令保持纯净静态，环境与前序设计记忆注入当前轮次用户提问载荷中
+                val currentView = state.currentView
+                val workspaceContextXml = if (currentView != null) {
+                    "  <current_view name=\"${currentView.nameStr}\" resolution=\"${currentView.width}x${currentView.height}\" block_count=\"${currentView.blocks.size}\" total_assets=\"${state.assetLibrary.items.size}\"/>"
+                } else ""
+                val assembledPayload = ChatPayloadAssembler.assemble(
+                    baseSystemPrompt = systemPrompt,
+                    userRawText = userMsg.prompt,
+                    workspaceContextXml = workspaceContextXml,
+                    priorDesignMemoryXml = activeSession.designMemoryContext
+                )
+
                 val chatRequest = GeminiChatRequest(
                     apiKey = effectiveApiKey,
                     model = resolvedModel,
                     apiFlavor = apiFlavor,
-                    prompt = userMsg.prompt,
-                    systemInstruction = "$systemPrompt\n\n$CONTEXT_INFO_HEADER $contextInfo",
+                    prompt = assembledPayload.compositeUserPrompt,
+                    systemInstruction = assembledPayload.pureSystemInstruction,
                     attachments = chatAttachments,
                     preferCloudUpload = true,
                     history = historyItems,
@@ -2693,6 +2895,7 @@ class UIStudioViewModel {
                 Toast.show("重新生成失败: ${e.message}", ToastType.ERROR)
                 state = state.copy(isAiChatSending = false)
             } finally {
+                activeChatJob = null
                 state = state.copy(streamingAiText = "")
             }
         }

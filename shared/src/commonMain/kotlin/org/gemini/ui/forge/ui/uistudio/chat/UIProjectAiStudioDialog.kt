@@ -26,6 +26,7 @@ import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import org.gemini.ui.forge.ui.uistudio.dialog.ApplyLayoutConfirmDialog
 import org.gemini.ui.forge.manager.PromptManager
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.ui.component.ToastType
 
@@ -42,6 +43,7 @@ fun UIProjectAiStudioDialog(
     onDismiss: () -> Unit
 ) {
     val state = viewModel.state
+    val spacing = LocalAppSpacing.current
     val currentSession = state.currentChatSession
     var showTrafficLogDialog by remember { mutableStateOf(false) }
 
@@ -56,8 +58,29 @@ fun UIProjectAiStudioDialog(
         defaultApiFlavor = state.projectAgentConfig.apiFlavor
     )
 
+    // LIFO 模态栈智能分流器：按视觉层级自顶向下逐层消费 Esc 键关闭请求
+    val handleModalDismiss: () -> Unit = {
+        when {
+            state.isSystemInstructionDialogVisible -> {
+                viewModel.closeSystemInstructionDialog()
+            }
+            state.isClearingCurrentSession -> {
+                viewModel.cancelClearCurrentSession()
+            }
+            showTrafficLogDialog -> {
+                showTrafficLogDialog = false
+            }
+            state.pendingLayoutResult != null -> {
+                viewModel.cancelApplyLayout()
+            }
+            else -> {
+                onDismiss()
+            }
+        }
+    }
+
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = handleModalDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         LaunchedEffect(Unit) {
@@ -92,6 +115,13 @@ fun UIProjectAiStudioDialog(
                     onSendMessage = { text, attachments ->
                         viewModel.sendChatMessage(text, attachments)
                     },
+                    onStopGeneration = {
+                        viewModel.cancelCurrentChatGeneration()
+                    },
+                    designMemoryContext = currentSession?.designMemoryContext,
+                    onCompressRequested = {
+                        viewModel.compressCurrentSession()
+                    },
                     onSwitchVariant = { messageId, variantIndex ->
                         viewModel.switchChatMessageVariant(messageId, variantIndex)
                     },
@@ -125,10 +155,21 @@ fun UIProjectAiStudioDialog(
                     onOpenSkillsDirectory = { viewModel.openSkillsDirectory() },
                     skillMode = viewModel.skillMode,
                     onSkillModeChanged = { viewModel.skillMode = it },
+                    onFallbackFlashModelRequested = { msg -> viewModel.fallbackToFlashAndRetry(msg) },
+                    onSwitchProtocolRequested = { msg -> viewModel.fallbackProtocolAndRetry(msg) },
                     viewName = state.currentView?.nameStr ?: "",
                     viewSizeText = if (state.currentView != null) "${state.currentView?.width?.toInt() ?: 0} × ${state.currentView?.height?.toInt() ?: 0}" else "",
                     readyAssetCount = state.assetLibrary.items.size,
                     config = studioConfig,
+                    chatNoticeContent = {
+                        state.lastLayoutUndoSnapshot?.let { snapshot ->
+                            org.gemini.ui.forge.ui.component.chat.LayoutDiffSummaryCard(
+                                diffResult = snapshot.diff,
+                                onUndo = { viewModel.undoLastLayoutChanges() },
+                                modifier = Modifier.padding(horizontal = spacing.medium, vertical = spacing.extraSmall)
+                            )
+                        }
+                    },
                     topBarActions = {
                         // 1. 当前视图标签胶囊
                         Surface(
@@ -186,7 +227,12 @@ fun UIProjectAiStudioDialog(
 
                         // 5. 关闭工作室按钮
                         IconButton(
-                            onClick = onDismiss,
+                            onClick = {
+                                if (state.isSystemInstructionDialogVisible) {
+                                    viewModel.closeSystemInstructionDialog()
+                                }
+                                onDismiss()
+                            },
                             modifier = Modifier.size(32.dp).tip("关闭工作室")
                         ) {
                             Icon(Icons.Default.Close, contentDescription = "关闭", modifier = Modifier.size(18.dp))

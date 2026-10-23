@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Menu
@@ -116,7 +117,13 @@ fun CommonChatStudioContent(
     onOpenSkillsDirectory: (() -> Unit)? = null,
     skillMode: SkillActivationMode = SkillActivationMode.AUTO,
     onSkillModeChanged: (SkillActivationMode) -> Unit = {},
+    onStopGeneration: (() -> Unit)? = null,
+    onFallbackFlashModelRequested: ((VisualChatMessage) -> Unit)? = null,
+    onSwitchProtocolRequested: ((VisualChatMessage) -> Unit)? = null,
+    designMemoryContext: String? = null,
+    onCompressRequested: (() -> Unit)? = null,
     topBarActions: @Composable RowScope.() -> Unit = {},
+    chatNoticeContent: @Composable ColumnScope.() -> Unit = {},
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     inputLeadingActions: @Composable RowScope.() -> Unit = {},
     inputTrailingActions: @Composable RowScope.() -> Unit = {}
@@ -242,6 +249,41 @@ fun CommonChatStudioContent(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(spacing.small)
                             ) {
+                                // 长对话智能压缩快捷入口
+                                if (onCompressRequested != null) {
+                                    val uncompressedCount = messages.count { !it.isCompressed }
+                                    val isHighContext = uncompressedCount >= 12
+                                    TextButton(
+                                        onClick = onCompressRequested,
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = spacing.small, vertical = 4.dp),
+                                        colors = if (isHighContext) {
+                                            ButtonDefaults.textButtonColors(
+                                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                                contentColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        } else {
+                                            ButtonDefaults.textButtonColors(
+                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        },
+                                        modifier = Modifier
+                                            .height(30.dp)
+                                            .tip(if (isHighContext) "当前有 $uncompressedCount 条未压缩消息，建议执行长对话结晶压缩以大幅降低 Token 消耗并加速响应" else "手动提炼长对话设计记忆并压缩上下文")
+                                    ) {
+                                        Icon(
+                                            Icons.Default.AutoAwesome,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(Modifier.width(spacing.extraSmall))
+                                        Text(
+                                            text = if (isHighContext) "压缩记忆 ($uncompressedCount)" else "智能压缩",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
+
                                 topBarActions()
                             }
                         }
@@ -257,6 +299,8 @@ fun CommonChatStudioContent(
                         viewName = viewName,
                         viewSizeText = viewSizeText,
                         readyAssetCount = readyAssetCount,
+                        designMemoryContext = designMemoryContext,
+                        onRecompressRequested = onCompressRequested,
                         onSuggestionClick = { suggestion ->
                             inputTextToInject = suggestion
                         },
@@ -280,6 +324,8 @@ fun CommonChatStudioContent(
                             inputTextToInject = textToEdit
                         },
                         onOpenViewRequested = onOpenViewRequested,
+                        onFallbackFlashModelRequested = onFallbackFlashModelRequested,
+                        onSwitchProtocolRequested = onSwitchProtocolRequested,
                         onMentionClick = { tag ->
                             val rawPath = tag.path.orEmpty()
                             val rawTitle = tag.title.trim()
@@ -363,6 +409,9 @@ fun CommonChatStudioContent(
                         modifier = Modifier.weight(1f)
                     )
 
+                    // 2.5 顶部通知/变更摘要插槽（如 AI 排版 Diff 与一键撤回卡片）
+                    chatNoticeContent()
+
                     // 3. 底部多模态输入控制栏
                     // 根据宿主剩余可视范围动态计算联想浮层最大高度：取 55% 黄金视口比例，最低 240dp，最高 640dp
                     val dynamicMentionMaxHeight = remember(studioMaxHeight) {
@@ -418,6 +467,7 @@ fun CommonChatStudioContent(
                         onOpenSkillsDirectory = onOpenSkillsDirectory,
                         skillMode = skillMode,
                         onSkillModeChanged = onSkillModeChanged,
+                        onStopGeneration = onStopGeneration,
                         leadingActions = inputLeadingActions,
                         trailingActions = inputTrailingActions
                     )

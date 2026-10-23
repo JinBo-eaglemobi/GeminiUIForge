@@ -421,8 +421,8 @@ class GeminiChatEngine(
             put("stream", true)
             put("model", request.model.modelName)
 
-            // 1. 官方规范：独立 system_instruction（仅在首轮未传入 previousInteractionId 时确立，多轮自动继承避免冗余）
-            if (request.previousInteractionId.isNullOrBlank() && !request.systemInstruction.isNullOrBlank()) {
+            // 1. 官方 Interactions 规范：system_instruction 是 interaction-scoped 的，每轮交互均需显式传入以维持人设、输出契约与安全红线
+            if (!request.systemInstruction.isNullOrBlank()) {
                 put("system_instruction", request.systemInstruction)
             }
 
