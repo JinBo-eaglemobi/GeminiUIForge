@@ -1,13 +1,13 @@
 package org.gemini.ui.forge.ui.feature.gameproject.create.component
 
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
 
 /**
  * 目标目录冲突确认弹窗组件。
@@ -21,7 +21,7 @@ fun ExistingDirConfirmDialog(
     onReuse: () -> Unit,
     onCancel: () -> Unit
 ) {
-    AlertDialog(
+    AppDraggableAlertDialog(
         onDismissRequest = onCancel,
         title = { Text(stringResource(Res.string.gp_clone_dir_exists_title)) },
         text = {

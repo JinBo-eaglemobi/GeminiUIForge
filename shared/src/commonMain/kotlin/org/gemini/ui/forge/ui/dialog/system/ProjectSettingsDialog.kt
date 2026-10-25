@@ -25,6 +25,7 @@ import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.utils.looseJson
 import org.jetbrains.compose.resources.stringResource
 import geminiuiforge.composeapp.generated.resources.*
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
 
 
 /**
@@ -61,7 +62,7 @@ fun ProjectSettingsDialog(
     // 带参数的错误格式模板，在 onClick 中动态格式化替换占位符
     val errParseTemplate = stringResource(Res.string.proj_settings_path_parse_err)
 
-    AlertDialog(
+    AppDraggableAlertDialog(
         onDismissRequest = onDismiss,
         // 解除平台默认宽度限制：路径与校验错误内容较长时可自然展宽
         properties = DialogProperties(usePlatformDefaultWidth = false),

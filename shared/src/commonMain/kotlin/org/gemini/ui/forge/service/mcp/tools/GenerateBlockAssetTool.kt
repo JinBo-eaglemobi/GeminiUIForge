@@ -126,14 +126,15 @@ class GenerateBlockAssetTool(
             ?: return McpToolResult.error("参数 'blockId' 不能为空")
         val customPrompt = arguments["customPrompt"]?.jsonPrimitive?.contentOrNull
         val isPng = arguments["isPng"]?.jsonPrimitive?.booleanOrNull ?: true
-        val modelName = arguments["modelName"]?.jsonPrimitive?.contentOrNull ?: "gemini-2.5-flash-image"
+        val configManager = ConfigManager()
+        val presetModel = configManager.loadKey("DEFAULT_IMAGE_GEN_MODEL")?.ifBlank { null }
+        val modelName = presetModel ?: arguments["modelName"]?.jsonPrimitive?.contentOrNull ?: "gemini-2.5-flash-image"
 
         onProgress?.invoke(0.05f, "正在读取图元属性与参考工程配置...")
         val match = repository.findTemplatePair(projectName)
             ?: return McpToolResult.error("未找到工程 '$projectName'")
 
         val state = match.second
-        val configManager = ConfigManager()
         val apiKey = configManager.loadKey("GEMINI_API_KEY")
             ?: configManager.loadGlobalGeminiKey()
             ?: return McpToolResult.error("未找到 Gemini API Key")

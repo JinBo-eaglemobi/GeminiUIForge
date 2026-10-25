@@ -42,8 +42,8 @@ data class InteractionGenerationConfig(
     @SerialName("thinking_level")
     val thinkingLevel: String? = null,
     /** 图像生成专属参数 */
-    @SerialName("image_generation_config")
-    val imageGenerationConfig: InteractionImageGenerationConfig? = null
+    @SerialName("image_config")
+    val imageConfig: InteractionImageGenerationConfig? = null
 )
 
 /**

@@ -2,7 +2,7 @@ package org.gemini.ui.forge.ui.uistudio
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.AlertDialog
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -371,7 +371,7 @@ fun UIStudioScreen(
 
         // 挂载退出未保存确认弹窗 (三选：保存并退出 / 不保存退出 / 取消)
         if (state.showExitConfirmDialog) {
-            AlertDialog(
+            AppDraggableAlertDialog(
                 onDismissRequest = { viewModel.dismissExitDialog() },
                 modifier = Modifier.width(LocalAppSpacing.current.dialogConfigWidth),
                 title = { Text("提醒") },

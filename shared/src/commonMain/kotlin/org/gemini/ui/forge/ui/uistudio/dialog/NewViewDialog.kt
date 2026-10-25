@@ -11,6 +11,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -37,8 +40,12 @@ fun NewViewDialog(
     var selectedResolution by remember { mutableStateOf("${defaultWidth.toInt()} × ${defaultHeight.toInt()}") }
     var customWidth by remember { mutableStateOf(defaultWidth.toInt().toString()) }
     var customHeight by remember { mutableStateOf(defaultHeight.toInt().toString()) }
+    val draggableState = rememberDraggableDialogState()
 
-    Dialog(onDismissRequest = onDismiss) {
+    AppDraggableDialog(
+        onDismissRequest = onDismiss,
+        state = draggableState
+    ) {
         Surface(
             modifier = Modifier.width(spacing.dialogAlertWidth),
             shape = RoundedCornerShape(16.dp),
@@ -56,7 +63,10 @@ fun NewViewDialog(
                     text = "新建视图界面",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .draggableDialogHandle(draggableState)
                 )
 
                 // 界面名称输入框

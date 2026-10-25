@@ -11,8 +11,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.ai.component.FormattedCodeViewer
 import org.gemini.ui.forge.ui.theme.AppShapes
@@ -48,10 +48,9 @@ fun SideBySideDiffInspectorDialog(
     val leftCode = if (isFullPageMode) originalFullJson else originalSegmentJson
     val rightCode = if (isFullPageMode) newFullJson else newSegmentJson
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    AppDraggableDialog(
+        onDismissRequest = onDismiss
+    ) { draggableState ->
         Surface(
             modifier = Modifier
                 .width(spacing.dialogHugeWidth)
@@ -66,9 +65,9 @@ fun SideBySideDiffInspectorDialog(
                     .fillMaxSize()
                     .padding(spacing.medium)
             ) {
-                // 1. 顶部标题与视图范围单选切换器
+                // 1. 顶部标题与视图范围单选切换器 (挂载拖拽抓手)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

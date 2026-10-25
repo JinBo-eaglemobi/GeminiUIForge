@@ -56,12 +56,14 @@ class GeminiChatEngine(
     suspend fun executeChat(
         request: GeminiChatRequest,
         onChunk: (String) -> Unit = {},
+        onThought: ((thought: String, signature: String?) -> Unit)? = null,
         onStatusLog: (String) -> Unit = {},
         onRawTraffic: ((direction: TrafficDirection, url: String, body: String) -> Unit)? = null
     ): GeminiChatResult {
         return streamChat(
             request = request,
             onChunk = onChunk,
+            onThought = onThought,
             onStatusLog = onStatusLog,
             onRawTraffic = onRawTraffic
         )
@@ -465,16 +467,22 @@ class GeminiChatEngine(
             })
 
             // 4. generation_config
+            val isImageGenModel = request.model.modelName.contains("image", ignoreCase = true) ||
+                request.model.displayName.contains("Nano Banana", ignoreCase = true) ||
+                !request.model.supportsThinking
+
             val genConfig = request.generationConfig
             put("generation_config", buildJsonObject {
                 genConfig.temperature?.let { put("temperature", it) }
                 genConfig.topP?.let { put("top_p", it) }
                 genConfig.topK?.let { put("top_k", it) }
                 genConfig.maxOutputTokens?.let { put("max_output_tokens", it) }
-                genConfig.thinkingConfig?.thinkingLevel?.let { put("thinking_level", it.lowercase()) }
+                // 生图模型与非思考模型严格禁止注入 thinking_level，防止 Google API 报 400 挂起
+                if (!isImageGenModel) {
+                    genConfig.thinkingConfig?.thinkingLevel?.let { put("thinking_level", it.lowercase()) }
+                }
             })
 
-            val isImageGenModel = request.model.modelName.contains("image", ignoreCase = true)
             put("response_modalities", buildJsonArray {
                 add(JsonPrimitive("text"))
                 if (isImageGenModel) {

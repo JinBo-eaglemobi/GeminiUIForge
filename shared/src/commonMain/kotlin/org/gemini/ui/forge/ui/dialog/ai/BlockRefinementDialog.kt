@@ -13,8 +13,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.TemplateFile
@@ -86,10 +86,9 @@ fun BlockRefinementDialog(
     val coroutineScope = rememberCoroutineScope()
     val spacing = LocalAppSpacing.current
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    AppDraggableDialog(
+        onDismissRequest = onDismiss
+    ) { draggableState ->
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
@@ -99,9 +98,9 @@ fun BlockRefinementDialog(
             tonalElevation = 6.dp
         ) {
             Column(modifier = Modifier.fillMaxSize().padding(spacing.medium)) {
-                // 顶部标题栏与关闭操作（根据模式动态改变标题）
+                // 顶部标题栏与关闭操作（挂载拖拽抓手，根据模式动态改变标题）
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(

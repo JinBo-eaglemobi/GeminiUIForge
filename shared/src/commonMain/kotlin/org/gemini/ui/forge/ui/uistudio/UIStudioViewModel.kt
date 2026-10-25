@@ -84,6 +84,7 @@ import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
+import org.gemini.ui.forge.model.chat.ThinkingLevel
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.model.chat.VisualChatSession
 import org.gemini.ui.forge.service.canvas.CanvasScreenshotService
@@ -1319,7 +1320,8 @@ class UIStudioViewModel {
             canvasHeight = page.height,
             activeContainerId = null,
             selectedBlockId = null,
-            selectedAssetId = null
+            selectedAssetId = null,
+            leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
         )
         restoreViewportOrDefault(viewId)
     }
@@ -1331,7 +1333,8 @@ class UIStudioViewModel {
         cacheCurrentViewport()
         selectView(viewId)
         state = state.copy(
-            activeContainerId = null
+            activeContainerId = null,
+            leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
         )
         restoreViewportOrDefault(viewId)
     }
@@ -1346,7 +1349,8 @@ class UIStudioViewModel {
         state = state.copy(
             openContainerTabs = updatedTabs,
             activeContainerId = containerId,
-            selectedBlockId = containerId
+            selectedBlockId = containerId,
+            leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
         )
         restoreViewportOrDefault(containerId)
         Toast.show("已打开容器独立布局视图", ToastType.INFO)
@@ -1383,7 +1387,8 @@ class UIStudioViewModel {
         cacheCurrentViewport()
         state = state.copy(
             activeContainerId = containerId,
-            selectedBlockId = containerId
+            selectedBlockId = containerId,
+            leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
         )
         restoreViewportOrDefault(containerId)
     }
@@ -1413,7 +1418,8 @@ class UIStudioViewModel {
             canvasWidth = nextPage?.width ?: state.canvasWidth,
             canvasHeight = nextPage?.height ?: state.canvasHeight,
             activeContainerId = null,
-            selectedBlockId = null
+            selectedBlockId = null,
+            leftBottomTab = if (newActiveId != null) UIStudioLeftBottomTab.HIERARCHY else state.leftBottomTab
         )
         if (newActiveId != null) {
             restoreViewportOrDefault(newActiveId)
@@ -1448,7 +1454,8 @@ class UIStudioViewModel {
             activeContainerId = null,
             canvasWidth = nextPage?.width ?: state.canvasWidth,
             canvasHeight = nextPage?.height ?: state.canvasHeight,
-            selectedBlockId = null
+            selectedBlockId = null,
+            leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
         )
         Toast.show("已关闭其他视图标签", ToastType.INFO)
     }
@@ -1514,7 +1521,8 @@ class UIStudioViewModel {
             canvasWidth = width,
             canvasHeight = height,
             selectedBlockId = null,
-            isNewViewDialogVisible = false
+            isNewViewDialogVisible = false,
+            leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
         )
         scope.launch {
             repo.saveTemplate(updatedProject.projectId, updatedProject)
@@ -1548,7 +1556,8 @@ class UIStudioViewModel {
             openViewIds = updatedOpen,
             canvasWidth = duplicatedPage.width,
             canvasHeight = duplicatedPage.height,
-            selectedBlockId = null
+            selectedBlockId = null,
+            leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
         )
         scope.launch {
             repo.saveTemplate(updatedProject.projectId, updatedProject)
@@ -1575,7 +1584,8 @@ class UIStudioViewModel {
             canvasWidth = nextPage?.width ?: 1920f,
             canvasHeight = nextPage?.height ?: 1080f,
             selectedBlockId = null,
-            deletingView = null
+            deletingView = null,
+            leftBottomTab = if (nextViewId != null) UIStudioLeftBottomTab.HIERARCHY else state.leftBottomTab
         )
         scope.launch {
             repo.saveTemplate(updatedProject.projectId, updatedProject)
@@ -1800,6 +1810,11 @@ class UIStudioViewModel {
     fun updateProjectApiFlavor(apiFlavor: ApiFlavor) {
         state = state.copy(projectAgentConfig = state.projectAgentConfig.copy(apiFlavor = apiFlavor))
         Toast.show("已切换通信协议: ${apiFlavor.displayNameZh}", ToastType.SUCCESS)
+    }
+
+    fun updateProjectThinkingLevel(level: ThinkingLevel) {
+        state = state.copy(projectAgentConfig = state.projectAgentConfig.copy(thinkingLevel = level))
+        Toast.show("思考等级: ${level.displayName}", ToastType.SUCCESS)
     }
 
     /**
@@ -2347,7 +2362,8 @@ class UIStudioViewModel {
                     history = historyItems,
                     previousInteractionId = sessionToUse.latestInteractionId,
                     generationConfig = GeminiGenerationConfig(
-                        temperature = state.projectAgentConfig.temperature.toDouble()
+                        temperature = state.projectAgentConfig.temperature.toDouble(),
+                        thinkingConfig = state.projectAgentConfig.thinkingLevel.toGeminiThinkingConfig(resolvedModel)
                     )
                 )
 
@@ -2356,6 +2372,11 @@ class UIStudioViewModel {
                         request = chatRequest,
                         onChunk = { chunk ->
                             state = state.copy(streamingAiText = state.streamingAiText + chunk)
+                        },
+                        onThought = { thought: String, _ ->
+                            if (state.streamingAiText.isBlank() && thought.isNotBlank()) {
+                                state = state.copy(streamingAiText = "🧠 " + thought.takeLast(120))
+                            }
                         },
                         onRawTraffic = { direction, rawUrl, body ->
                             scope.launch(Dispatchers.Default) {
@@ -2381,7 +2402,7 @@ class UIStudioViewModel {
                         errorMessage = e.message
                     )
                 } finally {
-                    state = state.copy(streamingAiText = "")
+                    state = state.copy(streamingAiText = "", streamingAiThought = "")
                 }
 
                 if (!result.isSuccess) {
@@ -2392,8 +2413,18 @@ class UIStudioViewModel {
                 }
 
                 val executedToolRecords = if (result.isSuccess) {
-                    executeDetectedAiTools(result.rawResponseJson, result.text)
+                    state = state.copy(streamingAiThought = "🛠️ 正在执行系统工具 [generate_image] 生成并落盘素材...")
+                    try {
+                        executeDetectedAiTools(result.rawResponseJson, result.text)
+                    } finally {
+                        state = state.copy(streamingAiThought = "")
+                    }
                 } else emptyList()
+
+                val generatedImgPath = extractGeneratedImageUri(executedToolRecords)
+                if (generatedImgPath != null) {
+                    state.project?.projectId?.let { loadAssetLibrary(it) }
+                }
 
                 val finalAssistantText = if (result.text.isNotBlank()) {
                     result.text
@@ -2425,7 +2456,8 @@ class UIStudioViewModel {
                     timestamp = getCurrentTimeMillis(),
                     isError = !result.isSuccess,
                     errorMessage = result.errorMessage,
-                    toolCalls = executedToolRecords
+                    toolCalls = executedToolRecords,
+                    generatedImageUri = generatedImgPath
                 )
 
                 val sessionAfterReply = (state.chatSessions.find { it.id == activeSession.id } ?: activeSession).let { cur ->
@@ -2558,6 +2590,7 @@ class UIStudioViewModel {
                 checkAndExecuteLayoutTool(rawResponseJson, responseText)
                 continue
             }
+            state = state.copy(streamingAiText = "🛠️ 正在执行系统工具 [$name] 并保存到素材库...")
             val t0 = getCurrentTimeMillis()
             val toolResult = toolDispatcher.dispatchToolCall(name, enrichedArgs)
             val dur = getCurrentTimeMillis() - t0
@@ -2570,7 +2603,28 @@ class UIStudioViewModel {
             )
             records.add(record)
         }
+        if (records.isNotEmpty()) {
+            state = state.copy(streamingAiText = "")
+        }
         return records
+    }
+
+    /**
+     * 从执行完毕的系统工具记录中提取最新生成的图像物理落盘路径
+     */
+    private fun extractGeneratedImageUri(toolRecords: List<ChatToolCallRecord>): String? {
+        for (record in toolRecords) {
+            if (record.isSuccess && (record.toolName == "generate_image" || record.toolName == "chat_refine_image" || record.toolName == "generate_block_asset")) {
+                val summary = record.resultSummary
+                if (!summary.isNullOrBlank() && summary.contains("📁 物理落盘: ")) {
+                    val rawPath = summary.substringAfter("📁 物理落盘: ").trim().lines().firstOrNull()?.trim()
+                    if (!rawPath.isNullOrBlank()) {
+                        return rawPath
+                    }
+                }
+            }
+        }
+        return null
     }
 
     /**
@@ -2647,7 +2701,8 @@ class UIStudioViewModel {
                 pendingLayoutResult = null,
                 lastLayoutUndoSnapshot = undoSnapshot,
                 isDirty = true,
-                isFitToViewport = true
+                isFitToViewport = true,
+                leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
             )
             saveProject(TemplateRepository(storage))
             val toastMsg = if (replaceCurrent) {
@@ -2698,7 +2753,8 @@ class UIStudioViewModel {
                 openViewIds = (state.openViewIds.filter { it != snapshot.viewId } + listOfNotNull(fallbackViewId)).distinct(),
                 lastLayoutUndoSnapshot = null,
                 isDirty = true,
-                isFitToViewport = true
+                isFitToViewport = true,
+                leftBottomTab = if (fallbackViewId != null) UIStudioLeftBottomTab.HIERARCHY else state.leftBottomTab
             )
             saveProject(TemplateRepository(storage))
             Toast.show("↩️ 已成功撤回 AI 布局调整，画布已还原", ToastType.SUCCESS)
@@ -2947,7 +3003,8 @@ class UIStudioViewModel {
                     history = historyItems,
                     previousInteractionId = previousInteractionId,
                     generationConfig = GeminiGenerationConfig(
-                        temperature = state.projectAgentConfig.temperature.toDouble()
+                        temperature = state.projectAgentConfig.temperature.toDouble(),
+                        thinkingConfig = state.projectAgentConfig.thinkingLevel.toGeminiThinkingConfig(resolvedModel)
                     )
                 )
 
@@ -2955,6 +3012,11 @@ class UIStudioViewModel {
                     request = chatRequest,
                     onChunk = { chunk ->
                         state = state.copy(streamingAiText = state.streamingAiText + chunk)
+                    },
+                    onThought = { thought: String, _ ->
+                        if (state.streamingAiText.isBlank() && thought.isNotBlank()) {
+                            state = state.copy(streamingAiText = "🧠 " + thought.takeLast(120))
+                        }
                     },
                     onRawTraffic = { direction, rawUrl, body ->
                         scope.launch(Dispatchers.Default) {
@@ -2972,8 +3034,18 @@ class UIStudioViewModel {
                 )
 
                 val executedToolRecords = if (result.isSuccess) {
-                    executeDetectedAiTools(result.rawResponseJson, result.text)
+                    state = state.copy(streamingAiThought = "🛠️ 正在执行系统工具 [generate_image] 生成并落盘素材...")
+                    try {
+                        executeDetectedAiTools(result.rawResponseJson, result.text)
+                    } finally {
+                        state = state.copy(streamingAiThought = "")
+                    }
                 } else emptyList()
+
+                val generatedImgPath = extractGeneratedImageUri(executedToolRecords)
+                if (generatedImgPath != null) {
+                    state.project?.projectId?.let { loadAssetLibrary(it) }
+                }
 
                 val finalResultText = if (result.text.isNotBlank()) {
                     result.text
@@ -3006,7 +3078,8 @@ class UIStudioViewModel {
                         timestamp = getCurrentTimeMillis(),
                         isError = !result.isSuccess,
                         errorMessage = result.errorMessage,
-                        toolCalls = executedToolRecords
+                        toolCalls = executedToolRecords,
+                        generatedImageUri = generatedImgPath ?: modelMsg.generatedImageUri
                     )
                 } else {
                     VisualChatMessage(
@@ -3026,7 +3099,8 @@ class UIStudioViewModel {
                         timestamp = getCurrentTimeMillis(),
                         isError = !result.isSuccess,
                         errorMessage = result.errorMessage,
-                        toolCalls = executedToolRecords
+                        toolCalls = executedToolRecords,
+                        generatedImageUri = generatedImgPath
                     )
                 }
 

@@ -27,8 +27,9 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.ResizeHorizontalIcon
 import org.gemini.ui.forge.data.TemplateFile
@@ -147,10 +148,9 @@ fun UniversalVisualChatStudioDialog(
     // 左侧会话抽屉宽度比例（默认 0.2f，支持鼠标自由拖拽）
     var leftSidebarWeight by remember { mutableStateOf(0.2f) }
 
-    Dialog(
-        onDismissRequest = handleSafeDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    AppDraggableDialog(
+        onDismissRequest = handleSafeDismiss
+    ) { draggableState ->
         Card(
             modifier = Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.92f),
             shape = AppShapes.large,
@@ -161,10 +161,11 @@ fun UniversalVisualChatStudioDialog(
                 val studioDialogHeight = maxHeight
 
                 Column(modifier = Modifier.fillMaxSize()) {
-                // 1. 顶栏 Header（标准 16dp / 12dp 呼吸感边距）
+                // 1. 顶栏 Header（挂载拖拽抓手，标准 16dp / 12dp 呼吸感边距）
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .draggableDialogHandle(draggableState)
                         .padding(horizontal = spacing.medium, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -582,7 +583,7 @@ fun UniversalVisualChatStudioDialog(
 
         // 8. 退出防误触与任务安全中止拦截弹窗
         if (showExitConfirmDialog) {
-            AlertDialog(
+            AppDraggableAlertDialog(
                 onDismissRequest = { showExitConfirmDialog = false },
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {

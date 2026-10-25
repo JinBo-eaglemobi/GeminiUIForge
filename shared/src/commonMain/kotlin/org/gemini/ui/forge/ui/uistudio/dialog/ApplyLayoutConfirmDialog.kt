@@ -29,6 +29,9 @@ import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.service.studio.UiStudioLayoutService
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -57,6 +60,7 @@ fun ApplyLayoutConfirmDialog(
     var customViewName by remember(layoutResult.viewName) {
         mutableStateOf(layoutResult.viewName.ifBlank { "NewView" })
     }
+    val draggableState = rememberDraggableDialogState()
 
     val page = layoutResult.createdPage
     val widthInt = page?.width?.toInt() ?: 1280
@@ -64,9 +68,9 @@ fun ApplyLayoutConfirmDialog(
     val blockCount = layoutResult.blockCount
     val matchedAssetCount = layoutResult.matchedAssetCount
 
-    Dialog(
+    AppDraggableDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        state = draggableState
     ) {
         Surface(
             modifier = Modifier
@@ -86,7 +90,9 @@ fun ApplyLayoutConfirmDialog(
             ) {
                 // 1. 顶部 Header
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .draggableDialogHandle(draggableState),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(

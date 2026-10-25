@@ -14,9 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import org.gemini.ui.forge.model.GeminiModel
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import org.gemini.ui.forge.ui.component.chat.CommonChatStudioConfig
 import org.gemini.ui.forge.ui.component.chat.CommonChatStudioContent
 import org.gemini.ui.forge.ui.component.chat.CommonSystemInstructionModalOverlay
@@ -80,10 +81,10 @@ fun UIProjectAiStudioDialog(
         }
     }
 
-    Dialog(
+    AppDraggableDialog(
         onDismissRequest = handleModalDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    ) { draggableState ->
         LaunchedEffect(Unit) {
             viewModel.loadExternalDocs(state.project?.projectId ?: "default")
             viewModel.loadChatSessions()
@@ -111,6 +112,8 @@ fun UIProjectAiStudioDialog(
                     streamingText = state.streamingAiText,
                     selectedModel = currentModel,
                     onModelSelected = { viewModel.updateProjectModel(it) },
+                    currentThinkingLevel = state.projectAgentConfig.thinkingLevel,
+                    onThinkingLevelSelected = { viewModel.updateProjectThinkingLevel(it) },
                     selectedApiFlavor = state.projectAgentConfig.apiFlavor,
                     onApiFlavorSelected = { viewModel.updateProjectApiFlavor(it) },
                     onSendMessage = { text, attachments ->
@@ -244,7 +247,8 @@ fun UIProjectAiStudioDialog(
                         ) {
                             Icon(Icons.Default.Close, contentDescription = "关闭", modifier = Modifier.size(18.dp))
                         }
-                    }
+                    },
+                    draggableModifier = Modifier.draggableDialogHandle(draggableState)
                 )
             }
 

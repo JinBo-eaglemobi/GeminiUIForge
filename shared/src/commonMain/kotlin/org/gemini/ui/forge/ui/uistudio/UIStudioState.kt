@@ -132,6 +132,7 @@ data class UIStudioState(
     val currentChatSessionId: String? = null,
     val chatSearchQuery: String = "",
     val streamingAiText: String = "",
+    val streamingAiThought: String = "",
     val aiChatAttachments: List<String> = emptyList(),
     val isAiChatSending: Boolean = false,
     val pendingCreateContainer: Pair<String, String>? = null,

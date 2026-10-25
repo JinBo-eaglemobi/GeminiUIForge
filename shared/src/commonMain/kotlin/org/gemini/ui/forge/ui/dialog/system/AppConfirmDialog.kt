@@ -1,20 +1,31 @@
 package org.gemini.ui.forge.ui.dialog.system
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.window.DialogProperties
-import org.gemini.ui.forge.ui.component.tip
+import androidx.compose.ui.unit.dp
+import org.gemini.ui.forge.ui.component.dialog.AppDialogHeader
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
- * 通用的操作确认弹窗组件。
- * 默认在标题栏右上角提供一个原生的关闭 (X) 图标，不再使用底部的取消按钮。
+ * 全平台通用视口自适应可拖拽操作确认弹窗组件。
+ * 标题栏支持鼠标悬浮手型、平滑按住拖拽移动，以及双击瞬时居中复位。
  *
  * @param title 弹窗标题
  * @param message 弹窗的内容文案
@@ -33,34 +44,60 @@ fun AppConfirmDialog(
     onConfirm: () -> Unit = {},
     onDismiss: () -> Unit = {}
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-        // 引入标准弹窗黄金宽度 Design Token（440.dp），横向拉撑，杜绝硬编码，使微型确认框在 0.7 密度下依旧舒展大气
-        modifier = Modifier.width(LocalAppSpacing.current.dialogConfirmWidth),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(title)
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = onDismiss, modifier = Modifier.tip("关闭")) {
-                    Icon(Icons.Default.Close, "关闭", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        },
-        text = {
-            Text(message)
-        },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                colors = if (isDestructive) {
-                    ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                } else {
-                    ButtonDefaults.buttonColors()
-                }
+    val spacing = LocalAppSpacing.current
+
+    AppDraggableDialog(
+        onDismissRequest = onDismiss
+    ) { draggableState ->
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 24.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+            modifier = Modifier.width(spacing.dialogConfirmWidth)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = spacing.medium)
             ) {
-                Text(confirmText)
+                // 1. 顶部紧凑 48dp 标题栏（集成拖拽抓手、双击居中复位与右侧关闭按钮）
+                AppDialogHeader(
+                    title = title,
+                    state = draggableState,
+                    onClose = onDismiss
+                )
+
+                // 2. 正文提示文案
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = spacing.medium, vertical = spacing.small)
+                )
+
+                Spacer(modifier = Modifier.height(spacing.small))
+
+                // 3. 底部操作按钮区域（右对齐确认按钮）
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = spacing.medium),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = onConfirm,
+                        colors = if (isDestructive) {
+                            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        } else {
+                            ButtonDefaults.buttonColors()
+                        }
+                    ) {
+                        Text(confirmText)
+                    }
+                }
             }
         }
-    )
+    }
 }

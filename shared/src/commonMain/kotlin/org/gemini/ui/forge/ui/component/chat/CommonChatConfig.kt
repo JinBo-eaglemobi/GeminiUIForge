@@ -82,5 +82,7 @@ data class CommonChatStudioConfig(
     val enableNarrowModeAutoFold: Boolean = true,
     val narrowBreakpointDp: Float = 640f,
     val dialogWidth: androidx.compose.ui.unit.Dp? = null,
-    val dialogHeight: androidx.compose.ui.unit.Dp? = null
+    val dialogHeight: androidx.compose.ui.unit.Dp? = null,
+    val defaultImageGenModel: String? = null,
+    val isAutoSwitchImageGenModelEnabled: Boolean? = null
 )

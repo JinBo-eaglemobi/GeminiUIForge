@@ -33,6 +33,7 @@ import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.state.ProjectWorkspaceState
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
 import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.ToastType
@@ -93,7 +94,7 @@ fun ReelSymbolManagerDialog(
     // 用于生图确认的状态
     var showGenConfirmDialog by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    AppDraggableAlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.9f),
@@ -357,7 +358,7 @@ fun ReelSymbolManagerDialog(
 
     // 新增/编辑符号信息的二级对话框
     if (showAddItemDialog) {
-        AlertDialog(
+        AppDraggableAlertDialog(
             onDismissRequest = { showAddItemDialog = false },
             properties = DialogProperties(usePlatformDefaultWidth = false),
             modifier = Modifier.fillMaxWidth(0.8f),

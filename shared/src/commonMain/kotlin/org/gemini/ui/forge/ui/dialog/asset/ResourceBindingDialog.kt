@@ -22,6 +22,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.model.ui.ResourceItem
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.looseJson
 import org.jetbrains.compose.resources.stringResource
@@ -107,7 +108,7 @@ fun ResourceBindingDialog(
         }
     }
 
-    AlertDialog(
+    AppDraggableAlertDialog(
         onDismissRequest = onDismiss,
         // 解除平台默认宽度限制：级联层级较深时内容可自然展宽，紧凑模式下不再被压成窄条
         properties = DialogProperties(usePlatformDefaultWidth = false),

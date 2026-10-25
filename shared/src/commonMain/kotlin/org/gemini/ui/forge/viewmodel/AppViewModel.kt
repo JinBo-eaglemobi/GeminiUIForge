@@ -180,6 +180,8 @@ class AppViewModel(
                 ?: ""
             val compileScriptPath = configManager.loadKey("COMPILE_SCRIPT_PATH") ?: ""
             val compileOutputDir = configManager.loadKey("COMPILE_OUTPUT_DIR") ?: ""
+            val defaultImageGenModel = configManager.loadKey("DEFAULT_IMAGE_GEN_MODEL")?.ifBlank { null }
+            val autoSwitchImageModel = configManager.loadKey("AUTO_SWITCH_IMAGE_GEN_MODEL")?.toBooleanStrictOrNull() ?: true
 
             _state.update {
                 it.copy(
@@ -193,6 +195,8 @@ class AppViewModel(
                         imageGenCount = imageGenCountStr.toIntOrNull() ?: 4,
                         layoutMode = layoutMode,
                         apiFlavor = apiFlavor,
+                        defaultImageGenModel = defaultImageGenModel,
+                        isAutoSwitchImageGenModelEnabled = autoSwitchImageModel,
                         compileConfig = CompileConfig(
                             rootDir = compileRootDir,
                             scriptPath = compileScriptPath,
@@ -214,6 +218,18 @@ class AppViewModel(
     }
 
     // --- 导航与显示控制 ---
+
+    fun updateDefaultImageGenModel(modelName: String?) {
+        _state.update {
+            it.copy(globalState = it.globalState.copy(defaultImageGenModel = modelName))
+        }
+    }
+
+    fun updateAutoSwitchImageGenModel(enabled: Boolean) {
+        _state.update {
+            it.copy(globalState = it.globalState.copy(isAutoSwitchImageGenModelEnabled = enabled))
+        }
+    }
 
     fun navigateTo(screen: AppScreen) =
         _state.update {

@@ -28,6 +28,9 @@ import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -95,24 +98,26 @@ fun BatchAssetGenDialog(
         value = referenceUriStr?.decodeBase64ToBitmap()
     }
     val refBitmap = refBitmapState.value
+    val draggableState = rememberDraggableDialogState()
 
-    BasicAlertDialog(
+    AppDraggableDialog(
         onDismissRequest = onCancel,
-        modifier = Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.9f),
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-        content = {
-            Surface(
-                shape = AppShapes.large,
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp
-            ) {
-                Column(modifier = Modifier.padding(spacing.large)) {
-                    // 对话框主标题
-                    Text(
-                        text = stringResource(Res.string.batch_gen_title),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
+        state = draggableState
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.9f),
+            shape = AppShapes.large,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(modifier = Modifier.padding(spacing.large)) {
+                // 对话框主标题
+                Text(
+                    text = stringResource(Res.string.batch_gen_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState)
+                )
 
                     // 说明提示文本
                     Text(
@@ -397,7 +402,6 @@ fun BatchAssetGenDialog(
                 }
             }
         }
-    )
 
     // 模块细化编辑弹窗（基于父级累计绝对偏移量传入，内部全绝对坐标计算，保存时逆向还原相对坐标并递归同步）
     refiningBlock?.let { targetBlock ->

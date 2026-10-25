@@ -28,8 +28,24 @@ class AiToolExecutionDispatcher {
             ?: return McpToolResult.error("未找到对应工具: $toolName")
 
         return try {
-            AppLogger.i(TAG, "🚀 开始执行 AI 工具: $toolName, 参数: $arguments")
-            tool.execute(arguments, onProgress)
+            val effectiveArguments = if (toolName in setOf("generate_block_asset", "generate_all_assets", "generate_image")) {
+                val presetModel = org.gemini.ui.forge.manager.ConfigManager().loadKey("DEFAULT_IMAGE_GEN_MODEL")?.ifBlank { null }
+                if (!presetModel.isNullOrBlank()) {
+                    val currentModel = arguments["modelName"]?.jsonPrimitive?.contentOrNull
+                    if (currentModel != presetModel) {
+                        AppLogger.i(TAG, "🛡️ 生图模型预设锁定生效: 强制将 modelName 从 [$currentModel] 替换为预设 [$presetModel]")
+                        buildJsonObject {
+                            arguments.forEach { (k, v) -> put(k, v) }
+                            put("modelName", presetModel)
+                        }
+                    } else arguments
+                } else arguments
+            } else {
+                arguments
+            }
+
+            AppLogger.i(TAG, "🚀 开始执行 AI 工具: $toolName, 参数: $effectiveArguments")
+            tool.execute(effectiveArguments, onProgress)
         } catch (e: Exception) {
             AppLogger.e(TAG, "工具 $toolName 执行异常", e)
             McpToolResult.error("工具执行发生异常: ${e.message}")

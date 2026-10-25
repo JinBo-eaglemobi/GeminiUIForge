@@ -283,15 +283,14 @@ class GeminiImageGenerator(
 
             // 4. 生成控制与尺寸比例配置
             put("generation_config", buildJsonObject {
-                // 思考级别配置 (low / medium / high)
+                // 思考级别严格透传：上游经过 supportsThinking 检查，生图模型必为 null，绝不擅自兜底 high
                 val thinkingLevel = params.thinkingConfigJson?.get("thinkingLevel")?.jsonPrimitive?.content
-                    ?: if (model.contains("gemini-3") || model.contains("nano-banana")) "high" else null
                 if (!thinkingLevel.isNullOrBlank()) {
                     put("thinking_level", thinkingLevel.lowercase())
                 }
 
-                // 图像尺寸与比例
-                put("image_generation_config", buildJsonObject {
+                // 图像尺寸与比例 (Google Interactions API 规范为 image_config)
+                put("image_config", buildJsonObject {
                     put("aspect_ratio", aspectRatio)
                     put("image_size", params.imageSize.uppercase())
                 })
@@ -330,16 +329,42 @@ class GeminiImageGenerator(
                 syncLog(TAG, "💬 AI: $outputText", onLog)
             }
 
-            // 3. 提取图像
-            val outputImage = rootJson["output_image"]?.jsonObject
-            val imgData = outputImage?.get("data")?.jsonPrimitive?.contentOrNull
-            val mimeType = outputImage?.get("mime_type")?.jsonPrimitive?.contentOrNull ?: "image/png"
+            // 3. 提取图像：全递归深度提取 Base64 图像数据 (兼容 outputs, output_image, steps[].content[], steps[].outputs[] 等所有官方结构)
+            fun findBase64Images(element: JsonElement) {
+                when (element) {
+                    is JsonObject -> {
+                        val data = element["data"]?.jsonPrimitive?.contentOrNull
+                        val mime = element["mime_type"]?.jsonPrimitive?.contentOrNull
+                            ?: element["mimeType"]?.jsonPrimitive?.contentOrNull
+                            ?: "image/jpeg"
+                        if (!data.isNullOrBlank() && (data.length > 200 || data.startsWith("/9j/") || data.startsWith("iVBOR"))) {
+                            val dataUri = if (data.startsWith("data:")) data else "data:$mime;base64,$data"
+                            if (!allImages.contains(dataUri)) {
+                                syncLog(TAG, "🖼️ [Interactions API] 深度递归成功捕获到生成图像数据 (Base64字符数: ${data.length})", onLog)
+                                allImages.add(dataUri)
+                                onImageGenerated(dataUri)
+                            }
+                        }
+                        element.values.forEach { findBase64Images(it) }
+                    }
+                    is JsonArray -> element.forEach { findBase64Images(it) }
+                    else -> {}
+                }
+            }
+            findBase64Images(rootJson)
 
-            if (!imgData.isNullOrBlank()) {
-                syncLog(TAG, "🖼️ [Interactions API] 成功接收到生成图像数据", onLog)
-                val dataUri = "data:$mimeType;base64,$imgData"
-                allImages.add(dataUri)
-                onImageGenerated(dataUri)
+            // 4. 极速双栈降级防线：如果 Interactions 仍未捕获有效图片，立即自动平滑降级至 generateContent 端点
+            if (allImages.isEmpty()) {
+                syncLog(TAG, "⚠️ [Interactions API] 响应未包含图像数据，自动平滑降级至 generateContent 端点...", onLog)
+                return generateWithGenerateContent(
+                    model = model,
+                    params = params,
+                    fullPrompt = fullPrompt,
+                    onLog = onLog,
+                    onImageGenerated = onImageGenerated,
+                    onRawTraffic = onRawTraffic,
+                    onResult = onResult
+                )
             }
 
             // 4. 提取思考链 steps
@@ -371,7 +396,21 @@ class GeminiImageGenerator(
 
             return allImages
         } catch (e: Exception) {
-            throw e
+            syncLog(TAG, "⚠️ [Interactions API] 生图通信异常: ${e.message}，正在自动平滑降级至 generateContent 端点...", onLog)
+            try {
+                return generateWithGenerateContent(
+                    model = model,
+                    params = params,
+                    fullPrompt = fullPrompt,
+                    onLog = onLog,
+                    onImageGenerated = onImageGenerated,
+                    onRawTraffic = onRawTraffic,
+                    onResult = onResult
+                )
+            } catch (fallbackEx: Exception) {
+                syncLog(TAG, "❌ [generateContent 降级重试亦失败]: ${fallbackEx.message}", onLog)
+                throw fallbackEx
+            }
         }
     }
 }

@@ -41,6 +41,9 @@ import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 
@@ -139,9 +142,11 @@ fun OverlayPreviewDialog(
         }
     }
 
-    Dialog(
+    val draggableState = rememberDraggableDialogState()
+
+    AppDraggableDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        state = draggableState
     ) {
         Surface(
             modifier = Modifier
@@ -158,7 +163,9 @@ fun OverlayPreviewDialog(
             ) {
                 // 1. 顶部 Header 与图元统计
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .draggableDialogHandle(draggableState),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

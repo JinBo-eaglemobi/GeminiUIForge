@@ -34,6 +34,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.datetime.TimeZone
 import kotlinx.serialization.json.Json
@@ -93,9 +96,11 @@ fun McpTrafficInspectorDialog(
         nodes.count { it.isActive }
     }
 
-    Dialog(
+    val draggableState = rememberDraggableDialogState()
+
+    AppDraggableDialog(
         onDismissRequest = onDismissRequest,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        state = draggableState
     ) {
         Surface(
             modifier = Modifier
@@ -113,7 +118,7 @@ fun McpTrafficInspectorDialog(
             ) {
                 // 1. 顶部 Header (左侧标题行与右侧操作按钮严格同一水平基线对齐，杜绝因多行描述下沉)
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = spacing.medium),
+                    modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState).padding(bottom = spacing.medium),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top
                 ) {

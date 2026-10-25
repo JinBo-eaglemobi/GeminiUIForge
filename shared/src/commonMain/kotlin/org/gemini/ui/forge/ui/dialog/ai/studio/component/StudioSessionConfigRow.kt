@@ -29,6 +29,7 @@ import org.gemini.ui.forge.model.ModelStudioGroup
 import org.gemini.ui.forge.model.ModelStudioMeta
 import org.gemini.ui.forge.model.StudioModelResolver
 import org.gemini.ui.forge.model.chat.ThinkingLevel
+import org.gemini.ui.forge.ui.component.chat.CommonThinkingLevelSelector
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -187,116 +188,12 @@ fun StudioSessionConfigRow(
         }
 
         // 思考模式切换入口（仅支持思考推理的模型激活展现）
-        if (selectedModel.supportsThinking) {
-            Box {
-                var isThinkingMenuExpanded by remember { mutableStateOf(false) }
-                Surface(
-                    shape = AppShapes.small,
-                    color = if (currentThinkingLevel != ThinkingLevel.OFF) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (currentThinkingLevel != ThinkingLevel.OFF) MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)
-                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                    ),
-                    modifier = Modifier
-                        .height(32.dp)
-                        .clip(AppShapes.small)
-                        .clickable { isThinkingMenuExpanded = true }
-                        .tip("调节大模型思考推理模式与深度 (当前: ${currentThinkingLevel.displayName})")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Psychology,
-                            contentDescription = null,
-                            modifier = Modifier.size(15.dp),
-                            tint = if (currentThinkingLevel != ThinkingLevel.OFF) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = currentThinkingLevel.displayName,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (currentThinkingLevel != ThinkingLevel.OFF) FontWeight.Bold else FontWeight.Normal,
-                            color = if (currentThinkingLevel != ThinkingLevel.OFF) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                DropdownMenu(
-                    expanded = isThinkingMenuExpanded,
-                    onDismissRequest = { isThinkingMenuExpanded = false },
-                    offset = DpOffset(0.dp, (-8).dp),
-                    modifier = Modifier
-                        .widthIn(min = 360.dp, max = 460.dp)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), AppShapes.medium)
-                        .padding(spacing.small)
-                ) {
-                    Text(
-                        text = "🧠 大模型思考推理模式调节",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(bottom = 6.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-                    ThinkingLevel.entries.forEach { level ->
-                        val isSelected = currentThinkingLevel == level
-                        Surface(
-                            shape = AppShapes.small,
-                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else Color.Transparent,
-                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)) else null,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(AppShapes.small)
-                                .clickable {
-                                    onThinkingLevelSelected(level)
-                                    isThinkingMenuExpanded = false
-                                }
-                                .padding(vertical = 2.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = level.displayName,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(Modifier.height(2.dp))
-                                    Text(
-                                        text = level.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        CommonThinkingLevelSelector(
+            selectedModel = selectedModel,
+            currentLevel = currentThinkingLevel,
+            onLevelSelected = onThinkingLevelSelected,
+            useShortLabel = false
+        )
 
         // 2. 单次生成数量分段单选胶囊 (1 / 2 / 4 张)
         Row(

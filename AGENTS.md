@@ -35,7 +35,7 @@
 ## 质量与校验（红线规则）
 
 - **IntelliJ IDEA 研发编译与局部增量初筛校验规范**: **【红线规则】**
-  - **【热重载与增量开发互斥阻断铁律】**：**若当前处于 `@forge-loop` 智能体接管、Compose 热重载开发模式或纯 UI 排版迭代场景下，严禁调用任何全量编译任务（如 `compileDesktop` 或全量 `:desktopApp:compileKotlin`）**；代码改动必须先通过 `idea_build_project(filesToRebuild = listOf(...))` 对修改文件执行精准毫秒级局部增量编译，确认 0 错误后交付热重载通道（优先通过官方 Compose Hot Reload MCP 极速热更；若涉及不可热更的结构级变更，**强制遵循第 4 条规范先执行 Hot Reload 热编译再结束进程极速重启**）。
+  - **【热重载与增量开发互斥阻断铁律】**：**若当前处于 `@forge-loop` 智能体接管、Compose 热重载开发模式或纯 UI 排版迭代场景下，严禁调用任何全量编译任务（如 `compileDesktop` 或全量 `:desktopApp:compileKotlin`）**；代码改动必须先通过 `idea_build_project(filesToRebuild = listOf(...))` 对修改文件执行精准毫秒级局部增量编译，确认 0 错误后交付热重载通道（优先通过官方 Compose Hot Reload MCP 极速热更；若涉及不可热更的结构级变更，**强制遵循本条第 3 点官方全生命周期规范，调用 `tools["compose-hot-reload"].restart()` 原生极速重启生效**）。
   - **常规冷编译模式执行通道**：仅在明确处于**非热重载开发模式**（如底层平台配置变更、Gradle 依赖增删、KMP 多模块架构重构等无法热替换且未处于 `@forge-loop` 模式时），如果影响项目代码编译，才允许执行桌面端真实编译校验：
     1. **首选通道 (IDEA 局部增量构建)**：优先调用 `idea_build_project(filesToRebuild = [...])` 对变动文件毫秒级编译；
     2. **语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 做毫秒级文件语法速查；
@@ -60,24 +60,23 @@
        - 选项 1 范式：`"忽略【compose-hot-reload】掉线，继续针对【GeminiUIForge 桌面端】执行开发/排版"`；
        - 选项 2 范式：`"授权关闭并重启【GeminiUIForge 桌面端】，以重新接入【compose-hot-reload】"`；
        - 选项 3 范式：`"终止本次针对【GeminiUIForge 桌面端】的全部任务"`；
-  3. **【重启/重置强制优先通道】优先调用 Hot Reload 自带能力**：
-     当因代码变更生效需要刷新、运行态状态出现异常、或者用户明确要求“重启/重置”时，**必须且仅能优先使用 Compose Hot Reload 官方自带的原生能力**：
-     - **第一优先级（状态级零杀重启）**：优先调用 `compose-hot-reload` 的 `reset_ui()` 工具（`tools["compose-hot-reload"].reset_ui()`）。它会安全丢弃当前的 Composition 树并丢弃所有 `remember` 的运行时状态，在保留进程与窗口的前提下实现毫秒级零破坏纯净重启；
-     - **第二优先级（字节码热加载通道）**：优先通过局部增量编译（`idea_build_project`）生成变动 class，由官方 Compose Hot Reload 机制热注入内存，或调用 `compose-hot-reload.await_reload()` 触发字节码无感替换；
-  4. **【物理冷重启与必须重启场景的标准执行规范 (Mandatory Pre-Restart Hot Reload & Warm Compile Protocol)】**：
-     - **适用场景**：
-       仅在遇到官方 Compose Hot Reload 底层不支持热更的结构级变更时（如：① 添加了全新类/文件；② 修改了核心数据模型/架构契约字段；③ 修改底层 JVM 启动参数、JNI 原生库或 Gradle 依赖；④ 进程彻底崩溃已自行消亡）才允许执行重启；
-     - **核心分流判断：先检查当前是否连接了 `compose-hot-reload` MCP**：
-       在准备重启程序前，智能体**必须首先检查当前运行环境是否连接了 `compose-hot-reload` MCP 且桌面端应用进程存活**：
-       - **分支 A（Hot MCP 连接中 & 桌面进程存活）：【重启前强制执行 Hot Reload 热更编译门禁 (Pre-Restart Hot Reload Gate)】**：
-         1. **第一步（热更增量编译落盘，核心红线）**：在调用 `Stop-Process` 结束旧进程前，**必须且仅能优先通过 Compose Hot Reload 执行一次更新（`tools["compose-hot-reload"].reload()`）**！借由后台常驻的热编译守护进程在毫秒级内将改动/新增代码编译为 `.class` 字节码并写入编译缓存；
-         2. **第二步（优雅结束旧进程）**：待热更新/热编译触发完成后，通过 Shell 执行 `Stop-Process -Id <pid> -Force` 优雅结束旧应用进程；
-         3. **第三步（免编译极速拉起）**：通过 IDEA MCP 调度运行配置 **`desktopApp [hot] 🔥`**（**强制且必须设置 `waitForExit = false`**）后台拉起。由于字节码已在第一步热更时提前就绪，Gradle 任务瞬间判定 `UP-TO-DATE`，直接跳过漫长冷编译，实现数秒内极速拉起！
-         4. **第四步（恢复通信与保活）**：轮询等待 18330 业务端口重新就绪，拉起后保持常驻保活，杜绝二次冷重启。
-       - **分支 B（Hot MCP 离线 或 应用此前已处于关闭状态）：【离线增量初筛通道】**：
-         1. 若程序此前已关闭或热更 MCP 未连接，在拉起前优先调用 `tools.idea.build_project(filesToRebuild = listOf(...))` 进行毫秒级语法与文件初筛；
-         2. 调度 IDEA MCP 运行配置必须且仅能调度 **`desktopApp [hot] 🔥`**（`waitForExit = false`），启动后重新接入 Compose Hot Reload 探针。
-     - **全项目统一引导铁律**：全项目任何涉及重启桌面端的操作（包括模型架构变更重启、调试代理重新挂载、开发阶段重启等），**一律强制且必须严格遵循上述标准规范执行，绝对禁止绕过步骤一直接强杀进程冷启**！
+  3. **【Compose Hot Reload 官方全生命周期生效与重启闭环规范 (Official Lifecycle & Native Restart Specification)】**：
+     全项目涉及界面刷新、代码生效、状态重置与程序重启时，必须严格按以下四级官方闭环标准执行，彻底杜绝强杀进程与无效编译：
+     - **第一级（状态级零杀重置，首选通道）**：
+       当仅需丢弃当前界面状态、重新触发 `LaunchedEffect` 或重置 Compose 树时，**强制且仅能调用 `tools["compose-hot-reload"].reset_ui()`**。该工具在毫秒级内丢弃全部 `remember` 运行时状态并从根重构 UI，保持系统窗口与 JVM 进程常驻保活，耗时 < 50ms；
+     - **第二级（字节码热替换与状态闭环验证通道，日常代码开发）**：
+       日常 UI 组件、排版、ViewModel 与业务逻辑修改后，必须遵循完整的双向闭环流水线：
+       1. 发起热更：调用 `tools["compose-hot-reload"].reload({ timeout_seconds: 30 })`；
+       2. 状态闭环等待：若结果返回 `status == "reloading"`，必须轮询调用 `tools["compose-hot-reload"].status()`，直至 `reloadState` 从 `"reloading"` 稳定变为 `"ok"`（热更成功生效）或 `"failed"`（热更编译报错）；
+       3. 错误归因：若为 `"failed"`，必须调用 `status({ max_error_detail_lines: 50 })` 读取 `lastErrorDetails` 进行语法诊断，严禁未查明报错盲目尝试重启；
+     - **第三级（官方原生极速重启通道，不可热更结构变更时唯一通道）**：
+       仅当修改了核心类契约、依赖配置导致 Hot Reload 底层明确报错且无法热替换时，方允许触发进程重启。**此时必须且仅能调用官方原生重启工具**：
+       ```typescript
+       tools["compose-hot-reload"].restart({ timeout_seconds: 60 })
+       ```
+       由 Hot Reload Runner 守护进程以既有类路径和参数极速拉起新进程并自动重连，耗时仅 3~5 秒。**【绝对铁律】严禁使用 PowerShell `Stop-Process` 强杀应用进程，严禁将内部原生重启降级为 Gradle 全量冷启动**；
+     - **第四级（仅限进程消亡冷启动兜底）**：
+       仅当应用程序物理崩溃已自行退出（进程表中不存在且 Hot Reload 离线无法重连）时，先调用 `tools.idea.build_project(filesToRebuild = [...])` 进行增量初筛，再调度 IDEA 运行配置 `desktopApp [hot] 🔥`（`waitForExit = false`）后台拉起并重新握手。
 - **IntelliJ IDEA xdebug 调试模式接入与实机断点取证规范 (IntelliJ IDEA xdebug Debugger & Runtime Data Inspection Specification)**: **【红线规则】**
   1. **【准入首要硬前提：IDEA MCP 在线 + 调试模式启动】**：
      - **首要前提门禁**：只要同时满足 **① 当前 IntelliJ IDEA MCP 通信连接可用** 且 **② 应用程序已处于调试模式（Debug）启动或附加运行中**（通过 `tools.idea.xdebug_get_debugger_status` 能探测到活跃会话 `sessionId`），智能体即可直接选择开启断点调试；
@@ -265,10 +264,17 @@
     3. `dialogMediumWidth` (720.dp) — 中型详情、普通列表弹窗；
     4. `dialogLargeWidth` (960.dp) — 大型 PC 仪表盘、2 列 Bento、MCP 服务中心与调试控制台；
     5. `dialogHugeWidth` (1280.dp) — 全景宽屏通信档案、全景对比编辑器。
-  - **响应式动态宽度计算规范 (Responsive Dynamic Menu & Dialog Sizing)**：
-    对于依赖外部宿主容器或视口大小的浮层菜单（如 AI 对话输入底栏的模型选择菜单、专业预设菜单等），**严禁在底层组件内部写死静态固定宽度，严禁对特定菜单人为施加割裂的狭窄比例或硬上限夹具**。必须统一通过 `BoxWithConstraints` 动态感知当前弹窗或容器的实际可用宽度 `effectiveDialogWidth`，统一采用黄金视口比例：
-    - 浮层菜单最大宽度统一严格按 **`effectiveDialogWidth * 0.85f`** 进行自适应响应；
-    - **【触发按钮自适应最小宽度铁律】**：浮层菜单/弹窗的最小宽度必须动态锚定在当前触发按钮的实际可视宽度（`minWidth = maxOf(minSafeWidth, anchorButtonWidth)`），严禁写死死板固定常数，确保菜单展开时底边或顶边至少与触发按钮等宽，形成视觉对齐与支撑；
+  - **响应式动态宽度与浮层菜单分级锚定规范 (Responsive Dynamic Menu & Dialog Sizing Specification)**：**【红线规则】**
+    全项目凡是依赖外部宿主容器或视口大小的浮层菜单（如 AI 对话输入底栏的模型选择菜单、专业预设菜单、思考等级调节菜单等），必须严格遵循以下三层几何约束标准：
+    1. **二元分级尺寸铁律 (Two-Tier Menu Sizing Gate)**：
+       - **Tier 1 (复杂宽屏/多Tab面板)**：涉及搜索过滤、分类多 Tab、多列卡片的复合选择器（如模型选择器、素材面板），最大宽度按宿主可用宽度的黄金比例响应：`maxMenuWidth = effectiveDialogWidth * 0.85f`，并通过 `.widthIn(min = anchorButtonWidth, max = maxMenuWidth)` 弹性包裹；
+       - **Tier 2 (单列枚举/紧凑调节菜单)**：涉及状态切换、枚举单选、参数滑块等单列浮层（如思考等级选择、比例选择、协议切换、采样步数），其内容在几何本质上属于紧凑型单列枚举，**强制施加 280dp ~ 360dp 物理安全上限 (Hard Clamp)**，严禁套用 Tier 1 的超宽比例撑大，杜绝卡片过度扁平与留白；
+    2. **弹性收拢与严禁固定宽度铁律 (widthIn vs width)**：
+       - 全项目所有 `DropdownMenu` 与浮层卡片，**一律强制使用 `.widthIn(min = ..., max = ...)`**，绝对禁止在浮层根容器直接硬写 `.width(maxMenuWidth)` 将宽度上限锁死为绝对宽度；
+       - 【触发按钮自适应最小宽度铁律】：浮层菜单的最小宽度必须动态锚定在当前触发按钮的实际可视宽度（`minWidth = maxOf(minSafeWidth, anchorButtonWidth)`），确保菜单展开时底边或顶边至少与触发按钮等宽，形成视觉对齐与物理支撑；
+    3. **底栏向上弹出与防越界漂移铁律 (Bottom-Up Positioning & Anti-Drift Guard)**：
+       - 底部工具条浮层统一遵循向上舒展原则（垂直偏移向上负值，如 `offset = DpOffset(0.dp, (-8).dp)`），底边紧邻按钮顶边；
+       - 菜单最大宽度必须严格约束在触发按钮与视口右边界的可用空间内，严禁超出屏幕右边界导致 Compose Desktop 底层 `PopupPositionProvider` 触发极端向左位移补偿（将菜单甩飞至屏幕最左边缘）。
     - 浮层菜单最大高度统一严格按 **`dialogHeight * 0.70f`**（或默认 520.dp）动态限制，确保在任何分辨率与视口缩放比下内容横向舒展无挤压、垂直平滑滚动。
   - **平台默认宽度逃逸铁律**：所有自定义 `Dialog` 必须显式声明 `properties = DialogProperties(usePlatformDefaultWidth = false)`，防止 Compose 平台默认窄宽度（约 280~320dp）拦截并破坏 Design Tokens 宽度。
 - **UI Studio 与传统 Slots 模板双轨架构规范 (Dual-Track Project Architecture Specification)**: **【业务铁律】**

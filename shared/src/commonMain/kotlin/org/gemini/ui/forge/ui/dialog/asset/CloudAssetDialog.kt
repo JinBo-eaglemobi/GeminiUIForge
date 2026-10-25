@@ -15,6 +15,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.*
 import org.gemini.ui.forge.manager.CloudAssetManager
@@ -97,9 +100,11 @@ fun CloudAssetDialog(
         isSyncing = false
     }
 
-    Dialog(
+    val draggableState = rememberDraggableDialogState()
+
+    AppDraggableDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        state = draggableState
     ) {
         Surface(
             modifier = Modifier
@@ -112,7 +117,7 @@ fun CloudAssetDialog(
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                 // Header
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

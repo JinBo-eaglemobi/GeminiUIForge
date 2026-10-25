@@ -30,8 +30,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.ui.theme.AppShapes
@@ -234,10 +235,9 @@ fun ImageEditorDialog(
         )
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    AppDraggableDialog(
+        onDismissRequest = onDismiss
+    ) { draggableState ->
         Surface(
             modifier = Modifier.fillMaxWidth(0.98f).fillMaxHeight(0.98f),
             shape = RoundedCornerShape(12.dp),
@@ -439,6 +439,28 @@ fun ImageEditorDialog(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
                         Column(Modifier.fillMaxSize()) {
+                            // 顶栏拖拽抓手与标题
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .draggableDialogHandle(draggableState)
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "图像高级编辑器",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                IconButton(
+                                    onClick = onDismiss,
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "关闭", modifier = Modifier.size(16.dp))
+                                }
+                            }
+
                             // 标签页切换
                             SecondaryTabRow(selectedTabIndex = selectedTab.ordinal) {
                                 Tab(
@@ -689,7 +711,7 @@ fun ImageEditorDialog(
 
         // --- 未应用更改警告弹窗 ---
         if (showUnappliedWarning) {
-            AlertDialog(
+            AppDraggableAlertDialog(
                 onDismissRequest = { showUnappliedWarning = false },
                 title = { Text("未应用的更改") },
                 text = { 

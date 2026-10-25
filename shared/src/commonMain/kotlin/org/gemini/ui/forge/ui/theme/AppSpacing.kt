@@ -67,7 +67,19 @@ data class AppSpacing(
     /**
      * [dialogHugeWidth] 用于全景工作台、会话原始网络通信档案等信息密集型宽屏弹窗（默认 1280.dp）。
      */
-    val dialogHugeWidth: Dp = 1280.dp
+    val dialogHugeWidth: Dp = 1280.dp,
+
+    /** 行内置操作按钮（如“更新”、“卸载”、“安装”）最小安全宽度 */
+    val buttonActionMinWidth: Dp = if (isCompact) 60.dp else 64.dp,
+
+    /** 行内置操作按钮高度 */
+    val buttonActionHeight: Dp = if (isCompact) 28.dp else 32.dp,
+
+    /** 行内置操作按钮水平内边距（收敛过大边距，留足文字排版宽度） */
+    val buttonActionPaddingHorizontal: Dp = if (isCompact) 8.dp else 10.dp,
+
+    /** 行内置操作按钮垂直内边距 */
+    val buttonActionPaddingVertical: Dp = 0.dp
 )
 
 /**
@@ -90,7 +102,11 @@ val DefaultSpacing = AppSpacing(
     textFieldPaddingHorizontal = 16.dp,
     textFieldPaddingVertical = 12.dp,
     formRowSpacing = 14.dp,
-    formColumnSpacing = 14.dp
+    formColumnSpacing = 14.dp,
+    buttonActionMinWidth = 64.dp,
+    buttonActionHeight = 32.dp,
+    buttonActionPaddingHorizontal = 10.dp,
+    buttonActionPaddingVertical = 0.dp
 )
 
 /**
@@ -107,5 +123,9 @@ val CompactSpacing = AppSpacing(
     textFieldPaddingHorizontal = 10.dp,
     textFieldPaddingVertical = 6.dp,
     formRowSpacing = 10.dp,
-    formColumnSpacing = 10.dp
+    formColumnSpacing = 10.dp,
+    buttonActionMinWidth = 60.dp,
+    buttonActionHeight = 28.dp,
+    buttonActionPaddingHorizontal = 8.dp,
+    buttonActionPaddingVertical = 0.dp
 )

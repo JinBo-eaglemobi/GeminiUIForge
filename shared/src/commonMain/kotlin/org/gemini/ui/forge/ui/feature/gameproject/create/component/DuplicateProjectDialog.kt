@@ -32,6 +32,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
@@ -47,8 +50,12 @@ fun DuplicateProjectDialog(
     onRenameOrDismiss: () -> Unit
 ) {
     val spacing = LocalAppSpacing.current
+    val draggableState = rememberDraggableDialogState()
 
-    Dialog(onDismissRequest = onRenameOrDismiss) {
+    AppDraggableDialog(
+        onDismissRequest = onRenameOrDismiss,
+        state = draggableState
+    ) {
         Surface(
             modifier = Modifier.width(spacing.dialogAlertWidth),
             shape = RoundedCornerShape(16.dp),
@@ -57,7 +64,9 @@ fun DuplicateProjectDialog(
             shadowElevation = 8.dp
         ) {
             Column(
-                modifier = Modifier.padding(spacing.large),
+                modifier = Modifier
+                    .padding(spacing.large)
+                    .draggableDialogHandle(draggableState),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // 顶部警示图标徽章

@@ -143,9 +143,14 @@ class ChatRefineImageTool(
         }
         var rawResultUri: String? = null
 
+        val presetModel = configManager.loadKey("DEFAULT_IMAGE_GEN_MODEL")?.ifBlank { null }
+        val targetModel = presetModel?.let { name ->
+            GeminiModel.entries.firstOrNull { it.modelName == name }
+        } ?: GeminiModel.GEMINI_2_5_FLASH_IMAGE
+
         try {
             aiService.generateImages(
-                model = GeminiModel.GEMINI_2_5_FLASH_IMAGE,
+                model = targetModel,
                 blockType = block.type.name,
                 userPrompt = promptToSend,
                 apiKey = apiKey,

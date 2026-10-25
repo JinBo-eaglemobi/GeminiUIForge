@@ -12,6 +12,7 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.model.app.CompileConfig
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -44,7 +45,7 @@ fun CompileConfigDialog(
         if (it != null) scriptPath = it
     }
 
-    AlertDialog(
+    AppDraggableAlertDialog(
         onDismissRequest = onDismiss,
         // 引入标准弹窗黄金宽度 Design Token（480.dp），横向拉宽并添加注释，防止多级输入项和文件选择按钮在 0.7 密度下显得过于窄细
         modifier = Modifier.width(LocalAppSpacing.current.dialogConfigWidth),

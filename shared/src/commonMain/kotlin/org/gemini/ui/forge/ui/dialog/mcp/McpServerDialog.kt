@@ -30,6 +30,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import androidx.compose.ui.window.DialogProperties
 import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.launch
@@ -139,9 +142,11 @@ fun McpServerDialog(
         clientsStatus.count { it.isConfigured }
     }
 
-    Dialog(
+    val draggableState = rememberDraggableDialogState()
+
+    AppDraggableDialog(
         onDismissRequest = onDismissRequest,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        state = draggableState
     ) {
         Surface(
             modifier = Modifier
@@ -159,7 +164,7 @@ fun McpServerDialog(
             ) {
                 // 1. 顶部 Header 品牌区
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = spacing.medium),
+                    modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState).padding(bottom = spacing.medium),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

@@ -10,6 +10,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
@@ -31,8 +34,12 @@ fun UIStudioRenameDialog(
 ) {
     val spacing = LocalAppSpacing.current
     var nameInput by remember(initialName) { mutableStateOf(initialName) }
+    val draggableState = rememberDraggableDialogState()
 
-    Dialog(onDismissRequest = onDismiss) {
+    AppDraggableDialog(
+        onDismissRequest = onDismiss,
+        state = draggableState
+    ) {
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -49,7 +56,10 @@ fun UIStudioRenameDialog(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .draggableDialogHandle(draggableState)
                 )
 
                 SelectAllOutlinedTextField(

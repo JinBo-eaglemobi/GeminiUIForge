@@ -667,4 +667,16 @@
     <string name="uistudio_hierarchy_empty_no_view">请在上方界面列表中选择或打开一个视图</string>
     <string name="uistudio_hierarchy_empty_container">当前容器内暂无子组件\n可从素材库拖入或添加子组件</string>
     <string name="uistudio_hierarchy_empty_page">当前视图暂无根图元\n可从素材库拖入切片开始排版</string>
+
+    <!-- 默认生图模型预设与动态路由 -->
+    <string name="settings_auto_switch_image_gen_model_title">生图意图自动切换模型</string>
+    <string name="settings_auto_switch_image_gen_model_desc">当输入包含生图、出图或绘制需求时，自动平滑切换至预设生图专属模型（可在输入栏随时切回）。</string>
+    <string name="settings_default_image_gen_model_title">默认生图模型预设</string>
+    <string name="settings_default_image_gen_model_desc">预设对话与 AI 工具的默认生图模型。设定后，生图工具将严格锁定仅提供该模型，避免越权产生歧义。</string>
+    <string name="settings_default_image_gen_model_auto">自动（由工具与场景智能推荐）</string>
+    <string name="chat_image_intent_detected_tip">检测到生图需求，点击切换至 %1$s</string>
+    <string name="chat_image_intent_switched_toast">已自动切换至生图模型 [%1$s]</string>
+    <string name="chat_image_intent_revert_btn">切回 %1$s</string>
+    <string name="chat_thinking_level_tip">调节 AI 思考推理深度 (当前: %1$s)</string>
+    <string name="chat_thinking_level_menu_title">🧠 大模型思考推理模式调节</string>
 </resources>

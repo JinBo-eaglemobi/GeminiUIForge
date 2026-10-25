@@ -23,6 +23,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.ProjectConfig
 import org.gemini.ui.forge.ResizeHorizontalIcon
@@ -70,11 +73,11 @@ fun AppSettingsDialog(
         org.gemini.ui.forge.utils.AppLogger.d("AppSettingsDialog", "Current Project Version: ${ProjectConfig.VERSION}")
     }
 
-    Dialog(
+    val draggableState = rememberDraggableDialogState()
+
+    AppDraggableDialog(
         onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
-            usePlatformDefaultWidth = false // 允许自定义超出默认系统宽度的尺寸
-        )
+        state = draggableState
     ) {
         BoxWithConstraints(
             modifier = Modifier.fillMaxSize(),
@@ -98,6 +101,7 @@ fun AppSettingsDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .draggableDialogHandle(draggableState)
                             .padding(horizontal = spacing.large, vertical = spacing.medium),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically

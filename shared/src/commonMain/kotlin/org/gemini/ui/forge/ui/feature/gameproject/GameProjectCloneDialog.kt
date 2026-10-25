@@ -59,6 +59,9 @@ import org.gemini.ui.forge.service.CloneRefType
 import org.gemini.ui.forge.service.CommitSummary
 import org.gemini.ui.forge.service.GitRefCatalog
 import org.gemini.ui.forge.service.RefSelection
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import org.gemini.ui.forge.ui.feature.gameproject.clone.component.*
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.viewmodel.GameProjectViewModel
@@ -80,15 +83,14 @@ fun GameProjectCloneDialog(
 ) {
     if (!viewModel.cloneDialogVisible) return
     val step = viewModel.cloneProgress.step
+    val draggableState = rememberDraggableDialogState()
 
-    Dialog(
+    AppDraggableDialog(
         onDismissRequest = {
             // 仅失败状态允许点外部关闭；执行中必须显式取消
             if (step == CloneStep.FAILED) viewModel.cancelClone()
         },
-        // 关闭"平台默认宽度"限制：桌面端该选项默认开启时会强制按内容宽度换行测量，
-        // 导致 fillMaxWidth 百分比尺寸失效（弹窗被挤成窄条）
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        state = draggableState
     ) {
         // 尺寸按宿主窗口比例约束：相对占比不受全局紧凑缩放（Density 重映射）影响，避免弹窗视觉缩水
         Surface(shape = AppShapes.large, tonalElevation = 6.dp) {
@@ -98,7 +100,8 @@ fun GameProjectCloneDialog(
                 Text(
                     text = stringResource(Res.string.gp_clone_title),
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState)
                 )
                 Spacer(Modifier.height(12.dp))
 

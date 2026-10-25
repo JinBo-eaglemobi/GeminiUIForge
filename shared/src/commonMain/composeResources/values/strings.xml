@@ -657,4 +657,16 @@
     <string name="uistudio_hierarchy_empty_no_view">Please select or open a view from the Views panel</string>
     <string name="uistudio_hierarchy_empty_container">Current container has no child blocks\nDrag assets or add blocks to this container</string>
     <string name="uistudio_hierarchy_empty_page">Current view has no root blocks\nDrag assets or add blocks to start layout</string>
+
+    <!-- Default Image Generation Model Preset & Routing -->
+    <string name="settings_auto_switch_image_gen_model_title">Auto-switch Model on Image Intent</string>
+    <string name="settings_auto_switch_image_gen_model_desc">Automatically switch to the preset image generation model when an image creation prompt is detected.</string>
+    <string name="settings_default_image_gen_model_title">Default Image Generation Model</string>
+    <string name="settings_default_image_gen_model_desc">Preset the image generation model for chat and AI tools. When set, image generation tools are strictly locked to this model.</string>
+    <string name="settings_default_image_gen_model_auto">Auto (Smart Route by Tool)</string>
+    <string name="chat_image_intent_detected_tip">Image generation request detected. Click to switch to %1$s</string>
+    <string name="chat_image_intent_switched_toast">Auto switched to image model [%1$s]</string>
+    <string name="chat_image_intent_revert_btn">Switch back to %1$s</string>
+    <string name="chat_thinking_level_tip">Adjust AI thinking depth (current: %1$s)</string>
+    <string name="chat_thinking_level_menu_title">🧠 Thinking / Reasoning Mode</string>
 </resources>

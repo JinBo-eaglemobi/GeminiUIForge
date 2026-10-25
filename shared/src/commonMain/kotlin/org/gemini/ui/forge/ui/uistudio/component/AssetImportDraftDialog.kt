@@ -14,6 +14,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import org.gemini.ui.forge.model.assetsheet.AssetImportDraft
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
@@ -31,9 +34,11 @@ fun AssetImportDraftDialog(
 ) {
     val spacing = LocalAppSpacing.current
 
-    Dialog(
+    val draggableState = rememberDraggableDialogState()
+
+    AppDraggableDialog(
         onDismissRequest = onDiscard,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        state = draggableState
     ) {
         Surface(
             modifier = modifier
@@ -52,7 +57,9 @@ fun AssetImportDraftDialog(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(spacing.medium),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .draggableDialogHandle(draggableState)
                 ) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),

@@ -83,6 +83,7 @@ data class ProjectAgentConfig(
     val apiFlavor: ApiFlavor = ApiFlavor.INTERACTIONS,
     val systemPrompt: String = "",
     val modelName: String = GeminiModel.GEMINI_3_8_FLASH.modelName,
-    val temperature: Float = 0.7f
+    val temperature: Float = 0.7f,
+    val thinkingLevel: org.gemini.ui.forge.model.chat.ThinkingLevel = org.gemini.ui.forge.model.chat.ThinkingLevel.DEFAULT
 )
 

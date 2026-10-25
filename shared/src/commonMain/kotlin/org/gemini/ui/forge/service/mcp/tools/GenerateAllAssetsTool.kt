@@ -86,7 +86,9 @@ class GenerateAllAssetsTool(
         val projectName = arguments["projectName"]?.jsonPrimitive?.contentOrNull
             ?: return McpToolResult.error("参数 'projectName' 不能为空")
         val onlyMissing = arguments["onlyMissing"]?.jsonPrimitive?.booleanOrNull ?: true
-        val modelName = arguments["modelName"]?.jsonPrimitive?.contentOrNull ?: "gemini-2.5-flash-image"
+        val configManager = ConfigManager()
+        val presetModel = configManager.loadKey("DEFAULT_IMAGE_GEN_MODEL")?.ifBlank { null }
+        val modelName = presetModel ?: arguments["modelName"]?.jsonPrimitive?.contentOrNull ?: "gemini-2.5-flash-image"
 
         onProgress?.invoke(0.02f, "正在检索待生成图元清单...")
         val match = repository.findTemplatePair(projectName)
@@ -117,7 +119,6 @@ class GenerateAllAssetsTool(
             return McpToolResult.text("✅ 当前模板中没有需要生成的业务图元 (纯容器已自动忽略，待生成目标数: 0)")
         }
 
-        val configManager = ConfigManager()
         val apiKey = configManager.loadKey("GEMINI_API_KEY")
             ?: configManager.loadGlobalGeminiKey()
             ?: return McpToolResult.error("未找到 Gemini API Key，请在桌面端应用设置中配置或通过环境变量提供")

@@ -25,8 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import coil3.compose.AsyncImage
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.getPlatform
@@ -76,10 +76,9 @@ fun AssetSelectionDialog(
         }
     }
 
-    Dialog(
-        onDismissRequest = { if (!isProcessing) onDismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    AppDraggableDialog(
+        onDismissRequest = { if (!isProcessing) onDismiss() }
+    ) { draggableState ->
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
@@ -88,9 +87,9 @@ fun AssetSelectionDialog(
             elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize().padding(spacing.medium)) {
-                // 1. 顶栏
+                // 1. 顶栏 (挂载拖拽抓手)
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState).padding(horizontal = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

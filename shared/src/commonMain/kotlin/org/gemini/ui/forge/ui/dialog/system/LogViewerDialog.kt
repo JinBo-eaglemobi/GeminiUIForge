@@ -22,6 +22,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.utils.getPlatformLogDirectory
 import org.gemini.ui.forge.utils.streamLocalFileLines
@@ -120,7 +123,9 @@ fun LogViewerDialog(
         loadLogs()
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+    val draggableState = rememberDraggableDialogState()
+
+    AppDraggableDialog(onDismissRequest = onDismiss, state = draggableState) {
         Surface(
             modifier = Modifier.fillMaxWidth(0.8f).fillMaxHeight(0.8f),
             shape = RoundedCornerShape(12.dp),
@@ -130,7 +135,7 @@ fun LogViewerDialog(
             Column(Modifier.fillMaxSize().padding(16.dp)) {
                 // 顶部标题与控制操作栏
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

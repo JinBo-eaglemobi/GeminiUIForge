@@ -15,6 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.InternalResourceApi
 import org.jetbrains.compose.resources.readResourceBytes
@@ -48,9 +51,11 @@ fun HelpDialog(onDismiss: () -> Unit) {
         }
     }
 
-    Dialog(
+    val draggableState = rememberDraggableDialogState()
+
+    AppDraggableDialog(
         onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        state = draggableState
     ) {
         Card(
             modifier = Modifier.widthIn(max = 1100.dp).fillMaxWidth(0.90f).fillMaxHeight(0.90f),
@@ -59,7 +64,12 @@ fun HelpDialog(onDismiss: () -> Unit) {
         ) {
             Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
                 // Header
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .draggableDialogHandle(draggableState),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(
                         Icons.AutoMirrored.Filled.HelpCenter,
                         contentDescription = null,

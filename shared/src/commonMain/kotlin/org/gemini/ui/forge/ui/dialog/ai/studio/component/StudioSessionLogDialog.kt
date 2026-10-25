@@ -23,8 +23,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -76,10 +76,9 @@ fun StudioSessionLogDialog(
         refreshRecords()
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    AppDraggableDialog(
+        onDismissRequest = onDismiss
+    ) { draggableState ->
         BoxWithConstraints(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -101,9 +100,9 @@ fun StudioSessionLogDialog(
                         .fillMaxSize()
                         .padding(spacing.large)
                 ) {
-                    // 1. 顶部 Header
+                    // 1. 顶部 Header (挂载拖拽抓手)
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = spacing.small),
+                        modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState).padding(bottom = spacing.small),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {

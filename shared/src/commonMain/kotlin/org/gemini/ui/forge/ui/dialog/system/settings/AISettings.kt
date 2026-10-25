@@ -2,17 +2,23 @@ package org.gemini.ui.forge.ui.dialog.system.settings
 
 
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.model.app.*
+import org.gemini.ui.forge.model.StudioModelResolver
+import org.gemini.ui.forge.model.ModelStudioGroup
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 
 /**
@@ -152,6 +158,98 @@ fun AISettings(
                         settingsViewModel.saveApiFlavor(flavor)
                         appViewModel.updateApiFlavorState(flavor)
                         apiFlavorExpanded = false
+                    }
+                )
+            }
+        }
+    }
+
+    var defaultImageModelExpanded by remember { mutableStateOf(false) }
+    val specializedImageModels = remember {
+        StudioModelResolver.resolveStudioModels()
+            .filter { it.group == ModelStudioGroup.IMAGE_SPECIALIZED }
+    }
+    val autoLabel = stringResource(Res.string.settings_default_image_gen_model_auto)
+    val spacing = LocalAppSpacing.current
+    val isAutoSwitchEnabled = globalState.isAutoSwitchImageGenModelEnabled
+
+    // 生图意图前端自动切换开关
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(vertical = spacing.extraSmall),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        shape = AppShapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = spacing.medium, vertical = spacing.small),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = spacing.medium)) {
+                Text(
+                    text = stringResource(Res.string.settings_auto_switch_image_gen_model_title),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = stringResource(Res.string.settings_auto_switch_image_gen_model_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = isAutoSwitchEnabled,
+                onCheckedChange = { checked ->
+                    settingsViewModel.saveAutoSwitchImageGenModel(checked)
+                    appViewModel.updateAutoSwitchImageGenModel(checked)
+                },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            )
+        }
+    }
+
+    val currentImageModelLabel = if (globalState.defaultImageGenModel.isNullOrBlank()) {
+        autoLabel
+    } else {
+        specializedImageModels.firstOrNull { it.model.modelName == globalState.defaultImageGenModel }?.let {
+            "${it.model.displayName} (${it.model.modelName})"
+        } ?: globalState.defaultImageGenModel
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = defaultImageModelExpanded,
+        onExpandedChange = { defaultImageModelExpanded = !defaultImageModelExpanded }
+    ) {
+        SelectAllOutlinedTextField(
+            value = currentImageModelLabel,
+            onValueChange = {}, readOnly = true,
+            label = { Text(stringResource(Res.string.settings_default_image_gen_model_title)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(defaultImageModelExpanded) },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            shape = AppShapes.medium
+        )
+        ExposedDropdownMenu(expanded = defaultImageModelExpanded, onDismissRequest = { defaultImageModelExpanded = false }) {
+            DropdownMenuItem(
+                text = { Text(autoLabel) },
+                onClick = {
+                    settingsViewModel.saveDefaultImageGenModel(null)
+                    appViewModel.updateDefaultImageGenModel(null)
+                    defaultImageModelExpanded = false
+                }
+            )
+            specializedImageModels.forEach { meta ->
+                DropdownMenuItem(
+                    text = { Text("${meta.model.displayName} (${meta.model.modelName})") },
+                    onClick = {
+                        settingsViewModel.saveDefaultImageGenModel(meta.model.modelName)
+                        appViewModel.updateDefaultImageGenModel(meta.model.modelName)
+                        defaultImageModelExpanded = false
                     }
                 )
             }

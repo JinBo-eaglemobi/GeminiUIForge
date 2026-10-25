@@ -15,8 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.action_refine_area
 import kotlinx.coroutines.Job
@@ -82,12 +82,11 @@ fun VisualRefineDialog(
 
     val prettyJson = remember { Json { prettyPrint = true; prettyPrintIndent = "  " } }
 
-    Dialog(
+    AppDraggableDialog(
         onDismissRequest = {
             if (!isExecuting) viewModel.hideVisualRefine()
-        },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+        }
+    ) { draggableState ->
         Surface(
             modifier = Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.96f),
             shape = AppShapes.large,
@@ -99,10 +98,10 @@ fun VisualRefineDialog(
                 // 1. 左侧主操作区 (自适应宽度，视口开阔)
                 // ==========================================
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    // 1.1 顶部标题与展开日志按钮
+                    // 1.1 顶部标题与展开日志按钮 (挂载拖拽抓手)
                     val titleSuffix = if (blockId != null) " - 模块: $blockId" else " - 全局区域"
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {

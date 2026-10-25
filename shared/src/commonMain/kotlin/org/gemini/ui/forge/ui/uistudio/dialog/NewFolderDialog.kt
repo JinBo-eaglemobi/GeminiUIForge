@@ -10,6 +10,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -29,8 +32,12 @@ fun NewFolderDialog(
 ) {
     val spacing = LocalAppSpacing.current
     var folderName by remember { mutableStateOf("") }
+    val draggableState = rememberDraggableDialogState()
 
-    Dialog(onDismissRequest = onDismiss) {
+    AppDraggableDialog(
+        onDismissRequest = onDismiss,
+        state = draggableState
+    ) {
         Surface(
             modifier = Modifier.width(spacing.dialogAlertWidth),
             shape = RoundedCornerShape(16.dp),
@@ -47,7 +54,10 @@ fun NewFolderDialog(
                     text = "新建素材文件夹",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .draggableDialogHandle(draggableState)
                 )
 
                 Text(

@@ -81,23 +81,23 @@ enum class GeminiModel(
     /** 版本: 3.1-flash-lite-05-2026 · Token: 输入 1048576 / 输出 65536 · 温度 1.0 · 最高温度 2.0 · TopP 0.95 · TopK 64 · 思考: 支持 */
     GEMINI_3_1_FLASH_LITE("gemini-3.1-flash-lite", "Gemini 3.1 Flash Lite", "Gemini 3.1 Flash Lite", "generateContent, countTokens, createCachedContent, batchGenerateContent", version = "3.1-flash-lite-05-2026", baseModelId = "", inputTokenLimit = 1048576, outputTokenLimit = 65536, temperature = 1.0f, maxTemperature = 2.0f, topP = 0.95f, topK = 64, supportsThinking = true),
 
-    /** 版本: 3.0 · Token: 输入 131072 / 输出 32768 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 支持 */
-    GEMINI_3_PRO_IMAGE_PREVIEW("gemini-3-pro-image-preview", "Nano Banana Pro", "Gemini 3 Pro Image Preview", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 131072, outputTokenLimit = 32768, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = true),
+    /** 版本: 3.0 · Token: 输入 131072 / 输出 32768 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 不支持 */
+    GEMINI_3_PRO_IMAGE_PREVIEW("gemini-3-pro-image-preview", "Nano Banana Pro", "Gemini 3 Pro Image Preview", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 131072, outputTokenLimit = 32768, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = false),
 
-    /** 版本: 3.0 · Token: 输入 131072 / 输出 32768 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 支持 */
-    GEMINI_3_PRO_IMAGE("gemini-3-pro-image", "Nano Banana Pro", "Gemini 3 Pro Image", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 131072, outputTokenLimit = 32768, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = true),
+    /** 版本: 3.0 · Token: 输入 131072 / 输出 32768 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 不支持 */
+    GEMINI_3_PRO_IMAGE("gemini-3-pro-image", "Nano Banana Pro", "Gemini 3 Pro Image", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 131072, outputTokenLimit = 32768, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = false),
 
-    /** 版本: 3.0 · Token: 输入 131072 / 输出 32768 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 支持 */
-    NANO_BANANA_PRO_PREVIEW("nano-banana-pro-preview", "Nano Banana Pro", "Gemini 3 Pro Image Preview", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 131072, outputTokenLimit = 32768, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = true),
+    /** 版本: 3.0 · Token: 输入 131072 / 输出 32768 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 不支持 */
+    NANO_BANANA_PRO_PREVIEW("nano-banana-pro-preview", "Nano Banana Pro", "Gemini 3 Pro Image Preview", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 131072, outputTokenLimit = 32768, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = false),
 
-    /** 版本: 3.0 · Token: 输入 65536 / 输出 65536 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 支持 */
-    GEMINI_3_1_FLASH_IMAGE_PREVIEW("gemini-3.1-flash-image-preview", "Nano Banana 2", "Gemini 3.1 Flash Image Preview.", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 65536, outputTokenLimit = 65536, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = true),
+    /** 版本: 3.0 · Token: 输入 65536 / 输出 65536 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 不支持 */
+    GEMINI_3_1_FLASH_IMAGE_PREVIEW("gemini-3.1-flash-image-preview", "Nano Banana 2", "Gemini 3.1 Flash Image Preview.", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 65536, outputTokenLimit = 65536, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = false),
 
-    /** 版本: 3.0 · Token: 输入 65536 / 输出 65536 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 支持 */
-    GEMINI_3_1_FLASH_IMAGE("gemini-3.1-flash-image", "Nano Banana 2", "Gemini 3.1 Flash Image.", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 65536, outputTokenLimit = 65536, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = true),
+    /** 版本: 3.0 · Token: 输入 65536 / 输出 65536 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 不支持 */
+    GEMINI_3_1_FLASH_IMAGE("gemini-3.1-flash-image", "Nano Banana 2", "Gemini 3.1 Flash Image.", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 65536, outputTokenLimit = 65536, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = false),
 
-    /** 版本: 3.0 · Token: 输入 65536 / 输出 65536 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 支持 */
-    GEMINI_3_1_FLASH_LITE_IMAGE("gemini-3.1-flash-lite-image", "Nano Banana 2 Lite", "Gemini 3.1 Flash Lite Image.", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 65536, outputTokenLimit = 65536, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = true),
+    /** 版本: 3.0 · Token: 输入 65536 / 输出 65536 · 温度 1.0 · 最高温度 1.0 · TopP 0.95 · TopK 64 · 思考: 不支持 */
+    GEMINI_3_1_FLASH_LITE_IMAGE("gemini-3.1-flash-lite-image", "Nano Banana 2 Lite", "Gemini 3.1 Flash Lite Image.", "generateContent, countTokens, batchGenerateContent", version = "3.0", baseModelId = "", inputTokenLimit = 65536, outputTokenLimit = 65536, temperature = 1.0f, maxTemperature = 1.0f, topP = 0.95f, topK = 64, supportsThinking = false),
 
     /** 版本: 3.5-flash-05-2026 · Token: 输入 1048576 / 输出 65536 · 温度 1.0 · 最高温度 2.0 · TopP 0.95 · TopK 64 · 思考: 支持 */
     GEMINI_3_5_FLASH("gemini-3.5-flash", "Gemini 3.5 Flash", "Gemini 3.5 Flash", "generateContent, countTokens, createCachedContent, batchGenerateContent", version = "3.5-flash-05-2026", baseModelId = "", inputTokenLimit = 1048576, outputTokenLimit = 65536, temperature = 1.0f, maxTemperature = 2.0f, topP = 0.95f, topK = 64, supportsThinking = true),

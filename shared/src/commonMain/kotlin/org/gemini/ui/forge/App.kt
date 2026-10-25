@@ -56,6 +56,7 @@ import org.gemini.ui.forge.service.mcp.McpController
 import org.gemini.ui.forge.service.mcp.McpTrafficInspector
 import org.gemini.ui.forge.ui.dialog.mcp.McpTrafficInspectorDialog
 import org.gemini.ui.forge.ui.dialog.layer.OverlayPreviewDialog
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
@@ -406,7 +407,7 @@ fun App(typography: Typography? = null) {
                     }
 
                     if (showExitConfirmDialog) {
-                        AlertDialog(
+                        AppDraggableAlertDialog(
                             onDismissRequest = { showExitConfirmDialog = false },
                             // 引入标准弹窗黄金宽度 Design Token（480.dp），横向托平，杜绝硬编码数值
                             modifier = Modifier.width(LocalAppSpacing.current.dialogConfigWidth),

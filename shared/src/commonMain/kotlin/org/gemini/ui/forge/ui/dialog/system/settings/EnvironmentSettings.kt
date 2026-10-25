@@ -54,6 +54,7 @@ fun EnvironmentSettings(
     val marketPage by envViewModel.marketPage.collectAsState()
 
     var envTab by remember { mutableStateOf(0) }
+    val spacing = LocalAppSpacing.current
 
     // Segmented Button 风格的 Tab
     Row(
@@ -164,13 +165,20 @@ fun EnvironmentSettings(
                                 onClick = { envViewModel.installEnvironmentItem(item.name) },
                                 shape = AppShapes.medium,
                                 contentPadding = PaddingValues(
-                                    horizontal = 12.dp,
-                                    vertical = LocalAppSpacing.current.extraSmall
+                                    horizontal = spacing.buttonActionPaddingHorizontal,
+                                    vertical = spacing.buttonActionPaddingVertical
                                 ),
-                                modifier = Modifier.height(LocalAppSpacing.current.extraLarge)
-                                    .padding(end = LocalAppSpacing.current.small)
+                                modifier = Modifier
+                                    .padding(end = spacing.small)
+                                    .height(spacing.buttonActionHeight)
+                                    .defaultMinSize(minWidth = spacing.buttonActionMinWidth)
                             ) {
-                                Text("更新", style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    "更新",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
                         }
 
@@ -180,10 +188,12 @@ fun EnvironmentSettings(
                                 enabled = !item.isInstalling,
                                 shape = AppShapes.medium,
                                 contentPadding = PaddingValues(
-                                    horizontal = 12.dp,
-                                    vertical = LocalAppSpacing.current.extraSmall
+                                    horizontal = spacing.buttonActionPaddingHorizontal,
+                                    vertical = spacing.buttonActionPaddingVertical
                                 ),
-                                modifier = Modifier.height(LocalAppSpacing.current.extraLarge)
+                                modifier = Modifier
+                                    .height(spacing.buttonActionHeight)
+                                    .defaultMinSize(minWidth = spacing.buttonActionMinWidth)
                             ) {
                                 if (item.isInstalling) CircularProgressIndicator(
                                     Modifier.size(14.dp),
@@ -192,7 +202,9 @@ fun EnvironmentSettings(
                                 )
                                 else Text(
                                     stringResource(Res.string.env_action_install),
-                                    style = MaterialTheme.typography.labelSmall
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         } else {
@@ -201,10 +213,12 @@ fun EnvironmentSettings(
                                 enabled = !item.isInstalling,
                                 shape = AppShapes.medium,
                                 contentPadding = PaddingValues(
-                                    horizontal = 12.dp,
-                                    vertical = LocalAppSpacing.current.extraSmall
+                                    horizontal = spacing.buttonActionPaddingHorizontal,
+                                    vertical = spacing.buttonActionPaddingVertical
                                 ),
-                                modifier = Modifier.height(LocalAppSpacing.current.extraLarge),
+                                modifier = Modifier
+                                    .height(spacing.buttonActionHeight)
+                                    .defaultMinSize(minWidth = spacing.buttonActionMinWidth),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                             ) {
                                 if (item.isInstalling) CircularProgressIndicator(
@@ -214,7 +228,9 @@ fun EnvironmentSettings(
                                 )
                                 else Text(
                                     stringResource(Res.string.env_action_uninstall),
-                                    style = MaterialTheme.typography.labelSmall
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }
@@ -421,14 +437,19 @@ fun EnvironmentSettings(
                                 }
 
                                 if (pkg.isOutdated) {
-                                    Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
+                                    Spacer(Modifier.width(spacing.extraSmall))
                                     Button(
                                         onClick = { envViewModel.batchInstallPipPackages(listOf(pkg.name)) },
                                         enabled = !isPipActionInProgress,
                                         shape = AppShapes.medium,
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                        modifier = Modifier.height(28.dp)
-                                    ) { Text("更新", fontSize = 12.sp) }
+                                        contentPadding = PaddingValues(
+                                            horizontal = spacing.buttonActionPaddingHorizontal,
+                                            vertical = spacing.buttonActionPaddingVertical
+                                        ),
+                                        modifier = Modifier
+                                            .height(spacing.buttonActionHeight)
+                                            .defaultMinSize(minWidth = spacing.buttonActionMinWidth)
+                                    ) { Text("更新", fontSize = 12.sp, maxLines = 1, softWrap = false) }
                                 }
                             }
                         }
@@ -534,11 +555,13 @@ fun EnvironmentSettings(
                         enabled = !isPipActionInProgress,
                         shape = AppShapes.medium,
                         contentPadding = PaddingValues(
-                            horizontal = 12.dp,
-                            vertical = LocalAppSpacing.current.extraSmall
+                            horizontal = spacing.buttonActionPaddingHorizontal,
+                            vertical = spacing.buttonActionPaddingVertical
                         ),
-                        modifier = Modifier.height(LocalAppSpacing.current.extraLarge)
-                    ) { Text("安装") }
+                        modifier = Modifier
+                            .height(spacing.buttonActionHeight)
+                            .defaultMinSize(minWidth = spacing.buttonActionMinWidth)
+                    ) { Text("安装", maxLines = 1, softWrap = false) }
                 }
             }
             HorizontalDivider(Modifier.padding(vertical = LocalAppSpacing.current.small))
@@ -680,10 +703,15 @@ fun EnvironmentSettings(
                                         onClick = { envViewModel.batchInstallPipPackages(listOf(pkg.name)) },
                                         enabled = !isPipActionInProgress,
                                         shape = AppShapes.medium,
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                                        modifier = Modifier.height(32.dp)
+                                        contentPadding = PaddingValues(
+                                            horizontal = spacing.buttonActionPaddingHorizontal,
+                                            vertical = spacing.buttonActionPaddingVertical
+                                        ),
+                                        modifier = Modifier
+                                            .height(spacing.buttonActionHeight)
+                                            .defaultMinSize(minWidth = spacing.buttonActionMinWidth)
                                     ) {
-                                        Text("安装", fontSize = 12.sp)
+                                        Text("安装", fontSize = 12.sp, maxLines = 1, softWrap = false)
                                     }
                                 }
                             }

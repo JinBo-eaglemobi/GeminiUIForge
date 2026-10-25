@@ -16,7 +16,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +40,7 @@ import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.extend.readClipboardImageBytes
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
+import org.gemini.ui.forge.model.chat.ThinkingLevel
 import org.gemini.ui.forge.model.chat.MentionCategory
 import org.gemini.ui.forge.model.chat.MentionItem
 import org.gemini.ui.forge.model.chat.MentionPayload
@@ -56,6 +59,9 @@ import org.gemini.ui.forge.service.canvas.CanvasSnapshotMode
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.utils.readLocalFileBytes
+import org.gemini.ui.forge.model.ModelStudioGroup
+import org.gemini.ui.forge.service.ai.ImageGenIntentDetector
+import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.utils.rememberFilePicker
 
 /**
@@ -91,6 +97,8 @@ fun CommonChatInputBar(
     onModelSelected: (GeminiModel) -> Unit,
     selectedApiFlavor: ApiFlavor,
     onApiFlavorSelected: (ApiFlavor) -> Unit,
+    currentThinkingLevel: ThinkingLevel = ThinkingLevel.DEFAULT,
+    onThinkingLevelSelected: (ThinkingLevel) -> Unit = {},
     onSendMessage: (text: String, attachments: List<CommonChatAttachment>) -> Unit,
     modifier: Modifier = Modifier,
     inputTextOverride: String? = null,
@@ -126,6 +134,7 @@ fun CommonChatInputBar(
     var isDropHovering by remember { mutableStateOf(false) }
     var previewSnapshotAttachment by remember { mutableStateOf<CommonChatAttachment?>(null) }
     var isSnapshotMenuExpanded by remember { mutableStateOf(false) }
+    var previousNonImageModel by remember { mutableStateOf<GeminiModel?>(null) }
 
     // 回填外部重新编辑的文本
     LaunchedEffect(inputTextOverride) {
@@ -257,11 +266,34 @@ fun CommonChatInputBar(
         }
     }
 
+    val loadedPresetModel by produceState<String?>(initialValue = config.defaultImageGenModel, config.defaultImageGenModel) {
+        value = if (config.defaultImageGenModel != null) {
+            config.defaultImageGenModel
+        } else {
+            ConfigManager().loadKey("DEFAULT_IMAGE_GEN_MODEL")?.takeIf { it.isNotBlank() }
+        }
+    }
+
+    val loadedAutoSwitchEnabled by produceState<Boolean>(initialValue = config.isAutoSwitchImageGenModelEnabled ?: true, config.isAutoSwitchImageGenModelEnabled) {
+        value = if (config.isAutoSwitchImageGenModelEnabled != null) {
+            config.isAutoSwitchImageGenModelEnabled
+        } else {
+            ConfigManager().loadKey("AUTO_SWITCH_IMAGE_GEN_MODEL")?.toBooleanStrictOrNull() ?: true
+        }
+    }
+
     val canSend = (inputText.isNotBlank() || attachments.isNotEmpty()) && !isGenerating
 
     fun performSend() {
         if (!canSend) return
         val text = inputText.trim()
+        val effectivePresetModel = loadedPresetModel
+        if (loadedAutoSwitchEnabled && ImageGenIntentDetector.isImageGenIntent(text) && !ImageGenIntentDetector.isImageSpecialized(selectedModel)) {
+            val targetModel = ImageGenIntentDetector.resolveTargetGeminiModel(effectivePresetModel)
+            previousNonImageModel = selectedModel
+            onModelSelected(targetModel)
+            Toast.show("检测到生图意图，已自动切换至 ${targetModel.displayName}", ToastType.INFO)
+        }
         val currentAttach = attachments.map { attach ->
             val isLarge = (attach.bytes?.size?.toLong() ?: 0L) >= CLOUD_UPLOAD_THRESHOLD_BYTES
             attach.copy(preferCloudUpload = isLarge && preferCloudUpload)
@@ -502,6 +534,83 @@ fun CommonChatInputBar(
                             text = "检测到排版视觉咨询，点击一键挂载当前画布截图 📷",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+
+            // 2.6 生图意图感知与自动切回胶囊气泡
+            val effectivePresetModel = loadedPresetModel
+            val isImageIntent = remember(inputText) {
+                ImageGenIntentDetector.isImageGenIntent(inputText)
+            }
+            val isCurrentNonImageModel = remember(selectedModel) {
+                !ImageGenIntentDetector.isImageSpecialized(selectedModel)
+            }
+            val targetImageModel = remember(effectivePresetModel) {
+                ImageGenIntentDetector.resolveTargetGeminiModel(effectivePresetModel)
+            }
+
+            if (loadedAutoSwitchEnabled && isImageIntent && isCurrentNonImageModel) {
+                Surface(
+                    modifier = Modifier
+                        .padding(bottom = 6.dp)
+                        .clickable {
+                            previousNonImageModel = selectedModel
+                            onModelSelected(targetImageModel)
+                            Toast.show("已切换至生图模型：${targetImageModel.displayName}", ToastType.INFO)
+                        },
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.9f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Palette,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.tertiary
+                        )
+                        Text(
+                            text = "检测到生图意图，发送时将自动切换至「${targetImageModel.displayName}」(点击可立即切换)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
+            } else if (previousNonImageModel != null && !isCurrentNonImageModel) {
+                Surface(
+                    modifier = Modifier
+                        .padding(bottom = 6.dp)
+                        .clickable {
+                            val prev = previousNonImageModel
+                            if (prev != null) {
+                                onModelSelected(prev)
+                                previousNonImageModel = null
+                                Toast.show("已切回原模型：${prev.displayName}", ToastType.INFO)
+                            }
+                        },
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Undo,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "当前已自动切换为生图模型，点击切回原模型「${previousNonImageModel?.displayName}」",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -776,6 +885,16 @@ fun CommonChatInputBar(
                             )
                         }
                     }
+
+                    // 思考模式切换器（紧邻模型选择器，仅当模型支持思考时展现）
+                    CommonThinkingLevelSelector(
+                        selectedModel = selectedModel,
+                        currentLevel = currentThinkingLevel,
+                        onLevelSelected = onThinkingLevelSelected,
+                        useShortLabel = true,
+                        maxMenuHeight = dynamicMenuMaxHeight,
+                        offset = DpOffset(0.dp, (-8).dp)
+                    )
 
                     // 原生协议切换器
                     if (config.showApiFlavorSelector) {

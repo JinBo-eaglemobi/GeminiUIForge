@@ -38,6 +38,7 @@ object McpToolRegistry {
             DeleteBlockTool(),
             SetBlockReferenceImageTool(),
             // B 组：资产生成与图像处理工具
+            GenerateImageTool(),
             GenerateBlockAssetTool(),
             GenerateAllAssetsTool(),
             ChatRefineImageTool(),

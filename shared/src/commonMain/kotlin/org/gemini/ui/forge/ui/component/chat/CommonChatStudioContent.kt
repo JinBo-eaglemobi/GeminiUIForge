@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
+import org.gemini.ui.forge.model.chat.ThinkingLevel
 import org.gemini.ui.forge.model.chat.ChatMentionTag
 import org.gemini.ui.forge.model.chat.MentionItem
 import org.gemini.ui.forge.model.chat.VisualChatMessage
@@ -95,6 +96,8 @@ fun CommonChatStudioContent(
     onModelSelected: (GeminiModel) -> Unit,
     selectedApiFlavor: ApiFlavor,
     onApiFlavorSelected: (ApiFlavor) -> Unit,
+    currentThinkingLevel: ThinkingLevel = ThinkingLevel.DEFAULT,
+    onThinkingLevelSelected: (ThinkingLevel) -> Unit = {},
     onSendMessage: (text: String, attachments: List<CommonChatAttachment>) -> Unit,
     modifier: Modifier = Modifier,
     config: CommonChatStudioConfig = CommonChatStudioConfig(),
@@ -129,7 +132,8 @@ fun CommonChatStudioContent(
     chatNoticeContent: @Composable ColumnScope.() -> Unit = {},
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     inputLeadingActions: @Composable RowScope.() -> Unit = {},
-    inputTrailingActions: @Composable RowScope.() -> Unit = {}
+    inputTrailingActions: @Composable RowScope.() -> Unit = {},
+    draggableModifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
     val density = LocalDensity.current
@@ -199,7 +203,7 @@ fun CommonChatStudioContent(
                         color = MaterialTheme.colorScheme.surface,
                         tonalElevation = 1.dp,
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                        modifier = Modifier.fillMaxWidth().height(48.dp).then(draggableModifier)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxSize().padding(horizontal = spacing.medium),
@@ -246,6 +250,9 @@ fun CommonChatStudioContent(
                                     }
                                 }
                             }
+
+                            // 顶部中间弹性空白区（专职作为拖拽安全抓手）
+                            Spacer(modifier = Modifier.weight(1f).fillMaxHeight().then(draggableModifier))
 
                             // 顶部自定义动作插槽
                             Row(
@@ -445,6 +452,8 @@ fun CommonChatStudioContent(
                         onModelSelected = onModelSelected,
                         selectedApiFlavor = selectedApiFlavor,
                         onApiFlavorSelected = onApiFlavorSelected,
+                        currentThinkingLevel = currentThinkingLevel,
+                        onThinkingLevelSelected = onThinkingLevelSelected,
                         onSendMessage = onSendMessage,
                         config = config,
                         inputTextOverride = inputTextToInject,

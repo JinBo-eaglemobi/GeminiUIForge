@@ -51,20 +51,65 @@ object UniversalAiToolRegistry {
     /**
      * 将 McpToolDefinition 转化为 Gemini 官方标准的 FunctionDeclaration JSON 对象
      */
-    fun McpToolDefinition.toGeminiFunctionDeclaration(): JsonObject {
+    fun McpToolDefinition.toGeminiFunctionDeclaration(presetImageModel: String? = null): JsonObject {
+        val effectivePreset = presetImageModel
+        val finalSchema = if (name in setOf("generate_block_asset", "generate_all_assets", "generate_image")) {
+            patchImageGenSchema(inputSchema, effectivePreset)
+        } else {
+            inputSchema
+        }
         return buildJsonObject {
             put("name", name)
             put("description", description)
-            put("parameters", inputSchema)
+            put("parameters", finalSchema)
+        }
+    }
+
+    /**
+     * 针对生图类工具，根据默认生图模型预设动态调整 inputSchema 的 modelName 参数
+     */
+    private fun patchImageGenSchema(originalSchema: JsonObject, presetModel: String?): JsonObject {
+        val originalProps = originalSchema["properties"]?.jsonObject ?: return originalSchema
+        val modelProp = originalProps["modelName"]?.jsonObject ?: return originalSchema
+
+        val newModelProp = buildJsonObject {
+            modelProp.forEach { (k, v) -> put(k, v) }
+            if (!presetModel.isNullOrBlank()) {
+                put("description", "当前系统已预设并锁定生图模型为: $presetModel。调用必须使用此模型。")
+                put("enum", buildJsonArray { add(presetModel) })
+            } else {
+                val specializedModels = org.gemini.ui.forge.model.StudioModelResolver.resolveStudioModels()
+                    .filter { it.group == org.gemini.ui.forge.model.ModelStudioGroup.IMAGE_SPECIALIZED }
+                    .map { it.model.modelName }
+                if (specializedModels.isNotEmpty()) {
+                    put("description", "可选生图模型，默认为 ${specializedModels.first()}。可用列表: ${specializedModels.joinToString(", ")}")
+                    put("enum", buildJsonArray { specializedModels.forEach { add(it) } })
+                }
+            }
+        }
+
+        val newProps = buildJsonObject {
+            originalProps.forEach { (k, v) ->
+                if (k == "modelName") put(k, newModelProp) else put(k, v)
+            }
+        }
+
+        return buildJsonObject {
+            originalSchema.forEach { (k, v) ->
+                if (k == "properties") put(k, newProps) else put(k, v)
+            }
         }
     }
 
     /**
      * 组装全量 Gemini Tool 配置（包含全部函数声明与可选的 Google 官方实时联网搜索）
      */
-    fun buildFullGeminiTools(enableGoogleSearch: Boolean = true): List<GeminiToolConfig> {
+    fun buildFullGeminiTools(
+        enableGoogleSearch: Boolean = true,
+        presetImageModel: String? = null
+    ): List<GeminiToolConfig> {
         val allTools = getAllAvailableTools()
-        val declarations = allTools.map { it.toGeminiFunctionDeclaration() }
+        val declarations = allTools.map { it.toGeminiFunctionDeclaration(presetImageModel) }
 
         val configs = mutableListOf<GeminiToolConfig>()
         configs.add(

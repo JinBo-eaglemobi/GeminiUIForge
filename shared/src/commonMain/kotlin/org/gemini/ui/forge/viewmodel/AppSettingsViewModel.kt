@@ -87,6 +87,24 @@ class AppSettingsViewModel(
     }
 
     /**
+     * 保存默认生图模型预设持久化（null 或特定模型名）
+     */
+    fun saveDefaultImageGenModel(modelName: String?) {
+        viewModelScope.launch {
+            configManager.saveKey("DEFAULT_IMAGE_GEN_MODEL", modelName ?: "")
+        }
+    }
+
+    /**
+     * 保存是否开启生图意图自动切换模型持久化
+     */
+    fun saveAutoSwitchImageGenModel(enabled: Boolean) {
+        viewModelScope.launch {
+            configManager.saveKey("AUTO_SWITCH_IMAGE_GEN_MODEL", enabled.toString())
+        }
+    }
+
+    /**
      * 保存 AI 底层通信协议架构 (generateContent / Interactions API)
      */
     fun saveApiFlavor(flavor: org.gemini.ui.forge.model.app.ApiFlavor) {

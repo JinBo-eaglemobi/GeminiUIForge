@@ -16,8 +16,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import coil3.compose.AsyncImage
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.ui.component.tip
@@ -43,10 +43,9 @@ fun ResourceSlotSelectionDialog(
     // 默认勾选第一个槽位
     var selectedIndices by remember { mutableStateOf(setOf(0)) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    AppDraggableDialog(
+        onDismissRequest = onDismiss
+    ) { draggableState ->
         Surface(
             modifier = Modifier
                 .width(spacing.dialogConfigWidth)
@@ -61,8 +60,11 @@ fun ResourceSlotSelectionDialog(
                     .fillMaxWidth()
                     .padding(spacing.large)
             ) {
-                // 1. 标题行
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // 1. 标题行（挂载拖拽抓手）
+                Row(
+                    modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Surface(
                         shape = AppShapes.small,
                         color = MaterialTheme.colorScheme.primaryContainer,

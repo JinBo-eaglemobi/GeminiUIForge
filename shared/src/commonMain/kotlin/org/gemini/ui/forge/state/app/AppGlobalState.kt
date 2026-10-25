@@ -37,5 +37,7 @@ data class AppGlobalState(
     val shortcuts: Map<ShortcutAction, String> = ShortcutAction.entries.associateWith { it.defaultKey },
     val layoutMode: LayoutMode = LayoutMode.AUTO,
     val compileConfig: CompileConfig = CompileConfig(),
-    val apiFlavor: ApiFlavor = ApiFlavor.INTERACTIONS
+    val apiFlavor: ApiFlavor = ApiFlavor.INTERACTIONS,
+    val defaultImageGenModel: String? = null,
+    val isAutoSwitchImageGenModelEnabled: Boolean = true
 )

@@ -17,8 +17,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
+import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -41,10 +41,9 @@ fun StudioReferenceSourceDialog(
 ) {
     val spacing = LocalAppSpacing.current
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    AppDraggableDialog(
+        onDismissRequest = onDismiss
+    ) { draggableState ->
         Surface(
             modifier = Modifier
                 .width(spacing.dialogConfigWidth)
@@ -59,9 +58,9 @@ fun StudioReferenceSourceDialog(
                 modifier = Modifier.padding(spacing.large),
                 verticalArrangement = Arrangement.spacedBy(spacing.medium)
             ) {
-                // 1. 顶部标题栏
+                // 1. 顶部标题栏（挂载拖拽抓手）
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().draggableDialogHandle(draggableState),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

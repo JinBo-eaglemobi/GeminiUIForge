@@ -28,6 +28,7 @@ import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.utils.findBlockById
 import org.gemini.ui.forge.ui.component.getIcon
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
@@ -335,7 +336,7 @@ fun UIStudioHierarchyPanel(
             }
             // 拖拽移出最后一个子组件确认弹窗 (支持保留父组件或解散删除)
             state.pendingDragRemoveLastChild?.let { ctx ->
-                AlertDialog(
+                AppDraggableAlertDialog(
                     onDismissRequest = { viewModel.cancelDragRemoveLastChild() },
                     title = {
                         Text(
