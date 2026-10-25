@@ -76,12 +76,13 @@ fun CommonChatMessageList(
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
 
-    // 标记当前 session 是否已有主动的用户滚动介入
+    // 标记当前 session 是否已有主动的用户滚动介入与是否已完成初次历史位置恢复
     var isUserInteracted by remember(sessionId) { mutableStateOf(false) }
+    var hasRestoredScrollPosition by remember(sessionId) { mutableStateOf(false) }
     val cachedOffset = remember(sessionId) { ChatScrollMemoryManager.getScrollOffset(sessionId) }
 
-    // 智能吸底锁定状态机：是否保持始终贴紧最新底部
-    var shouldStickToBottom by remember(sessionId) { mutableStateOf(true) }
+    // 智能吸底锁定状态机：如果有历史缓存记录，初次挂载优先等待精准恢复位置，防止被吸底抢跑拽至末尾
+    var shouldStickToBottom by remember(sessionId) { mutableStateOf(cachedOffset == null) }
     var previousScrollValue by remember(sessionId) { mutableStateOf(0) }
 
     // 自动吸底感知：判断当前列表是否贴近底部 (距底 <= 80px)
@@ -108,13 +109,14 @@ fun CommonChatMessageList(
 
     // 会话进入或布局测量完成时的滚动位置记忆恢复：绝不无脑把页面拽到最极限底端
     LaunchedEffect(sessionId, scrollState.maxValue) {
-        if (scrollState.maxValue > 0) {
+        if (scrollState.maxValue > 0 && !hasRestoredScrollPosition) {
             if (cachedOffset != null) {
                 // 存在历史离开位置：若用户尚未手动介入滚动，精准恢复至上次位置（若历史位置大于最大可滚动范围则取合理最大值）
                 if (!isUserInteracted) {
-                    scrollState.scrollTo(cachedOffset.coerceIn(0, scrollState.maxValue))
+                    val targetOffset = cachedOffset.coerceIn(0, scrollState.maxValue)
+                    scrollState.scrollTo(targetOffset)
                     // 如果恢复的位置就在底部附近，则保持吸底模式；否则为用户阅读历史模式
-                    shouldStickToBottom = (scrollState.maxValue - cachedOffset) <= 80
+                    shouldStickToBottom = (scrollState.maxValue - targetOffset) <= 80
                 }
             } else {
                 // 初次进入全新会话：默认自然停留在首屏顶部（offset = 0），让用户从上往下阅读！绝不强行拽到底部遮盖内容！
@@ -123,19 +125,20 @@ fun CommonChatMessageList(
                     shouldStickToBottom = false
                 }
             }
+            hasRestoredScrollPosition = true
         }
     }
 
     // 核心物理高度监听：每当气泡高度撑大（如思考中卡片出现、流式排版高度增加等），只要处于吸底锁定态，毫秒级贴紧最新内容
     LaunchedEffect(scrollState.maxValue, shouldStickToBottom) {
-        if (shouldStickToBottom && scrollState.maxValue > 0) {
+        if (hasRestoredScrollPosition && shouldStickToBottom && scrollState.maxValue > 0) {
             scrollState.scrollTo(scrollState.maxValue)
         }
     }
 
-    // 实时缓存用户滑动的位置
-    LaunchedEffect(scrollState.value, scrollState.maxValue) {
-        if (scrollState.maxValue > 0) {
+    // 实时缓存用户滑动的位置：只有在历史位置恢复完成之后，才允许写回保存，防止初始未就绪时被脏数据冲刷
+    LaunchedEffect(scrollState.value, scrollState.maxValue, hasRestoredScrollPosition) {
+        if (hasRestoredScrollPosition && scrollState.maxValue > 0) {
             ChatScrollMemoryManager.saveScrollOffset(sessionId, scrollState.value)
         }
     }
