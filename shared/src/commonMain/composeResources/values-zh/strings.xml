@@ -667,6 +667,11 @@
     <string name="uistudio_hierarchy_empty_no_view">请在上方界面列表中选择或打开一个视图</string>
     <string name="uistudio_hierarchy_empty_container">当前容器内暂无子组件\n可从素材库拖入或添加子组件</string>
     <string name="uistudio_hierarchy_empty_page">当前视图暂无根图元\n可从素材库拖入切片开始排版</string>
+    <string name="uistudio_asset_missing">资源丢失</string>
+    <string name="uistudio_import_files_mixed">导入文件（可多选）</string>
+    <string name="uistudio_import_folder">导入文件夹</string>
+    <string name="uistudio_import_sheet_slices">导入图集切片</string>
+    <string name="uistudio_drop_hint">拖入图片或文件夹即可导入</string>
 
     <!-- 默认生图模型预设与动态路由 -->
     <string name="settings_auto_switch_image_gen_model_title">生图意图自动切换模型</string>
@@ -679,4 +684,21 @@
     <string name="chat_image_intent_revert_btn">切回 %1$s</string>
     <string name="chat_thinking_level_tip">调节 AI 思考推理深度 (当前: %1$s)</string>
     <string name="chat_thinking_level_menu_title">🧠 大模型思考推理模式调节</string>
+
+    <!-- 会话原始网络通信档案弹窗 -->
+    <string name="traffic_search_hint">搜索模型 / URL / 序号...</string>
+    <string name="traffic_sort_menu_title">排序维度</string>
+    <string name="traffic_sort_time_asc">时间正序 (最早优先)</string>
+    <string name="traffic_sort_time_desc">时间倒序 (最新优先)</string>
+    <string name="traffic_sort_req_first">请求优先 (REQ 前置)</string>
+    <string name="traffic_sort_size_desc">报文大小降序 (大载荷优先)</string>
+    <string name="traffic_filter_all">全部</string>
+    <string name="traffic_filter_req">REQ</string>
+    <string name="traffic_filter_resp">RESP</string>
+    <string name="traffic_clear_menu_label">清空通信档案</string>
+    <string name="traffic_clear_confirm_title">清空原始通信档案</string>
+    <string name="traffic_clear_confirm_message">确定要永久物理删除当前会话的全部 %1$d 条原始报文归档文件吗？此操作无法撤销。</string>
+    <string name="traffic_clear_done">已清空当前会话的全部通信档案</string>
+    <string name="traffic_show_all_lines">展开全部剩余 %1$d 行</string>
+    <string name="traffic_stats_summary">共 %1$d 条 · REQ %2$d · RESP %3$d · ~%4$s</string>
 </resources>

@@ -177,6 +177,7 @@ fun UIStudioLeftSidebar(
                     UIStudioHierarchyPanel(
                         viewModel = viewModel,
                         templateRepo = templateRepo,
+                        assetPathResolver = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
                         modifier = Modifier.fillMaxSize()
                     )
                 }

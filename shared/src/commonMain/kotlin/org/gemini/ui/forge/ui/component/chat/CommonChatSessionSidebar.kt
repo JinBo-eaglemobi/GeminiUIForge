@@ -25,10 +25,9 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import org.gemini.ui.forge.ui.component.AppSearchField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -131,35 +130,11 @@ fun CommonChatSessionSidebar(
 
             // 2. 搜索过滤输入框（若配置开启）
             if (config.showSessionSearch && sessions.size > 3) {
-                OutlinedTextField(
+                AppSearchField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = {
-                        Text(
-                            text = "搜索历史会话...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotBlank()) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "清空搜索",
-                                modifier = Modifier.size(16.dp).clickable { searchQuery = "" }
-                            )
-                        }
-                    },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                    )
+                    placeholder = "搜索历史会话...",
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(spacing.small))
             }

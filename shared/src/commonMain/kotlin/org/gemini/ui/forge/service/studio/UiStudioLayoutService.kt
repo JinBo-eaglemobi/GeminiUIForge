@@ -1,7 +1,6 @@
 package org.gemini.ui.forge.service.studio
 
 import kotlinx.serialization.json.*
-import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
@@ -11,13 +10,13 @@ import org.gemini.ui.forge.utils.asset.AssetManifestHelper.AssetSemanticCategory
 import org.gemini.ui.forge.utils.bindParents
 
 /**
- * 界面全自动装配与排版落地核心服务。
+ * UI Studio 界面全自动装配与排版落地核心服务。
  *
  * 核心职能：
  * 1. 响应大模型发起的 [apply_view_layout] 本地工具调用；
- * 2. 贯彻全屏背景自愈、局部相对坐标系与纯容器铁律；
- * 3. 自动根据切片文件名 (assetFileName) 匹配工程素材库物理资源；
- * 4. 递归装配 UIBlock 树并构建完整 UIPage 视图对象。
+ * 2. 贯彻局部相对坐标系与纯容器铁律；
+ * 3. 自动根据切片文件名 (assetFileName) 匹配工程素材库物理资源并绑定哈希引用；
+ * 4. 递归装配 UIStudioBlock 树并构建完整 UIStudioPage 视图对象。
  */
 object UiStudioLayoutService {
     private const val TAG = "UiStudioLayoutService"
@@ -30,13 +29,13 @@ object UiStudioLayoutService {
         val viewName: String,
         val blockCount: Int,
         val matchedAssetCount: Int = 0,
-        val createdPage: UIPage? = null,
+        val createdPage: UIStudioPage? = null,
         val summary: String = "",
         val errorMessage: String? = null
     )
 
     /**
-     * 将大模型输出的 JSON 参数解析并装配为真实的 UIPage 页面实体
+     * 将大模型输出的 JSON 参数解析并装配为真实的 UIStudioPage 页面实体
      */
     fun assembleViewPage(
         projectId: String,
@@ -60,23 +59,23 @@ object UiStudioLayoutService {
             }
 
             // 递归解析图元列表与插槽角色映射
-            val assembledBlocks = mutableListOf<UIBlock>()
+            val assembledBlocks = mutableListOf<UIStudioBlock>()
             val slotRoleMap = mutableMapOf<String, String>()
             for (element in rawBlocks) {
                 val blockObj = element as? JsonObject ?: continue
-                parseBlockRecursive(blockObj, projectId, assetMap, slotRoleMap, assembledBlocks)
+                parseBlockRecursive(blockObj, assetMap, slotRoleMap, assembledBlocks)
             }
 
             // 【阶段二：全自动素材智能装配流水线】
             // 若素材库非空，针对骨架中尚未绑定素材的插槽，按语义角色、网格顺序与纵横比智能填充切片
             val finalBlocks = if (assetLibrary.items.isNotEmpty()) {
-                autoFitAssetsToSlots(assembledBlocks, slotRoleMap, assetLibrary, projectId)
+                autoFitAssetsToSlots(assembledBlocks, slotRoleMap, assetLibrary)
             } else {
                 assembledBlocks
             }
 
-            // 构建 UIPage 并执行全屏背景等自愈治理
-            val initialPage = UIPage(
+            // 构建 UIStudioPage 视图实体
+            val initialPage = UIStudioPage(
                 id = "page_${viewName.replace(" ", "_")}",
                 nameStr = viewName,
                 width = width,
@@ -84,12 +83,11 @@ object UiStudioLayoutService {
                 blocks = finalBlocks
             )
 
-            // 执行核心规范自愈：贯彻全屏游戏背景底图规范，绑定父级引用
-            val postProcessedPage = initialPage.postProcess()
-            postProcessedPage.blocks.bindParents()
+            // 绑定父级引用接线
+            initialPage.blocks.bindParents()
 
-            val totalBlocksCount = countAllBlocks(postProcessedPage.blocks)
-            val matchedAssetCount = countMatchedAssets(postProcessedPage.blocks)
+            val totalBlocksCount = countAllBlocks(initialPage.blocks)
+            val matchedAssetCount = countMatchedAssets(initialPage.blocks)
             AppLogger.i(TAG, "成功为工程 [$projectId] 装配视图 [$viewName]，包含 $totalBlocksCount 个图元 (匹配素材: $matchedAssetCount)")
 
             ApplyLayoutResult(
@@ -97,7 +95,7 @@ object UiStudioLayoutService {
                 viewName = viewName,
                 blockCount = totalBlocksCount,
                 matchedAssetCount = matchedAssetCount,
-                createdPage = postProcessedPage,
+                createdPage = initialPage,
                 summary = "成功装配视图 [$viewName] ($width x $height)，包含 $totalBlocksCount 个组件图元 (已精准拼装 $matchedAssetCount 个切片素材)"
             )
         } catch (e: Exception) {
@@ -113,14 +111,13 @@ object UiStudioLayoutService {
     }
 
     /**
-     * 递归解析单个图元对象
+     * 递归解析单个图元对象（哈希引用模型：命中素材即绑定其唯一 assetHash）
      */
     private fun parseBlockRecursive(
         obj: JsonObject,
-        projectId: String,
         assetMap: Map<String, UIAssetItem>,
         slotRoleMap: MutableMap<String, String>,
-        outList: MutableList<UIBlock>
+        outList: MutableList<UIStudioBlock>
     ) {
         val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: "block_${outList.size + 1}"
         val typeStr = obj["type"]?.jsonPrimitive?.contentOrNull ?: "CONTAINER"
@@ -136,26 +133,16 @@ object UiStudioLayoutService {
             slotRoleMap[id] = it
         }
 
-        // 匹配素材库切片
+        // 匹配素材库切片（命中即持有其唯一哈希引用）
         val assetFileName = obj["assetFileName"]?.jsonPrimitive?.contentOrNull?.trim()
-        var boundFile: TemplateFile? = null
         var matchedAsset: UIAssetItem? = null
         if (!assetFileName.isNullOrBlank()) {
             matchedAsset = assetMap[assetFileName.lowercase()]
                 ?: assetMap[assetFileName.substringBeforeLast('.').lowercase()]
-            if (matchedAsset != null) {
-                val cleanRel = matchedAsset.relativePath.replace("\\", "/")
-                val resolvedPath = when {
-                    cleanRel.startsWith("templates/") -> cleanRel
-                    cleanRel.startsWith("assets/") -> "templates/$projectId/$cleanRel"
-                    else -> "templates/$projectId/assets/$cleanRel"
-                }
-                boundFile = TemplateFile(resolvedPath)
-            }
         }
 
         // 若成功绑定切片素材，强制不能为纯容器（否则画布不渲染底图本体）
-        val isPureContainer = if (boundFile != null) {
+        val isPureContainer = if (matchedAsset != null) {
             false
         } else {
             obj["isPureContainer"]?.jsonPrimitive?.booleanOrNull ?: (type == UIBlockType.CONTAINER)
@@ -183,22 +170,21 @@ object UiStudioLayoutService {
         val bounds = SerialRect(x, y, x + finalW, y + finalH)
 
         // 解析嵌套子组件
-        val childBlocks = mutableListOf<UIBlock>()
+        val childBlocks = mutableListOf<UIStudioBlock>()
         val rawChildren = obj["children"]?.jsonArray
         if (rawChildren != null && rawChildren.isNotEmpty()) {
             for (childElement in rawChildren) {
                 val childObj = childElement as? JsonObject ?: continue
-                parseBlockRecursive(childObj, projectId, assetMap, slotRoleMap, childBlocks)
+                parseBlockRecursive(childObj, assetMap, slotRoleMap, childBlocks)
             }
         }
 
-        val block = UIBlock(
+        val block = UIStudioBlock(
             id = id,
             type = type,
             bounds = bounds,
             isPureContainer = isPureContainer,
-            referenceImage = boundFile,
-            currentImageUri = boundFile,
+            assetHash = matchedAsset?.hash,
             children = childBlocks
         )
         outList.add(block)
@@ -214,18 +200,21 @@ object UiStudioLayoutService {
      * 4. 纵横比守恒与居中：严格遵循素材物理尺寸与比例，解除纯容器遮盖。
      */
     private fun autoFitAssetsToSlots(
-        blocks: List<UIBlock>,
+        blocks: List<UIStudioBlock>,
         slotRoleMap: Map<String, String>,
-        assetLibrary: UIAssetLibrary,
-        projectId: String
-    ): List<UIBlock> {
+        assetLibrary: UIAssetLibrary
+    ): List<UIStudioBlock> {
+        // 哈希→素材反查索引（用于识别已被显式绑定的素材，避免重复分配）
+        val assetByHash = assetLibrary.items.filter { it.hash != null }.associateBy { it.hash!! }
+
         // 收集已显式绑定的素材，避免重复分配
         val usedAssetNames = mutableSetOf<String>()
-        fun collectBound(list: List<UIBlock>) {
+        fun collectBound(list: List<UIStudioBlock>) {
             for (b in list) {
-                b.referenceImage?.let {
-                    val fileName = it.relativePath.substringAfterLast('/').substringAfterLast('\\')
-                    usedAssetNames.add(fileName.lowercase())
+                b.assetHash?.let { hash ->
+                    assetByHash[hash]?.let { asset ->
+                        usedAssetNames.add(asset.name.lowercase())
+                    }
                 }
                 collectBound(b.children)
             }
@@ -244,10 +233,10 @@ object UiStudioLayoutService {
         var symbolCursor = 0
         val usedButtons = mutableSetOf<String>()
 
-        fun fitRecursive(blockList: List<UIBlock>, parentId: String = ""): List<UIBlock> {
+        fun fitRecursive(blockList: List<UIStudioBlock>, parentId: String = ""): List<UIStudioBlock> {
             return blockList.map { block ->
                 // 如果当前节点已有切片绑定，仅递归处理子组件
-                if (block.referenceImage != null) {
+                if (block.assetHash != null) {
                     return@map block.copy(children = fitRecursive(block.children, block.id))
                 }
 
@@ -313,15 +302,8 @@ object UiStudioLayoutService {
                     else -> null
                 }
 
-                // 执行物理装配
+                // 执行物理装配（哈希引用绑定）
                 if (candidateAsset != null) {
-                    val cleanRel = candidateAsset.relativePath.replace("\\", "/")
-                    val resolvedPath = when {
-                        cleanRel.startsWith("templates/") -> cleanRel
-                        cleanRel.startsWith("assets/") -> "templates/$projectId/$cleanRel"
-                        else -> "templates/$projectId/assets/$cleanRel"
-                    }
-                    val boundFile = TemplateFile(resolvedPath)
                     usedAssetNames.add(candidateAsset.name.lowercase())
 
                     // 保持素材原生纵横比，纠偏大模型失真的长宽比
@@ -349,8 +331,7 @@ object UiStudioLayoutService {
                     }
 
                     block.copy(
-                        referenceImage = boundFile,
-                        currentImageUri = boundFile,
+                        assetHash = candidateAsset.hash,
                         isPureContainer = false,
                         bounds = newBounds,
                         children = fitRecursive(block.children, block.id)
@@ -386,7 +367,7 @@ object UiStudioLayoutService {
     /**
      * 递归统计整棵树的图元总数
      */
-    fun countAllBlocks(blocks: List<UIBlock>): Int {
+    fun countAllBlocks(blocks: List<UIStudioBlock>): Int {
         var count = blocks.size
         for (b in blocks) {
             if (b.children.isNotEmpty()) {
@@ -399,10 +380,10 @@ object UiStudioLayoutService {
     /**
      * 递归统计已成功绑定切片素材的图元总数
      */
-    fun countMatchedAssets(blocks: List<UIBlock>): Int {
+    fun countMatchedAssets(blocks: List<UIStudioBlock>): Int {
         var count = 0
         for (b in blocks) {
-            if (b.currentImageUri != null || b.referenceImage != null) {
+            if (b.assetHash != null) {
                 count++
             }
             if (b.children.isNotEmpty()) {

@@ -42,16 +42,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.uistudio_drop_hint
+import geminiuiforge.composeapp.generated.resources.uistudio_import_files_mixed
+import geminiuiforge.composeapp.generated.resources.uistudio_import_folder
+import geminiuiforge.composeapp.generated.resources.uistudio_import_sheet_slices
+import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.extend.contextMenuClickable
 import org.gemini.ui.forge.extend.rememberClipboardAction
+import org.gemini.ui.forge.ui.component.chat.drop.onFileDrop
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.utils.SUPPORTED_IMAGE_EXTENSIONS
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import org.gemini.ui.forge.ui.uistudio.dialog.UIStudioRenameDialog
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetFolder
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
+import org.gemini.ui.forge.utils.rememberFilePicker
+import org.gemini.ui.forge.utils.rememberMultiFilePicker
 
 /**
  * UI Studio 素材库树形视图面板 (Tree View)。
@@ -80,10 +90,37 @@ fun UIStudioAssetPanel(
     var deletingAssetTarget by remember { mutableStateOf<UIAssetItem?>(null) }
     val folderBoundsMap = remember { mutableStateMapOf<String, Rect>() }
 
+    // 导入菜单展开状态与外部拖放悬停高亮状态
+    var showImportMenu by remember { mutableStateOf(false) }
+    var isExternalDragHovered by remember { mutableStateOf(false) }
+
+    // 三通道导入启动器：多选混合（文件+文件夹）、目录浏览、图集切片走原弹窗流程
+    val launchMultiFilePicker = rememberMultiFilePicker(
+        title = stringResource(Res.string.uistudio_import_files_mixed),
+        extensions = SUPPORTED_IMAGE_EXTENSIONS.toList()
+    ) { paths ->
+        if (paths.isNotEmpty()) viewModel.importExternalPaths(paths)
+    }
+    val launchFolderPicker = rememberFilePicker(
+        title = stringResource(Res.string.uistudio_import_folder),
+        isFolder = true
+    ) { path ->
+        path?.let { viewModel.importExternalPaths(listOf(it)) }
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            // 外部系统拖放导入：拖入图片文件或文件夹直接批量入库（哈希唯一去重）
+            .onFileDrop(
+                onDragStateChanged = { isDragging -> isExternalDragHovered = isDragging },
+                onFilesDropped = { paths ->
+                    isExternalDragHovered = false
+                    if (paths.isNotEmpty()) viewModel.importExternalPaths(paths)
+                }
+            )
     ) {
         Column(
             modifier = Modifier
@@ -170,17 +207,49 @@ fun UIStudioAssetPanel(
                         )
                     }
 
-                    FilledTonalButton(
-                        onClick = { viewModel.openImportSheetDialog() },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier
-                            .height(28.dp)
-                            .tip("导入外部图集并切片")
-                    ) {
-                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import", modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text("导入", style = MaterialTheme.typography.labelSmall)
+                    // 导入三通道菜单：图集切片 / 多选混合文件 / 目录浏览
+                    Box {
+                        FilledTonalButton(
+                            onClick = { showImportMenu = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier
+                                .height(28.dp)
+                                .tip("导入外部图集并切片 / 导入图片文件或文件夹")
+                        ) {
+                            Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import", modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("导入", style = MaterialTheme.typography.labelSmall)
+                        }
+                        DropdownMenu(
+                            expanded = showImportMenu,
+                            onDismissRequest = { showImportMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("导入图集切片", style = MaterialTheme.typography.bodySmall) },
+                                leadingIcon = { Icon(Icons.Default.Collections, null, modifier = Modifier.size(16.dp)) },
+                                onClick = {
+                                    showImportMenu = false
+                                    viewModel.openImportSheetDialog()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.uistudio_import_files_mixed), style = MaterialTheme.typography.bodySmall) },
+                                leadingIcon = { Icon(Icons.Default.AddPhotoAlternate, null, modifier = Modifier.size(16.dp)) },
+                                onClick = {
+                                    showImportMenu = false
+                                    launchMultiFilePicker()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.uistudio_import_folder), style = MaterialTheme.typography.bodySmall) },
+                                leadingIcon = { Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp)) },
+                                onClick = {
+                                    showImportMenu = false
+                                    launchFolderPicker()
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -445,6 +514,41 @@ fun UIStudioAssetPanel(
                                 viewModel.updateLastDragHoverPos(null)
                             }
                         )
+                    }
+                }
+            }
+
+            // 外部拖放悬停高亮遮罩（拖入图片或文件夹即可导入提示）
+            if (isExternalDragHovered) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f))
+                        .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                        shadowElevation = 6.dp
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AddPhotoAlternate,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(Res.string.uistudio_drop_hint),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }

@@ -316,7 +316,7 @@ class GenerateBlockAssetTool(
                     targetWidth = block.bounds.width,
                     targetHeight = block.bounds.height,
                     isPng = isPng,
-                    referenceImageUri = if (isTextToImage) null else effectiveRefFile?.getAbsolutePath(),
+                    referenceImageUri = if (isTextToImage) null else effectiveRefFile.getAbsolutePath(),
                     generationCount = 1,
                     onLog = { logMsg -> onProgress?.invoke(0.5f, logMsg) },
                     onImageGenerated = { uri -> rawResultUri = uri }
@@ -330,7 +330,6 @@ class GenerateBlockAssetTool(
             val finalRaw = rawResultUri
                 ?: return Pair(workingState, BlockAssetGenerationResult(false, blockId, errorMessage = "模型未返回有效图像"))
 
-            @OptIn(ExperimentalEncodingApi::class)
             val rawBytes = if (finalRaw.startsWith("data:image")) {
                 val pureB64 = if (finalRaw.contains(",")) finalRaw.substringAfter(",") else finalRaw
                 Base64.decode(pureB64)
@@ -408,7 +407,7 @@ class GenerateBlockAssetTool(
             // 6. CV 图案重叠与对齐评估 (PatternOverlapEvaluator)
             var ratingResult = if (isTextToImage) "TEXT_TO_IMAGE" else "VERIFIED"
             var casScore = 1.0f
-            if (!isTextToImage && !isBackground && refBytesToUse != null) {
+            if (!isTextToImage && !isBackground) {
                 try {
                     val cvEval = PatternOverlapEvaluator.evaluate(
                         renderBytes = rescaledBytes,

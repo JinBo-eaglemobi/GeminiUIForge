@@ -246,8 +246,10 @@
 
 - **面板与视图分割线拖拽规范 (Splitter & Draggable Specification)**: **【红线规则】**
   - **严禁重复手写底层原始手势监听**：全项目凡是涉及面板调宽、视图高宽拖拽比例划分的场景，**一律强制复用公共标准组件 VerticalSplitter 与 HorizontalSplitter**（位于 org.gemini.ui.forge.ui.component），严禁在业务界面中就地手写 pointerInput 与裸 detectDragGestures；
-  - **基于 Compose 官方生产级 Modifier.draggable 封装**：分割线组件底层必须统一基于官方一维拖拽手势 Modifier.draggable + rememberDraggableState 构建，并显式配置 startDragImmediately = true 确保零启动死区与硬件级指针连续捕获；
-  - **手势协程保活与防锁死铁律**：严禁将易变闭包作为手势监听的动态 key。拖拽回调必须通过 rememberUpdatedState 进行安全收拢，拖拽结束/中断时必须通过 onDragStopped 100% 确保释放 isDragging = false，彻底根除由于宿主重组导致的手势中断与高亮状态死锁缺陷。
+  - **基于 Compose 官方生产级 Modifier.draggable 封装**：分割线组件底层必须统一基于官方一维拖拽手势 Modifier.draggable + 
+rememberDraggableState 构建，并显式配置 startDragImmediately = true 确保零启动死区与硬件级指针连续捕获；
+  - **手势协程保活与防锁死铁律**：严禁将易变闭包作为手势监听的动态 key。拖拽回调必须通过 
+rememberUpdatedState 进行安全收拢，拖拽结束/中断时必须通过 onDragStopped 100% 确保释放 isDragging = false，彻底根除由于宿主重组导致的手势中断与高亮状态死锁缺陷。
 
 - **剪贴板工具与点击复制 (Clipboard Specification)**: **【红线规则】**
   - **严禁直接散落手写底层剪贴板与协程**：全项目凡是需要将文本、命令、URL 或日志写入系统剪贴板的场景，**一律强制复用项目内建的高阶扩展**（位于 `org.gemini.ui.forge.extend.ClipboardExtend.kt`），严禁在业务 UI 内重复声明 `LocalClipboard.current`、`rememberCoroutineScope()` 与 `scope.launch`。

@@ -28,8 +28,10 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.JsonPrimitive
 import org.gemini.ui.forge.utils.looseJson
 import org.gemini.ui.forge.data.TemplateFile
+import org.gemini.ui.forge.ui.uistudio.model.AgentPreference
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.assetsheet.AssetImportDraft
@@ -64,9 +66,16 @@ import org.gemini.ui.forge.utils.asset.AssetManifestHelper
 import org.gemini.ui.forge.manager.SessionTrafficStore
 import org.gemini.ui.forge.model.chat.TrafficDirection
 import org.gemini.ui.forge.model.chat.TrafficRecord
-import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
-import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.model.ui.UIStudioPage
+import org.gemini.ui.forge.utils.calculateFileHash
+import org.gemini.ui.forge.utils.calculateShortFileHash
+import org.gemini.ui.forge.utils.toShortHash
+import org.gemini.ui.forge.utils.copyLocalFile
+import org.gemini.ui.forge.utils.listFilesRecursively
+import org.gemini.ui.forge.utils.isSupportedImageFile
+import org.gemini.ui.forge.utils.TrafficSummaryExtractor
 import kotlin.random.Random
 import org.gemini.ui.forge.service.LocalMattingService
 import org.gemini.ui.forge.service.ai.ChatCompressionManager
@@ -148,6 +157,19 @@ class UIStudioViewModel {
     var isCapturingCanvasSnapshot by mutableStateOf(false)
         private set
 
+    /** 达到最大轮询次数时的用户确认续轮通道 */
+    private var toolLoopContinueDeferred: kotlinx.coroutines.CompletableDeferred<Boolean>? = null
+
+    /** 用户授权继续添加轮询 */
+    fun continueToolLoop() {
+        toolLoopContinueDeferred?.complete(true)
+    }
+
+    /** 用户选择结束或取消轮询 */
+    fun cancelToolLoop() {
+        toolLoopContinueDeferred?.complete(false)
+    }
+
     /**
      * 捕获画布快照并挂载到聊天附件
      */
@@ -165,7 +187,8 @@ class UIStudioViewModel {
                     projectName = project.projectId,
                     currentPage = currentView,
                     windowBounds = state.canvasWindowBounds,
-                    mode = mode
+                    mode = mode,
+                    assetPathResolver = { hash -> findAssetByHash(hash)?.relativePath }
                 )
                 if (attachment != null) {
                     onSuccess(attachment)
@@ -415,7 +438,7 @@ class UIStudioViewModel {
         }
 
         // 3. 视图界面 (Views)
-        state.project?.pages?.forEach { page ->
+        state.project?.studioPages?.forEach { page ->
             candidates.add(
                 MentionItem(
                     id = "view_${page.id}",
@@ -435,7 +458,7 @@ class UIStudioViewModel {
         }
 
         // 4. 当前视图图层图元 (Blocks - 沉底排列，剥离坐标仅保留尺寸)
-        fun collectBlocks(blocks: List<UIBlock>) {
+        fun collectBlocks(blocks: List<UIStudioBlock>) {
             blocks.forEach { block ->
                 val w = block.bounds.width.toInt()
                 val h = block.bounds.height.toInt()
@@ -480,7 +503,7 @@ class UIStudioViewModel {
      */
     fun loadProject(project: ProjectState?) {
         val effectiveProject = project ?: createDefaultBlankProject("NewUIStudioProject", 1920f, 1080f)
-        val firstPage = effectiveProject.pages.firstOrNull()
+        val firstPage = effectiveProject.studioPages.firstOrNull()
         val initialWidth = firstPage?.width?.takeIf { it > 0 } ?: 1920f
         val initialHeight = firstPage?.height?.takeIf { it > 0 } ?: 1080f
 
@@ -554,37 +577,29 @@ class UIStudioViewModel {
      * 自动从项目图元元数据及物理磁盘 assets 目录扫描补齐，并持久化保存。
      */
     private suspend fun healAssetLibrary(sanitized: String, initialLib: UIAssetLibrary): UIAssetLibrary {
-        val existingPaths = initialLib.items.map { it.relativePath.replace("\\", "/") }.toMutableSet()
-        val existingIds = initialLib.items.map { it.id }.toMutableSet()
+        var hasUpdatedExisting = false
+        val healedExistingItems = initialLib.items.map { item ->
+            val curHash = item.hash
+            if (curHash.isNullOrBlank()) {
+                val computed = calculateShortFileHash(item.relativePath)
+                if (computed != null) {
+                    hasUpdatedExisting = true
+                    item.copy(hash = computed)
+                } else item
+            } else if (curHash.length > 16) {
+                // 将历史存量 64 位长哈希规整为 16 位短哈希
+                hasUpdatedExisting = true
+                item.copy(hash = curHash.toShortHash())
+            } else item
+        }
+        val effectiveLib = if (hasUpdatedExisting) initialLib.copy(items = healedExistingItems) else initialLib
+
+        val existingPaths = effectiveLib.items.map { it.relativePath.replace("\\", "/") }.toMutableSet()
+        val existingIds = effectiveLib.items.map { it.id }.toMutableSet()
+        val existingHashes = effectiveLib.items.mapNotNull { it.hash }.toMutableSet()
         val newItems = mutableListOf<UIAssetItem>()
 
-        // 1. 优先从当前项目所有页面的图元绑定资产中提取高精度元数据
-        val allBlocks = state.project?.pages?.flatMap { it.blocks } ?: emptyList()
-        for (block in allBlocks) {
-            val tFile = block.currentImageUri ?: block.referenceImage
-            val rawUri = tFile?.relativePath ?: ""
-            val uri = rawUri.replace("\\", "/")
-            if (uri.isNotBlank() && (uri.endsWith(".png", ignoreCase = true) || uri.endsWith(".webp", ignoreCase = true))) {
-                if (!existingPaths.contains(uri) && !existingIds.contains(block.id)) {
-                    val displayName = block.userPromptZh.ifBlank { block.userPromptEn.ifBlank { block.id } }
-                    val item = UIAssetItem(
-                        id = block.id,
-                        name = displayName,
-                        relativePath = uri,
-                        width = block.bounds.width.toInt().coerceAtLeast(1),
-                        height = block.bounds.height.toInt().coerceAtLeast(1),
-                        category = block.type.name.lowercase(),
-                        folderId = null,
-                        createdAt = getCurrentTimeMillis()
-                    )
-                    newItems.add(item)
-                    existingPaths.add(uri)
-                    existingIds.add(block.id)
-                }
-            }
-        }
-
-        // 2. 深度扫描本地物理 assets 目录兜底自愈
+        // 1. 深度扫描本地物理 assets 目录兜底自愈（新模型下素材唯一凭据是内容哈希，扫描时同步计算补齐 16 位短哈希）
         try {
             val assetsDirRel = "templates/$sanitized/assets"
             val directFiles = storage.listFiles(assetsDirRel)
@@ -593,6 +608,9 @@ class UIStudioViewModel {
                     val relPath = "$assetsDirRel/$file"
                     if (!existingPaths.contains(relPath)) {
                         val baseId = file.substringBeforeLast(".")
+                        val fileHash = calculateShortFileHash(relPath)
+                        // 同内容哈希的重复文件跳过入库（哈希是素材唯一凭据）
+                        if (fileHash != null && existingHashes.contains(fileHash)) continue
                         if (!existingIds.contains(baseId)) {
                             newItems.add(
                                 UIAssetItem(
@@ -603,11 +621,13 @@ class UIStudioViewModel {
                                     height = 100,
                                     category = "image",
                                     folderId = null,
-                                    createdAt = getCurrentTimeMillis()
+                                    createdAt = getCurrentTimeMillis(),
+                                    hash = fileHash
                                 )
                             )
                             existingPaths.add(relPath)
                             existingIds.add(baseId)
+                            fileHash?.let { existingHashes.add(it) }
                         }
                     }
                 }
@@ -623,6 +643,9 @@ class UIStudioViewModel {
                         if (!existingPaths.contains(relPath)) {
                             val baseId = file.substringBeforeLast(".")
                             val effectiveId = if (existingIds.contains(baseId)) "${sub}_$baseId" else baseId
+                            val fileHash = calculateShortFileHash(relPath)
+                            // 同内容哈希的重复文件跳过入库（哈希是素材唯一凭据）
+                            if (fileHash != null && existingHashes.contains(fileHash)) continue
                             newItems.add(
                                 UIAssetItem(
                                     id = effectiveId,
@@ -632,11 +655,13 @@ class UIStudioViewModel {
                                     height = 100,
                                     category = "image",
                                     folderId = null,
-                                    createdAt = getCurrentTimeMillis()
+                                    createdAt = getCurrentTimeMillis(),
+                                    hash = fileHash
                                 )
                             )
                             existingPaths.add(relPath)
                             existingIds.add(effectiveId)
+                            fileHash?.let { existingHashes.add(it) }
                         }
                     }
                 }
@@ -645,9 +670,9 @@ class UIStudioViewModel {
             AppLogger.w("UIStudioViewModel", "物理目录自愈扫描部分跳过: ${e.message}")
         }
 
-        return if (newItems.isNotEmpty()) {
-            val updated = initialLib.copy(items = initialLib.items + newItems)
-            AppLogger.i("UIStudioViewModel", "✨ 自愈补齐素材库完成: 新增 ${newItems.size} 个物理素材！")
+        return if (newItems.isNotEmpty() || hasUpdatedExisting) {
+            val updated = effectiveLib.copy(items = effectiveLib.items + newItems)
+            AppLogger.i("UIStudioViewModel", "✨ 自愈补齐素材库完成: 新增 ${newItems.size} 个物理素材，补全哈希 ${if (hasUpdatedExisting) "是" else "否"}！")
             updated
         } else {
             initialLib
@@ -813,36 +838,12 @@ class UIStudioViewModel {
             } else it
         }
 
-        // 同步递归更新 project 内所有图元（包括容器内嵌套图元）的关联图片路径
-        fun updateBlockImages(blocks: List<UIBlock>): List<UIBlock> {
-            return blocks.map { b ->
-                val updatedChildren = updateBlockImages(b.children)
-                if (b.id == assetId) {
-                    b.copy(
-                        currentImageUri = TemplateFile(newRelPath),
-                        referenceImage = TemplateFile(newRelPath),
-                        children = updatedChildren
-                    )
-                } else {
-                    b.copy(children = updatedChildren)
-                }
-            }
-        }
-
-        val updatedPages = state.project?.pages?.map { page ->
-            page.copy(blocks = updateBlockImages(page.blocks))
-        }
-
-        val updatedProject = if (updatedPages != null && state.project != null) {
-            state.project!!.copy(pages = updatedPages)
-        } else state.project
-
+        // 哈希引用模型下：素材库内移动文件夹仅更新条目的当前路径账本（relativePath），
+        // 页面图元通过 assetHash 引用素材，与物理路径彻底解耦，无需任何图元联动更新
         state = state.copy(
-            project = updatedProject,
             assetLibrary = state.assetLibrary.copy(items = updatedItems)
         )
         saveAssetLibrary()
-        saveProject(repo)
         val destDesc = targetFolder?.name ?: "根目录"
         Toast.show("素材已移动至: $destDesc", ToastType.SUCCESS)
     }
@@ -851,10 +852,10 @@ class UIStudioViewModel {
      * 递归遍历并更新模块树中的目标图元。
      */
     private fun updateBlockInTreeRecursively(
-        blocks: List<UIBlock>,
+        blocks: List<UIStudioBlock>,
         targetId: String,
-        transform: (UIBlock) -> UIBlock
-    ): List<UIBlock> {
+        transform: (UIStudioBlock) -> UIStudioBlock
+    ): List<UIStudioBlock> {
         return blocks.map { b ->
             if (b.id == targetId) {
                 transform(b)
@@ -870,9 +871,9 @@ class UIStudioViewModel {
      * 递归遍历整棵模块树并统一变换所有图元。
      */
     private fun mapAllBlocksRecursively(
-        blocks: List<UIBlock>,
-        transform: (UIBlock) -> UIBlock
-    ): List<UIBlock> {
+        blocks: List<UIStudioBlock>,
+        transform: (UIStudioBlock) -> UIStudioBlock
+    ): List<UIStudioBlock> {
         return blocks.map { b ->
             val updated = transform(b)
             if (updated.children.isNotEmpty()) {
@@ -908,7 +909,7 @@ class UIStudioViewModel {
     fun toggleAllBlocksLocked(repo: TemplateRepository) {
         val currentV = state.currentView ?: return
         if (currentV.blocks.isEmpty()) return
-        fun hasAnyUnlocked(list: List<UIBlock>): Boolean = list.any { !it.isLocked || hasAnyUnlocked(it.children) }
+        fun hasAnyUnlocked(list: List<UIStudioBlock>): Boolean = list.any { !it.isLocked || hasAnyUnlocked(it.children) }
         val targetLock = hasAnyUnlocked(currentV.blocks)
         val updatedBlocks = mapAllBlocksRecursively(currentV.blocks) { it.copy(isLocked = targetLock) }.bindParents()
         updateViewBlocksAndSave(currentV.id, updatedBlocks, repo)
@@ -924,7 +925,7 @@ class UIStudioViewModel {
     fun toggleAllBlocksVisibility(repo: TemplateRepository) {
         val currentV = state.currentView ?: return
         if (currentV.blocks.isEmpty()) return
-        fun hasAnyHidden(list: List<UIBlock>): Boolean = list.any { !it.isVisible || hasAnyHidden(it.children) }
+        fun hasAnyHidden(list: List<UIStudioBlock>): Boolean = list.any { !it.isVisible || hasAnyHidden(it.children) }
         val targetVisible = hasAnyHidden(currentV.blocks)
         val updatedBlocks = mapAllBlocksRecursively(currentV.blocks) { it.copy(isVisible = targetVisible) }.bindParents()
         updateViewBlocksAndSave(currentV.id, updatedBlocks, repo)
@@ -989,6 +990,128 @@ class UIStudioViewModel {
             } catch (_: Exception) {}
         }
         Toast.show("已删除素材: ${target.name}", ToastType.INFO)
+    }
+
+    // ====== 素材库哈希引用体系与统一导入管道 ======
+
+    /**
+     * 通过内容哈希检索素材条目。
+     * 这是页面图元 (assetHash) 寻址物理资源的唯一通道：
+     * 图元仅持有哈希 → 素材条目持有「当前路径账本」(relativePath) → 物理文件。
+     * 条目被移动/改名时账本路径更新，但哈希不变，图元引用永不断链。
+     */
+    fun findAssetByHash(hash: String?): UIAssetItem? {
+        if (hash.isNullOrBlank()) return null
+        val target = hash.trim().lowercase()
+        return state.assetLibrary.items.firstOrNull { item ->
+            val itemHash = item.hash?.trim()?.lowercase() ?: return@firstOrNull false
+            itemHash == target || itemHash.startsWith(target) || target.startsWith(itemHash)
+        }
+    }
+
+    /**
+     * 统一外部导入管道：支持多文件、多文件夹、文件与文件夹混合的路径列表。
+     * 三条导入入口（弹窗多选、目录浏览、桌面拖放）最终全部收口于此。
+     *
+     * 处理流程：展开目录 → 过滤图片扩展名 → 逐文件计算 SHA-256 哈希 →
+     * 同哈希去重跳过 → 物理拷贝入工程 assets/import 目录（文件名 = 哈希.扩展名）→
+     * Skia 解码读取真实尺寸 → 构造素材条目入库并持久化。
+     *
+     * @param paths 外部文件/文件夹绝对路径列表（单一或多个均可）
+     * @param targetFolderId 入库目标文件夹（默认当前选中的素材文件夹）
+     */
+    fun importExternalPaths(paths: List<String>, targetFolderId: String? = state.selectedFolderId) {
+        val proj = state.project ?: run {
+            Toast.show("尚未打开任何工程，无法导入素材", ToastType.ERROR)
+            return
+        }
+        if (paths.isEmpty()) return
+        val sanitized = proj.projectId.trim().replace(" ", "_")
+        scope.launch(Dispatchers.Default) {
+            // 1. 展开路径集合：文件直接收集，文件夹递归扫描，统一过滤受支持的图片扩展名
+            val candidateFiles = mutableListOf<String>()
+            for (rawPath in paths) {
+                val cleanPath = rawPath.replace("\\", "/")
+                try {
+                    // 优先按目录递归展开（非目录或空目录返回空列表），否则按单图片文件兜底收录
+                    val nested = listFilesRecursively(cleanPath)
+                    if (nested.isNotEmpty()) {
+                        candidateFiles.addAll(nested.filter { isSupportedImageFile(it) })
+                    } else if (isSupportedImageFile(cleanPath) && TemplateFile(cleanPath).exists()) {
+                        candidateFiles.add(cleanPath)
+                    }
+                } catch (e: Exception) {
+                    AppLogger.w("UIStudioViewModel", "导入路径解析跳过: $cleanPath (${e.message})")
+                }
+            }
+            if (candidateFiles.isEmpty()) {
+                Toast.show("未在所选路径中发现可导入的图片文件", ToastType.INFO)
+                return@launch
+            }
+
+            // 2. 逐文件哈希去重与物理拷贝入库
+            val existingHashes = state.assetLibrary.items.mapNotNull { it.hash?.trim()?.lowercase() }.toMutableSet()
+            val newItems = mutableListOf<UIAssetItem>()
+            var skippedCount = 0
+            for (filePath in candidateFiles) {
+                try {
+                    val fileHash = calculateShortFileHash(filePath) ?: continue
+                    // 哈希是素材唯一凭据：库内已有同内容文件直接跳过（重复导入零冗余，支持长短哈希前缀比对）
+                    if (existingHashes.any { it == fileHash || it.startsWith(fileHash) || fileHash.startsWith(it) }) {
+                        skippedCount++
+                        continue
+                    }
+                    val extension = filePath.substringAfterLast('.', "png").lowercase()
+                    val relPath = "templates/$sanitized/assets/import/$fileHash.$extension"
+                    if (!copyLocalFile(filePath, relPath)) {
+                        AppLogger.w("UIStudioViewModel", "素材拷贝失败，跳过: $filePath")
+                        continue
+                    }
+                    // Skia 解码读取真实物理尺寸（失败兜底 100x100）
+                    var imgWidth = 100
+                    var imgHeight = 100
+                    try {
+                        val bytes = readLocalFileBytes(relPath)
+                        if (bytes != null) {
+                            val image = Image.makeFromEncoded(bytes)
+                            imgWidth = image.width.coerceAtLeast(1)
+                            imgHeight = image.height.coerceAtLeast(1)
+                        }
+                    } catch (_: Exception) {}
+                    val displayName = filePath.substringAfterLast('/').substringBeforeLast('.')
+                    newItems.add(
+                        UIAssetItem(
+                            id = "asset_${fileHash.take(8)}_${getCurrentTimeMillis() % 100000}",
+                            name = displayName,
+                            relativePath = relPath,
+                            width = imgWidth,
+                            height = imgHeight,
+                            category = "image",
+                            folderId = targetFolderId,
+                            createdAt = getCurrentTimeMillis(),
+                            hash = fileHash
+                        )
+                    )
+                    existingHashes.add(fileHash)
+                } catch (e: Exception) {
+                    AppLogger.w("UIStudioViewModel", "导入单文件失败: $filePath (${e.message})")
+                }
+            }
+
+            if (newItems.isEmpty()) {
+                Toast.show(if (skippedCount > 0) "所选素材均已存在（跳过 $skippedCount 个重复项）" else "导入失败，未新增任何素材", ToastType.INFO)
+                return@launch
+            }
+
+            // 3. 入库并持久化，同时切换左侧栏到素材库 Tab 便于即时查看
+            state = state.copy(
+                assetLibrary = state.assetLibrary.copy(items = state.assetLibrary.items + newItems),
+                leftBottomTab = UIStudioLeftBottomTab.ASSETS
+            )
+            saveAssetLibrary()
+            val dupHint = if (skippedCount > 0) "，跳过重复 $skippedCount 个" else ""
+            Toast.show("成功导入 ${newItems.size} 个素材$dupHint", ToastType.SUCCESS)
+        }
     }
 
     fun openNewFolderDialog() {
@@ -1255,10 +1378,10 @@ class UIStudioViewModel {
         val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
             it.copy(scaleX = scaleX, scaleY = scaleY)
         }.bindParents()
-        val updatedPages = state.project?.pages?.map {
+        val updatedPages = state.project?.studioPages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
+        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
     }
 
     /**
@@ -1278,10 +1401,10 @@ class UIStudioViewModel {
         val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
             it.copy(opacity = clamped)
         }.bindParents()
-        val updatedPages = state.project?.pages?.map {
+        val updatedPages = state.project?.studioPages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
+        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
     }
 
     /**
@@ -1292,10 +1415,10 @@ class UIStudioViewModel {
         val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
             it.copy(scaleX = 1.0f, scaleY = 1.0f, opacity = 1.0f)
         }.bindParents()
-        val updatedPages = state.project?.pages?.map {
+        val updatedPages = state.project?.studioPages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
+        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
     }
 
     fun triggerFitToViewport() {
@@ -1310,7 +1433,7 @@ class UIStudioViewModel {
      */
     fun openViewTab(viewId: String) {
         cacheCurrentViewport()
-        val page = state.project?.pages?.find { it.id == viewId } ?: return
+        val page = state.project?.studioPages?.find { it.id == viewId } ?: return
         val currentOpen = state.openViewIds
         val updatedOpen = if (currentOpen.contains(viewId)) currentOpen else currentOpen + viewId
         state = state.copy(
@@ -1411,7 +1534,7 @@ class UIStudioViewModel {
         } else {
             state.currentViewId
         }
-        val nextPage = state.project?.pages?.find { it.id == newActiveId }
+        val nextPage = state.project?.studioPages?.find { it.id == newActiveId }
         state = state.copy(
             openViewIds = updatedOpen,
             currentViewId = newActiveId,
@@ -1446,7 +1569,7 @@ class UIStudioViewModel {
      */
     fun closeOtherViewTabs(viewId: String) {
         if (!state.openViewIds.contains(viewId)) return
-        val nextPage = state.project?.pages?.find { it.id == viewId }
+        val nextPage = state.project?.studioPages?.find { it.id == viewId }
         state = state.copy(
             openViewIds = listOf(viewId),
             currentViewId = viewId,
@@ -1472,12 +1595,12 @@ class UIStudioViewModel {
      */
     fun updatePageDimensions(viewId: String, newWidth: Float, newHeight: Float, repo: TemplateRepository) {
         val proj = state.project ?: return
-        val targetPage = proj.pages.find { it.id == viewId } ?: return
+        val targetPage = proj.studioPages.find { it.id == viewId } ?: return
         val clampedW = newWidth.coerceIn(100f, 10000f)
         val clampedH = newHeight.coerceIn(100f, 10000f)
-        val updatedPage = targetPage.copy(width = clampedW, height = clampedH).postProcess()
-        val updatedPages = proj.pages.map { if (it.id == viewId) updatedPage else it }
-        val updatedProject = proj.copy(pages = updatedPages)
+        val updatedPage = targetPage.copy(width = clampedW, height = clampedH)
+        val updatedPages = proj.studioPages.map { if (it.id == viewId) updatedPage else it }
+        val updatedProject = proj.copy(studioPages = updatedPages)
         state = state.copy(
             project = updatedProject,
             canvasWidth = if (state.currentViewId == viewId) clampedW else state.canvasWidth,
@@ -1503,16 +1626,16 @@ class UIStudioViewModel {
      */
     fun createView(name: String, width: Float, height: Float, repo: TemplateRepository) {
         val proj = state.project ?: return
-        val viewName = name.trim().ifBlank { "View_${proj.pages.size + 1}" }
-        val newPage = UIPage(
+        val viewName = name.trim().ifBlank { "View_${proj.studioPages.size + 1}" }
+        val newPage = UIStudioPage(
             id = "view_${getCurrentTimeMillis()}",
             nameStr = viewName,
             width = width,
             height = height,
             blocks = emptyList()
         )
-        val updatedPages = proj.pages + newPage
-        val updatedProject = proj.copy(pages = updatedPages)
+        val updatedPages = proj.studioPages + newPage
+        val updatedProject = proj.copy(studioPages = updatedPages)
         val updatedOpen = state.openViewIds + newPage.id
         state = state.copy(
             project = updatedProject,
@@ -1533,22 +1656,22 @@ class UIStudioViewModel {
     /**
      * 复制并克隆指定视图界面 (含全部图元深度复制)。
      */
-    fun duplicateView(page: UIPage, repo: TemplateRepository) {
+    fun duplicateView(page: UIStudioPage, repo: TemplateRepository) {
         val proj = state.project ?: return
         val newViewName = "${page.nameStr}_副本"
         val timestamp = getCurrentTimeMillis()
         val clonedBlocks = page.blocks.map { block ->
             block.copy(id = "block_${timestamp}_${block.id.takeLast(6)}")
         }
-        val duplicatedPage = UIPage(
+        val duplicatedPage = UIStudioPage(
             id = "view_$timestamp",
             nameStr = newViewName,
             width = page.width,
             height = page.height,
             blocks = clonedBlocks
         )
-        val updatedPages = proj.pages + duplicatedPage
-        val updatedProject = proj.copy(pages = updatedPages)
+        val updatedPages = proj.studioPages + duplicatedPage
+        val updatedProject = proj.copy(studioPages = updatedPages)
         val updatedOpen = state.openViewIds + duplicatedPage.id
         state = state.copy(
             project = updatedProject,
@@ -1570,14 +1693,14 @@ class UIStudioViewModel {
      */
     fun deleteView(viewId: String, repo: TemplateRepository) {
         val proj = state.project ?: return
-        if (proj.pages.size <= 1) {
+        if (proj.studioPages.size <= 1) {
             Toast.show("至少保留一个主视图界面", ToastType.INFO)
             return
         }
-        val updatedPages = proj.pages.filterNot { it.id == viewId }
+        val updatedPages = proj.studioPages.filterNot { it.id == viewId }
         val nextViewId = if (state.currentViewId == viewId) updatedPages.firstOrNull()?.id else state.currentViewId
         val nextPage = updatedPages.find { it.id == nextViewId }
-        val updatedProject = proj.copy(pages = updatedPages)
+        val updatedProject = proj.copy(studioPages = updatedPages)
         state = state.copy(
             project = updatedProject,
             currentViewId = nextViewId,
@@ -1593,7 +1716,7 @@ class UIStudioViewModel {
         Toast.show("已删除视图", ToastType.INFO)
     }
 
-    fun requestDeleteView(page: UIPage) {
+    fun requestDeleteView(page: UIStudioPage) {
         state = state.copy(deletingView = page)
     }
 
@@ -1776,14 +1899,66 @@ class UIStudioViewModel {
                     )
                 }
 
-                // 2. 无感平滑清理：检测并安全删除单项目目录下遗留的旧版 agent_config.json
+                // 2. 加载用户偏好配置 (agent_pref.json)，项目私有优先，缺省回退全局默认偏好
+                var pref: AgentPreference? = null
+                val projPrefFile = TemplateFile("templates/$sanitized/agent_pref.json")
+                if (projPrefFile.exists()) {
+                    val bytes = projPrefFile.readBytes()
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        pref = jsonHelper.decodeFromString(AgentPreference.serializer(), bytes.decodeToString())
+                    }
+                }
+                if (pref == null) {
+                    val globalPrefFile = TemplateFile("preferences/agent_pref.json")
+                    if (globalPrefFile.exists()) {
+                        val bytes = globalPrefFile.readBytes()
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            pref = jsonHelper.decodeFromString(AgentPreference.serializer(), bytes.decodeToString())
+                        }
+                    }
+                }
+                if (pref != null) {
+                    state = state.copy(
+                        projectAgentConfig = state.projectAgentConfig.copy(
+                            modelName = pref.modelName,
+                            thinkingLevel = pref.thinkingLevel,
+                            apiFlavor = pref.apiFlavor,
+                            temperature = pref.temperature
+                        )
+                    )
+                    AppLogger.i("UIStudioViewModel", "✨ 已成功恢复智能设计助理偏好: model=${pref.modelName}, thinking=${pref.thinkingLevel}, flavor=${pref.apiFlavor}")
+                }
+
+                // 3. 无感平滑清理：检测并安全删除单项目目录下遗留的旧版 agent_config.json
                 val legacyFile = TemplateFile(legacyPath)
                 if (legacyFile.exists()) {
                     legacyFile.delete()
                     AppLogger.i("UIStudioViewModel", "🧹 已清理项目私有遗留配置文件: $legacyPath")
                 }
             } catch (e: Exception) {
-                AppLogger.e("UIStudioViewModel", "加载全局 Agent 人设配置失败", e)
+                AppLogger.e("UIStudioViewModel", "加载全局 Agent 人设配置或用户偏好失败", e)
+            }
+        }
+    }
+
+    private fun saveAgentPreferenceAsync() {
+        val proj = state.project ?: return
+        val sanitized = proj.projectId.trim().replace(" ", "_")
+        val pref = AgentPreference(
+            modelName = state.projectAgentConfig.modelName,
+            thinkingLevel = state.projectAgentConfig.thinkingLevel,
+            apiFlavor = state.projectAgentConfig.apiFlavor,
+            temperature = state.projectAgentConfig.temperature
+        )
+        scope.launch(Dispatchers.Default) {
+            try {
+                val jsonStr = jsonHelper.encodeToString(AgentPreference.serializer(), pref)
+                val bytes = jsonStr.encodeToByteArray()
+                TemplateFile("templates/$sanitized/agent_pref.json").writeBytes(bytes)
+                TemplateFile("preferences/agent_pref.json").writeBytes(bytes)
+                AppLogger.d("UIStudioViewModel", "💾 已持久化智能设计助理用户偏好: model=${pref.modelName}, thinking=${pref.thinkingLevel}, flavor=${pref.apiFlavor}")
+            } catch (e: Exception) {
+                AppLogger.e("UIStudioViewModel", "持久化智能设计助理偏好失败", e)
             }
         }
     }
@@ -1794,11 +1969,13 @@ class UIStudioViewModel {
 
     fun updateProjectModel(modelName: String) {
         state = state.copy(projectAgentConfig = state.projectAgentConfig.copy(modelName = modelName))
+        saveAgentPreferenceAsync()
         Toast.show("已切换模型: $modelName", ToastType.SUCCESS)
     }
 
     fun updateProjectModel(model: GeminiModel) {
         state = state.copy(projectAgentConfig = state.projectAgentConfig.copy(modelName = model.modelName))
+        saveAgentPreferenceAsync()
         Toast.show("已切换模型: ${model.displayName}", ToastType.SUCCESS)
     }
 
@@ -1809,11 +1986,13 @@ class UIStudioViewModel {
 
     fun updateProjectApiFlavor(apiFlavor: ApiFlavor) {
         state = state.copy(projectAgentConfig = state.projectAgentConfig.copy(apiFlavor = apiFlavor))
+        saveAgentPreferenceAsync()
         Toast.show("已切换通信协议: ${apiFlavor.displayNameZh}", ToastType.SUCCESS)
     }
 
     fun updateProjectThinkingLevel(level: ThinkingLevel) {
         state = state.copy(projectAgentConfig = state.projectAgentConfig.copy(thinkingLevel = level))
+        saveAgentPreferenceAsync()
         Toast.show("思考等级: ${level.displayName}", ToastType.SUCCESS)
     }
 
@@ -2367,113 +2546,280 @@ class UIStudioViewModel {
                     )
                 )
 
-                val result = try {
-                    chatEngine.executeChat(
-                        request = chatRequest,
-                        onChunk = { chunk ->
-                            state = state.copy(streamingAiText = state.streamingAiText + chunk)
-                        },
-                        onThought = { thought: String, _ ->
-                            if (state.streamingAiText.isBlank() && thought.isNotBlank()) {
-                                state = state.copy(streamingAiText = "🧠 " + thought.takeLast(120))
-                            }
-                        },
-                        onRawTraffic = { direction, rawUrl, body ->
-                            scope.launch(Dispatchers.Default) {
-                                val record = TrafficRecord(
-                                    seq = 0,
-                                    direction = direction,
-                                    timestamp = getCurrentTimeMillis(),
-                                    url = rawUrl,
-                                    model = selectedModel,
-                                    body = body
+                var currentChatRequest = chatRequest
+                val allExecutedToolRecords = mutableListOf<ChatToolCallRecord>()
+                var round = 0
+                val toolRoundStep = configManager.loadKey("AI_AGENT_MAX_TOOL_ROUNDS")?.toIntOrNull()?.coerceIn(5, 500) ?: 50
+                var maxToolRounds = toolRoundStep
+                var lastResult: org.gemini.ui.forge.service.ai.GeminiChatResult? = null
+                val previousRoundsThoughts = mutableListOf<String>()
+
+                val liveMsgId = "msg_${getCurrentTimeMillis()}_assistant"
+                var liveAssistantMsg = VisualChatMessage(
+                    id = liveMsgId,
+                    role = "model",
+                    prompt = "",
+                    modelName = selectedModel,
+                    timestamp = getCurrentTimeMillis(),
+                    toolCalls = emptyList()
+                )
+                var currentLiveSession = activeSession.copy(messages = activeSession.messages + liveAssistantMsg)
+                state = state.copy(
+                    chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it }
+                )
+
+                while (round < maxToolRounds) {
+                    round++
+                    val currentRound = round
+                    var currentStreamingThoughtThisRound = ""
+                    val result = try {
+                        chatEngine.executeChat(
+                            request = currentChatRequest,
+                            onChunk = { chunk ->
+                                val updatedPrompt = liveAssistantMsg.prompt + chunk
+                                liveAssistantMsg = liveAssistantMsg.copy(
+                                    prompt = updatedPrompt,
+                                    variants = listOf(updatedPrompt)
                                 )
-                                trafficStore.append(record, trafficScopeId, activeSession.id)
+                                currentLiveSession = currentLiveSession.copy(
+                                    messages = currentLiveSession.messages.map { if (it.id == liveMsgId) liveAssistantMsg else it }
+                                )
+                                state = state.copy(
+                                    chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it },
+                                    streamingAiText = updatedPrompt
+                                )
+                            },
+                            onThought = { thought: String, _ ->
+                                if (thought.isNotBlank()) {
+                                    currentStreamingThoughtThisRound = thought
+                                    val fullThought = if (previousRoundsThoughts.isEmpty()) {
+                                        thought
+                                    } else {
+                                        "${previousRoundsThoughts.joinToString("\n\n---\n\n")}\n\n---\n\n[第 $currentRound 轮思考]\n$thought"
+                                    }
+                                    liveAssistantMsg = liveAssistantMsg.copy(thought = fullThought)
+                                    currentLiveSession = currentLiveSession.copy(
+                                        messages = currentLiveSession.messages.map { if (it.id == liveMsgId) liveAssistantMsg else it }
+                                    )
+                                    state = state.copy(
+                                        chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it },
+                                        streamingAiThought = thought
+                                    )
+                                }
+                            },
+                            onRawTraffic = { direction, rawUrl, body ->
+                                scope.launch(Dispatchers.Default) {
+                                    val isReq = direction == TrafficDirection.REQ
+                                    val stageTag = if (currentRound <= 1 && isReq) {
+                                        "第 1 轮 · 意图输入"
+                                    } else if (isReq) {
+                                        "第 $currentRound 轮 · 工具结果反哺"
+                                    } else {
+                                        "第 $currentRound 轮 · 模型推理与工具决策"
+                                    }
+                                    val summary = TrafficSummaryExtractor.extractSummary(direction.name, body)
+                                    val record = TrafficRecord(
+                                        seq = 0,
+                                        direction = direction,
+                                        timestamp = getCurrentTimeMillis(),
+                                        url = rawUrl,
+                                        model = selectedModel,
+                                        body = body,
+                                        roundIndex = currentRound,
+                                        stageTag = stageTag,
+                                        summary = summary
+                                    )
+                                    trafficStore.append(record, trafficScopeId, activeSession.id)
+                                }
                             }
-                        }
-                    )
-                } catch (e: Exception) {
-                    AppLogger.e("UIStudioViewModel", "Gemini API 调用异常", e)
-                    Toast.show("AI 回复失败: ${e.message}", ToastType.ERROR)
-                    org.gemini.ui.forge.service.ai.GeminiChatResult(
-                        text = "⚠️ 网络通信异常：${e.message ?: "未知网络错误"}\n可点击顶部网络通信图标 (Receipt) 查看原始 HTTP 报文排查问题。",
-                        rawResponseJson = e.message ?: "",
-                        isSuccess = false,
-                        errorMessage = e.message
-                    )
-                } finally {
-                    state = state.copy(streamingAiText = "", streamingAiThought = "")
-                }
-
-                if (!result.isSuccess) {
-                    val errMsg = result.errorMessage ?: "服务调用未成功"
-                    withContext(Dispatchers.Main) {
-                        Toast.show("AI 响应异常: $errMsg", ToastType.ERROR)
-                    }
-                }
-
-                val executedToolRecords = if (result.isSuccess) {
-                    state = state.copy(streamingAiThought = "🛠️ 正在执行系统工具 [generate_image] 生成并落盘素材...")
-                    try {
-                        executeDetectedAiTools(result.rawResponseJson, result.text)
+                        )
+                    } catch (e: Exception) {
+                        AppLogger.e("UIStudioViewModel", "Gemini API 调用异常", e)
+                        Toast.show("AI 回复失败: ${e.message}", ToastType.ERROR)
+                        org.gemini.ui.forge.service.ai.GeminiChatResult(
+                            text = "⚠️ 网络通信异常：${e.message ?: "未知网络错误"}\n可点击顶部网络通信图标 (Receipt) 查看原始 HTTP 报文排查问题。",
+                            rawResponseJson = e.message ?: "",
+                            isSuccess = false,
+                            errorMessage = e.message
+                        )
                     } finally {
-                        state = state.copy(streamingAiThought = "")
+                        state = state.copy(streamingAiText = "", streamingAiThought = "")
                     }
-                } else emptyList()
 
-                val generatedImgPath = extractGeneratedImageUri(executedToolRecords)
+                    lastResult = result
+
+                    // 沉淀本轮思考过程，保证多轮交互后完整呈现
+                    val resolvedThoughtText = result.thoughtText?.ifBlank { null } ?: currentStreamingThoughtThisRound.ifBlank { null }
+                    if (resolvedThoughtText != null) {
+                        val labeledThought = if (currentRound <= 1) resolvedThoughtText else "[第 $currentRound 轮思考]\n$resolvedThoughtText"
+                        previousRoundsThoughts.add(labeledThought)
+                        liveAssistantMsg = liveAssistantMsg.copy(thought = previousRoundsThoughts.joinToString("\n\n---\n\n"))
+                    }
+
+                    if (!result.isSuccess) {
+                        val errMsg = result.errorMessage ?: "服务调用未成功"
+                        withContext(Dispatchers.Main) {
+                            Toast.show("AI 响应异常: $errMsg", ToastType.ERROR)
+                        }
+                        break
+                    }
+
+                    val executedToolRecords = if (result.isSuccess) {
+                        state = state.copy(streamingAiThought = "🛠️ 正在执行系统工具...")
+                        try {
+                            executeDetectedAiTools(result.rawResponseJson, result.text)
+                        } finally {
+                            state = state.copy(streamingAiThought = "")
+                        }
+                    } else emptyList()
+
+                    allExecutedToolRecords.addAll(executedToolRecords)
+
+                    // 实时将当前执行完毕的工具卡片同步刷新至正在展示的消息实体中
+                    liveAssistantMsg = liveAssistantMsg.copy(toolCalls = allExecutedToolRecords.toList())
+                    currentLiveSession = currentLiveSession.copy(
+                        messages = currentLiveSession.messages.map { if (it.id == liveMsgId) liveAssistantMsg else it }
+                    )
+                    state = state.copy(
+                        chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it }
+                    )
+
+                    val isLayoutTriggered = executedToolRecords.any { it.toolName == "apply_view_layout" } ||
+                        result.rawResponseJson.contains("apply_view_layout")
+
+                    // 如果没有工具调用，或者已经触发了排版装配，跳出循环
+                    if (executedToolRecords.isEmpty() || isLayoutTriggered) {
+                        break
+                    }
+
+                    // 到达当前最大轮次上限时，弹窗询问用户是否追加继续
+                    if (round >= maxToolRounds) {
+                        state = state.copy(
+                            showMaxToolRoundsContinueDialog = true,
+                            currentToolLoopRound = round,
+                            maxToolLoopRoundLimit = maxToolRounds
+                        )
+                        val deferred = kotlinx.coroutines.CompletableDeferred<Boolean>()
+                        toolLoopContinueDeferred = deferred
+                        val shouldContinue = try {
+                            deferred.await()
+                        } finally {
+                            toolLoopContinueDeferred = null
+                            state = state.copy(showMaxToolRoundsContinueDialog = false)
+                        }
+                        if (shouldContinue) {
+                            maxToolRounds += toolRoundStep
+                            withContext(Dispatchers.Main) {
+                                Toast.show("已继续追加 $toolRoundStep 轮推理...", ToastType.INFO)
+                            }
+                        } else {
+                            break
+                        }
+                    }
+
+                    // 否则说明调用了探索类/辅助类元工具，准备将工具执行结果与强收敛指令反哺给大模型继续多轮推理
+                    // 纯化反哺：单工具直传原生纯数据，多工具以工具名为 key 构建纯 JSON 映射，零模版包装词
+                    val pureFeedbackPayload = if (executedToolRecords.size == 1) {
+                        val single = executedToolRecords.first()
+                        val raw = single.rawOutput?.ifBlank { null } ?: single.resultSummary ?: "{}"
+                        if (single.isSuccess) {
+                            raw
+                        } else {
+                            "{\"error\":${Json.encodeToString(raw)}}"
+                        }
+                    } else {
+                        buildJsonObject {
+                            executedToolRecords.forEach { record ->
+                                val raw = record.rawOutput?.ifBlank { null } ?: record.resultSummary ?: "{}"
+                                if (record.isSuccess) {
+                                    try {
+                                        put(record.toolName, Json.parseToJsonElement(raw))
+                                    } catch (_: Exception) {
+                                        put(record.toolName, raw)
+                                    }
+                                } else {
+                                    put(record.toolName, buildJsonObject {
+                                        put("error", raw)
+                                    })
+                                }
+                            }
+                        }.toString()
+                    }
+
+                    val updatedHistory = currentChatRequest.history.toMutableList().apply {
+                        add(GeminiChatHistoryItem(role = "model", text = result.text.ifBlank { "Executed tools: ${executedToolRecords.joinToString { it.toolName }}" }))
+                        add(GeminiChatHistoryItem(role = "user", text = pureFeedbackPayload))
+                    }
+
+                    currentChatRequest = currentChatRequest.copy(
+                        history = updatedHistory,
+                        prompt = pureFeedbackPayload,
+                        userPrompt = pureFeedbackPayload,
+                        previousInteractionId = result.interactionId ?: currentChatRequest.previousInteractionId
+                    )
+                }
+
+                val finalResult = lastResult ?: org.gemini.ui.forge.service.ai.GeminiChatResult(
+                    text = "（无响应结果）",
+                    rawResponseJson = "",
+                    isSuccess = false
+                )
+
+                val generatedImgPath = extractGeneratedImageUri(allExecutedToolRecords)
                 if (generatedImgPath != null) {
                     state.project?.projectId?.let { loadAssetLibrary(it) }
                 }
 
-                val finalAssistantText = if (result.text.isNotBlank()) {
-                    result.text
-                } else if (executedToolRecords.isNotEmpty()) {
-                    val successSummary = executedToolRecords.joinToString("\n") {
-                        "🛠️ 已执行工具 `[${it.toolName}]`: ${it.resultSummary ?: "完成"}"
-                    }
-                    "已为您调用并执行系统工具：\n\n$successSummary"
-                } else if (!result.isSuccess) {
-                    result.errorMessage ?: "服务端未返回错误详情"
+                val finalAssistantText = if (liveAssistantMsg.prompt.isNotBlank()) {
+                    liveAssistantMsg.prompt
+                } else if (finalResult.text.isNotBlank()) {
+                    finalResult.text
+                } else if (allExecutedToolRecords.isNotEmpty()) {
+                    "" // 工具调用由结构化工具卡片纯净呈现，绝不擅自拼接机械文本污染界面
+                } else if (!finalResult.isSuccess) {
+                    finalResult.errorMessage ?: "服务端未返回错误详情"
                 } else {
                     "（未收到有效文本内容）"
                 }
 
-                val assistantMsg = VisualChatMessage(
-                    id = "msg_${getCurrentTimeMillis()}_assistant",
-                    role = "model",
+                val finalThoughtText = if (previousRoundsThoughts.isNotEmpty()) {
+                    previousRoundsThoughts.joinToString("\n\n---\n\n")
+                } else {
+                    finalResult.thoughtText ?: liveAssistantMsg.thought
+                }
+
+                val assistantMsg = liveAssistantMsg.copy(
                     prompt = finalAssistantText,
                     variants = listOf(finalAssistantText),
                     activeVariantIndex = 0,
-                    thought = result.thoughtText,
-                    thoughtSignature = result.thoughtSignature,
-                    interactionId = result.interactionId,
-                    modelName = result.modelName ?: selectedModel,
-                    durationMs = result.durationMs,
-                    promptTokens = result.promptTokens,
-                    candidatesTokens = result.candidatesTokens,
-                    totalTokens = result.totalTokens,
+                    thought = finalThoughtText,
+                    thoughtSignature = finalResult.thoughtSignature,
+                    interactionId = finalResult.interactionId,
+                    modelName = finalResult.modelName ?: selectedModel,
+                    durationMs = finalResult.durationMs,
+                    promptTokens = finalResult.promptTokens,
+                    candidatesTokens = finalResult.candidatesTokens,
+                    totalTokens = finalResult.totalTokens,
                     timestamp = getCurrentTimeMillis(),
-                    isError = !result.isSuccess,
-                    errorMessage = result.errorMessage,
-                    toolCalls = executedToolRecords,
-                    generatedImageUri = generatedImgPath
+                    isError = !finalResult.isSuccess,
+                    errorMessage = finalResult.errorMessage,
+                    toolCalls = allExecutedToolRecords
                 )
 
-                val sessionAfterReply = (state.chatSessions.find { it.id == activeSession.id } ?: activeSession).let { cur ->
-                    cur.copy(
-                        messages = cur.messages + assistantMsg,
-                        latestInteractionId = result.interactionId ?: cur.latestInteractionId,
-                        updatedAt = getCurrentTimeMillis()
-                    )
-                }
-                val finalSessions = state.chatSessions.map { if (it.id == sessionAfterReply.id) sessionAfterReply else it }
-                state = state.copy(chatSessions = finalSessions, isAiChatSending = false)
-                saveSession(sessionAfterReply)
+                val finalizedSession = currentLiveSession.copy(
+                    messages = currentLiveSession.messages.map { if (it.id == liveMsgId) assistantMsg else it },
+                    latestInteractionId = finalResult.interactionId ?: currentLiveSession.latestInteractionId,
+                    updatedAt = getCurrentTimeMillis()
+                )
+                saveSession(finalizedSession)
+                state = state.copy(
+                    chatSessions = state.chatSessions.map { if (it.id == finalizedSession.id) finalizedSession else it },
+                    isAiChatSending = false
+                )
 
                 // 自动检查大模型是否发起了 apply_view_layout 工具调用并自动装配
-                if (result.isSuccess) {
-                    checkAndExecuteLayoutTool(result.rawResponseJson, result.text)
+                if (finalResult.isSuccess) {
+                    checkAndExecuteLayoutTool(finalResult.rawResponseJson, finalResult.text)
                 }
             } catch (e: Exception) {
                 AppLogger.e("UIStudioViewModel", "AI Chat 处理异常", e)
@@ -2617,7 +2963,7 @@ class UIStudioViewModel {
             if (record.isSuccess && (record.toolName == "generate_image" || record.toolName == "chat_refine_image" || record.toolName == "generate_block_asset")) {
                 val summary = record.resultSummary
                 if (!summary.isNullOrBlank() && summary.contains("📁 物理落盘: ")) {
-                    val rawPath = summary.substringAfter("📁 物理落盘: ").trim().lines().firstOrNull()?.trim()
+                    val rawPath = summary.substringAfter("📁 物理落盘: ").trim().lines().firstOrNull()?.trim()?.removeSurrounding("`")?.trim()
                     if (!rawPath.isNullOrBlank()) {
                         return rawPath
                     }
@@ -2645,6 +2991,13 @@ class UIStudioViewModel {
     }
 
     /**
+     * 从给定的消息或文本中重新提取排版方案并弹出应用决策弹窗
+     */
+    fun reapplyLayoutFromText(rawText: String) {
+        checkAndExecuteLayoutTool(rawText, rawText)
+    }
+
+    /**
      * 确认应用 AI 生成的界面排版
      *
      * @param replaceCurrent 是否覆盖替换当前视图
@@ -2653,7 +3006,7 @@ class UIStudioViewModel {
     fun confirmApplyLayout(replaceCurrent: Boolean, targetName: String) {
         val result = state.pendingLayoutResult ?: return
         val rawPage = result.createdPage ?: return
-        val existingPages = state.project?.pages ?: emptyList()
+        val existingPages = state.project?.studioPages ?: emptyList()
 
         val currentView = state.currentView ?: existingPages.firstOrNull()
         val finalPage = if (replaceCurrent) {
@@ -2692,7 +3045,7 @@ class UIStudioViewModel {
             existingPages + finalPage
         }
 
-        val updatedProject = state.project?.copy(pages = updatedPages)
+        val updatedProject = state.project?.copy(studioPages = updatedPages)
         if (updatedProject != null) {
             state = state.copy(
                 project = updatedProject,
@@ -2726,7 +3079,7 @@ class UIStudioViewModel {
             Toast.show("当前没有可撤回的 AI 排版变更", ToastType.INFO)
             return
         }
-        val existingPages = state.project?.pages ?: return
+        val existingPages = state.project?.studioPages ?: return
         val updatedPages = if (snapshot.isReplaced) {
             // 还原被替换视图的图元树
             existingPages.map { page ->
@@ -2745,7 +3098,7 @@ class UIStudioViewModel {
             updatedPages.firstOrNull()?.id
         }
 
-        val updatedProject = state.project?.copy(pages = updatedPages)
+        val updatedProject = state.project?.copy(studioPages = updatedPages)
         if (updatedProject != null) {
             state = state.copy(
                 project = updatedProject,
@@ -3050,10 +3403,7 @@ class UIStudioViewModel {
                 val finalResultText = if (result.text.isNotBlank()) {
                     result.text
                 } else if (executedToolRecords.isNotEmpty()) {
-                    val successSummary = executedToolRecords.joinToString("\n") {
-                        "🛠️ 已执行工具 `[${it.toolName}]`: ${it.resultSummary ?: "完成"}"
-                    }
-                    "已为您调用并执行系统工具：\n\n$successSummary"
+                    "" // 工具执行状态由卡片呈现，不拼接机械废话
                 } else if (!result.isSuccess) {
                     result.errorMessage ?: "服务端未返回错误详情"
                 } else {
@@ -3203,10 +3553,10 @@ class UIStudioViewModel {
      */
     fun updatePageCanvasBackgroundColor(pageId: String, colorHex: String?, repo: TemplateRepository) {
         val proj = state.project ?: return
-        val updatedPages = proj.pages.map { page ->
+        val updatedPages = proj.studioPages.map { page ->
             if (page.id == pageId) page.copy(canvasBackgroundColor = colorHex) else page
         }
-        val updatedProject = proj.copy(pages = updatedPages)
+        val updatedProject = proj.copy(studioPages = updatedPages)
         state = state.copy(project = updatedProject)
         markDirty()
         scope.launch(Dispatchers.Default) {
@@ -3449,18 +3799,17 @@ class UIStudioViewModel {
 
     /** 执行深拷贝以避免快照与内存状态的引用污染 */
     private fun deepCopyProject(project: ProjectState): ProjectState {
-        val copiedPages = project.pages.map { page ->
+        val copiedPages = project.studioPages.map { page ->
             page.copy(blocks = deepCopyBlocks(page.blocks))
         }
-        return project.copy(pages = copiedPages)
+        return project.copy(studioPages = copiedPages)
     }
 
-    private fun deepCopyBlocks(blocks: List<UIBlock>): List<UIBlock> {
+    private fun deepCopyBlocks(blocks: List<UIStudioBlock>): List<UIStudioBlock> {
         return blocks.map { block ->
             block.copy(
                 bounds = block.bounds.copy(),
                 cropRect = block.cropRect?.copy(),
-                ninePatchConfig = block.ninePatchConfig.copy(),
                 properties = block.properties,
                 children = deepCopyBlocks(block.children)
             )
@@ -3528,9 +3877,9 @@ class UIStudioViewModel {
             return
         }
         val view = state.currentView ?: return
-        val target = view.blocks.findBlockById(blockId) ?: return
+        val target = (view.blocks.findBlockById(blockId) as? UIStudioBlock) ?: return
         state = state.copy(clipboardBlock = target)
-        Toast.show("已复制组件: ${target.userPromptZh.ifBlank { target.id }}", ToastType.SUCCESS)
+        Toast.show("已复制组件: ${target.id}", ToastType.SUCCESS)
     }
 
     fun cutSelectedBlock(repo: TemplateRepository = TemplateRepository()) {
@@ -3539,11 +3888,11 @@ class UIStudioViewModel {
             return
         }
         val view = state.currentView ?: return
-        val target = view.blocks.findBlockById(blockId) ?: return
+        val target = (view.blocks.findBlockById(blockId) as? UIStudioBlock) ?: return
         saveSnapshot("剪切组件")
         state = state.copy(clipboardBlock = target)
         deleteSelectedBlock(blockId, repo)
-        Toast.show("已剪切组件: ${target.userPromptZh.ifBlank { target.id }}", ToastType.SUCCESS)
+        Toast.show("已剪切组件: ${target.id}", ToastType.SUCCESS)
     }
 
     fun pasteBlock(repo: TemplateRepository = TemplateRepository()) {
@@ -3569,7 +3918,7 @@ class UIStudioViewModel {
         val updatedBlocks = (view.blocks + newBlock).bindParents()
         updateViewBlocksAndSave(view.id, updatedBlocks, repo)
         state = state.copy(selectedBlockId = newBlock.id)
-        Toast.show("已粘贴组件: ${newBlock.userPromptZh.ifBlank { newBlock.id }}", ToastType.SUCCESS)
+        Toast.show("已粘贴组件: ${newBlock.id}", ToastType.SUCCESS)
     }
 
     fun duplicateSelectedBlock(repo: TemplateRepository = TemplateRepository()) {
@@ -3578,7 +3927,7 @@ class UIStudioViewModel {
             return
         }
         val view = state.currentView ?: return
-        val target = view.blocks.findBlockById(blockId) ?: return
+        val target = (view.blocks.findBlockById(blockId) as? UIStudioBlock) ?: return
         saveSnapshot("克隆组件")
         val timestamp = getCurrentTimeMillis()
         val newId = "block_${timestamp % 100000}_${(100..999).random()}"
@@ -3596,7 +3945,7 @@ class UIStudioViewModel {
         val updatedBlocks = (view.blocks + newBlock).bindParents()
         updateViewBlocksAndSave(view.id, updatedBlocks, repo)
         state = state.copy(selectedBlockId = newBlock.id)
-        Toast.show("已克隆组件: ${newBlock.userPromptZh.ifBlank { newBlock.id }}", ToastType.SUCCESS)
+        Toast.show("已克隆组件: ${newBlock.id}", ToastType.SUCCESS)
     }
 
     fun nudgeSelectedBlock(dx: Float, dy: Float) {
@@ -3868,7 +4217,7 @@ class UIStudioViewModel {
                                     }
                                 )
 
-                                // 4. 构建资产项实体 (带索引保证最终稳定保序)
+                                // 4. 构建资产项实体 (带索引保证最终稳定保序；哈希在首次导入时生成，此后终身不变)
                                 IndexedValue(
                                     idx,
                                     UIAssetItem(
@@ -3879,7 +4228,8 @@ class UIStudioViewModel {
                                         height = item.bounds.height.toInt().coerceAtLeast(1),
                                         category = item.type.name.lowercase(),
                                         folderId = targetFolderId,
-                                        createdAt = getCurrentTimeMillis()
+                                        createdAt = getCurrentTimeMillis(),
+                                        hash = calculateShortFileHash(relPath)
                                     )
                                 )
                             }
@@ -3986,6 +4336,35 @@ class UIStudioViewModel {
         org.gemini.ui.forge.getPlatform().openInFileExplorer(path)
     }
 
+    /**
+     * 获取或计算素材的 16 位紧凑短哈希值
+     * 若素材模型中已有 hash 则规整后返回；若为空则即时计算并持久化回填
+     */
+    suspend fun getOrComputeAssetHash(asset: UIAssetItem): String? {
+        val existing = asset.hash
+        if (!existing.isNullOrBlank()) {
+            if (existing.length > 16) {
+                val shortHash = existing.toShortHash()
+                val updated = asset.copy(hash = shortHash)
+                val updatedItems = state.assetLibrary.items.map { if (it.id == asset.id) updated else it }
+                state = state.copy(assetLibrary = state.assetLibrary.copy(items = updatedItems))
+                saveAssetLibrary()
+                return shortHash
+            }
+            return existing
+        }
+        val absPath = TemplateFile(asset.relativePath).getAbsolutePath()
+        val calculated = calculateShortFileHash(absPath)
+        if (!calculated.isNullOrBlank()) {
+            val updated = asset.copy(hash = calculated)
+            val updatedItems = state.assetLibrary.items.map { if (it.id == asset.id) updated else it }
+            state = state.copy(assetLibrary = state.assetLibrary.copy(items = updatedItems))
+            saveAssetLibrary()
+            return calculated
+        }
+        return null
+    }
+
     fun revealFolderInExplorer(folderId: String? = state.selectedFolderId) {
         val proj = state.project?.projectId ?: "default"
         val folder = state.assetLibrary.folders.find { it.id == folderId }
@@ -4007,19 +4386,25 @@ class UIStudioViewModel {
         val activeContainer = state.activeContainerBlock
         val targetW = asset.width.coerceAtLeast(32)
         val targetH = asset.height.coerceAtLeast(32)
+        val effectiveHash = asset.hash?.toShortHash() ?: kotlinx.coroutines.runBlocking { calculateShortFileHash(asset.relativePath) }
+        if (effectiveHash != null && asset.hash != effectiveHash) {
+            val updatedLib = state.assetLibrary.copy(
+                items = state.assetLibrary.items.map { if (it.id == asset.id) it.copy(hash = effectiveHash) else it }
+            )
+            state = state.copy(assetLibrary = updatedLib)
+            saveAssetLibrary()
+        }
         saveSnapshot("添加素材: ${asset.name}")
 
         if (activeContainer != null) {
             // 当前处于父组件打开的独立编辑视口：添加到该父组件内（居中落位在光标松手点）
             val posX = if (logicalX != null) logicalX - (targetW / 2f) else ((activeContainer.bounds.width - targetW).coerceAtLeast(0f) / 2f)
             val posY = if (logicalY != null) logicalY - (targetH / 2f) else ((activeContainer.bounds.height - targetH).coerceAtLeast(0f) / 2f)
-            val newBlock = UIBlock(
+            val newBlock = UIStudioBlock(
                 id = "block_${asset.id}_${Random.nextInt(1000, 9999)}",
                 type = UIBlockType.IMAGE,
                 bounds = SerialRect(posX, posY, posX + targetW, posY + targetH),
-                currentImageUri = TemplateFile(asset.relativePath),
-                userPromptZh = asset.name,
-                userPromptEn = asset.id
+                assetHash = effectiveHash
             )
             val updatedContainer = activeContainer.copy(children = activeContainer.children + newBlock)
             val updatedBlocks = view.blocks.updateBlockInList(activeContainer.id) { updatedContainer }.bindParents()
@@ -4030,13 +4415,11 @@ class UIStudioViewModel {
             // 主视图界面：添加到页面根级 blocks（居中落位在光标松手点）
             val posX = if (logicalX != null) logicalX - (targetW / 2f) else ((view.width - targetW).coerceAtLeast(0f) / 2f)
             val posY = if (logicalY != null) logicalY - (targetH / 2f) else ((view.height - targetH).coerceAtLeast(0f) / 2f)
-            val newBlock = UIBlock(
+            val newBlock = UIStudioBlock(
                 id = "block_${asset.id}_${Random.nextInt(1000, 9999)}",
                 type = UIBlockType.IMAGE,
                 bounds = SerialRect(posX, posY, posX + targetW, posY + targetH),
-                currentImageUri = TemplateFile(asset.relativePath),
-                userPromptZh = asset.name,
-                userPromptEn = asset.id
+                assetHash = effectiveHash
             )
             val updatedBlocks = (view.blocks + newBlock).bindParents()
             updateViewBlocksAndSave(view.id, updatedBlocks, repo)
@@ -4045,14 +4428,14 @@ class UIStudioViewModel {
         }
     }
 
-    fun startRenameView(view: UIPage) { state = state.copy(renamingView = view) }
+    fun startRenameView(view: UIStudioPage) { state = state.copy(renamingView = view) }
     fun cancelRenameView() { state = state.copy(renamingView = null) }
     fun commitRenameView(viewId: String, newName: String, repo: TemplateRepository = TemplateRepository()) {
         if (newName.isBlank()) return
-        val updatedPages = state.project?.pages?.map {
+        val updatedPages = state.project?.studioPages?.map {
             if (it.id == viewId) it.copy(nameStr = newName.trim()) else it
         } ?: return
-        val updatedProject = state.project?.copy(pages = updatedPages) ?: return
+        val updatedProject = state.project?.copy(studioPages = updatedPages) ?: return
         state = state.copy(project = updatedProject, renamingView = null, isDirty = true)
         scope.launch {
             repo.saveTemplate(updatedProject.projectId, updatedProject)
@@ -4065,10 +4448,10 @@ class UIStudioViewModel {
         val updatedBlocks = view.blocks.map {
             if (it.id == blockId) it.copy(bounds = SerialRect(left, top, left + width, top + height)) else it
         }
-        val updatedPages = state.project?.pages?.map {
+        val updatedPages = state.project?.studioPages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
+        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
     }
 
     /**
@@ -4093,10 +4476,10 @@ class UIStudioViewModel {
             val newTop = b.top + dy
             block.copy(bounds = SerialRect(newLeft, newTop, newLeft + w, newTop + h))
         }.bindParents()
-        val updatedPages = state.project?.pages?.map {
+        val updatedPages = state.project?.studioPages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
+        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
     }
 
     /**
@@ -4111,21 +4494,10 @@ class UIStudioViewModel {
         val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
             it.copy(type = newType)
         }.bindParents()
-        val updatedPages = state.project?.pages?.map {
+        val updatedPages = state.project?.studioPages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
-    }
-
-    fun updateBlockPrompts(blockId: String, userPromptZh: String, userPromptEn: String, repo: TemplateRepository = TemplateRepository()) {
-        val view = state.currentView ?: return
-        val updatedBlocks = view.blocks.map {
-            if (it.id == blockId) it.copy(userPromptZh = userPromptZh, userPromptEn = userPromptEn) else it
-        }
-        val updatedPages = state.project?.pages?.map {
-            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
-        } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
+        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
     }
 
     fun updateBlockPureContainer(blockId: String, isPure: Boolean, repo: TemplateRepository = TemplateRepository()) {
@@ -4133,10 +4505,10 @@ class UIStudioViewModel {
         val updatedBlocks = view.blocks.map {
             if (it.id == blockId) it.copy(isPureContainer = isPure) else it
         }
-        val updatedPages = state.project?.pages?.map {
+        val updatedPages = state.project?.studioPages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
-        state = state.copy(project = state.project?.copy(pages = updatedPages), isDirty = true)
+        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
     }
 
     fun deleteSelectedBlock(blockId: String, repo: TemplateRepository) {
@@ -4151,7 +4523,7 @@ class UIStudioViewModel {
     /**
      * 递归从模块树中安全移除指定 ID 的图元对象。
      */
-    private fun removeBlockFromTree(list: List<UIBlock>, id: String): List<UIBlock> {
+    private fun removeBlockFromTree(list: List<UIStudioBlock>, id: String): List<UIStudioBlock> {
         return list.filterNot { it.id == id }.map { block ->
             if (block.children.any { it.id == id }) {
                 block.copy(children = block.children.filterNot { it.id == id })
@@ -4172,10 +4544,10 @@ class UIStudioViewModel {
     ) {
         val view = state.currentView ?: return
         if (draggedId == targetId) return
-        val draggedBlock = view.blocks.findBlockById(draggedId) ?: return
+        val draggedBlock = (view.blocks.findBlockById(draggedId) as? UIStudioBlock) ?: return
 
         val oldParentId = view.blocks.findParentBlockId(draggedId)
-        val oldParent = oldParentId?.let { view.blocks.findBlockById(it) }
+        val oldParent = oldParentId?.let { view.blocks.findBlockById(it) as? UIStudioBlock }
         val targetParentId = if (targetId != null) view.blocks.findParentBlockId(targetId) else null
         val isMovingOutOfParent = oldParentId != null && (
             (position == DropPosition.INSIDE && targetId != oldParentId) ||
@@ -4235,7 +4607,7 @@ class UIStudioViewModel {
         dissolveContainerId: String? = null
     ) {
         val view = state.currentView ?: return
-        val draggedBlock = view.blocks.findBlockById(draggedId) ?: return
+        val draggedBlock = (view.blocks.findBlockById(draggedId) as? UIStudioBlock) ?: return
 
         // 目标为 null：移至列表末尾（容器视口下移至当前激活容器末尾，整页视口下移至根列表末尾）
         if (targetId == null) {
@@ -4273,7 +4645,7 @@ class UIStudioViewModel {
             return
         }
 
-        val targetBlock = view.blocks.findBlockById(targetId) ?: return
+        val targetBlock = (view.blocks.findBlockById(targetId) as? UIStudioBlock) ?: return
         val targetParentId = view.blocks.findParentBlockId(targetId)
 
         if (position == DropPosition.INSIDE) {
@@ -4301,7 +4673,7 @@ class UIStudioViewModel {
 
             // 2. 若目标所处已有父容器
             if (targetParentId != null) {
-                val parentBlock = view.blocks.findBlockById(targetParentId) ?: return
+                val parentBlock = (view.blocks.findBlockById(targetParentId) as? UIStudioBlock) ?: return
                 val parentAbsBounds = view.blocks.calculateBlockAbsoluteBounds(targetParentId) ?: parentBlock.bounds
                 val draggedAbsBounds = view.blocks.calculateBlockAbsoluteBounds(draggedId) ?: draggedBlock.bounds
                 val localBounds = SerialRect(
@@ -4332,7 +4704,7 @@ class UIStudioViewModel {
         val cleanedBlocks = removeBlockFromTree(view.blocks, draggedId)
 
         if (targetParentId != null) {
-            val parentBlock = cleanedBlocks.findBlockById(targetParentId) ?: return
+            val parentBlock = (cleanedBlocks.findBlockById(targetParentId) as? UIStudioBlock) ?: return
             val parentAbsBounds = cleanedBlocks.calculateBlockAbsoluteBounds(targetParentId) ?: parentBlock.bounds
             val localBounds = SerialRect(
                 left = draggedAbsBounds.left - parentAbsBounds.left,
@@ -4371,8 +4743,8 @@ class UIStudioViewModel {
      */
     fun confirmCreateContainer(draggedId: String, targetId: String, repo: TemplateRepository) {
         val view = state.currentView ?: return
-        val blockA = view.blocks.findBlockById(draggedId) ?: return
-        val blockB = view.blocks.findBlockById(targetId) ?: return
+        val blockA = (view.blocks.findBlockById(draggedId) as? UIStudioBlock) ?: return
+        val blockB = (view.blocks.findBlockById(targetId) as? UIStudioBlock) ?: return
 
         val boundsA = view.blocks.calculateBlockAbsoluteBounds(draggedId) ?: blockA.bounds
         val boundsB = view.blocks.calculateBlockAbsoluteBounds(targetId) ?: blockB.bounds
@@ -4387,7 +4759,7 @@ class UIStudioViewModel {
         val localB = blockB.copy(bounds = SerialRect(boundsB.left - unionLeft, boundsB.top - unionTop, boundsB.right - unionLeft, boundsB.bottom - unionTop))
 
         val containerId = "Container_${getCurrentTimeMillis() % 10000}"
-        val container = UIBlock(
+        val container = UIStudioBlock(
             id = containerId,
             type = UIBlockType.CONTAINER,
             isPureContainer = true,
@@ -4417,7 +4789,7 @@ class UIStudioViewModel {
     fun requestRemoveBlockFromParent(blockId: String, repo: TemplateRepository) {
         val view = state.currentView ?: return
         val parentId = view.blocks.findParentBlockId(blockId) ?: return
-        val parent = view.blocks.findBlockById(parentId) ?: return
+        val parent = (view.blocks.findBlockById(parentId) as? UIStudioBlock) ?: return
         if (parent.children.size <= 1) {
             state = state.copy(pendingRemoveLastChildAction = Triple(parentId, blockId, false))
         } else {
@@ -4432,7 +4804,7 @@ class UIStudioViewModel {
         val view = state.currentView ?: return
         val parentId = view.blocks.findParentBlockId(blockId)
         if (parentId != null) {
-            val parent = view.blocks.findBlockById(parentId)
+            val parent = view.blocks.findBlockById(parentId) as? UIStudioBlock
             if (parent != null && parent.children.size <= 1) {
                 state = state.copy(pendingRemoveLastChildAction = Triple(parentId, blockId, true))
                 return
@@ -4459,9 +4831,9 @@ class UIStudioViewModel {
         repo: TemplateRepository
     ) {
         val view = state.currentView ?: return
-        val child = view.blocks.findBlockById(childId) ?: return
+        val child = (view.blocks.findBlockById(childId) as? UIStudioBlock) ?: return
         val childAbsBounds = view.blocks.calculateBlockAbsoluteBounds(childId) ?: child.bounds
-        val parent = view.blocks.findBlockById(containerId) ?: return
+        val parent = (view.blocks.findBlockById(containerId) as? UIStudioBlock) ?: return
 
         val parentIndexInRoot = view.blocks.indexOfFirst { it.id == containerId }
         val remainingInContainer = parent.children.filterNot { it.id == childId }
@@ -4499,7 +4871,7 @@ class UIStudioViewModel {
      */
     fun ungroupContainer(containerId: String, repo: TemplateRepository) {
         val view = state.currentView ?: return
-        val container = view.blocks.findBlockById(containerId) ?: return
+        val container = (view.blocks.findBlockById(containerId) as? UIStudioBlock) ?: return
         val containerAbsBounds = view.blocks.calculateBlockAbsoluteBounds(containerId) ?: container.bounds
         val releasedChildren = container.children.map { child ->
             val absLeft = containerAbsBounds.left + child.bounds.left
@@ -4512,12 +4884,12 @@ class UIStudioViewModel {
         Toast.show("已解散父容器: ${container.id}", ToastType.SUCCESS)
     }
 
-    private fun updateViewBlocksAndSave(viewId: String, newBlocks: List<UIBlock>, repo: TemplateRepository = TemplateRepository()) {
-        val updatedPages = state.project?.pages?.map {
+    private fun updateViewBlocksAndSave(viewId: String, newBlocks: List<UIStudioBlock>, repo: TemplateRepository = TemplateRepository()) {
+        val updatedPages = state.project?.studioPages?.map {
             if (it.id == viewId) it.copy(blocks = newBlocks) else it
         } ?: return
         state = state.copy(
-            project = state.project?.copy(pages = updatedPages),
+            project = state.project?.copy(studioPages = updatedPages),
             isDirty = true
         )
     }
@@ -4547,10 +4919,10 @@ class UIStudioViewModel {
      * 纯平移语义：仅调整列表顺序，绝不改动任何图元 bounds 与宽高。
      */
     private fun rerouteWithinSiblings(
-        blocks: List<UIBlock>,
+        blocks: List<UIStudioBlock>,
         blockId: String,
         action: SiblingReorderAction
-    ): List<UIBlock>? {
+    ): List<UIStudioBlock>? {
         val index = blocks.indexOfFirst { it.id == blockId }
         if (index >= 0) {
             val mutable = blocks.toMutableList()
@@ -4631,7 +5003,7 @@ class UIStudioViewModel {
      */
     fun renameBlock(blockId: String, newName: String, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
-        val target = view.blocks.findBlockById(blockId) ?: return
+        val target = (view.blocks.findBlockById(blockId) as? UIStudioBlock) ?: return
         val trimmed = newName.trim().ifBlank { target.id }
         if (trimmed == blockId) {
             state = state.copy(renamingBlockId = null)
@@ -4640,11 +5012,11 @@ class UIStudioViewModel {
         val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
             it.copy(id = trimmed)
         }.bindParents()
-        val updatedPages = state.project?.pages?.map {
+        val updatedPages = state.project?.studioPages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
         state = state.copy(
-            project = state.project?.copy(pages = updatedPages),
+            project = state.project?.copy(studioPages = updatedPages),
             selectedBlockId = if (state.selectedBlockId == blockId) trimmed else state.selectedBlockId,
             renamingBlockId = null,
             isDirty = true
@@ -4688,8 +5060,8 @@ class UIStudioViewModel {
     private fun createDefaultBlankProject(name: String, width: Float, height: Float): ProjectState {
         return ProjectState(
             projectId = name,
-            pages = listOf(
-                UIPage(
+            studioPages = listOf(
+                UIStudioPage(
                     id = "page_main",
                     nameStr = "MainPage",
                     width = width,

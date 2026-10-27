@@ -1,7 +1,7 @@
 package org.gemini.ui.forge.service.studio
 
 import org.gemini.ui.forge.model.ui.SerialRect
-import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIStudioBlock
 import kotlin.math.abs
 
 /**
@@ -20,9 +20,9 @@ data class BlockGeometryDiff(
  * 界面布局整体比对差异摘要结果
  */
 data class LayoutDiffResult(
-    val addedBlocks: List<UIBlock> = emptyList(),
+    val addedBlocks: List<UIStudioBlock> = emptyList(),
     val modifiedBlocks: List<BlockGeometryDiff> = emptyList(),
-    val removedBlocks: List<UIBlock> = emptyList()
+    val removedBlocks: List<UIStudioBlock> = emptyList()
 ) {
     val totalChanges: Int get() = addedBlocks.size + modifiedBlocks.size + removedBlocks.size
     val hasChanges: Boolean get() = totalChanges > 0
@@ -44,13 +44,13 @@ object LayoutDiffCalculator {
      * @param newBlocks 新图元树
      * @return 结构化 Diff 结果
      */
-    fun calculateDiff(oldBlocks: List<UIBlock>, newBlocks: List<UIBlock>): LayoutDiffResult {
+    fun calculateDiff(oldBlocks: List<UIStudioBlock>, newBlocks: List<UIStudioBlock>): LayoutDiffResult {
         val oldMap = oldBlocks.associateBy { it.id }
         val newMap = newBlocks.associateBy { it.id }
 
-        val added = mutableListOf<UIBlock>()
+        val added = mutableListOf<UIStudioBlock>()
         val modified = mutableListOf<BlockGeometryDiff>()
-        val removed = mutableListOf<UIBlock>()
+        val removed = mutableListOf<UIStudioBlock>()
 
         for (newBlock in newBlocks) {
             val oldBlock = oldMap[newBlock.id]

@@ -178,7 +178,7 @@ fun CommonModelBubble(
                             if (modelText.contains("已完成界面排版规划方案") || modelText.contains("apply_view_layout")) {
                                 val viewName = Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(message.prompt)?.groupValues?.get(1)
                                     ?: Regex("""\[([^\]]+)\]""").find(modelText)?.groupValues?.get(1)
-                                    ?: "FootballSlotMain"
+                                    ?: "View_1"
 
                                 Spacer(Modifier.height(8.dp))
                                 Button(
@@ -191,9 +191,9 @@ fun CommonModelBubble(
                                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                                     modifier = Modifier.height(34.dp)
                                 ) {
-                                    Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(15.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("在画布中打开视图 [$viewName]", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                    Text("应用排版方案到画布 [$viewName]", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }

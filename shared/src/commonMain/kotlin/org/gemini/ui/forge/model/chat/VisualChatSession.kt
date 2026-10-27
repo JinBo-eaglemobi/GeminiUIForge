@@ -29,7 +29,8 @@ data class ChatToolCallRecord(
     val argumentsJson: String = "",
     val resultSummary: String? = null,
     val isSuccess: Boolean = true,
-    val durationMs: Long = 0L
+    val durationMs: Long = 0L,
+    val rawOutput: String? = null
 )
 
 /**

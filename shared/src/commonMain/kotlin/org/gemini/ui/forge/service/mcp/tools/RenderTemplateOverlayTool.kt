@@ -90,7 +90,7 @@ class RenderTemplateOverlayTool(
 
         val firstPage = state.pages.firstOrNull()
         val absPath = overlayFile.getAbsolutePath()
-        val message = "✅ 全景标注图 [$projectName ($stage)] Skia 离屏渲染完成 (${compact.bytes.size / 1024}KB)，物理落盘路径: $absPath，画布尺寸: ${firstPage?.width ?: 1080}x${firstPage?.height ?: 1920}"
+        val message = "✅ 全景标注图 [$projectName ($stage)] Skia 离屏渲染完成 (${compact.bytes.size / 1024}KB)，物理落盘路径: `$absPath`，画布尺寸: ${firstPage?.width ?: 1080}x${firstPage?.height ?: 1920}"
 
         return McpToolResult.image(
             base64Data = base64Data,

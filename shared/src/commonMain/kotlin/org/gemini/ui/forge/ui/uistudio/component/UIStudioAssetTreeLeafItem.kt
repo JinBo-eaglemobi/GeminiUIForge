@@ -47,10 +47,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.extend.rememberClipboardAction
+import org.gemini.ui.forge.utils.toShortHash
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
@@ -86,6 +88,7 @@ fun UIStudioAssetTreeLeafItem(
 ) {
     val state = viewModel.state
     val copy = rememberClipboardAction()
+    val coroutineScope = rememberCoroutineScope()
     var bitmap by remember(item.relativePath) { mutableStateOf<ImageBitmap?>(null) }
     var showContextMenu by remember { mutableStateOf(false) }
     var showMoveFolderDialog by remember { mutableStateOf(false) }
@@ -295,6 +298,26 @@ fun UIStudioAssetTreeLeafItem(
                 onClick = {
                     showContextMenu = false
                     copy(item.relativePath, "已复制素材路径: ${item.relativePath}")
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("复制资源哈希 (Hash)", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
+                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                onClick = {
+                    showContextMenu = false
+                    val hash = item.hash?.toShortHash()
+                    if (!hash.isNullOrBlank()) {
+                        copy(hash, "已复制资源哈希: $hash")
+                    } else {
+                        coroutineScope.launch {
+                            val computed = viewModel.getOrComputeAssetHash(item)?.toShortHash()
+                            if (!computed.isNullOrBlank()) {
+                                copy(computed, "已复制资源哈希: $computed")
+                            } else {
+                                org.gemini.ui.forge.utils.Toast.show("暂无可用哈希码", org.gemini.ui.forge.ui.component.ToastType.INFO)
+                            }
+                        }
+                    }
                 }
             )
             HorizontalDivider(

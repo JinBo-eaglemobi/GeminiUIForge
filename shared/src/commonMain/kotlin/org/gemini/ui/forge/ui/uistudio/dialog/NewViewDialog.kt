@@ -20,7 +20,7 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 /**
  * 新建视图界面弹窗
  *
- * 用于在当前 UI Studio 工程中添加新的视图界面 (UIPage)，
+ * 用于在当前 UI Studio 工程中添加新的视图界面 (UIStudioPage)，
  * 支持自定义视图名称及画布分辨率。
  *
  * @param defaultWidth 默认画布宽度

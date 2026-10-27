@@ -14,8 +14,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.gemini.ui.forge.data.TemplateFile
-import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.utils.readLocalFileBytes
 import org.gemini.ui.forge.utils.toImageBitmap
 
@@ -23,31 +22,33 @@ import org.gemini.ui.forge.utils.toImageBitmap
  * 实时预览父容器中渲染各个子图元真实切片画面的微缩组件。
  *
  * 遵循一文件一 Composable 铁律，异步加载子图元切片图片并在微缩父容器画布中按局部坐标呈现真实视觉。
+ *
+ * @param assetPathResolver 哈希→素材相对路径解析器（素材库唯一账本）
  */
 @Composable
 fun UIStudioChildPreviewThumbnail(
-    child: UIBlock,
+    child: UIStudioBlock,
     scale: Float,
     inheritedOpacity: Float = 1.0f,
+    assetPathResolver: (String?) -> String? = { null },
     modifier: Modifier = Modifier
 ) {
-    var bitmap by remember(child.currentImageUri?.relativePath, child.referenceImage?.relativePath) {
+    // 哈希引用模型：图元仅持有 assetHash，路径由素材库动态解析
+    val imagePath = assetPathResolver(child.assetHash)
+
+    var bitmap by remember(imagePath, child.id) {
         mutableStateOf<ImageBitmap?>(null)
     }
 
-    val imagePath = child.currentImageUri?.relativePath ?: child.referenceImage?.relativePath
-
     LaunchedEffect(imagePath, child.id) {
         withContext(Dispatchers.Default) {
-            val bytes = if (!imagePath.isNullOrBlank()) {
-                readLocalFileBytes(imagePath) ?: try {
-                    TemplateFile(imagePath).readBytes()
-                } catch (_: Exception) {
-                    null
-                }
-            } else null
+            val bytes = imagePath?.let { path ->
+                readLocalFileBytes(path)
+            }
             if (bytes != null) {
                 bitmap = bytes.toImageBitmap()
+            } else {
+                bitmap = null
             }
         }
     }

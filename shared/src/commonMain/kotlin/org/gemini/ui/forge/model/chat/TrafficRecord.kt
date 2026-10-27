@@ -33,5 +33,8 @@ data class TrafficRecord(
     val timestamp: Long,
     val url: String = "",
     val model: String = "",
-    val body: String = ""
+    val body: String = "",
+    val roundIndex: Int = 0,
+    val stageTag: String = "",
+    val summary: String = ""
 )

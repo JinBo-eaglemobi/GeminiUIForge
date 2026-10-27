@@ -247,6 +247,7 @@ fun UIStudioScreen(
                     // 核心交互画布
                     UIStudioCanvasArea(
                         viewModel = viewModel,
+                        assetPathResolver = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -368,6 +369,30 @@ fun UIStudioScreen(
             asset = draggedAsset,
             cursorPos = state.dragCursorPosition
         )
+
+        // 挂载最大工具轮询续轮确认弹窗
+        if (state.showMaxToolRoundsContinueDialog) {
+            AppDraggableAlertDialog(
+                onDismissRequest = { viewModel.cancelToolLoop() },
+                modifier = Modifier.width(LocalAppSpacing.current.dialogAlertWidth),
+                title = { Text("工具轮询上限提醒") },
+                text = {
+                    Text(
+                        "AI Agent 已达到当前单次最大轮询上限（${state.currentToolLoopRound} 轮），当前仍在全力推演中。\n\n是否继续追加 ${state.maxToolLoopRoundLimit} 轮继续推演？"
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = { viewModel.continueToolLoop() }) {
+                        Text("继续执行 (+${state.maxToolLoopRoundLimit}轮)")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.cancelToolLoop() }) {
+                        Text("停止推演")
+                    }
+                }
+            )
+        }
 
         // 挂载退出未保存确认弹窗 (三选：保存并退出 / 不保存退出 / 取消)
         if (state.showExitConfirmDialog) {

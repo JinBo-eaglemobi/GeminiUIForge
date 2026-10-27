@@ -77,6 +77,26 @@ expect suspend fun executeSystemCommand(
 expect suspend fun calculateFileHash(filePath: String): String?
 
 /**
+ * 紧凑短哈希标准截断长度 (16 位十六进制，碰撞概率约 1/2^64，完全满足本地资源去重与视觉美观)
+ */
+const val SHORT_HASH_LENGTH = 16
+
+/**
+ * 将任意完整哈希字符串规整为指定长度的紧凑短哈希 (小写)
+ */
+fun String.toShortHash(length: Int = SHORT_HASH_LENGTH): String {
+    val clean = this.trim().lowercase()
+    return if (clean.length > length) clean.take(length) else clean
+}
+
+/**
+ * 跨平台计算文件的紧凑短哈希 (截取前 16 位十六进制)
+ */
+suspend fun calculateShortFileHash(filePath: String, length: Int = SHORT_HASH_LENGTH): String? {
+    return calculateFileHash(filePath)?.toShortHash(length)
+}
+
+/**
  * 跨平台安全复制文件 (流式写入，内存安全)
  */
 expect suspend fun copyLocalFile(sourcePath: String, destPath: String): Boolean

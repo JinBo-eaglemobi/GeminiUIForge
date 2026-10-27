@@ -158,5 +158,5 @@ data class ProjectWorkspaceState(
     val currentPage get() = project.pages.find { it.id == selectedPageId } ?: project.pages.firstOrNull()
     /** 当前高亮或选中的图元实体 */
     val selectedBlock: UIBlock?
-        get() = currentPage?.blocks?.findBlockById(selectedBlockId ?: editingGroupId ?: "")
+        get() = currentPage?.blocks?.findBlockById(selectedBlockId ?: editingGroupId ?: "") as? UIBlock
 }

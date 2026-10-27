@@ -53,6 +53,7 @@ fun UIStudioRightSidebar(
         // 下半部分：高保真独立实时预览面板
         UIStudioPreviewPanel(
             viewModel = viewModel,
+            assetPathResolver = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
             modifier = Modifier
                 .weight((1f - state.propertyPanelHeightRatio).coerceIn(0.05f, 0.95f))
                 .fillMaxWidth()

@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.DropPosition
-import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.utils.findBlockById
 import org.gemini.ui.forge.ui.component.getIcon
 import org.gemini.ui.forge.ui.component.tip
@@ -45,12 +45,14 @@ import geminiuiforge.composeapp.generated.resources.*
  *
  * @param viewModel UI Studio 核心 ViewModel
  * @param templateRepo 模板工程仓储
+ * @param assetPathResolver 哈希→素材相对路径解析器（素材库唯一账本）
  * @param modifier 外部修饰符
  */
 @Composable
 fun UIStudioHierarchyPanel(
     viewModel: UIStudioViewModel,
     templateRepo: TemplateRepository,
+    assetPathResolver: (String?) -> String? = { null },
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
@@ -197,7 +199,7 @@ fun UIStudioHierarchyPanel(
                     }
                 } else {
                     val contextBlocks = remember(currentView, state.activeContainerId) {
-                        val activeContainer = state.activeContainerId?.let { cid -> currentView.blocks.findBlockById(cid) }
+                        val activeContainer = state.activeContainerId?.let { cid -> currentView.blocks.findBlockById(cid) as? UIStudioBlock }
                         activeContainer?.children ?: currentView.blocks.filter { it.parent == null }
                     }
                     val filteredBlocks = if (searchQuery.isBlank()) {
@@ -244,6 +246,7 @@ fun UIStudioHierarchyPanel(
                                     draggedBlockId = draggedBlockId,
                                     hoveredBlockId = hoveredBlockId,
                                     dropPosition = dropPosition,
+                                    assetPathResolver = assetPathResolver,
                                     onPositioned = { id, rect ->
                                         itemBounds[id] = rect
                                     },

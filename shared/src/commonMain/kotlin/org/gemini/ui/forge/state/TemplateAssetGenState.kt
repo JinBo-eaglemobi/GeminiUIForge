@@ -81,7 +81,7 @@ data class TemplateAssetGenState(
     val currentPage get() = project.pages.find { it.id == selectedPageId }
     /** 当前选中的图元实体 */
     val selectedBlock: UIBlock?
-        get() = currentPage?.blocks?.findBlockById(selectedBlockId ?: editingGroupId ?: "")
+        get() = currentPage?.blocks?.findBlockById(selectedBlockId ?: editingGroupId ?: "") as? UIBlock
 }
 
 /**

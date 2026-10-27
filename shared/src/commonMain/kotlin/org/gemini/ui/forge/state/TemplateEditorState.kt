@@ -44,5 +44,5 @@ data class TemplateEditorState(
     /** 当前选中的页面实体，若未选中则返回 null */
     val currentPage get() = project.pages.find { it.id == selectedPageId }
     /** 当前高亮或选中的图元实体 */
-    val selectedBlock: UIBlock? get() = currentPage?.blocks?.findBlockById(selectedBlockId ?: editingGroupId ?: "")
+    val selectedBlock: UIBlock? get() = currentPage?.blocks?.findBlockById(selectedBlockId ?: editingGroupId ?: "") as? UIBlock
 }

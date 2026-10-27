@@ -17,6 +17,8 @@ import org.gemini.ui.forge.model.chat.VisualChatSession
  * @property category 业务分类标签（如 "button", "symbol", "icon" 等）
  * @property folderId 所属文件夹 ID，为 null 时表示归属于根目录
  * @property createdAt 创建时间戳
+ * @property hash 素材内容 SHA-256 哈希码（仅首次导入时生成，此后对图片的更新/修改/改名均不再变化；
+ *                页面图元通过该哈希引用素材而非路径，素材移动/改名后图元引用自动跟随无需修改）
  */
 @Serializable
 data class UIAssetItem(
@@ -27,7 +29,8 @@ data class UIAssetItem(
     val height: Int,
     val category: String = "default",
     val folderId: String? = null,
-    val createdAt: Long = 0L
+    val createdAt: Long = 0L,
+    val hash: String? = null
 )
 
 /**

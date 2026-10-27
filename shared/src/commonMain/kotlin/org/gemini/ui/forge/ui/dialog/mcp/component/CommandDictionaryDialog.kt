@@ -30,6 +30,7 @@ import org.gemini.ui.forge.service.mcp.McpCommandCategory
 import org.gemini.ui.forge.service.mcp.McpCommandDictionary
 import org.gemini.ui.forge.service.mcp.McpCommandEntry
 import org.gemini.ui.forge.service.mcp.McpToolRegistry
+import org.gemini.ui.forge.ui.component.AppSearchField
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -143,36 +144,14 @@ fun CommandDictionaryDialog(
                     }
                 }
 
-                // 2. 搜索输入框与快速过滤
-                OutlinedTextField(
+                // 2. 搜索输入框与快速过滤（使用系统统一 AppSearchField）
+                AppSearchField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
+                    placeholder = "按指令标识名或中文描述搜索（如 analyze、template、UI、确认 等）...",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = spacing.extraSmall),
-                    placeholder = {
-                        Text("按指令标识名或中文描述搜索（如 analyze、template、UI、确认 等）...", style = MaterialTheme.typography.bodySmall)
-                    },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(
-                                onClick = { searchQuery = "" },
-                                modifier = Modifier.size(24.dp).tip("清空搜索条件")
-                            ) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodySmall,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
-                    )
+                        .padding(vertical = spacing.extraSmall)
                 )
 
                 Spacer(Modifier.height(spacing.extraSmall))

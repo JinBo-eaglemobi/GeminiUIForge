@@ -657,6 +657,11 @@
     <string name="uistudio_hierarchy_empty_no_view">Please select or open a view from the Views panel</string>
     <string name="uistudio_hierarchy_empty_container">Current container has no child blocks\nDrag assets or add blocks to this container</string>
     <string name="uistudio_hierarchy_empty_page">Current view has no root blocks\nDrag assets or add blocks to start layout</string>
+    <string name="uistudio_asset_missing">Asset Missing</string>
+    <string name="uistudio_import_files_mixed">Import Files (Multi-Select)</string>
+    <string name="uistudio_import_folder">Import Folder</string>
+    <string name="uistudio_import_sheet_slices">Import Sheet Slices</string>
+    <string name="uistudio_drop_hint">Drop images or folders to import</string>
 
     <!-- Default Image Generation Model Preset & Routing -->
     <string name="settings_auto_switch_image_gen_model_title">Auto-switch Model on Image Intent</string>
@@ -669,4 +674,21 @@
     <string name="chat_image_intent_revert_btn">Switch back to %1$s</string>
     <string name="chat_thinking_level_tip">Adjust AI thinking depth (current: %1$s)</string>
     <string name="chat_thinking_level_menu_title">🧠 Thinking / Reasoning Mode</string>
+
+    <!-- Session Traffic Log Dialog -->
+    <string name="traffic_search_hint">Search model / URL / Seq...</string>
+    <string name="traffic_sort_menu_title">Sort Records</string>
+    <string name="traffic_sort_time_asc">Time Ascending (Oldest First)</string>
+    <string name="traffic_sort_time_desc">Time Descending (Newest First)</string>
+    <string name="traffic_sort_req_first">Request First (REQ Priority)</string>
+    <string name="traffic_sort_size_desc">Payload Size Descending (Largest First)</string>
+    <string name="traffic_filter_all">All</string>
+    <string name="traffic_filter_req">REQ</string>
+    <string name="traffic_filter_resp">RESP</string>
+    <string name="traffic_clear_menu_label">Clear Traffic Records</string>
+    <string name="traffic_clear_confirm_title">Clear Traffic Archives</string>
+    <string name="traffic_clear_confirm_message">Are you sure you want to permanently delete all %1$d traffic record files for this session? This action cannot be undone.</string>
+    <string name="traffic_clear_done">All traffic records cleared</string>
+    <string name="traffic_show_all_lines">Expand all remaining %1$d lines</string>
+    <string name="traffic_stats_summary">Total %1$d · REQ %2$d · RESP %3$d · ~%4$s</string>
 </resources>

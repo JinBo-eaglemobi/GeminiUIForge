@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.data.TemplateFile
-import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -46,10 +46,12 @@ import org.gemini.ui.forge.utils.toImageBitmap
  * - 选中图层父组件时：直接以微缩画布渲染该父组件内部子布局的整体排版效果；
  * - 选中普通图元组件时：展示组件切片画面与几何属性；
  * - 未选择任何对象时：呈现优雅的未选择引导空状态。
+ * @param assetPathResolver 哈希→素材相对路径解析器（素材库唯一账本）
  */
 @Composable
 fun UIStudioPreviewPanel(
     viewModel: UIStudioViewModel,
+    assetPathResolver: (String?) -> String? = { null },
     modifier: Modifier = Modifier
 ) {
     val state = viewModel.state
@@ -61,7 +63,7 @@ fun UIStudioPreviewPanel(
         state.selectedAssetId?.let { id -> state.assetLibrary.items.find { it.id == id } }
     }
     val selectedBlock = remember(state.selectedBlockId, currentView?.blocks) {
-        state.selectedBlockId?.let { id -> currentView?.blocks?.findBlockById(id) }
+        state.selectedBlockId?.let { id -> currentView?.blocks?.findBlockById(id) as? UIStudioBlock }
     }
 
     Surface(
@@ -164,11 +166,11 @@ fun UIStudioPreviewPanel(
                     }
                     selectedBlock != null && (selectedBlock.isPureContainer || selectedBlock.children.isNotEmpty() || selectedBlock.type == UIBlockType.CONTAINER) -> {
                         // 2. 预览选中的父组件渲染效果（渲染内部子布局）
-                        ContainerPreviewView(container = selectedBlock)
+                        ContainerPreviewView(container = selectedBlock, assetPathResolver = assetPathResolver)
                     }
                     selectedBlock != null -> {
                         // 3. 预览选中的普通组件切片
-                        BlockPreviewView(block = selectedBlock)
+                        BlockPreviewView(block = selectedBlock, assetPathResolver = assetPathResolver)
                     }
                     else -> {
                         // 4. 空状态
@@ -288,7 +290,10 @@ private fun AssetPreviewView(asset: UIAssetItem) {
  * 父组件整体渲染效果预览视图（支持内部子组件微缩排版）。
  */
 @Composable
-private fun ContainerPreviewView(container: UIBlock) {
+private fun ContainerPreviewView(
+    container: UIStudioBlock,
+    assetPathResolver: (String?) -> String?
+) {
     val containerW = container.bounds.width.coerceAtLeast(1f)
     val containerH = container.bounds.height.coerceAtLeast(1f)
 
@@ -328,7 +333,8 @@ private fun ContainerPreviewView(container: UIBlock) {
                             UIStudioChildPreviewThumbnail(
                                 child = child,
                                 scale = scale,
-                                inheritedOpacity = container.effectiveOpacity
+                                inheritedOpacity = container.effectiveOpacity,
+                                assetPathResolver = assetPathResolver
                             )
                         }
                     }
@@ -384,8 +390,12 @@ private fun ContainerPreviewView(container: UIBlock) {
  * 普通组件切片预览视图。
  */
 @Composable
-private fun BlockPreviewView(block: UIBlock) {
-    val imagePath = block.currentImageUri?.relativePath ?: block.referenceImage?.relativePath
+private fun BlockPreviewView(
+    block: UIStudioBlock,
+    assetPathResolver: (String?) -> String?
+) {
+    // 哈希引用模型：图元仅持有 assetHash，路径由素材库动态解析
+    val imagePath = assetPathResolver(block.assetHash)
     var bitmap by remember(imagePath) { mutableStateOf<ImageBitmap?>(null) }
     val blockW = (block.bounds.right - block.bounds.left).toInt()
     val blockH = (block.bounds.bottom - block.bounds.top).toInt()
@@ -394,15 +404,14 @@ private fun BlockPreviewView(block: UIBlock) {
         if (!imagePath.isNullOrBlank()) {
             withContext(Dispatchers.Default) {
                 val bytes = readLocalFileBytes(imagePath)
-                    ?: try {
-                        TemplateFile(imagePath).readBytes()
-                    } catch (_: Exception) {
-                        null
-                    }
                 if (bytes != null) {
                     bitmap = bytes.toImageBitmap()
+                } else {
+                    bitmap = null
                 }
             }
+        } else {
+            bitmap = null
         }
     }
 

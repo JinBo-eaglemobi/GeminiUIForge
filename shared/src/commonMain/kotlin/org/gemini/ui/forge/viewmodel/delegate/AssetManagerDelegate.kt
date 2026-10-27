@@ -314,7 +314,7 @@ class AssetManagerDelegate(
         originalCropBytes: ByteArray? = null
     ) {
         val currentState = getState()
-        val block = currentState.project.pages.flatMap { it.blocks }.findBlockById(blockId) ?: return
+        val block = currentState.project.pages.flatMap { it.blocks }.findBlockById(blockId) as? UIBlock ?: return
         val currentUri = block.currentImageUri
         if (currentUri == null && imageBytes == null) return
         

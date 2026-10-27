@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -16,21 +17,24 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.uistudio_asset_missing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.model.ui.SerialRect
-import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
+import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.utils.readLocalFileBytes
 import org.gemini.ui.forge.utils.toImageBitmap
 
 /**
@@ -38,11 +42,14 @@ import org.gemini.ui.forge.utils.toImageBitmap
  *
  * 负责在画布逻辑坐标系下渲染单个已切片/已入库的图元实体，展示真实的切片图像与工程级边界药丸。
  * 支持鼠标左键点击选中与左键拖拽平移。
+ * 图片寻址遵循哈希引用体系：图元仅持有 assetHash，实际路径由外部解析器从素材库「当前路径账本」实时换算，
+ * 因此素材在库内移动/改名后图元渲染自动跟随，路径彻底解耦。
+ * 若哈希对应的素材条目或物理文件已丢失，渲染专属「资源丢失」占位框。
  * 遵循一文件一 Composable 铁律。
  */
 @Composable
 fun UIStudioBlockItem(
-    block: UIBlock,
+    block: UIStudioBlock,
     isSelected: Boolean,
     absBounds: SerialRect = block.toAbsoluteBounds(),
     inheritedOpacity: Float = 1.0f,
@@ -51,31 +58,34 @@ fun UIStudioBlockItem(
     onDoubleTap: () -> Unit = {},
     onDragDelta: (dx: Float, dy: Float) -> Unit = { _, _ -> },
     onDragEnd: () -> Unit = {},
+    assetPathResolver: (String?) -> String? = { null },
     modifier: Modifier = Modifier
 ) {
-    var imageBitmap by remember(block.id, block.currentImageUri) { mutableStateOf<ImageBitmap?>(null) }
+    // 通过哈希解析出的素材当前物理路径（素材库账本实时换算，路径变化自动跟随）
+    val resolvedPath = assetPathResolver(block.assetHash)
+    var imageBitmap by remember(block.id, block.assetHash, resolvedPath) { mutableStateOf<ImageBitmap?>(null) }
+    // 资源丢失判定：图元持有哈希但物理文件读取失败（素材条目被删或外部文件丢失）
+    var isAssetMissing by remember(block.id, block.assetHash, resolvedPath) { mutableStateOf(false) }
 
-    LaunchedEffect(block.id, block.currentImageUri) {
+    LaunchedEffect(block.id, block.assetHash, resolvedPath) {
         withContext(Dispatchers.Default) {
-            val file = block.currentImageUri ?: block.referenceImage
-            var bytes = file?.readBytes()
-            // 历史路径失效自愈探测：若读不出，尝试从规范 assets/image/{id}.png 读取
-            if (bytes == null || bytes.isEmpty()) {
-                val rel = file?.relativePath ?: ""
-                val project = rel.substringAfter("templates/").substringBefore("/assets").ifBlank { "New_UI_Game" }
-                val fallbackRel = "templates/$project/assets/image/${block.id}.png"
-                bytes = try {
-                    org.gemini.ui.forge.data.TemplateFile(fallbackRel).readBytes()
-                } catch (_: Exception) {
-                    null
-                }
+            isAssetMissing = false
+            if (resolvedPath.isNullOrBlank()) {
+                // 纯容器或未绑定素材的图元：无图可加载，不算丢失
+                if (block.assetHash != null) isAssetMissing = true
+                return@withContext
             }
+            val bytes = readLocalFileBytes(resolvedPath)
             if (bytes != null && bytes.isNotEmpty()) {
                 try {
                     imageBitmap = bytes.toImageBitmap()
                 } catch (_: Exception) {
                     imageBitmap = null
                 }
+            } else {
+                imageBitmap = null
+                // 持有哈希但读取不到物理文件 → 资源丢失
+                if (block.assetHash != null) isAssetMissing = true
             }
         }
     }
@@ -83,7 +93,7 @@ fun UIStudioBlockItem(
     val b = absBounds
     val width = (b.right - b.left).coerceAtLeast(1f)
     val height = (b.bottom - b.top).coerceAtLeast(1f)
-    val displayName = block.userPromptZh.ifBlank { block.userPromptEn.ifBlank { block.id } }
+    val displayName = block.id
     val isPureContainer = block.isPureContainer || block.type == UIBlockType.CONTAINER
 
     val typeColor = when (block.type) {
@@ -94,10 +104,13 @@ fun UIStudioBlockItem(
         else -> Color(0xFF06B6D4) // 科技青蓝
     }
 
+    val missingColor = Color(0xFFEF4444) // 资源丢失警示红
+
     val borderColor = when {
         isSelected -> Color(0xFFFF9100) // 鲜明工程金橙色
         block.isLocked -> Color.Gray.copy(alpha = 0.45f)
         isPureContainer -> Color(0xFF8B5CF6).copy(alpha = 0.55f) // 柔和紫罗兰纯容器
+        isAssetMissing -> missingColor.copy(alpha = 0.85f) // 资源丢失警示红边框
         imageBitmap != null -> typeColor.copy(alpha = 0.35f) // 已绑定素材时细微优雅边框，不遮挡素材
         else -> typeColor.copy(alpha = 0.65f)
     }
@@ -156,6 +169,38 @@ fun UIStudioBlockItem(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit
             )
+        } else if (isAssetMissing && !isPureContainer) {
+            // 「资源丢失」专属占位框：红调警示 + 破图图标 + 双行文案
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(missingColor.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.BrokenImage,
+                        contentDescription = stringResource(Res.string.uistudio_asset_missing),
+                        tint = missingColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(Res.string.uistudio_asset_missing),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                        color = missingColor,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = displayName,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = Color.White.copy(alpha = 0.6f),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
+            }
         } else if (!isPureContainer) {
             // 无图普通组件占位（遵循多维语义化配色）
             Box(
@@ -204,23 +249,6 @@ fun UIStudioBlockItem(
                     .background(Color(0xFFFF9100))
                     .border(0.5.dp, Color.White)
             )
-
-            // 左上角悬浮高对比名称胶囊
-            Surface(
-                color = Color(0xFFFF9100),
-                shape = RoundedCornerShape(bottomEnd = 4.dp),
-                modifier = Modifier.align(Alignment.TopStart)
-            ) {
-                Text(
-                    text = block.id,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = Color.Black,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                )
-            }
         }
 
         // 锁定态右上角挂锁标记

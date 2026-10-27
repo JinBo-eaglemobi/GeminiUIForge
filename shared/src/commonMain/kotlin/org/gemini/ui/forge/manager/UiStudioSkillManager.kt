@@ -130,6 +130,35 @@ object UiStudioSkillManager {
     }
 
     /**
+     * 读取用户被禁用的技能 ID 集合
+     */
+    suspend fun getDisabledSkillIds(): Set<String> {
+        val content = storage.readFromFile("$SKILLS_DIR/disabled_skills.json") ?: return emptySet()
+        return runCatching {
+            json.decodeFromString<Set<String>>(content)
+        }.getOrDefault(emptySet())
+    }
+
+    /**
+     * 校验技能当前是否处于启用状态
+     */
+    suspend fun isSkillEnabled(skillId: String): Boolean {
+        val disabledIds = getDisabledSkillIds()
+        if (skillId in disabledIds) return false
+        val allSkills = getRegisteredSkills()
+        val target = allSkills.firstOrNull { it.id == skillId } ?: return false
+        return target.isSkillEnabled
+    }
+
+    /**
+     * 获取所有当前已启用的技能清单（已排除被禁用的技能，红线隔离）
+     */
+    suspend fun getEnabledSkills(): List<UiStudioSkill> {
+        val disabledIds = getDisabledSkillIds()
+        return getRegisteredSkills().filter { it.isSkillEnabled && it.id !in disabledIds }
+    }
+
+    /**
      * 同步纯内存判定激活的技能列表（供 UI 状态高频绑定使用，复用已缓存技能）
      */
     fun resolveActiveSkillsSync(
@@ -172,18 +201,24 @@ object UiStudioSkillManager {
     /**
      * 构建 Gemini 官方标准的 ToolConfig 工具声明
      *
-     * 接入 UniversalAiToolRegistry，全面开放全量 MCP 工具、通用内置 AI 标配工具、
-     * 专属界面排版装配工具 (apply_view_layout) 以及 Google 官方实时联网搜索。
+     * 【自主大脑精炼工具集架构】：
+     * 绝不平铺下发 43+ 个全量 MCP 工具（彻底切断 Slots 模板底层运维等噪音工具对大模型的干扰）；
+     * 仅下发：专属界面排版装配工具 (apply_view_layout) + 工作区核心工具 + 4 个探索发现元工具 (search_tools, list_tools, search_skills, read_skill_spec)。
+     * 大模型如同人类大脑，遇到未掌握的细节通过元工具自主搜索与索取。
      */
     fun buildToolConfigs(skills: List<UiStudioSkill> = emptyList(), enableGoogleSearch: Boolean = true): List<GeminiToolConfig> {
-        val fullConfigs = UniversalAiToolRegistry.buildFullGeminiTools(enableGoogleSearch = enableGoogleSearch)
+        val extraExplicitToolNames = skills.flatMap { it.toolNames }.toSet()
+        val coreConfigs = UniversalAiToolRegistry.buildStudioCoreGeminiTools(
+            enableGoogleSearch = enableGoogleSearch,
+            extraExplicitToolNames = extraExplicitToolNames
+        )
         val declarations = mutableListOf<JsonObject>()
 
         // 注入 apply_view_layout 专有视图排版工具
         declarations.add(buildApplyViewLayoutDeclaration())
 
-        // 注入 MCP + 通用内置工具
-        fullConfigs.forEach { config ->
+        // 注入精炼核心工作区工具与 4 个探索元工具
+        coreConfigs.forEach { config ->
             config.functionDeclarations?.let { declarations.addAll(it) }
         }
 

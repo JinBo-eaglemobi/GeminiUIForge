@@ -338,7 +338,7 @@ fun VisualRefineDialog(
 
                         val previewJson = remember(pendingUpdatedPages, blockId) {
                             pendingUpdatedPages?.let { pages ->
-                                val target = if (blockId != null) pages.flatMap { it.blocks }.findBlockById(blockId) else null
+                                val target = if (blockId != null) pages.flatMap { it.blocks }.findBlockById(blockId) as? UIBlock else null
                                 if (target != null) {
                                     try {
                                         prettyJson.encodeToString(UIBlock.serializer(), target)
@@ -374,13 +374,13 @@ fun VisualRefineDialog(
         val newFullJson = remember(pendingUpdatedPages) { prettyJson.encodeToString(pendingUpdatedPages) }
 
         val originalSegmentJson = remember(blockId, state.currentPage) {
-            val target = state.currentPage?.blocks?.findBlockById(blockId ?: "")
+            val target = state.currentPage?.blocks?.findBlockById(blockId ?: "") as? UIBlock
             if (target != null) prettyJson.encodeToString(UIBlock.serializer(), target)
             else originalFullJson
         }
 
         val newSegmentJson = remember(blockId, pendingUpdatedPages) {
-            val target = pendingUpdatedPages?.flatMap { it.blocks }?.findBlockById(blockId ?: "")
+            val target = pendingUpdatedPages?.flatMap { it.blocks }?.findBlockById(blockId ?: "") as? UIBlock
             if (target != null) prettyJson.encodeToString(UIBlock.serializer(), target)
             else newFullJson
         }

@@ -40,11 +40,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.getCurrentTimeMillis
-import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.DropPosition
-import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.ui.component.getIcon
 import org.gemini.ui.forge.ui.component.tip
@@ -52,6 +52,7 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import org.gemini.ui.forge.utils.readLocalFileBytes
 import org.gemini.ui.forge.utils.toImageBitmap
+import org.gemini.ui.forge.utils.toShortHash
 
 /**
  * UI Studio 单个组件/图层树节点行项组件 (Hierarchy Item)。
@@ -69,16 +70,17 @@ import org.gemini.ui.forge.utils.toImageBitmap
  * @param hoveredBlockId 拖拽悬浮命中的目标图层 ID
  * @param dropPosition 拖拽插入相对位置 (BEFORE / AFTER / INSIDE)
  * @param onPositioned 位置坐标回调
+ * @param assetPathResolver 哈希→素材相对路径解析器（素材库唯一账本）
  * @param modifier 外部修饰符
  */
 @Composable
 fun UIStudioHierarchyItem(
-    block: UIBlock,
+    block: UIStudioBlock,
     depth: Int,
     isAncestorHidden: Boolean,
     viewModel: UIStudioViewModel,
     templateRepo: TemplateRepository,
-    parentBlock: UIBlock? = null,
+    parentBlock: UIStudioBlock? = null,
     draggedBlockId: String? = null,
     hoveredBlockId: String? = null,
     dropPosition: DropPosition = DropPosition.INSIDE,
@@ -86,10 +88,12 @@ fun UIStudioHierarchyItem(
     onStartDrag: (String, Offset) -> Unit = { _, _ -> },
     onDrag: (Offset) -> Unit = {},
     onDragEnd: () -> Unit = {},
+    assetPathResolver: (String?) -> String? = { null },
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
     val state = viewModel.state
+    val copy = rememberClipboardAction()
     val isSelected = state.selectedBlockId == block.id
     var showContextMenu by remember { mutableStateOf(false) }
     val hasChildren = block.children.isNotEmpty()
@@ -99,35 +103,18 @@ fun UIStudioHierarchyItem(
     val isHovered = hoveredBlockId == block.id
     val hasParent = parentBlock != null || block.parent != null
 
-    // 真实图片缩略图异步加载（融合素材库联动与历史路径智能自愈探测）
-    val assetItem = remember(block.id, state.assetLibrary.items) {
-        state.assetLibrary.items.find { it.id == block.id }
+    // 真实图片缩略图异步加载（哈希引用模型：素材库按 assetHash 唯一解析路径）
+    val assetItem = remember(block.id, block.assetHash, state.assetLibrary.items) {
+        state.assetLibrary.items.find { it.id == block.id && it.hash == block.assetHash }
     }
-    val effectivePath = assetItem?.relativePath
-        ?: block.currentImageUri?.relativePath
-        ?: block.referenceImage?.relativePath
+    val effectivePath = assetPathResolver(block.assetHash) ?: assetItem?.relativePath
 
     var bitmap by remember(effectivePath, block.id) { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(effectivePath, block.id) {
         if (!effectivePath.isNullOrBlank()) {
             withContext(Dispatchers.Default) {
-                var bytes = readLocalFileBytes(effectivePath)
-                    ?: try {
-                        TemplateFile(effectivePath).readBytes()
-                    } catch (_: Exception) {
-                        null
-                    }
-                // 历史路径失效自愈探测：若读不出，尝试从规范 assets/image/{id}.png 读取
-                if (bytes == null && state.project != null) {
-                    val sanitized = state.project.projectId.replace(" ", "_")
-                    val fallbackRel = "templates/$sanitized/assets/image/${block.id}.png"
-                    bytes = try {
-                        TemplateFile(fallbackRel).readBytes()
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
+                val bytes = readLocalFileBytes(effectivePath)
                 if (bytes != null) {
                     bitmap = bytes.toImageBitmap()
                 } else {
@@ -447,6 +434,27 @@ fun UIStudioHierarchyItem(
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                )
+
+                if (!block.assetHash.isNullOrBlank()) {
+                    val shortHash = block.assetHash.toShortHash()
+                    DropdownMenuItem(
+                        text = { Text("复制资源哈希 (Hash)", fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp)) },
+                        onClick = {
+                            copy(shortHash, "已复制资源哈希: $shortHash")
+                            showContextMenu = false
+                        }
+                    )
+                }
+
+                DropdownMenuItem(
+                    text = { Text("复制图元 ID", fontSize = 13.sp) },
+                    leadingIcon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
+                        copy(block.id, "已复制图元 ID: ${block.id}")
+                        showContextMenu = false
+                    }
                 )
 
                 DropdownMenuItem(

@@ -26,7 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.data.repository.TemplateRepository
-import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -36,7 +36,7 @@ import org.gemini.ui.forge.ui.uistudio.dialog.UIStudioRenameDialog
 /**
  * UI Studio 左上侧视图界面管理面板
  *
- * 展示当前工程的所有视图界面 (UIPage)，支持新建视图、搜索过滤、切换活跃视图与删除视图。
+ * 展示当前工程的所有视图界面 (UIStudioPage)，支持新建视图、搜索过滤、切换活跃视图与删除视图。
  *
  * @param viewModel UI Studio 核心 ViewModel
  * @param templateRepo 模板工程仓储
@@ -50,7 +50,7 @@ fun UIStudioViewsPanel(
 ) {
     val spacing = LocalAppSpacing.current
     val state = viewModel.state
-    val allPages = state.project?.pages ?: emptyList()
+    val allPages = state.project?.studioPages ?: emptyList()
     val filteredPages = if (state.viewSearchQuery.isBlank()) {
         allPages
     } else {
@@ -108,7 +108,7 @@ fun UIStudioViewsPanel(
                     shape = RoundedCornerShape(6.dp),
                     modifier = Modifier
                         .height(28.dp)
-                        .tip("新建视图界面 (UIPage)")
+                        .tip("新建视图界面 (UIStudioPage)")
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(2.dp))

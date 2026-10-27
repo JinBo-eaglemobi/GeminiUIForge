@@ -4,9 +4,10 @@ import androidx.compose.ui.unit.IntRect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.AppWindowHolder
+import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.SerialRect
-import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.ui.component.chat.CommonChatAttachment
 import org.gemini.ui.forge.utils.CompactImage
 import org.gemini.ui.forge.utils.ImageCacheManager
@@ -33,15 +34,16 @@ class CanvasScreenshotService {
      */
     suspend fun captureSnapshot(
         projectName: String,
-        currentPage: UIPage?,
+        currentPage: UIStudioPage?,
         windowBounds: SerialRect?,
-        mode: CanvasSnapshotMode = CanvasSnapshotMode.OFFSCREEN_COMPOSITE
+        mode: CanvasSnapshotMode = CanvasSnapshotMode.OFFSCREEN_COMPOSITE,
+        assetPathResolver: (String?) -> String? = { null }
     ): CommonChatAttachment? = withContext(Dispatchers.Default) {
         if (currentPage == null) return@withContext null
 
         val compactImage: CompactImage = when (mode) {
             CanvasSnapshotMode.OFFSCREEN_COMPOSITE -> {
-                renderOffscreenComposite(currentPage) ?: return@withContext null
+                renderOffscreenComposite(currentPage, assetPathResolver) ?: return@withContext null
             }
             CanvasSnapshotMode.VIEWPORT_CLIP -> {
                 captureViewportPhysicalClip(windowBounds) ?: return@withContext null
@@ -71,7 +73,10 @@ class CanvasScreenshotService {
     /**
      * 模式 A：纯本地 Skia 离屏图元 1:1 拼装渲染（不受缩放和视口裁剪影响）
      */
-    private suspend fun renderOffscreenComposite(page: UIPage): CompactImage? {
+    private suspend fun renderOffscreenComposite(
+        page: UIStudioPage,
+        assetPathResolver: (String?) -> String?
+    ): CompactImage? {
         val width = page.width.toInt().coerceAtLeast(100)
         val height = page.height.toInt().coerceAtLeast(100)
 
@@ -83,8 +88,8 @@ class CanvasScreenshotService {
         canvas.drawRect(Rect.makeWH(width.toFloat(), height.toFloat()), bgPaint)
 
         // 2. 收集所有图元
-        val allBlocks = mutableListOf<UIBlock>()
-        fun collect(blocks: List<UIBlock>) {
+        val allBlocks = mutableListOf<UIStudioBlock>()
+        fun collect(blocks: List<UIStudioBlock>) {
             for (b in blocks) {
                 if (b.isVisible) {
                     allBlocks.add(b)
@@ -104,7 +109,10 @@ class CanvasScreenshotService {
 
         for (block in allBlocks) {
             val bounds = block.absoluteBounds
-            val imgPath = block.currentImageUri?.getAbsolutePath()
+            // 哈希引用模型：素材库解析相对路径后转绝对物理路径读取
+            val imgPath = assetPathResolver(block.assetHash)?.let { rel ->
+                TemplateFile(rel).getAbsolutePath()
+            }
 
             if (!imgPath.isNullOrBlank()) {
                 val skiaImg = imageCache[imgPath] ?: run {

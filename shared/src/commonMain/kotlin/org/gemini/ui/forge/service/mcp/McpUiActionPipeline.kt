@@ -336,7 +336,7 @@ object McpUiActionPipeline {
                 // 优先通过 UiGeometryHelper 几何中枢计算目标图元的视口逻辑裁剪区域，彻底杜绝 DPI 与视口变换错位
                 val region: androidx.compose.ui.unit.IntRect? = if (!screenshotTargetBlockId.isNullOrBlank()) {
                     val allBlocks = vm.state.value.currentPage?.blocks?.bindParents() ?: emptyList()
-                    val targetBlock = allBlocks.findBlockById(screenshotTargetBlockId)
+                    val targetBlock = allBlocks.findBlockById(screenshotTargetBlockId) as? UIBlock
                     if (targetBlock != null) {
                         val calcRegion = UiGeometryHelper.getBlockCropRegionInWindow(targetBlock, paddingPx = 48)
                         println("[UiGeometryHelper] targetBlock=${targetBlock.id}, absBounds=${targetBlock.toAbsoluteBounds()}, region=$calcRegion, viewport=${UiGeometryHelper.viewport}")

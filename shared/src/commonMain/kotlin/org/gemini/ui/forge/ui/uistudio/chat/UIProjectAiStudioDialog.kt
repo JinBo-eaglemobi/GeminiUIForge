@@ -136,13 +136,23 @@ fun UIProjectAiStudioDialog(
                         viewModel.deleteChatMessage(messageId)
                     },
                     onOpenViewRequested = { viewName ->
-                        val matchedPage = state.project?.pages?.find { it.nameStr.equals(viewName, ignoreCase = true) }
-                        if (matchedPage != null) {
-                            viewModel.selectView(matchedPage.id)
-                            onDismiss()
-                            Toast.show("已切换至视图 [${matchedPage.nameStr}]", ToastType.SUCCESS)
+                        // 优先检查当前会话是否存在排版方案，若存在则重新调起排版应用决策弹窗，让用户选择替换当前视图或新建视图
+                        val lastLayoutMsg = currentSession?.messages?.lastOrNull {
+                            it.effectiveText.contains("已完成界面排版规划方案") || it.effectiveText.contains("apply_view_layout")
+                        }
+                        if (lastLayoutMsg != null) {
+                            viewModel.reapplyLayoutFromText(lastLayoutMsg.effectiveText)
                         } else {
-                            Toast.show("未找到视图: $viewName", ToastType.INFO)
+                            val matchedPage = state.project?.studioPages?.find {
+                                it.nameStr.equals(viewName, ignoreCase = true) || it.id.equals(viewName, ignoreCase = true)
+                            }
+                            if (matchedPage != null) {
+                                viewModel.selectView(matchedPage.id)
+                                onDismiss()
+                                Toast.show("已切换至视图 [${matchedPage.nameStr}]", ToastType.SUCCESS)
+                            } else {
+                                Toast.show("未找到视图: $viewName", ToastType.INFO)
+                            }
                         }
                     },
                     mentionState = viewModel.mentionState,
@@ -280,6 +290,17 @@ fun UIProjectAiStudioDialog(
                     isDestructive = true,
                     onConfirm = { viewModel.confirmClearCurrentSession() },
                     onDismiss = { viewModel.cancelClearCurrentSession() }
+                )
+            }
+
+            // 最大工具轮询续轮确认弹窗
+            if (state.showMaxToolRoundsContinueDialog) {
+                AppConfirmDialog(
+                    title = "工具轮询上限提醒",
+                    message = "AI Agent 已达到当前单次最大轮询上限（${state.currentToolLoopRound} 轮），当前仍在全力推演中。\n\n是否继续追加 ${state.maxToolLoopRoundLimit} 轮继续推演？",
+                    confirmText = "继续执行 (+${state.maxToolLoopRoundLimit}轮)",
+                    onConfirm = { viewModel.continueToolLoop() },
+                    onDismiss = { viewModel.cancelToolLoop() }
                 )
             }
 

@@ -183,7 +183,7 @@ class LayoutEditorDelegate(
         saveSnapshot("移动模块层级: $draggedBlockId")
         updateState { currentState ->
             val currentPage = currentState.currentPage ?: return@updateState currentState
-            val draggedBlock = currentPage.blocks.findBlockById(draggedBlockId) ?: return@updateState currentState
+            val draggedBlock = currentPage.blocks.findBlockById(draggedBlockId) as? UIBlock ?: return@updateState currentState
             if (targetId != null && isDescendantOfBlock(targetId, draggedBlock)) return@updateState currentState
             
             val draggedAbsBounds = getAbsoluteBounds(currentPage.blocks, draggedBlockId) ?: draggedBlock.bounds
@@ -284,7 +284,7 @@ class LayoutEditorDelegate(
      */
     fun copy() {
         val selectedId = getState().selectedBlockId ?: return
-        val block = getState().currentPage?.blocks?.findBlockById(selectedId)
+        val block = getState().currentPage?.blocks?.findBlockById(selectedId) as? UIBlock
         if (block != null) {
             clipboardBlock = block
             Toast.show("已复制模块 ${block.id}", ToastType.SUCCESS)
@@ -296,7 +296,7 @@ class LayoutEditorDelegate(
      */
     fun cut() {
         val selectedId = getState().selectedBlockId ?: return
-        val block = getState().currentPage?.blocks?.findBlockById(selectedId)
+        val block = getState().currentPage?.blocks?.findBlockById(selectedId) as? UIBlock
         if (block != null) {
             clipboardBlock = block
             deleteBlock(selectedId)
@@ -356,7 +356,7 @@ class LayoutEditorDelegate(
 
         saveSnapshot("原点贴合与相对坐标归零: ${targetBlock.id}")
         val boundBlocks = page.blocks.bindParents()
-        val boundTarget = boundBlocks.findBlockById(groupId) ?: return
+        val boundTarget = (boundBlocks.findBlockById(groupId) as? UIBlock) ?: return
 
         val normalized = org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.normalizeContainerAndChildren(boundTarget)
 
@@ -473,7 +473,7 @@ class LayoutEditorDelegate(
      * @param useChatContext 是否携带历史上下文
      */
     fun optimizePrompt(blockId: String, apiKey: String, lang: PromptLanguage, useChatContext: Boolean = false) {
-        val block = getState().project.pages.flatMap { it.blocks }.findBlockById(blockId) ?: return
+        val block = (getState().project.pages.flatMap { it.blocks }.findBlockById(blockId) as? UIBlock) ?: return
         val textToOptimize = if (lang == PromptLanguage.EN) block.userPromptEn else block.userPromptZh
         if (textToOptimize.isBlank()) return
         

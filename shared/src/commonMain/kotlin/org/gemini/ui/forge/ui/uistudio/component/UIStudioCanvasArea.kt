@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.model.ui.SerialRect
-import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
@@ -45,11 +45,13 @@ import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
  * 3. 处于活跃视图时，右下角悬浮「✨ AI Chat 智能排版」按钮。
  *
  * @param viewModel UI Studio 核心 ViewModel
+ * @param assetPathResolver 哈希→素材相对路径解析器（素材库唯一账本）
  * @param modifier 外部修饰符
  */
 @Composable
 fun UIStudioCanvasArea(
     viewModel: UIStudioViewModel,
+    assetPathResolver: (String?) -> String? = { null },
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
@@ -360,6 +362,7 @@ fun UIStudioCanvasArea(
                                     inheritedOpacity = info.inheritedOpacity,
                                     isSelected = info.block.id == state.selectedBlockId,
                                     scale = state.scale,
+                                    assetPathResolver = assetPathResolver,
                                     onClick = {
                                         if (activeContainer == null) {
                                             // 主视图模式层级门禁：严禁绕过父容器直接选中子组件，点击必须选中所属顶层根父容器
@@ -495,7 +498,7 @@ fun UIStudioCanvasArea(
  * UI Studio 画布全层级展平图元渲染模型。
  */
 private data class RenderableBlockInfo(
-    val block: UIBlock,
+    val block: UIStudioBlock,
     val absBounds: SerialRect,
     val inheritedOpacity: Float = 1.0f,
     val isInheritedLocked: Boolean = false
@@ -505,7 +508,7 @@ private data class RenderableBlockInfo(
  * 递归收集页面内所有可见的图元，并精准推导累加其绝对全局坐标矩形与继承锁定态及父级级联透明度。
  */
 private fun collectRenderableBlocks(
-    blocks: List<UIBlock>,
+    blocks: List<UIStudioBlock>,
     parentOffsetX: Float = 0f,
     parentOffsetY: Float = 0f,
     parentLocked: Boolean = false,

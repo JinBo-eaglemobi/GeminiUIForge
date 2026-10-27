@@ -21,7 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.extend.contextMenuClickable
-import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
@@ -40,7 +40,7 @@ import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
  */
 @Composable
 fun UIStudioViewRowItem(
-    page: UIPage,
+    page: UIStudioPage,
     isSelected: Boolean,
     canDelete: Boolean,
     viewModel: UIStudioViewModel,

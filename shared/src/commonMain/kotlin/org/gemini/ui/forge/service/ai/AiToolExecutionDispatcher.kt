@@ -62,21 +62,20 @@ class AiToolExecutionDispatcher {
         result: McpToolResult,
         durationMs: Long
     ): ChatToolCallRecord {
+        val rawText = result.content.filterIsInstance<McpContent.Text>().joinToString("\n") { it.text }
         val summary = when {
             result.isError -> {
-                result.content.filterIsInstance<McpContent.Text>().firstOrNull()?.text
-                    ?: "执行失败"
+                rawText.ifBlank { "执行失败" }
             }
             result.content.any { it is McpContent.Image } -> {
                 val textMsg = result.content.filterIsInstance<McpContent.Text>().firstOrNull()?.text
                 textMsg ?: "已生成多模态视觉图像内容"
             }
             else -> {
-                val fullText = result.content.filterIsInstance<McpContent.Text>().joinToString("\n") { it.text }
-                if (fullText.length > 300) {
-                    fullText.take(300) + "..."
+                if (rawText.length > 300) {
+                    rawText.take(300) + "..."
                 } else {
-                    fullText.ifBlank { "执行成功" }
+                    rawText.ifBlank { "执行成功" }
                 }
             }
         }
@@ -87,7 +86,8 @@ class AiToolExecutionDispatcher {
             argumentsJson = looseJson.encodeToString(arguments),
             resultSummary = summary,
             isSuccess = !result.isError,
-            durationMs = durationMs
+            durationMs = durationMs,
+            rawOutput = rawText.ifBlank { if (result.isError) "{\"error\":\"执行失败\"}" else "{}" }
         )
     }
 

@@ -6,6 +6,7 @@ import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.model.ui.UIStudioPage
 
 /**
  * 顶级数据模型：应用模板工程 (ProjectState)
@@ -26,6 +27,8 @@ data class ProjectState(
     val styleReferenceUri: TemplateFile? = null,
     val referenceImages: List<TemplateFile> = emptyList(), // 多参考图路径列表
     val pages: List<UIPage> = emptyList(),
+    /** UI Studio 独立工作台的视图界面集合（图元模型为 UIStudioBlock，不含任何路径引用属性；传统 Slots 工程恒为空） */
+    val studioPages: List<UIStudioPage> = emptyList(),
     /** 模板创建时间戳（毫秒） */
     val createdAt: Long = 0L
 ) {

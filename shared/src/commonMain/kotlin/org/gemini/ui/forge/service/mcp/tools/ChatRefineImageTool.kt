@@ -195,7 +195,7 @@ class ChatRefineImageTool(
         return McpToolResult.image(
             base64Data = returnBase64,
             mimeType = "image/png",
-            message = "✅ 图元 [$blockId] 微调重塑完成，新资产已绑定: ${savedFile.getAbsolutePath()}"
+            message = "✅ 图元 [$blockId] 微调重塑完成，新资产已绑定: `${savedFile.getAbsolutePath()}`"
         )
     }
 }

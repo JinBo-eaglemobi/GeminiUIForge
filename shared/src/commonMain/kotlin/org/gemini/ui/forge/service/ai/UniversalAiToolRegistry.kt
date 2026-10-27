@@ -3,7 +3,11 @@ package org.gemini.ui.forge.service.ai
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.service.ai.tools.CalculateGeometryTool
 import org.gemini.ui.forge.service.ai.tools.GetCurrentTimeTool
+import org.gemini.ui.forge.service.ai.tools.ListToolsTool
 import org.gemini.ui.forge.service.ai.tools.ReadProjectFileTool
+import org.gemini.ui.forge.service.ai.tools.ReadSkillSpecTool
+import org.gemini.ui.forge.service.ai.tools.SearchSkillsTool
+import org.gemini.ui.forge.service.ai.tools.SearchToolsTool
 import org.gemini.ui.forge.service.ai.tools.WebFetchTool
 import org.gemini.ui.forge.service.mcp.McpToolDefinition
 import org.gemini.ui.forge.service.mcp.McpToolRegistry
@@ -16,12 +20,16 @@ import org.gemini.ui.forge.service.mcp.McpToolRegistry
  */
 object UniversalAiToolRegistry {
 
-    /** 通用内置 AI 基础工具清单 */
+    /** 通用内置 AI 基础与探索元工具清单 */
     val builtinAiTools: List<McpToolDefinition> = listOf(
         GetCurrentTimeTool(),
         CalculateGeometryTool(),
         WebFetchTool(),
-        ReadProjectFileTool()
+        ReadProjectFileTool(),
+        SearchToolsTool(),
+        ListToolsTool(),
+        SearchSkillsTool(),
+        ReadSkillSpecTool()
     )
 
     /** 排除工具黑名单（防止递归自调用死循环或纯底层私有探测） */
@@ -110,6 +118,50 @@ object UniversalAiToolRegistry {
     ): List<GeminiToolConfig> {
         val allTools = getAllAvailableTools()
         val declarations = allTools.map { it.toGeminiFunctionDeclaration(presetImageModel) }
+
+        val configs = mutableListOf<GeminiToolConfig>()
+        configs.add(
+            GeminiToolConfig(
+                functionDeclarations = declarations,
+                googleSearch = if (enableGoogleSearch) buildJsonObject {} else null
+            )
+        )
+        return configs
+    }
+
+    /**
+     * UI Studio 默认下发的精炼核心工具与元工具集（过滤 Slots 模板底层运维等噪音工具）
+     */
+    fun buildStudioCoreGeminiTools(
+        enableGoogleSearch: Boolean = true,
+        presetImageModel: String? = null,
+        extraExplicitToolNames: Set<String> = emptySet()
+    ): List<GeminiToolConfig> {
+        val excludedStudioNoise = setOf(
+            "list_templates",
+            "get_template",
+            "create_template",
+            "delete_template",
+            "duplicate_template",
+            "rename_template",
+            "list_matting_presets",
+            "check_environment"
+        )
+        // 核心工作区工具名：内置基础工具与探索元工具 + UI Studio 核心交互工具
+        val coreStudioToolNames = setOf(
+            "apply_view_layout",
+            "generate_image",
+            "generate_block_asset",
+            "crop_image",
+            "remove_image_background",
+            "get_runtime_status"
+        ) + builtinAiTools.map { it.name }.toSet() + extraExplicitToolNames
+
+        val allTools = getAllAvailableTools()
+        val filteredTools = allTools.filter { tool ->
+            tool.name !in excludedStudioNoise && tool.name in coreStudioToolNames
+        }
+        val declarations = filteredTools.map { it.toGeminiFunctionDeclaration(presetImageModel) }
 
         val configs = mutableListOf<GeminiToolConfig>()
         configs.add(

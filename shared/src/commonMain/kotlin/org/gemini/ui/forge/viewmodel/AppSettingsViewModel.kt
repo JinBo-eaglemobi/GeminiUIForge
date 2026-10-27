@@ -124,6 +124,23 @@ class AppSettingsViewModel(
             configManager.saveKey("COMPILE_OUTPUT_DIR", config.outputDir)
         }
     }
+
+    /**
+     * 保存 AI Agent 工具调用最大轮询次数（5..500 轮，出厂默认 50）
+     */
+    fun saveAiAgentMaxToolRounds(rounds: Int) {
+        val safeRounds = rounds.coerceIn(5, 500)
+        viewModelScope.launch {
+            configManager.saveKey("AI_AGENT_MAX_TOOL_ROUNDS", safeRounds.toString())
+        }
+    }
+
+    /**
+     * 获取 AI Agent 工具调用最大轮询次数（默认 50）
+     */
+    suspend fun getAiAgentMaxToolRounds(): Int {
+        return configManager.loadKey("AI_AGENT_MAX_TOOL_ROUNDS")?.toIntOrNull()?.coerceIn(5, 500) ?: 50
+    }
     
     /**
      * 获取 ConfigManager 实例，用于初始化加载

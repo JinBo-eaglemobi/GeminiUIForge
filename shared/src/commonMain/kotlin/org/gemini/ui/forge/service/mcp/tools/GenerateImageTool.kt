@@ -177,7 +177,7 @@ class GenerateImageTool(
                 append("✂️ 透明背景: 已完成本地 AI 自动去背 (PNG)\n")
             }
             if (savedPath != null) {
-                append("📁 物理落盘: $savedPath")
+                append("📁 物理落盘: `$savedPath`")
             }
         }
 

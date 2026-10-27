@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import org.gemini.ui.forge.data.repository.TemplateRepository
-import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -44,7 +44,7 @@ import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
  */
 @Composable
 fun UIStudioMainViewInspector(
-    view: UIPage,
+    view: UIStudioPage,
     viewModel: UIStudioViewModel,
     templateRepo: TemplateRepository,
     modifier: Modifier = Modifier

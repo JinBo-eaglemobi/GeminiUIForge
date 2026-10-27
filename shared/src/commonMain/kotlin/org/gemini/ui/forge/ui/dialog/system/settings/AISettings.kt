@@ -255,4 +255,66 @@ fun AISettings(
             }
         }
     }
+
+    var maxToolRounds by remember { mutableStateOf(50) }
+    var maxToolRoundsInput by remember { mutableStateOf("50") }
+    LaunchedEffect(Unit) {
+        val loaded = settingsViewModel.getAiAgentMaxToolRounds()
+        maxToolRounds = loaded
+        maxToolRoundsInput = loaded.toString()
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(vertical = spacing.extraSmall),
+        shape = AppShapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(spacing.medium)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = spacing.medium)) {
+                    Text(
+                        text = "AI Agent 最大工具轮询次数",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "单次最大探索与排版推理循环次数（出厂默认 50 次），达到上限时将弹窗询问是否继续",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                SelectAllOutlinedTextField(
+                    value = maxToolRoundsInput,
+                    onValueChange = { input ->
+                        val clean = input.filter { it.isDigit() }
+                        maxToolRoundsInput = clean
+                        clean.toIntOrNull()?.let { num ->
+                            if (num in 5..500) {
+                                maxToolRounds = num
+                                settingsViewModel.saveAiAgentMaxToolRounds(num)
+                            }
+                        }
+                    },
+                    modifier = Modifier.width(120.dp),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    trailingIcon = {
+                        Text(
+                            text = "轮",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                    }
+                )
+            }
+        }
+    }
 }

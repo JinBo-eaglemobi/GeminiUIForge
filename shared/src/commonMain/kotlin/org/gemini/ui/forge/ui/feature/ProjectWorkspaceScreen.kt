@@ -378,7 +378,7 @@ fun ProjectWorkspaceScreen(
         }
         
         // 统一参考区域设置对话框（复用 BlockRefinementDialog 纯净参考区域模式）
-        val refTargetBlock = state.currentPage?.blocks?.findBlockById(state.referenceAreaTargetId ?: "")
+        val refTargetBlock = state.currentPage?.blocks?.findBlockById(state.referenceAreaTargetId ?: "") as? UIBlock
         if (state.showReferenceArea && state.currentPage?.sourceImageUri != null && refTargetBlock != null) {
             BlockRefinementDialog(
                 block = refTargetBlock,

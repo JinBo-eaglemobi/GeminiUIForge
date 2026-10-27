@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.UIBlockType
+import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.tip
@@ -216,7 +217,7 @@ fun UIStudioPropertyPanel(
             } else {
                 // 已选中组件：动态编辑属性（尺寸、坐标、类型、名称）
                 val currentView = state.currentView
-                val selectedBlock = currentView?.blocks?.findBlockById(selectedId)
+                val selectedBlock = currentView?.blocks?.findBlockById(selectedId) as? UIStudioBlock
 
                 if (selectedBlock != null) {
                     val scrollState = rememberScrollState()
@@ -282,13 +283,12 @@ fun UIStudioPropertyPanel(
                         }
 
                         // 2. 几何坐标与尺寸 (X, Y, W, H 与 双轴独立缩放，支持鼠标水平滑动与滚轮微调)
-                        // 组件基准切片尺寸与双轴缩放状态计算 (范围 0.0 ~ 1.0)
-                        val matchingAsset = remember(selectedBlock.id, viewModel.state.assetLibrary.items) {
+                        // 组件基准切片尺寸与双轴缩放状态计算 (范围 0.0 ~ 1.0)（哈希引用模型：按素材哈希唯一联动）
+                        val matchingAsset = remember(selectedBlock.id, selectedBlock.assetHash, viewModel.state.assetLibrary.items) {
                             viewModel.state.assetLibrary.items.find {
                                 it.id == selectedBlock.id ||
                                 it.name == selectedBlock.id ||
-                                (selectedBlock.currentImageUri?.relativePath?.contains(it.name) == true) ||
-                                selectedBlock.resourceBindingPath.contains(it.id)
+                                (selectedBlock.assetHash != null && it.hash == selectedBlock.assetHash)
                             }
                         }
                         // 独立缩放 Transform 状态 (独立于 bounds 宽高)

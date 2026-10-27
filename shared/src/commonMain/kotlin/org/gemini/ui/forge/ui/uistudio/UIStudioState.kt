@@ -4,8 +4,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.assetsheet.AssetSheetParseResult
-import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.model.ui.UIPage
+import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.utils.findBlockById
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.chat.VisualChatMessage
@@ -24,8 +24,8 @@ data class LayoutUndoSnapshot(
     val viewId: String,
     val viewName: String,
     val isReplaced: Boolean,
-    val oldBlocks: List<UIBlock>,
-    val newBlocks: List<UIBlock>,
+    val oldBlocks: List<UIStudioBlock>,
+    val newBlocks: List<UIStudioBlock>,
     val diff: LayoutDiffResult,
     val timestamp: Long = org.gemini.ui.forge.getCurrentTimeMillis()
 )
@@ -122,8 +122,8 @@ data class UIStudioState(
     val renamingAsset: UIAssetItem? = null,
     val deletingFolder: UIAssetFolder? = null,
     val deletingAsset: UIAssetItem? = null,
-    val renamingView: UIPage? = null,
-    val deletingView: UIPage? = null,
+    val renamingView: UIStudioPage? = null,
+    val deletingView: UIStudioPage? = null,
     val projectAgentConfig: ProjectAgentConfig = ProjectAgentConfig(),
     val isSystemInstructionDialogVisible: Boolean = false,
     val deletingSession: VisualChatSession? = null,
@@ -146,19 +146,23 @@ data class UIStudioState(
     val dragCursorPosition: androidx.compose.ui.geometry.Offset? = null,
     val undoStack: List<UIStudioHistoryEntry> = emptyList(),
     val redoStack: List<UIStudioHistoryEntry> = emptyList(),
-    val clipboardBlock: UIBlock? = null,
+    val clipboardBlock: UIStudioBlock? = null,
     val pendingLayoutResult: org.gemini.ui.forge.service.studio.UiStudioLayoutService.ApplyLayoutResult? = null,
-    val lastLayoutUndoSnapshot: LayoutUndoSnapshot? = null
+    val lastLayoutUndoSnapshot: LayoutUndoSnapshot? = null,
+    val showMaxToolRoundsContinueDialog: Boolean = false,
+    val currentToolLoopRound: Int = 0,
+    val maxToolLoopRoundLimit: Int = 50
 ) {
     val canUndo: Boolean get() = undoStack.isNotEmpty()
     val canRedo: Boolean get() = redoStack.isNotEmpty()
     /**
-     * 当前处于激活独立编辑状态的父容器组件 [UIBlock]（若处于整页模式则为 null）。
+     * 当前处于激活独立编辑状态的父容器组件 [UIStudioBlock]（若处于整页模式则为 null）。
      */
-    val activeContainerBlock: UIBlock?
+    val activeContainerBlock: UIStudioBlock?
         get() {
             val cid = activeContainerId ?: return null
-            return currentView?.blocks?.findBlockById(cid)
+            // 视图树内类型同质（均为 UIStudioBlock），收敛转换安全
+            return currentView?.blocks?.findBlockById(cid) as? UIStudioBlock
         }
     /**
      * 获取当前处于活跃对话状态的会话单元 [VisualChatSession]。
@@ -170,21 +174,21 @@ data class UIStudioState(
             return chatSessions.find { it.id == id } ?: chatSessions.firstOrNull()
         }
     /**
-     * 获取当前处于活跃编辑状态的视图界面 [UIPage]。
+     * 获取当前处于活跃编辑状态的视图界面 [UIStudioPage]。
      * 若所有标签已全部关闭或未指定活跃视图，则严格返回 null，清空画布渲染。
      */
-    val currentView: UIPage?
+    val currentView: UIStudioPage?
         get() {
-            val pages = project?.pages ?: return null
+            val pages = project?.studioPages ?: return null
             if (pages.isEmpty() || openViewIds.isEmpty()) return null
             val viewId = currentViewId ?: return null
             return pages.find { it.id == viewId }
         }
 
     /**
-     * 获取当前处于选中状态的图元对象 [UIBlock]。
+     * 获取当前处于选中状态的图元对象 [UIStudioBlock]。
      */
-    val selectedBlock: UIBlock?
+    val selectedBlock: UIStudioBlock?
         get() {
             val id = selectedBlockId ?: return null
             return currentView?.blocks?.find { it.id == id }

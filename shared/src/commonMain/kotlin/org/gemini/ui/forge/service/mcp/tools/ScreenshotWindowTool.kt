@@ -66,7 +66,7 @@ class ScreenshotWindowTool : McpToolDefinition {
             val cleanId = id.removePrefix("block_")
             val vm = McpUiActionPipeline.getActiveViewModel()
             val allBlocks = vm?.state?.value?.currentPage?.blocks?.bindParents() ?: emptyList()
-            val targetBlock = allBlocks.findBlockById(cleanId)
+            val targetBlock = allBlocks.findBlockById(cleanId) as? UIBlock
             if (targetBlock != null) {
                 // 携带模块类型与唯一 ID，例如 block_button_btn_spin 或 block_btn_spin
                 blockFilePrefix = "block_${targetBlock.type.name.lowercase()}_$cleanId"

@@ -120,17 +120,6 @@ fun ToolExecutionStatusCard(
                 )
             }
 
-            // 结果摘要 (当非空且未展开时简要呈现)
-            if (!record.resultSummary.isNullOrBlank() && !isExpanded) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = record.resultSummary,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2
-                )
-            }
-
             // 展开区域：入参与完整返回结果
             AnimatedVisibility(
                 visible = isExpanded,
