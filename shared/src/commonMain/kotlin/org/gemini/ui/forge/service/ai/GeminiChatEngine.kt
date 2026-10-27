@@ -339,6 +339,8 @@ class GeminiChatEngine(
         var promptTokens: Int? = null
         var candidatesTokens: Int? = null
         var totalTokens: Int? = null
+        var generatedImageData: String? = null
+        var generatedImageMime: String? = null
         val startTime = getCurrentTimeMillis()
 
         return try {
@@ -368,6 +370,11 @@ class GeminiChatEngine(
                             usage["totalTokenCount"]?.jsonPrimitive?.intOrNull?.let { totalTokens = it }
                         }
                     }
+                    val imgPair = extractInlineImageData(element)
+                    if (imgPair != null) {
+                        generatedImageData = imgPair.first
+                        generatedImageMime = imgPair.second
+                    }
                 },
                 onChunk = { chunk ->
                     fullTextBuilder.append(chunk)
@@ -378,7 +385,7 @@ class GeminiChatEngine(
 
             val durationMs = getCurrentTimeMillis() - startTime
             val resultText = fullTextBuilder.toString()
-            if (resultText.isBlank() && lastThought.isNullOrBlank()) {
+            if (resultText.isBlank() && lastThought.isNullOrBlank() && generatedImageData == null) {
                 return GeminiChatResult(
                     text = "",
                     modelName = request.model.displayName,
@@ -397,6 +404,8 @@ class GeminiChatEngine(
                 promptTokens = promptTokens,
                 candidatesTokens = candidatesTokens,
                 totalTokens = totalTokens ?: if (promptTokens != null || candidatesTokens != null) (promptTokens ?: 0) + (candidatesTokens ?: 0) else null,
+                generatedImageData = generatedImageData,
+                generatedImageMime = generatedImageMime,
                 isSuccess = true
             )
         } catch (e: Exception) {
@@ -533,6 +542,8 @@ class GeminiChatEngine(
         var candidatesTokens: Int? = null
         var totalTokens: Int? = null
         var rawResponseAggregator: String? = null
+        var generatedImageData: String? = null
+        var generatedImageMime: String? = null
 
         return try {
             geminiClient.streamInteraction(
@@ -577,6 +588,12 @@ class GeminiChatEngine(
                         if (sig != null) lastSig = sig
                         onThought?.invoke(lastThought ?: "", lastSig)
                     }
+
+                    val imgPair = extractInlineImageData(element)
+                    if (imgPair != null) {
+                        generatedImageData = imgPair.first
+                        generatedImageMime = imgPair.second
+                    }
                 },
                 onChunk = { chunk ->
                     fullTextBuilder.append(chunk)
@@ -596,11 +613,22 @@ class GeminiChatEngine(
                 rawResponseAggregator?.let { ChatPayloadViewProjector.projectDisplayContent(it).text } ?: ""
             }
 
+            if (generatedImageData == null && rawResponseAggregator != null) {
+                try {
+                    val parsed = jsonParser.parseToJsonElement(rawResponseAggregator!!)
+                    val imgPair = extractInlineImageData(parsed)
+                    if (imgPair != null) {
+                        generatedImageData = imgPair.first
+                        generatedImageMime = imgPair.second
+                    }
+                } catch (_: Exception) {}
+            }
+
             val hasToolCallInResponse = rawResponseAggregator?.let {
                 it.contains("\"function_call\"") || it.contains("\"functionCall\"") || it.contains("\"tool_call\"")
             } ?: false
 
-            if (finalExtractedText.isBlank() && lastThought.isNullOrBlank() && !hasToolCallInResponse) {
+            if (finalExtractedText.isBlank() && lastThought.isNullOrBlank() && !hasToolCallInResponse && generatedImageData == null) {
                 val durationMsErr = getCurrentTimeMillis() - startTime
                 return GeminiChatResult(
                     text = "",
@@ -623,6 +651,8 @@ class GeminiChatEngine(
                 promptTokens = promptTokens,
                 candidatesTokens = candidatesTokens,
                 totalTokens = totalTokens ?: if (promptTokens != null || candidatesTokens != null) (promptTokens ?: 0) + (candidatesTokens ?: 0) else null,
+                generatedImageData = generatedImageData,
+                generatedImageMime = generatedImageMime,
                 isSuccess = true
             )
         } catch (e: Exception) {
@@ -659,5 +689,35 @@ class GeminiChatEngine(
                 })
             })
         }
+    }
+
+    /**
+     * 深度提取响应 JSON 中的 inlineData / inline_data 图像载荷
+     */
+    private fun extractInlineImageData(element: JsonElement): Pair<String, String>? {
+        if (element !is JsonObject) return null
+        fun findInline(obj: JsonObject): Pair<String, String>? {
+            val inline = obj["inlineData"]?.jsonObject ?: obj["inline_data"]?.jsonObject
+            if (inline != null) {
+                val data = inline["data"]?.jsonPrimitive?.contentOrNull
+                val mime = (inline["mimeType"] ?: inline["mime_type"])?.jsonPrimitive?.contentOrNull ?: "image/png"
+                if (!data.isNullOrBlank()) return data to mime
+            }
+            for ((_, v) in obj) {
+                if (v is JsonObject) {
+                    val found = findInline(v)
+                    if (found != null) return found
+                } else if (v is JsonArray) {
+                    for (item in v) {
+                        if (item is JsonObject) {
+                            val found = findInline(item)
+                            if (found != null) return found
+                        }
+                    }
+                }
+            }
+            return null
+        }
+        return findInline(element)
     }
 }

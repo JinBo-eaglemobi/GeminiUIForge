@@ -691,4 +691,20 @@
     <string name="traffic_clear_done">All traffic records cleared</string>
     <string name="traffic_show_all_lines">Expand all remaining %1$d lines</string>
     <string name="traffic_stats_summary">Total %1$d · REQ %2$d · RESP %3$d · ~%4$s</string>
+
+    <!-- Mention Fuzzy Matching -->
+    <string name="mention_empty_no_context">No project context available</string>
+    <string name="mention_empty_not_found">No entities matching "%1$s"</string>
+
+    <!-- Chat ImageGen Payload Routing -->
+    <string name="chat_imagegen_route_hint">Image gen intent detected; will route to "%1$s" on send</string>
+
+    <!-- Mention Hover Preview -->
+    <string name="mention_preview_unavailable">No preview available</string>
+    <string name="mention_preview_loading">Loading...</string>
+    <string name="mention_clear_history_tip">Clear history reference</string>
+    <string name="mention_press_enter_tip">Press Enter to select</string>
+    <string name="mention_preview_container_child_count">%1$d child component(s)</string>
+    <string name="mention_preview_doc_empty">File is empty or cannot be read</string>
+    <string name="mention_preview_no_bound_asset">No asset bound</string>
 </resources>

@@ -10,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -62,62 +63,64 @@ fun ToolExecutionStatusCard(
                 .fillMaxWidth()
                 .padding(10.dp)
         ) {
-            // 顶栏：工具图标、工具名称、耗时、状态图标与折叠箭头
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Handyman,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
+            // 顶栏：工具图标、工具名称、耗时、状态图标与折叠箭头 (通过 DisableSelection 阻断外层划选光标侵入)
+            DisableSelection {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isExpanded = !isExpanded },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Handyman,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
 
-                Text(
-                    text = record.toolName,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = FontFamily.Monospace
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-
-                if (record.durationMs > 0) {
                     Text(
-                        text = "${record.durationMs}ms",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        text = record.toolName,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = FontFamily.Monospace
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    if (record.durationMs > 0) {
+                        Text(
+                            text = "${record.durationMs}ms",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    if (record.isSuccess) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "执行成功",
+                            modifier = Modifier.size(15.dp),
+                            tint = statusColor
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Error,
+                            contentDescription = "执行失败",
+                            modifier = Modifier.size(15.dp),
+                            tint = statusColor
+                        )
+                    }
+
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isExpanded) "折叠" else "展开详情",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                if (record.isSuccess) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "执行成功",
-                        modifier = Modifier.size(15.dp),
-                        tint = statusColor
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Error,
-                        contentDescription = "执行失败",
-                        modifier = Modifier.size(15.dp),
-                        tint = statusColor
-                    )
-                }
-
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (isExpanded) "折叠" else "展开详情",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
 
             // 展开区域：入参与完整返回结果

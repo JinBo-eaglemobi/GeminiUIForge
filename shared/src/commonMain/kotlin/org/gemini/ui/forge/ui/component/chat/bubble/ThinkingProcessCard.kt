@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -91,65 +92,67 @@ fun ThinkingProcessCard(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(horizontal = spacing.medium, vertical = spacing.small)) {
-            // 顶栏操作与状态行
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(enabled = thought.isNotBlank()) { isExpanded = !isExpanded },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (isThinking) {
-                    Icon(
-                        Icons.Default.Psychology,
-                        contentDescription = "思考中",
-                        modifier = Modifier.size(16.dp).alpha(effectiveAlpha),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.Lightbulb,
-                        contentDescription = "已完成思考",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.tertiary
-                    )
-                }
-
-                Spacer(Modifier.width(spacing.small))
-
-                Text(
-                    text = if (isThinking) {
-                        "深度思考与逻辑推演中..."
+            // 顶栏操作与状态行 (通过 DisableSelection 阻断外层划选光标侵入)
+            DisableSelection {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = thought.isNotBlank()) { isExpanded = !isExpanded },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isThinking) {
+                        Icon(
+                            Icons.Default.Psychology,
+                            contentDescription = "思考中",
+                            modifier = Modifier.size(16.dp).alpha(effectiveAlpha),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     } else {
-                        if (isExpanded) "收起深度思考过程" else "查看深度思考过程"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (isThinking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                )
+                        Icon(
+                            Icons.Default.Lightbulb,
+                            contentDescription = "已完成思考",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
 
-                // 耗时指示器
-                val displayTime = when {
-                    isThinking -> "${((elapsedSeconds * 10).roundToInt() / 10f)}s"
-                    durationMs != null -> "${((durationMs / 100f).roundToInt() / 10f)}s"
-                    else -> null
-                }
-                if (displayTime != null) {
-                    Spacer(Modifier.width(spacing.extraSmall))
+                    Spacer(Modifier.width(spacing.small))
+
                     Text(
-                        text = "· $displayTime",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        text = if (isThinking) {
+                            "深度思考与逻辑推演中..."
+                        } else {
+                            if (isExpanded) "收起深度思考过程" else "查看深度思考过程"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (isThinking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     )
-                }
 
-                Spacer(Modifier.weight(1f))
+                    // 耗时指示器
+                    val displayTime = when {
+                        isThinking -> "${((elapsedSeconds * 10).roundToInt() / 10f)}s"
+                        durationMs != null -> "${((durationMs / 100f).roundToInt() / 10f)}s"
+                        else -> null
+                    }
+                    if (displayTime != null) {
+                        Spacer(Modifier.width(spacing.extraSmall))
+                        Text(
+                            text = "· $displayTime",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
 
-                if (thought.isNotBlank()) {
-                    Icon(
-                        if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "折叠" else "展开",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Spacer(Modifier.weight(1f))
+
+                    if (thought.isNotBlank()) {
+                        Icon(
+                            if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (isExpanded) "折叠" else "展开",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 

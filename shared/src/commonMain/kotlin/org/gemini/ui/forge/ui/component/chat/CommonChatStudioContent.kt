@@ -35,6 +35,7 @@ import org.gemini.ui.forge.model.skill.SkillActivationMode
 import org.gemini.ui.forge.model.skill.UiStudioSkill
 import org.gemini.ui.forge.model.chat.MentionCategory
 import org.gemini.ui.forge.model.chat.MentionPayload
+import org.gemini.ui.forge.ui.component.chat.mention.MentionHoverPreviewConfig
 import org.gemini.ui.forge.ui.component.chat.drop.onFileDrop
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.component.tip
@@ -128,6 +129,7 @@ fun CommonChatStudioContent(
     onCompressRequested: (() -> Unit)? = null,
     onCaptureCanvasSnapshotRequested: ((CanvasSnapshotMode, (CommonChatAttachment) -> Unit) -> Unit)? = null,
     isCapturingCanvasSnapshot: Boolean = false,
+    hoverPreviewConfig: MentionHoverPreviewConfig? = null,
     topBarActions: @Composable RowScope.() -> Unit = {},
     chatNoticeContent: @Composable ColumnScope.() -> Unit = {},
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
@@ -468,6 +470,7 @@ fun CommonChatStudioContent(
                         mentionState = mentionState,
                         mentionCandidates = mentionCandidates,
                         mentionMaxHeight = dynamicMentionMaxHeight,
+                        hoverPreviewConfig = hoverPreviewConfig,
                         onFilesDropped = onFilesDropped,
                         externalDroppedFiles = filesToInject,
                         onExternalDroppedFilesConsumed = { filesToInject = null },

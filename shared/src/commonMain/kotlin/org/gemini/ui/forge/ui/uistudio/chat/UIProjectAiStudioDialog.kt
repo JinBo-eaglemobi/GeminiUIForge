@@ -30,6 +30,9 @@ import org.gemini.ui.forge.manager.PromptManager
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.ui.component.ToastType
+import org.gemini.ui.forge.ui.component.chat.mention.MentionHoverPreviewConfig
+import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.utils.findBlockById
 
 /**
  * UI Studio 专属项目级 AI 智能工作台全景弹窗
@@ -157,6 +160,13 @@ fun UIProjectAiStudioDialog(
                     },
                     mentionState = viewModel.mentionState,
                     mentionCandidates = viewModel.getMentionCandidates(viewModel.mentionState.searchQuery),
+                    hoverPreviewConfig = remember(state.project, state.currentView, state.assetLibrary) {
+                        MentionHoverPreviewConfig(
+                            resolveAssetPathByHash = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
+                            resolveViewBlocks = { viewId -> state.project?.studioPages?.find { it.id == viewId }?.blocks },
+                            resolveBlockById = { id -> state.currentView?.blocks?.findBlockById(id) as? UIStudioBlock }
+                        )
+                    },
                     onFilesDropped = { paths ->
                         paths.forEach { viewModel.handleFileDropped(it) }
                     },

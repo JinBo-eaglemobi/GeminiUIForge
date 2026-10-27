@@ -4,6 +4,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
@@ -41,87 +42,89 @@ fun AppMarkdownCodeHeader(
 ) {
     val spacing = LocalAppSpacing.current
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Color(0xFF181A1F))
-            .clickable(onClick = onToggleCollapse)
-            .padding(horizontal = spacing.medium, vertical = spacing.extraSmall),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    DisableSelection {
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(spacing.small)
+            modifier = modifier
+                .fillMaxWidth()
+                .background(Color(0xFF181A1F))
+                .clickable(onClick = onToggleCollapse)
+                .padding(horizontal = spacing.medium, vertical = spacing.extraSmall),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = language?.uppercase()?.ifBlank { "TEXT" } ?: "TEXT",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    color = Color(0xFF9DA5B4)
-                )
-            )
-
-            if (isCollapsed && lineCount > 0) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(spacing.small)
+            ) {
                 Text(
-                    text = "($lineCount 行代码已折叠)",
+                    text = language?.uppercase()?.ifBlank { "TEXT" } ?: "TEXT",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 10.sp,
-                        color = Color(0xFF5C6370)
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        color = Color(0xFF9DA5B4)
                     )
                 )
-            }
-        }
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(spacing.extraSmall)
-        ) {
-            // 一键复制代码按钮
-            IconButton(
-                onClick = onCopyClick,
-                modifier = Modifier.size(28.dp).tip(if (isCopied) "已复制" else "复制代码")
-            ) {
-                Crossfade(targetState = isCopied) { copied ->
-                    if (copied) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = "已复制",
-                            tint = Color(0xFF98C379),
-                            modifier = Modifier.size(15.dp)
+                if (isCollapsed && lineCount > 0) {
+                    Text(
+                        text = "($lineCount 行代码已折叠)",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            color = Color(0xFF5C6370)
                         )
-                    } else {
-                        Icon(
-                            Icons.Default.ContentCopy,
-                            contentDescription = "复制代码",
-                            tint = Color(0xFFABB2BF),
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
+                    )
                 }
             }
 
-            // 折叠 / 展开状态切换按钮
-            IconButton(
-                onClick = onToggleCollapse,
-                modifier = Modifier.size(28.dp).tip(if (isCollapsed) "展开代码块" else "折叠代码块")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(spacing.extraSmall)
             ) {
-                Crossfade(targetState = isCollapsed) { collapsed ->
-                    if (collapsed) {
-                        Icon(
-                            Icons.Default.UnfoldMore,
-                            contentDescription = "展开代码块",
-                            tint = Color(0xFFABB2BF),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.UnfoldLess,
-                            contentDescription = "折叠代码块",
-                            tint = Color(0xFFABB2BF),
-                            modifier = Modifier.size(16.dp)
-                        )
+                // 一键复制代码按钮
+                IconButton(
+                    onClick = onCopyClick,
+                    modifier = Modifier.size(28.dp).tip(if (isCopied) "已复制" else "复制代码")
+                ) {
+                    Crossfade(targetState = isCopied) { copied ->
+                        if (copied) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = "已复制",
+                                tint = Color(0xFF98C379),
+                                modifier = Modifier.size(15.dp)
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.ContentCopy,
+                                contentDescription = "复制代码",
+                                tint = Color(0xFFABB2BF),
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
+                }
+
+                // 折叠 / 展开状态切换按钮
+                IconButton(
+                    onClick = onToggleCollapse,
+                    modifier = Modifier.size(28.dp).tip(if (isCollapsed) "展开代码块" else "折叠代码块")
+                ) {
+                    Crossfade(targetState = isCollapsed) { collapsed ->
+                        if (collapsed) {
+                            Icon(
+                                Icons.Default.UnfoldMore,
+                                contentDescription = "展开代码块",
+                                tint = Color(0xFFABB2BF),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.UnfoldLess,
+                                contentDescription = "折叠代码块",
+                                tint = Color(0xFFABB2BF),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }

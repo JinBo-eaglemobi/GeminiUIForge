@@ -118,5 +118,7 @@ data class GeminiChatResult(
     val durationMs: Long? = null,
     val promptTokens: Int? = null,
     val candidatesTokens: Int? = null,
-    val totalTokens: Int? = null
+    val totalTokens: Int? = null,
+    val generatedImageData: String? = null,
+    val generatedImageMime: String? = null
 )

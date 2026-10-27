@@ -701,4 +701,20 @@
     <string name="traffic_clear_done">已清空当前会话的全部通信档案</string>
     <string name="traffic_show_all_lines">展开全部剩余 %1$d 行</string>
     <string name="traffic_stats_summary">共 %1$d 条 · REQ %2$d · RESP %3$d · ~%4$s</string>
+
+    <!-- Mention Fuzzy Matching -->
+    <string name="mention_empty_no_context">暂无工程上下文可用</string>
+    <string name="mention_empty_not_found">未找到与 “%1$s” 相关的实体</string>
+
+    <!-- Chat ImageGen Payload Routing -->
+    <string name="chat_imagegen_route_hint">检测到生图意图，发送时将智能路由至「%1$s」生图</string>
+
+    <!-- Mention Hover Preview -->
+    <string name="mention_preview_unavailable">暂无预览</string>
+    <string name="mention_preview_loading">加载中…</string>
+    <string name="mention_clear_history_tip">清除历史引用</string>
+    <string name="mention_press_enter_tip">回车选中</string>
+    <string name="mention_preview_container_child_count">包含 %1$d 个子组件</string>
+    <string name="mention_preview_doc_empty">文件为空或无法读取文本</string>
+    <string name="mention_preview_no_bound_asset">未绑定素材</string>
 </resources>

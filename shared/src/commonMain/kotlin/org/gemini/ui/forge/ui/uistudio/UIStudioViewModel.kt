@@ -30,6 +30,10 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.JsonPrimitive
 import org.gemini.ui.forge.utils.looseJson
+import org.gemini.ui.forge.utils.MentionFuzzyMatcher
+import org.gemini.ui.forge.service.ai.ImageGenIntentDetector
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.ui.uistudio.model.AgentPreference
 import org.gemini.ui.forge.data.repository.TemplateRepository
@@ -362,6 +366,7 @@ class UIStudioViewModel {
     fun getMentionCandidates(query: String = ""): List<MentionItem> {
         val candidates = mutableListOf<MentionItem>()
         val trimmed = query.trim()
+        val tokens = trimmed.split(Regex("""\s+""")).filter { it.isNotBlank() }
         val projId = state.project?.projectId ?: "default"
 
         if (registeredExternalDocs.isEmpty()) {
@@ -374,10 +379,12 @@ class UIStudioViewModel {
         }
         val allDocs = registeredExternalDocs.sortedByDescending { it.lastReferencedAt }
 
-        val displayDocs = if (trimmed.isBlank()) {
+        val displayDocs = if (tokens.isEmpty()) {
             allDocs.take(5)
         } else {
-            allDocs.filter { it.fileName.contains(trimmed, ignoreCase = true) || it.absolutePath.contains(trimmed, ignoreCase = true) }
+            allDocs.filter { doc ->
+                MentionFuzzyMatcher.matchTokens(tokens, doc.fileName, doc.absolutePath) != null
+            }
         }
 
         displayDocs.forEach { doc ->
@@ -485,11 +492,14 @@ class UIStudioViewModel {
         }
         state.currentView?.blocks?.let { collectBlocks(it) }
 
-        if (trimmed.isBlank()) return candidates
-        return candidates.filter {
-            it.title.contains(trimmed, ignoreCase = true) ||
-                    it.subtitle?.contains(trimmed, ignoreCase = true) == true
+        if (tokens.isEmpty()) return candidates
+        return candidates.mapNotNull { item ->
+            MentionFuzzyMatcher.matchTokens(tokens, item.title, item.subtitle)?.let { (score, _) ->
+                item to score
+            }
         }
+            .sortedWith(compareByDescending<Pair<MentionItem, Int>> { it.second })
+            .map { it.first }
     }
 
     /** 界面响应式状态快照 */
@@ -2350,7 +2360,7 @@ class UIStudioViewModel {
                         prompt = errorMsg,
                         timestamp = getCurrentTimeMillis()
                     )
-                    val sessionAfterReply = (state.chatSessions.find { it.id == activeSession.id } ?: activeSession).let { cur ->
+                    val sessionAfterReply = (state.chatSessions.find { it.id == updatedSession.id } ?: updatedSession).let { cur ->
                         cur.copy(
                             messages = cur.messages + assistantMsg,
                             updatedAt = getCurrentTimeMillis()
@@ -2487,12 +2497,12 @@ class UIStudioViewModel {
                 } else ""
 
                 // 长对话智能上下文自愈与自动压缩：达到阈值时自动提炼设计记忆并压缩历史
-                var sessionToUse = activeSession
-                if (ChatCompressionManager.shouldCompress(activeSession)) {
+                var sessionToUse = (state.chatSessions.find { it.id == updatedSession.id } ?: updatedSession)
+                if (ChatCompressionManager.shouldCompress(sessionToUse)) {
                     AppLogger.i("UIStudioViewModel", "达到长对话阈值，正在自动提炼设计记忆...")
                     try {
                         sessionToUse = ChatCompressionManager.compressSession(
-                            session = activeSession,
+                            session = sessionToUse,
                             apiFlavor = apiFlavor,
                             chatEngine = chatEngine,
                             apiKey = effectiveApiKey,
@@ -2528,21 +2538,23 @@ class UIStudioViewModel {
                 }
 
                 val resolvedModel = GeminiModel.fromModelName(selectedModel) ?: GeminiModel.GEMINI_3_8_FLASH
+                val requestModel = resolveChatRequestModel(resolvedModel, userText)
+                val isImageGenTurn = ImageGenIntentDetector.isImageSpecialized(requestModel)
 
                 val chatRequest = GeminiChatRequest(
                     apiKey = effectiveApiKey,
-                    model = resolvedModel,
+                    model = requestModel,
                     apiFlavor = apiFlavor,
                     prompt = assembledPayload.compositeUserPrompt,
                     systemInstruction = assembledPayload.pureSystemInstruction,
-                    tools = toolConfigs,
+                    tools = if (isImageGenTurn) emptyList() else toolConfigs,
                     attachments = chatAttachments,
                     preferCloudUpload = preferCloud,
                     history = historyItems,
                     previousInteractionId = sessionToUse.latestInteractionId,
                     generationConfig = GeminiGenerationConfig(
                         temperature = state.projectAgentConfig.temperature.toDouble(),
-                        thinkingConfig = state.projectAgentConfig.thinkingLevel.toGeminiThinkingConfig(resolvedModel)
+                        thinkingConfig = if (isImageGenTurn) null else state.projectAgentConfig.thinkingLevel.toGeminiThinkingConfig(requestModel)
                     )
                 )
 
@@ -2559,11 +2571,11 @@ class UIStudioViewModel {
                     id = liveMsgId,
                     role = "model",
                     prompt = "",
-                    modelName = selectedModel,
+                    modelName = requestModel.modelName,
                     timestamp = getCurrentTimeMillis(),
                     toolCalls = emptyList()
                 )
-                var currentLiveSession = activeSession.copy(messages = activeSession.messages + liveAssistantMsg)
+                var currentLiveSession = sessionToUse.copy(messages = sessionToUse.messages + liveAssistantMsg)
                 state = state.copy(
                     chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it }
                 )
@@ -2623,7 +2635,7 @@ class UIStudioViewModel {
                                         direction = direction,
                                         timestamp = getCurrentTimeMillis(),
                                         url = rawUrl,
-                                        model = selectedModel,
+                                        model = requestModel.modelName,
                                         body = body,
                                         roundIndex = currentRound,
                                         stageTag = stageTag,
@@ -2765,7 +2777,8 @@ class UIStudioViewModel {
                     isSuccess = false
                 )
 
-                val generatedImgPath = extractGeneratedImageUri(allExecutedToolRecords)
+                val directGeneratedImageUri = finalResult.generatedImageData?.let { persistGeneratedChatImage(it) }
+                val generatedImgPath = directGeneratedImageUri ?: extractGeneratedImageUri(allExecutedToolRecords)
                 if (generatedImgPath != null) {
                     state.project?.projectId?.let { loadAssetLibrary(it) }
                 }
@@ -2795,7 +2808,7 @@ class UIStudioViewModel {
                     thought = finalThoughtText,
                     thoughtSignature = finalResult.thoughtSignature,
                     interactionId = finalResult.interactionId,
-                    modelName = finalResult.modelName ?: selectedModel,
+                    modelName = finalResult.modelName ?: requestModel.modelName,
                     durationMs = finalResult.durationMs,
                     promptTokens = finalResult.promptTokens,
                     candidatesTokens = finalResult.candidatesTokens,
@@ -2803,7 +2816,8 @@ class UIStudioViewModel {
                     timestamp = getCurrentTimeMillis(),
                     isError = !finalResult.isSuccess,
                     errorMessage = finalResult.errorMessage,
-                    toolCalls = allExecutedToolRecords
+                    toolCalls = allExecutedToolRecords,
+                    generatedImageUri = generatedImgPath
                 )
 
                 val finalizedSession = currentLiveSession.copy(
@@ -2953,6 +2967,43 @@ class UIStudioViewModel {
             state = state.copy(streamingAiText = "")
         }
         return records
+    }
+
+    /**
+     * 针对当前用户发送的文本意图与配置，自适应解析本次请求实际应调度的 Gemini 模型
+     * 若检测到纯生图意图且 baseModel 非生图模型，静默分流至 Imagen 或指定生图模型
+     */
+    private suspend fun resolveChatRequestModel(baseModel: GeminiModel, userText: String): GeminiModel {
+        val autoSwitch = configManager.loadKey("AI_AUTO_SWITCH_IMAGE_GEN_MODEL")?.toBooleanStrictOrNull() ?: true
+        if (!autoSwitch) return baseModel
+        if (ImageGenIntentDetector.isImageSpecialized(baseModel)) return baseModel
+        if (!ImageGenIntentDetector.isImageGenIntent(userText)) return baseModel
+
+        val preset = configManager.loadKey("AI_DEFAULT_IMAGE_MODEL")?.ifBlank { null }
+        return ImageGenIntentDetector.resolveTargetGeminiModel(preset)
+    }
+
+    /**
+     * 将 AI 生成的内联 Base64 图像持久化落盘至当前项目的 chat_attachments 目录
+     */
+    @OptIn(ExperimentalEncodingApi::class)
+    private suspend fun persistGeneratedChatImage(base64Data: String): String? {
+        return try {
+            val proj = state.project
+            val sanitized = proj?.projectId?.trim()?.replace(" ", "_") ?: "default"
+            val tempDir = "templates/$sanitized/chat_attachments"
+            val pureB64 = if (base64Data.contains(",")) base64Data.substringAfter(",") else base64Data
+            val bytes = Base64.decode(pureB64)
+            if (bytes.isEmpty()) return null
+            val fileName = "gen_${getCurrentTimeMillis()}.png"
+            val fileRelPath = "$tempDir/$fileName"
+            val file = TemplateFile(fileRelPath)
+            file.writeBytes(bytes)
+            file.getAbsolutePath()
+        } catch (e: Exception) {
+            AppLogger.e("UIStudioViewModel", "持久化 AI 生成图像失败", e)
+            null
+        }
     }
 
     /**
@@ -3324,6 +3375,8 @@ class UIStudioViewModel {
                 }
 
                 val resolvedModel = GeminiModel.fromModelName(selectedModel) ?: GeminiModel.GEMINI_3_8_FLASH
+                val requestModel = resolveChatRequestModel(resolvedModel, userMsg.prompt)
+                val isImageGenTurn = ImageGenIntentDetector.isImageSpecialized(requestModel)
 
                 val previousInteractionId = activeSession.messages
                     .take(targetIndex)
@@ -3346,18 +3399,18 @@ class UIStudioViewModel {
 
                 val chatRequest = GeminiChatRequest(
                     apiKey = effectiveApiKey,
-                    model = resolvedModel,
+                    model = requestModel,
                     apiFlavor = apiFlavor,
                     prompt = assembledPayload.compositeUserPrompt,
                     systemInstruction = assembledPayload.pureSystemInstruction,
-                    tools = toolConfigs,
+                    tools = if (isImageGenTurn) emptyList() else toolConfigs,
                     attachments = chatAttachments,
                     preferCloudUpload = true,
                     history = historyItems,
                     previousInteractionId = previousInteractionId,
                     generationConfig = GeminiGenerationConfig(
                         temperature = state.projectAgentConfig.temperature.toDouble(),
-                        thinkingConfig = state.projectAgentConfig.thinkingLevel.toGeminiThinkingConfig(resolvedModel)
+                        thinkingConfig = if (isImageGenTurn) null else state.projectAgentConfig.thinkingLevel.toGeminiThinkingConfig(requestModel)
                     )
                 )
 
@@ -3378,7 +3431,7 @@ class UIStudioViewModel {
                                 direction = direction,
                                 timestamp = getCurrentTimeMillis(),
                                 url = rawUrl,
-                                model = selectedModel,
+                                model = requestModel.modelName,
                                 body = body
                             )
                             trafficStore.append(record, trafficScopeId, activeSession.id)
@@ -3395,7 +3448,8 @@ class UIStudioViewModel {
                     }
                 } else emptyList()
 
-                val generatedImgPath = extractGeneratedImageUri(executedToolRecords)
+                val directGeneratedImageUri = result.generatedImageData?.let { persistGeneratedChatImage(it) }
+                val generatedImgPath = directGeneratedImageUri ?: extractGeneratedImageUri(executedToolRecords)
                 if (generatedImgPath != null) {
                     state.project?.projectId?.let { loadAssetLibrary(it) }
                 }
@@ -3420,7 +3474,7 @@ class UIStudioViewModel {
                         thought = result.thoughtText,
                         thoughtSignature = result.thoughtSignature,
                         interactionId = result.interactionId,
-                        modelName = result.modelName ?: selectedModel,
+                        modelName = result.modelName ?: requestModel.modelName,
                         durationMs = result.durationMs,
                         promptTokens = result.promptTokens,
                         candidatesTokens = result.candidatesTokens,
@@ -3441,7 +3495,7 @@ class UIStudioViewModel {
                         thought = result.thoughtText,
                         thoughtSignature = result.thoughtSignature,
                         interactionId = result.interactionId,
-                        modelName = result.modelName ?: selectedModel,
+                        modelName = result.modelName ?: requestModel.modelName,
                         durationMs = result.durationMs,
                         promptTokens = result.promptTokens,
                         candidatesTokens = result.candidatesTokens,

@@ -29,6 +29,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.Dp
@@ -47,6 +48,7 @@ import org.gemini.ui.forge.model.chat.MentionPayload
 import org.gemini.ui.forge.data.isFileExistsInternal
 import org.gemini.ui.forge.state.MentionState
 import org.gemini.ui.forge.ui.component.chat.mention.MentionDropdownPanel
+import org.gemini.ui.forge.ui.component.chat.mention.MentionHoverPreviewConfig
 import org.gemini.ui.forge.ui.component.chat.mention.MentionPillBar
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
@@ -63,6 +65,9 @@ import org.gemini.ui.forge.model.ModelStudioGroup
 import org.gemini.ui.forge.service.ai.ImageGenIntentDetector
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.utils.rememberFilePicker
+import org.jetbrains.compose.resources.stringResource
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.chat_imagegen_route_hint
 
 /**
  * 全场景通用多模态 AI 对话输入控制栏
@@ -123,6 +128,7 @@ fun CommonChatInputBar(
     onStopGeneration: (() -> Unit)? = null,
     onCaptureCanvasSnapshotRequested: ((CanvasSnapshotMode, (CommonChatAttachment) -> Unit) -> Unit)? = null,
     isCapturingCanvasSnapshot: Boolean = false,
+    hoverPreviewConfig: MentionHoverPreviewConfig? = null,
     leadingActions: @Composable RowScope.() -> Unit = {},
     trailingActions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -134,7 +140,6 @@ fun CommonChatInputBar(
     var isDropHovering by remember { mutableStateOf(false) }
     var previewSnapshotAttachment by remember { mutableStateOf<CommonChatAttachment?>(null) }
     var isSnapshotMenuExpanded by remember { mutableStateOf(false) }
-    var previousNonImageModel by remember { mutableStateOf<GeminiModel?>(null) }
 
     // 回填外部重新编辑的文本
     LaunchedEffect(inputTextOverride) {
@@ -287,13 +292,6 @@ fun CommonChatInputBar(
     fun performSend() {
         if (!canSend) return
         val text = inputText.trim()
-        val effectivePresetModel = loadedPresetModel
-        if (loadedAutoSwitchEnabled && ImageGenIntentDetector.isImageGenIntent(text) && !ImageGenIntentDetector.isImageSpecialized(selectedModel)) {
-            val targetModel = ImageGenIntentDetector.resolveTargetGeminiModel(effectivePresetModel)
-            previousNonImageModel = selectedModel
-            onModelSelected(targetModel)
-            Toast.show("检测到生图意图，已自动切换至 ${targetModel.displayName}", ToastType.INFO)
-        }
         val currentAttach = attachments.map { attach ->
             val isLarge = (attach.bytes?.size?.toLong() ?: 0L) >= CLOUD_UPLOAD_THRESHOLD_BYTES
             attach.copy(preferCloudUpload = isLarge && preferCloudUpload)
@@ -465,6 +463,7 @@ fun CommonChatInputBar(
                     candidates = mentionCandidates,
                     maxHeight = mentionMaxHeight,
                     onDeleteItem = onDeleteMentionItem,
+                    hoverPreviewConfig = hoverPreviewConfig,
                     onItemSelected = { selected ->
                         val docPayload = selected.payload as? MentionPayload.DocPayload
                         if (docPayload != null) {
@@ -539,7 +538,7 @@ fun CommonChatInputBar(
                 }
             }
 
-            // 2.6 生图意图感知与自动切回胶囊气泡
+            // 2.6 生图意图感知与静默路由提示气泡
             val effectivePresetModel = loadedPresetModel
             val isImageIntent = remember(inputText) {
                 ImageGenIntentDetector.isImageGenIntent(inputText)
@@ -553,13 +552,7 @@ fun CommonChatInputBar(
 
             if (loadedAutoSwitchEnabled && isImageIntent && isCurrentNonImageModel) {
                 Surface(
-                    modifier = Modifier
-                        .padding(bottom = 6.dp)
-                        .clickable {
-                            previousNonImageModel = selectedModel
-                            onModelSelected(targetImageModel)
-                            Toast.show("已切换至生图模型：${targetImageModel.displayName}", ToastType.INFO)
-                        },
+                    modifier = Modifier.padding(bottom = 6.dp),
                     shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.9f)
                 ) {
@@ -575,42 +568,9 @@ fun CommonChatInputBar(
                             tint = MaterialTheme.colorScheme.tertiary
                         )
                         Text(
-                            text = "检测到生图意图，发送时将自动切换至「${targetImageModel.displayName}」(点击可立即切换)",
+                            text = stringResource(Res.string.chat_imagegen_route_hint, targetImageModel.displayName),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
-                    }
-                }
-            } else if (previousNonImageModel != null && !isCurrentNonImageModel) {
-                Surface(
-                    modifier = Modifier
-                        .padding(bottom = 6.dp)
-                        .clickable {
-                            val prev = previousNonImageModel
-                            if (prev != null) {
-                                onModelSelected(prev)
-                                previousNonImageModel = null
-                                Toast.show("已切回原模型：${prev.displayName}", ToastType.INFO)
-                            }
-                        },
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Undo,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "当前已自动切换为生图模型，点击切回原模型「${previousNonImageModel?.displayName}」",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -625,7 +585,7 @@ fun CommonChatInputBar(
                         val lastAtIndex = newText.lastIndexOf('@')
                         if (lastAtIndex >= 0) {
                             val textAfterAt = newText.substring(lastAtIndex + 1)
-                            if (!textAfterAt.contains(' ') && !textAfterAt.contains('\n')) {
+                            if (!textAfterAt.contains('\n')) {
                                 mentionState.openMenu(textAfterAt)
                             } else {
                                 mentionState.closeMenu()
@@ -647,6 +607,7 @@ fun CommonChatInputBar(
                     )
                 },
                 modifier = Modifier
+                    .testTag("chat_input_field")
                     .fillMaxWidth()
                     .onPreviewKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown) {
