@@ -84,5 +84,7 @@ data class CommonChatStudioConfig(
     val dialogWidth: androidx.compose.ui.unit.Dp? = null,
     val dialogHeight: androidx.compose.ui.unit.Dp? = null,
     val defaultImageGenModel: String? = null,
-    val isAutoSwitchImageGenModelEnabled: Boolean? = null
+    val isAutoSwitchImageGenModelEnabled: Boolean? = null,
+    val isEmbeddedMode: Boolean = false,
+    val showInlineSessionSelector: Boolean = true
 )

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.ViewSidebar
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Psychology
@@ -15,6 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.ui_studio_dialog_dock_to_sidebar_tip
+import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
 import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
@@ -260,7 +264,25 @@ fun UIProjectAiStudioDialog(
                             }
                         }
 
-                        // 5. 关闭工作室按钮
+                        // 5. 收纳至右侧边栏按钮 (一键将大窗收纳回右侧边栏 AI Tab)
+                        IconButton(
+                            onClick = {
+                                if (state.isSystemInstructionDialogVisible) {
+                                    viewModel.closeSystemInstructionDialog()
+                                }
+                                viewModel.dockAiChatToSidebar()
+                            },
+                            modifier = Modifier.size(32.dp).tip(stringResource(Res.string.ui_studio_dialog_dock_to_sidebar_tip))
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ViewSidebar,
+                                contentDescription = stringResource(Res.string.ui_studio_dialog_dock_to_sidebar_tip),
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        // 6. 关闭工作室按钮
                         IconButton(
                             onClick = {
                                 if (state.isSystemInstructionDialogVisible) {

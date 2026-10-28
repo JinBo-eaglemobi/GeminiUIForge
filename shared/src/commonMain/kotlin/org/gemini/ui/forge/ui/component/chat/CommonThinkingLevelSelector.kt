@@ -47,6 +47,7 @@ fun CommonThinkingLevelSelector(
     onLevelSelected: (ThinkingLevel) -> Unit,
     modifier: Modifier = Modifier,
     useShortLabel: Boolean = true,
+    isIconOnly: Boolean = false,
     minMenuWidth: Dp = 0.dp,
     maxMenuWidth: Dp = 440.dp,
     maxMenuHeight: Dp = 520.dp,
@@ -91,30 +92,46 @@ fun CommonThinkingLevelSelector(
                 .clickable { isExpanded = true }
                 .tip(stringResource(Res.string.chat_thinking_level_tip, currentLevel.displayName))
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = spacing.small, vertical = spacing.extraSmall)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Psychology,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = contentColor
-                )
-                Spacer(modifier = Modifier.width(spacing.extraSmall))
-                Text(
-                    text = if (useShortLabel) "🧠 ${currentLevel.shortLabel}" else "🧠 ${currentLevel.displayName}",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.width(2.dp))
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = contentColor
-                )
+            if (isIconOnly) {
+                // 单图标紧凑模式 (Icon-Only Mode)
+                Box(
+                    modifier = Modifier.size(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Psychology,
+                        contentDescription = currentLevel.displayName,
+                        modifier = Modifier.size(16.dp),
+                        tint = contentColor
+                    )
+                }
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = spacing.small, vertical = spacing.extraSmall)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Psychology,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = contentColor
+                    )
+                    Spacer(modifier = Modifier.width(spacing.extraSmall))
+                    Text(
+                        text = if (useShortLabel) currentLevel.shortLabel else currentLevel.displayName,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = contentColor
+                    )
+                }
             }
         }
 

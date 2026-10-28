@@ -36,6 +36,7 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.ui.uistudio.model.AgentPreference
+import org.gemini.ui.forge.ui.uistudio.model.UIStudioRightTab
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.model.assetsheet.AssetImportDraft
@@ -1302,10 +1303,18 @@ class UIStudioViewModel {
                     val bytes = tFile.readBytes()
                     if (bytes != null && bytes.isNotEmpty()) {
                         val layout = jsonHelper.decodeFromString(UIStudioLayoutConfig.serializer(), bytes.decodeToString())
+                        val restoredTab = runCatching { UIStudioRightTab.valueOf(layout.activeRightTabName) }.getOrDefault(UIStudioRightTab.PROPERTY)
+                        val propW = layout.propertySidebarWidthDp.dp.coerceAtLeast(180.dp)
+                        val aiW = layout.aiChatSidebarWidthDp.dp.coerceAtLeast(280.dp)
+                        val activeWidth = if (restoredTab == UIStudioRightTab.PROPERTY) propW else aiW
                         withContext(Dispatchers.Main) {
                             state = state.copy(
                                 leftPanelWidth = layout.leftPanelWidthDp.dp,
-                                rightPanelWidth = layout.rightPanelWidthDp.dp,
+                                rightPanelWidth = activeWidth,
+                                propertySidebarWidth = propW,
+                                aiChatSidebarWidth = aiW,
+                                activeRightTab = restoredTab,
+                                isRightSidebarVisible = layout.isRightSidebarVisible,
                                 viewsPanelHeightRatio = layout.viewsPanelHeightRatio.coerceIn(0.05f, 0.95f),
                                 propertyPanelHeightRatio = layout.propertyPanelHeightRatio.coerceIn(0.05f, 0.95f)
                             )
@@ -1331,7 +1340,11 @@ class UIStudioViewModel {
                     leftPanelWidthDp = state.leftPanelWidth.value,
                     rightPanelWidthDp = state.rightPanelWidth.value,
                     viewsPanelHeightRatio = state.viewsPanelHeightRatio,
-                    propertyPanelHeightRatio = state.propertyPanelHeightRatio
+                    propertyPanelHeightRatio = state.propertyPanelHeightRatio,
+                    propertySidebarWidthDp = state.propertySidebarWidth.value,
+                    aiChatSidebarWidthDp = state.aiChatSidebarWidth.value,
+                    activeRightTabName = state.activeRightTab.name,
+                    isRightSidebarVisible = state.isRightSidebarVisible
                 )
                 val tFile = TemplateFile(path)
                 tFile.createParentDirs()
@@ -1764,11 +1777,23 @@ class UIStudioViewModel {
     }
 
     fun openAiChatDialog() {
-        state = state.copy(isAiChatDialogVisible = true)
+        state = state.copy(
+            isAiChatDialogVisible = true,
+            activeRightTab = UIStudioRightTab.PROPERTY
+        )
         loadProjectAgentConfig()
         loadChatSessions()
         refreshSkills(userInitiated = false)
         startSkillsDirectoryWatcher()
+    }
+
+    /**
+     * 将全景大弹窗收纳并无缝转换至右侧边栏 AI 助手模式 (单模态互斥切换)
+     */
+    fun dockAiChatToSidebar() {
+        closeAiChatDialog()
+        setRightSidebarVisible(true)
+        selectRightTab(UIStudioRightTab.AI_CHAT)
     }
 
     fun closeAiChatDialog() {
@@ -3577,7 +3602,7 @@ class UIStudioViewModel {
     }
 
     fun updateRightPanelWidth(width: Dp, totalContainerWidth: Dp? = null) {
-        val minWidth = 60.dp
+        val minWidth = if (state.activeRightTab == UIStudioRightTab.PROPERTY) 180.dp else 260.dp
         val maxWidth = if (totalContainerWidth != null && totalContainerWidth > minWidth) {
             val leftW = if (state.isAssetPanelVisible) state.leftPanelWidth else 0.dp
             val intersectWidth = (totalContainerWidth - leftW).coerceAtLeast(minWidth)
@@ -3585,7 +3610,42 @@ class UIStudioViewModel {
         } else {
             1200.dp
         }
-        state = state.copy(rightPanelWidth = width.coerceIn(minWidth, maxWidth))
+        val clamped = width.coerceIn(minWidth, maxWidth)
+        state = if (state.activeRightTab == UIStudioRightTab.PROPERTY) {
+            state.copy(rightPanelWidth = clamped, propertySidebarWidth = clamped)
+        } else {
+            state.copy(rightPanelWidth = clamped, aiChatSidebarWidth = clamped)
+        }
+    }
+
+    /**
+     * 切换右侧边栏分页 Tab（属性 / AI 助手）。
+     * 切换时自动应用该 Tab 记忆的独立宽度，并确保边栏处于可见状态。
+     */
+    fun selectRightTab(tab: UIStudioRightTab) {
+        val targetWidth = if (tab == UIStudioRightTab.PROPERTY) state.propertySidebarWidth else state.aiChatSidebarWidth
+        state = state.copy(
+            activeRightTab = tab,
+            isRightSidebarVisible = true,
+            rightPanelWidth = targetWidth
+        )
+        saveWorkspaceLayout()
+    }
+
+    /**
+     * 展开 / 折叠右侧边栏。
+     */
+    fun toggleRightSidebar() {
+        state = state.copy(isRightSidebarVisible = !state.isRightSidebarVisible)
+        saveWorkspaceLayout()
+    }
+
+    /**
+     * 显式设置右侧边栏可见性。
+     */
+    fun setRightSidebarVisible(visible: Boolean) {
+        state = state.copy(isRightSidebarVisible = visible)
+        saveWorkspaceLayout()
     }
 
     fun updateViewsPanelHeightRatio(ratio: Float) {

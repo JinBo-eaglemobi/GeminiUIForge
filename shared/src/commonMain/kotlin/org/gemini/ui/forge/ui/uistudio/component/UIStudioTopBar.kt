@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.filled.ViewSidebar
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -147,6 +148,20 @@ fun UIStudioTopBar(
                         imageVector = if (state.isAssetPanelVisible) Icons.AutoMirrored.Filled.ViewSidebar else Icons.Default.FolderOpen,
                         contentDescription = "Toggle Sidebar",
                         tint = if (state.isAssetPanelVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // 右侧面板显隐切换按钮
+                IconButton(
+                    onClick = { viewModel.toggleRightSidebar() },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .tip(if (state.isRightSidebarVisible) "收起右侧面板" else "展开右侧面板")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "Toggle Right Sidebar",
+                        tint = if (state.isRightSidebarVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 

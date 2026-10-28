@@ -34,6 +34,7 @@ import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.gemini.ui.forge.ui.uistudio.model.UIStudioRightTab
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 
 /**
@@ -419,8 +420,8 @@ fun UIStudioCanvasArea(
             }
         }
 
-        // 独立覆盖层：右下角悬浮「✨ AI Chat 智能排版」按钮（完全免疫底层画布平移缩放手势）
-        if (currentView != null) {
+        // 独立覆盖层：右下角悬浮「✨ AI Chat 智能排版」按钮（单模态互斥：仅当右侧边栏折叠收起且大弹窗未打开时才作为唤醒入口展示）
+        if (currentView != null && !state.isRightSidebarVisible && !state.isAiChatDialogVisible) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -428,7 +429,10 @@ fun UIStudioCanvasArea(
                 contentAlignment = Alignment.BottomEnd
             ) {
                 ExtendedFloatingActionButton(
-                    onClick = { viewModel.openAiChatDialog() },
+                    onClick = {
+                        viewModel.setRightSidebarVisible(true)
+                        viewModel.selectRightTab(UIStudioRightTab.AI_CHAT)
+                    },
                     icon = {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,

@@ -720,4 +720,12 @@
     <!-- AppMenu Component -->
     <string name="app_menu_item_count">共 %1$d 项</string>
     <string name="app_menu_empty_default">暂无可用选项</string>
+
+    <!-- UI Studio Right Sidebar Tabs -->
+    <string name="ui_studio_tab_property">属性</string>
+    <string name="ui_studio_tab_ai_chat">AI 助手</string>
+    <string name="ui_studio_tab_open_dialog_tip">弹出独立大窗</string>
+    <string name="ui_studio_tab_collapse_tip">收起右侧边栏</string>
+    <string name="ui_studio_tab_expand_tip">展开右侧边栏</string>
+    <string name="ui_studio_dialog_dock_to_sidebar_tip">收纳至右侧边栏</string>
 </resources>

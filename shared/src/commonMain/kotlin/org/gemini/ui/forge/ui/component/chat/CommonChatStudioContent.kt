@@ -3,15 +3,19 @@ package org.gemini.ui.forge.ui.component.chat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,9 +23,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
@@ -37,6 +43,9 @@ import org.gemini.ui.forge.model.chat.MentionCategory
 import org.gemini.ui.forge.model.chat.MentionPayload
 import org.gemini.ui.forge.ui.component.chat.mention.MentionHoverPreviewConfig
 import org.gemini.ui.forge.ui.component.chat.drop.onFileDrop
+import org.gemini.ui.forge.ui.component.AppMenu
+import org.gemini.ui.forge.ui.component.AppMenuItemRow
+import org.gemini.ui.forge.ui.component.AppMenuTier
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.doc.DocumentPreviewDialog
@@ -143,7 +152,7 @@ fun CommonChatStudioContent(
         sessions.find { it.id == currentSessionId }
     }
 
-    // 窄屏抽屉式会话覆盖层控制
+    // 窄屏抽屉式会话覆盖层控制（非嵌入模式下兜底）
     var isNarrowSessionDrawerOpen by remember { mutableStateOf(false) }
 
     // 沉浸式图片灯箱激活状态（内置开箱即用）
@@ -174,10 +183,15 @@ fun CommonChatStudioContent(
     ) {
         val studioMaxHeight = maxHeight
         val isNarrowMode = config.enableNarrowModeAutoFold && maxWidth < config.narrowBreakpointDp.dp
+        val shouldShowPermanentSidebar = !config.isEmbeddedMode && !isNarrowMode
+        val isCompactHeader = maxWidth < 460.dp || config.isEmbeddedMode
+
+        // 嵌入模式/窄屏模式下的内联会话选择器展开状态
+        var isSessionMenuExpanded by remember { mutableStateOf(false) }
 
         Row(modifier = Modifier.fillMaxSize()) {
             // 宽屏模式：左侧可拖拽会话侧栏
-            if (!isNarrowMode) {
+            if (shouldShowPermanentSidebar) {
                 CommonChatSessionSidebar(
                     sessions = sessions,
                     currentSessionId = currentSessionId,
@@ -204,8 +218,8 @@ fun CommonChatStudioContent(
                     Surface(
                         color = MaterialTheme.colorScheme.surface,
                         tonalElevation = 1.dp,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth().height(48.dp).then(draggableModifier)
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth().height(44.dp).then(draggableModifier)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxSize().padding(horizontal = spacing.medium),
@@ -216,33 +230,104 @@ fun CommonChatStudioContent(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(spacing.small)
                             ) {
-                                // 窄屏模式下的会话历史抽屉切换入口
-                                if (isNarrowMode) {
-                                    IconButton(
-                                        onClick = { isNarrowSessionDrawerOpen = !isNarrowSessionDrawerOpen },
-                                        modifier = Modifier.size(32.dp).tip("切换历史会话")
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Menu,
-                                            contentDescription = "会话菜单",
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
+                                // 标题文案（在极端紧凑下可省略或缩小）
+                                if (!isCompactHeader) {
+                                    Text(
+                                        text = config.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
 
-                                Text(
-                                    text = config.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                // 嵌入模式或窄屏模式下的内联会话选择器 (AppMenu)
+                                if (!shouldShowPermanentSidebar && config.showInlineSessionSelector) {
+                                    var sessionBtnHeightDp by remember { mutableStateOf(28.dp) }
+                                    Box {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .onGloballyPositioned { coords ->
+                                                    sessionBtnHeightDp = with(density) { coords.size.height.toDp() }
+                                                }
+                                                .clickable { isSessionMenuExpanded = true }
+                                                .tip("点击切换或新建会话")
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.ChatBubbleOutline,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(13.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                                Spacer(Modifier.width(4.dp))
+                                                Text(
+                                                    text = currentSession?.title ?: "默认会话",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Medium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.widthIn(max = if (isCompactHeader) 140.dp else 200.dp),
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Spacer(Modifier.width(2.dp))
+                                                Icon(
+                                                    Icons.Default.KeyboardArrowDown,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(13.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
 
-                                currentSession?.let { sess ->
+                                        AppMenu(
+                                            expanded = isSessionMenuExpanded,
+                                            onDismissRequest = { isSessionMenuExpanded = false },
+                                            tier = AppMenuTier.COMPACT,
+                                            offset = DpOffset(0.dp, sessionBtnHeightDp + 4.dp),
+                                            isUpwardExplicit = false
+                                        ) {
+                                            AppMenuItemRow(
+                                                title = "新建对话",
+                                                subtitle = "创建空白上下文会话",
+                                                icon = Icons.Default.Add,
+                                                onClick = {
+                                                    isSessionMenuExpanded = false
+                                                    onNewSession()
+                                                }
+                                            )
+                                            HorizontalDivider(
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                                thickness = 1.dp,
+                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                            )
+                                            sessions.forEach { sess ->
+                                                AppMenuItemRow(
+                                                    title = sess.title,
+                                                    subtitle = "${sess.messages.size} 条对话",
+                                                    icon = Icons.Default.ChatBubbleOutline,
+                                                    isSelected = (sess.id == currentSessionId),
+                                                    onClick = {
+                                                        isSessionMenuExpanded = false
+                                                        onSessionSelected(sess.id)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else if (currentSession != null) {
+                                    // 宽屏模式下展示普通药丸徽章
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
                                         color = MaterialTheme.colorScheme.surfaceVariant
                                     ) {
                                         Text(
-                                            text = sess.title,
+                                            text = currentSession.title,
                                             style = MaterialTheme.typography.labelSmall,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
@@ -265,34 +350,61 @@ fun CommonChatStudioContent(
                                 if (onCompressRequested != null) {
                                     val uncompressedCount = messages.count { !it.isCompressed }
                                     val isHighContext = uncompressedCount >= 12
-                                    TextButton(
-                                        onClick = onCompressRequested,
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = spacing.small, vertical = 4.dp),
-                                        colors = if (isHighContext) {
-                                            ButtonDefaults.textButtonColors(
-                                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                                                contentColor = MaterialTheme.colorScheme.primary
+
+                                    if (isCompactHeader) {
+                                        // 紧凑模式：小巧胶囊/图标按钮
+                                        IconButton(
+                                            onClick = onCompressRequested,
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .tip(if (isHighContext) "当前有 $uncompressedCount 条未压缩消息，建议执行长对话结晶压缩以大幅降低 Token 消耗" else "手动提炼长对话设计记忆并压缩上下文")
+                                        ) {
+                                            BadgedBox(
+                                                badge = {
+                                                    if (isHighContext) {
+                                                        Badge { Text(uncompressedCount.toString()) }
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.AutoAwesome,
+                                                    contentDescription = "智能压缩",
+                                                    modifier = Modifier.size(15.dp),
+                                                    tint = if (isHighContext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        // 宽屏模式：展开 TextButton
+                                        TextButton(
+                                            onClick = onCompressRequested,
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = spacing.small, vertical = 4.dp),
+                                            colors = if (isHighContext) {
+                                                ButtonDefaults.textButtonColors(
+                                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                                    contentColor = MaterialTheme.colorScheme.primary
+                                                )
+                                            } else {
+                                                ButtonDefaults.textButtonColors(
+                                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            },
+                                            modifier = Modifier
+                                                .height(30.dp)
+                                                .tip(if (isHighContext) "当前有 $uncompressedCount 条未压缩消息，建议执行长对话结晶压缩以大幅降低 Token 消耗并加速响应" else "手动提炼长对话设计记忆并压缩上下文")
+                                        ) {
+                                            Icon(
+                                                Icons.Default.AutoAwesome,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(15.dp)
                                             )
-                                        } else {
-                                            ButtonDefaults.textButtonColors(
-                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            Spacer(Modifier.width(spacing.extraSmall))
+                                            Text(
+                                                text = if (isHighContext) "压缩记忆 ($uncompressedCount)" else "智能压缩",
+                                                style = MaterialTheme.typography.labelSmall
                                             )
-                                        },
-                                        modifier = Modifier
-                                            .height(30.dp)
-                                            .tip(if (isHighContext) "当前有 $uncompressedCount 条未压缩消息，建议执行长对话结晶压缩以大幅降低 Token 消耗并加速响应" else "手动提炼长对话设计记忆并压缩上下文")
-                                    ) {
-                                        Icon(
-                                            Icons.Default.AutoAwesome,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                        Spacer(Modifier.width(spacing.extraSmall))
-                                        Text(
-                                            text = if (isHighContext) "压缩记忆 ($uncompressedCount)" else "智能压缩",
-                                            style = MaterialTheme.typography.labelSmall
-                                        )
+                                        }
                                     }
                                 }
 
@@ -490,8 +602,8 @@ fun CommonChatStudioContent(
                     )
                 }
 
-                // 窄屏模式下弹出的会话覆盖层抽屉
-                if (isNarrowMode && isNarrowSessionDrawerOpen) {
+                // 窄屏模式下弹出的会话覆盖层抽屉（仅在非嵌入模式兜底）
+                if (!config.isEmbeddedMode && isNarrowMode && isNarrowSessionDrawerOpen) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()

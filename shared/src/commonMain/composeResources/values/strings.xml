@@ -710,4 +710,12 @@
     <!-- AppMenu Component -->
     <string name="app_menu_item_count">%1$d items</string>
     <string name="app_menu_empty_default">No items available</string>
+
+    <!-- UI Studio Right Sidebar Tabs -->
+    <string name="ui_studio_tab_property">Properties</string>
+    <string name="ui_studio_tab_ai_chat">AI Assistant</string>
+    <string name="ui_studio_tab_open_dialog_tip">Open in Full Dialog</string>
+    <string name="ui_studio_tab_collapse_tip">Collapse Right Sidebar</string>
+    <string name="ui_studio_tab_expand_tip">Expand Right Sidebar</string>
+    <string name="ui_studio_dialog_dock_to_sidebar_tip">Dock to right sidebar</string>
 </resources>

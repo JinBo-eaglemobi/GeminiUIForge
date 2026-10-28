@@ -44,6 +44,7 @@ fun SkillSelectorPill(
     activeSkills: List<UiStudioSkill> = emptyList(),
     currentMode: SkillActivationMode = SkillActivationMode.AUTO,
     onModeChanged: ((SkillActivationMode) -> Unit)? = null,
+    isIconOnly: Boolean = false,
     minMenuWidth: Dp = 380.dp,
     maxMenuWidth: Dp = 500.dp,
     maxMenuHeight: Dp = 520.dp,
@@ -84,7 +85,7 @@ fun SkillSelectorPill(
         modifier = modifier.onGloballyPositioned { pillWidthPx = it.size.width }
     ) {
         Surface(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(8.dp),
             color = pillBg,
             border = androidx.compose.foundation.BorderStroke(
                 1.dp,
@@ -97,23 +98,37 @@ fun SkillSelectorPill(
                 }
                 .tip("查看与配置界面工程技能 (当前: $statusText)")
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Bolt,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = if (hasAnySkillEnabled) MaterialTheme.colorScheme.tertiary else contentColor
-                )
-                Text(
-                    text = statusText,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = contentColor
-                )
+            if (isIconOnly) {
+                Box(
+                    modifier = Modifier.size(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Bolt,
+                        contentDescription = "工程技能",
+                        modifier = Modifier.size(16.dp),
+                        tint = if (hasAnySkillEnabled) MaterialTheme.colorScheme.tertiary else contentColor
+                    )
+                }
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Bolt,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = if (hasAnySkillEnabled) MaterialTheme.colorScheme.tertiary else contentColor
+                    )
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = contentColor
+                    )
+                }
             }
         }
 

@@ -3,6 +3,8 @@ package org.gemini.ui.forge.ui.component.chat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +23,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Screenshot
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -674,15 +678,21 @@ fun CommonChatInputBar(
             Spacer(Modifier.height(spacing.small))
 
             // 3. 底部操作控制栏（动态模型选择器、协议切换器、自定义动作插槽、发送按钮）
+            // 采用自适应弹性排版：右侧发送按钮绝对固定保底可见，左侧工具群弹性微滚防溢出
+            val isUltraNarrow = containerWidth < 440.dp
+            val isNarrow = containerWidth < 560.dp
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // 左侧工具群（前置插槽 + 附件按钮 + 模型选择 + 协议选择）
+                // 左侧工具群（前置插槽 + 附件按钮 + 模型选择 + 协议选择），超出时支持平滑横向微滚
                 Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(spacing.small)
+                    horizontalArrangement = Arrangement.spacedBy(if (isUltraNarrow) 4.dp else spacing.small)
                 ) {
                     // 外部自定义前置动作插槽（如系统人设指令入口、生图预设等）
                     leadingActions()
@@ -810,6 +820,7 @@ fun CommonChatInputBar(
                         activeSkills = activeSkills,
                         currentMode = skillMode,
                         onModeChanged = onSkillModeChanged,
+                        isIconOnly = isUltraNarrow,
                         minMenuWidth = 340.dp,
                         maxMenuWidth = adaptiveMenuWidth,
                         maxMenuHeight = dynamicMenuMaxHeight
@@ -827,21 +838,39 @@ fun CommonChatInputBar(
                                     .clickable { isModelMenuExpanded = true }
                                     .tip("选择 AI 模型 (当前: ${selectedModel.displayName})")
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = selectedModel.displayName,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Spacer(Modifier.width(2.dp))
-                                    Icon(
-                                        Icons.Default.KeyboardArrowDown,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
+                                if (isUltraNarrow) {
+                                    Box(
+                                        modifier = Modifier.size(32.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.SmartToy,
+                                            contentDescription = "模型",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                } else {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isNarrow) {
+                                                selectedModel.displayName.replace("Gemini ", "").replace("Experimental", "Exp")
+                                            } else {
+                                                selectedModel.displayName
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Spacer(Modifier.width(2.dp))
+                                        Icon(
+                                            Icons.Default.KeyboardArrowDown,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
                                 }
                             }
 
@@ -864,6 +893,7 @@ fun CommonChatInputBar(
                         currentLevel = currentThinkingLevel,
                         onLevelSelected = onThinkingLevelSelected,
                         useShortLabel = true,
+                        isIconOnly = isUltraNarrow,
                         maxMenuHeight = dynamicMenuMaxHeight,
                         offset = DpOffset(0.dp, (-8).dp)
                     )
@@ -880,24 +910,38 @@ fun CommonChatInputBar(
                                     .clickable { isFlavorMenuExpanded = true }
                                     .tip("切换通信协议 (当前: ${selectedApiFlavor.displayNameZh})")
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = when (selectedApiFlavor) {
-                                            ApiFlavor.INTERACTIONS -> "⚡ Interactions"
-                                            ApiFlavor.GENERATE_CONTENT -> "⚡ generateContent"
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Spacer(Modifier.width(2.dp))
-                                    Icon(
-                                        Icons.Default.KeyboardArrowDown,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
+                                if (isUltraNarrow) {
+                                    Box(
+                                        modifier = Modifier.size(32.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Speed,
+                                            contentDescription = "通信协议",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                } else {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = when (selectedApiFlavor) {
+                                                ApiFlavor.INTERACTIONS -> "⚡ Interactions"
+                                                ApiFlavor.GENERATE_CONTENT -> "⚡ generateContent"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Spacer(Modifier.width(2.dp))
+                                        Icon(
+                                            Icons.Default.KeyboardArrowDown,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
                                 }
                             }
 
@@ -932,8 +976,11 @@ fun CommonChatInputBar(
                     }
                 }
 
-                // 右侧工具群（外部后置插槽 + 发送按钮）
+                Spacer(Modifier.width(spacing.small))
+
+                // 右侧工具群（外部后置插槽 + 发送按钮），绝对常驻保底展示，绝不被溢出挤压
                 Row(
+                    modifier = Modifier.wrapContentWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(spacing.small)
                 ) {

@@ -28,6 +28,8 @@ import org.gemini.ui.forge.ui.uistudio.component.*
 import org.gemini.ui.forge.ui.uistudio.dialog.*
 import org.gemini.ui.forge.ui.uistudio.verify.AssetSliceVerifyDialog
 import org.gemini.ui.forge.viewmodel.AppViewModel
+import org.jetbrains.skiko.OS
+import org.jetbrains.skiko.hostOs
 
 /**
  * 全新独立的 UI Studio 主工作台容器界面。
@@ -108,10 +110,12 @@ fun UIStudioScreen(
             .fillMaxSize()
             .focusRequester(focusRequester)
             .focusable()
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 val isCtrl = event.isCtrlPressed || event.isMetaPressed
                 val isShift = event.isShiftPressed
+                val isMac = hostOs.isMacOS || hostOs == OS.Ios
+                val isDeleteKey = if (isMac) event.key == Key.Delete || event.key == Key.Backspace else event.key == Key.Delete
 
                 when {
                     // Ctrl+Z / Cmd+Z: 撤销
@@ -157,8 +161,8 @@ fun UIStudioScreen(
                             true
                         } else false
                     }
-                    // Delete / Backspace: 删除图元（无输入框获焦时）
-                    (event.key == Key.Delete || event.key == Key.Backspace) && !isCtrl -> {
+                    // Delete: 删除图元（冒泡到此处说明无文本输入框消费此按键）
+                    isDeleteKey && !isCtrl -> {
                         val selId = viewModel.state.selectedBlockId
                         if (selId != null && viewModel.state.renamingBlockId == null && viewModel.state.renamingView == null) {
                             viewModel.deleteSelectedBlock(selId, templateRepository)
@@ -254,28 +258,30 @@ fun UIStudioScreen(
                     )
                 }
 
-                // 右侧纵向拖拽分割线（官方 draggable 封装，毫秒级无损平滑响应）
-                VerticalSplitter(
-                    onDrag = { deltaPx ->
-                        val deltaDp = with(density) { deltaPx.toDp() }
-                        viewModel.updateRightPanelWidth(
-                            viewModel.state.rightPanelWidth - deltaDp,
-                            totalContainerWidth = totalContainerWidth
-                        )
-                    },
-                    onDragEnd = {
-                        viewModel.saveWorkspaceLayout()
-                    }
-                )
+                // 右侧纵向拖拽分割线与右侧边栏（受 isRightSidebarVisible 状态控制）
+                if (state.isRightSidebarVisible) {
+                    VerticalSplitter(
+                        onDrag = { deltaPx ->
+                            val deltaDp = with(density) { deltaPx.toDp() }
+                            viewModel.updateRightPanelWidth(
+                                viewModel.state.rightPanelWidth - deltaDp,
+                                totalContainerWidth = totalContainerWidth
+                            )
+                        },
+                        onDragEnd = {
+                            viewModel.saveWorkspaceLayout()
+                        }
+                    )
 
-                // 右侧复合边栏（属性检查面板 + 独立高保真实时预览面板，可自由拖拽宽度与上下高度）
-                UIStudioRightSidebar(
-                    viewModel = viewModel,
-                    templateRepo = templateRepository,
-                    modifier = Modifier
-                        .width(state.rightPanelWidth)
-                        .fillMaxHeight()
-                )
+                    // 右侧复合边栏（属性检查面板 / AI 对话面板，可自由拖拽宽度与上下高度）
+                    UIStudioRightSidebar(
+                        viewModel = viewModel,
+                        templateRepo = templateRepository,
+                        modifier = Modifier
+                            .width(state.rightPanelWidth)
+                            .fillMaxHeight()
+                    )
+                }
             }
         }
 

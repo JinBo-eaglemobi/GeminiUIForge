@@ -14,6 +14,7 @@ import org.gemini.ui.forge.ui.uistudio.model.ProjectAgentConfig
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetFolder
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
+import org.gemini.ui.forge.ui.uistudio.model.UIStudioRightTab
 import org.gemini.ui.forge.service.studio.LayoutDiffResult
 import kotlinx.serialization.Serializable
 
@@ -105,6 +106,10 @@ data class UIStudioState(
     val isAiChatDialogVisible: Boolean = false,
     val leftPanelWidth: Dp = 280.dp,
     val rightPanelWidth: Dp = 280.dp,
+    val activeRightTab: UIStudioRightTab = UIStudioRightTab.PROPERTY,
+    val isRightSidebarVisible: Boolean = true,
+    val propertySidebarWidth: Dp = 280.dp,
+    val aiChatSidebarWidth: Dp = 400.dp,
     val viewsPanelHeightRatio: Float = 0.45f,
     val propertyPanelHeightRatio: Float = 0.55f,
     val isCanvasDragHovered: Boolean = false,
@@ -239,7 +244,11 @@ data class UIStudioLayoutConfig(
     val leftPanelWidthDp: Float = 280f,
     val rightPanelWidthDp: Float = 280f,
     val viewsPanelHeightRatio: Float = 0.45f,
-    val propertyPanelHeightRatio: Float = 0.55f
+    val propertyPanelHeightRatio: Float = 0.55f,
+    val propertySidebarWidthDp: Float = 280f,
+    val aiChatSidebarWidthDp: Float = 400f,
+    val activeRightTabName: String = "PROPERTY",
+    val isRightSidebarVisible: Boolean = true
 )
 
 
