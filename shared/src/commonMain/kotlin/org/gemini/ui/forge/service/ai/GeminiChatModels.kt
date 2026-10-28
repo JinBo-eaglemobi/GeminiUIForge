@@ -71,12 +71,32 @@ data class GeminiChatAttachment(
 )
 
 /**
+ * 单次函数调用记录（model 轮发起）
+ */
+data class GeminiFunctionCallRecord(
+    val name: String,
+    val argsJson: String,        // arguments/args 原始 JSON 字符串
+    val callId: String? = null   // Interactions function_call step.id
+)
+
+/**
+ * 单次函数执行结果（回传轮）
+ */
+data class GeminiFunctionResponse(
+    val name: String,
+    val callId: String? = null,
+    val responseJson: String     // 官方要求 JSON 序列化结果
+)
+
+/**
  * 单轮历史会话项 (用于上下文构建)
  */
 data class GeminiChatHistoryItem(
     val role: String, // "user" 或 "model"
     val text: String,
-    val attachments: List<GeminiChatAttachment> = emptyList()
+    val attachments: List<GeminiChatAttachment> = emptyList(),
+    val functionCalls: List<GeminiFunctionCallRecord> = emptyList(), // model 轮发起的函数调用
+    val functionResults: List<GeminiFunctionResponse> = emptyList()  // 回传轮返回的函数执行结果
 )
 
 /**
@@ -96,6 +116,7 @@ data class GeminiChatRequest(
     val tools: List<GeminiToolConfig> = emptyList(),
     val safetySettings: List<GeminiSafetySetting> = emptyList(),
     val previousInteractionId: String? = null,
+    val functionResults: List<GeminiFunctionResponse> = emptyList(), // 当前轮次工具回传结果 (反哺模型)
     val scopeId: String = "default",
     val sessionId: String? = null,
     val prompt: String = "" // 兼容 prompt 别名字段
@@ -120,5 +141,6 @@ data class GeminiChatResult(
     val candidatesTokens: Int? = null,
     val totalTokens: Int? = null,
     val generatedImageData: String? = null,
-    val generatedImageMime: String? = null
+    val generatedImageMime: String? = null,
+    val functionCalls: List<GeminiFunctionCallRecord> = emptyList()
 )

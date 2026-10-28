@@ -31,6 +31,9 @@ import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.service.chat.ChatErrorClassifier
 import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.component.AppMenu
+import org.gemini.ui.forge.ui.component.AppMenuItemRow
+import org.gemini.ui.forge.ui.component.AppMenuTier
 import androidx.compose.ui.text.font.FontWeight
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -216,16 +219,17 @@ fun CommonModelBubble(
                 }
 
                 // 右键上下文菜单 (阻断原生系统 copy 弹窗，跟随光标偏移)
-                DropdownMenu(
+                AppMenu(
                     expanded = showContextMenu,
                     onDismissRequest = { showContextMenu = false },
-                    offset = menuOffset
+                    tier = AppMenuTier.COMPACT,
+                    title = "消息操作"
                 ) {
                     val selText = selectedTextSnapshot
                     if (!selText.isNullOrBlank()) {
-                        DropdownMenuItem(
-                            text = { Text("复制选择文案") },
-                            leadingIcon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(18.dp)) },
+                        AppMenuItemRow(
+                            title = "复制选择文案",
+                            icon = Icons.Default.ContentCopy,
                             onClick = {
                                 copy(selText, "已复制选中内容")
                                 showContextMenu = false
@@ -233,9 +237,9 @@ fun CommonModelBubble(
                         )
                     }
 
-                    DropdownMenuItem(
-                        text = { Text(if (!selText.isNullOrBlank()) "复制全部文案" else "复制全部回复文案") },
-                        leadingIcon = { Icon(Icons.Default.CopyAll, null, modifier = Modifier.size(18.dp)) },
+                    AppMenuItemRow(
+                        title = if (!selText.isNullOrBlank()) "复制全部文案" else "复制全部回复文案",
+                        icon = Icons.Default.CopyAll,
                         onClick = {
                             copy(modelText, "已复制全部回复文案")
                             showContextMenu = false
@@ -243,9 +247,9 @@ fun CommonModelBubble(
                     )
 
                     if (onRegenerateRequested != null) {
-                        DropdownMenuItem(
-                            text = { Text("重新生成回答") },
-                            leadingIcon = { Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp)) },
+                        AppMenuItemRow(
+                            title = "重新生成回答",
+                            icon = Icons.Default.Refresh,
                             onClick = {
                                 showContextMenu = false
                                 onRegenerateRequested(message)
@@ -254,10 +258,11 @@ fun CommonModelBubble(
                     }
 
                     if (onDeleteRequested != null) {
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("删除本轮对话", color = MaterialTheme.colorScheme.error) },
-                            leadingIcon = { Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)) },
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        AppMenuItemRow(
+                            title = "删除本轮对话",
+                            icon = Icons.Default.DeleteOutline,
+                            iconTint = MaterialTheme.colorScheme.error,
                             onClick = {
                                 showContextMenu = false
                                 onDeleteRequested(message)

@@ -254,21 +254,58 @@ class GeminiChatEngine(
                     add(buildJsonObject {
                         put("role", historyItem.role)
                         put("parts", buildJsonArray {
-                            add(buildJsonObject { put("text", historyItem.text) })
+                            if (historyItem.text.isNotBlank()) {
+                                add(buildJsonObject { put("text", historyItem.text) })
+                            }
                             historyItem.attachments.forEach { attach ->
                                 addAttachmentPart(attach)
+                            }
+                            historyItem.functionCalls.forEach { fc ->
+                                add(buildJsonObject {
+                                    put("functionCall", buildJsonObject {
+                                        put("name", fc.name)
+                                        val argsElement = runCatching { jsonParser.parseToJsonElement(fc.argsJson) }.getOrElse { buildJsonObject {} }
+                                        put("args", if (argsElement is JsonObject) argsElement else buildJsonObject { put("value", argsElement) })
+                                    })
+                                })
+                            }
+                            historyItem.functionResults.forEach { fr ->
+                                add(buildJsonObject {
+                                    put("functionResponse", buildJsonObject {
+                                        put("name", fr.name)
+                                        val respElement = runCatching { jsonParser.parseToJsonElement(fr.responseJson) }.getOrElse {
+                                            buildJsonObject { put("output", JsonPrimitive(fr.responseJson)) }
+                                        }
+                                        put("response", if (respElement is JsonObject) respElement else buildJsonObject { put("output", respElement) })
+                                    })
+                                })
                             }
                         })
                     })
                 }
 
-                // 当前轮次用户输入
+                // 当前轮次用户输入 / 工具反哺
+                val hasFunctionResults = request.functionResults.isNotEmpty()
+                val currentRole = if (hasFunctionResults && request.effectivePrompt.isBlank()) "function" else "user"
                 add(buildJsonObject {
-                    put("role", "user")
+                    put("role", currentRole)
                     put("parts", buildJsonArray {
-                        add(buildJsonObject { put("text", request.effectivePrompt) })
+                        if (request.effectivePrompt.isNotBlank()) {
+                            add(buildJsonObject { put("text", request.effectivePrompt) })
+                        }
                         request.attachments.forEach { attach ->
                             addAttachmentPart(attach)
+                        }
+                        request.functionResults.forEach { fr ->
+                            add(buildJsonObject {
+                                put("functionResponse", buildJsonObject {
+                                    put("name", fr.name)
+                                    val respElement = runCatching { jsonParser.parseToJsonElement(fr.responseJson) }.getOrElse {
+                                        buildJsonObject { put("output", JsonPrimitive(fr.responseJson)) }
+                                    }
+                                    put("response", if (respElement is JsonObject) respElement else buildJsonObject { put("output", respElement) })
+                                })
+                            })
                         }
                     })
                 })
@@ -334,6 +371,7 @@ class GeminiChatEngine(
 
         onStatusLog("📡 [generateContent] 建立流连接 (${request.model.modelName})...")
         val fullTextBuilder = StringBuilder()
+        val rawElements = mutableListOf<String>()
         var lastThought: String? = null
         var lastSig: String? = null
         var promptTokens: Int? = null
@@ -349,6 +387,7 @@ class GeminiChatEngine(
                 requestBody = requestJson,
                 onLog = { onStatusLog(it) },
                 onRawData = { element ->
+                    rawElements.add(element.toString())
                     if (element is JsonObject) {
                         val errObj = element["error"]?.jsonObject
                         if (errObj != null) {
@@ -385,13 +424,16 @@ class GeminiChatEngine(
 
             val durationMs = getCurrentTimeMillis() - startTime
             val resultText = fullTextBuilder.toString()
-            if (resultText.isBlank() && lastThought.isNullOrBlank() && generatedImageData == null) {
+            val rawCombined = rawElements.joinToString("\n")
+            val extractedFunctionCalls = AiToolExecutionDispatcher.extractFunctionCallRecords(rawCombined, resultText)
+            if (resultText.isBlank() && lastThought.isNullOrBlank() && extractedFunctionCalls.isEmpty() && generatedImageData == null) {
                 return GeminiChatResult(
                     text = "",
                     modelName = request.model.displayName,
                     durationMs = durationMs,
                     isSuccess = false,
-                    errorMessage = "未收到有效回复内容，请重试"
+                    errorMessage = "未收到有效回复内容，请重试",
+                    rawResponseJson = rawCombined
                 )
             }
 
@@ -399,6 +441,7 @@ class GeminiChatEngine(
                 text = resultText,
                 thoughtText = lastThought,
                 thoughtSignature = lastSig,
+                rawResponseJson = rawCombined,
                 modelName = request.model.displayName,
                 durationMs = durationMs,
                 promptTokens = promptTokens,
@@ -406,6 +449,7 @@ class GeminiChatEngine(
                 totalTokens = totalTokens ?: if (promptTokens != null || candidatesTokens != null) (promptTokens ?: 0) + (candidatesTokens ?: 0) else null,
                 generatedImageData = generatedImageData,
                 generatedImageMime = generatedImageMime,
+                functionCalls = extractedFunctionCalls,
                 isSuccess = true
             )
         } catch (e: Exception) {
@@ -448,12 +492,14 @@ class GeminiChatEngine(
                 put("previous_interaction_id", request.previousInteractionId)
             }
 
-            // 3. 官方输入项规范 (input: text / image / document / audio / video)
+            // 3. 官方输入项规范 (input: text / image / document / audio / video / function_result)
             put("input", buildJsonArray {
-                add(buildJsonObject {
-                    put("type", "text")
-                    put("text", request.effectivePrompt)
-                })
+                if (request.effectivePrompt.isNotBlank()) {
+                    add(buildJsonObject {
+                        put("type", "text")
+                        put("text", request.effectivePrompt)
+                    })
+                }
 
                 request.attachments.forEach { attach ->
                     val targetType = when {
@@ -471,6 +517,21 @@ class GeminiChatEngine(
                             put("data", Base64.encode(attach.bytes))
                         }
                         put("mime_type", attach.mimeType)
+                    })
+                }
+
+                // 官方 Interactions 规范：function_result input 项
+                request.functionResults.forEach { fr ->
+                    add(buildJsonObject {
+                        put("type", "function_result")
+                        if (!fr.callId.isNullOrBlank()) {
+                            put("call_id", fr.callId)
+                        }
+                        put("name", fr.name)
+                        val respElement = runCatching { jsonParser.parseToJsonElement(fr.responseJson) }.getOrElse {
+                            buildJsonObject { put("output", JsonPrimitive(fr.responseJson)) }
+                        }
+                        put("result", if (respElement is JsonObject) respElement else buildJsonObject { put("output", respElement) })
                     })
                 }
             })
@@ -624,9 +685,14 @@ class GeminiChatEngine(
                 } catch (_: Exception) {}
             }
 
-            val hasToolCallInResponse = rawResponseAggregator?.let {
+            val extractedFunctionCalls = AiToolExecutionDispatcher.extractFunctionCallRecords(
+                rawResponseAggregator ?: "",
+                finalExtractedText
+            )
+
+            val hasToolCallInResponse = extractedFunctionCalls.isNotEmpty() || (rawResponseAggregator?.let {
                 it.contains("\"function_call\"") || it.contains("\"functionCall\"") || it.contains("\"tool_call\"")
-            } ?: false
+            } ?: false)
 
             if (finalExtractedText.isBlank() && lastThought.isNullOrBlank() && !hasToolCallInResponse && generatedImageData == null) {
                 val durationMsErr = getCurrentTimeMillis() - startTime
@@ -636,7 +702,8 @@ class GeminiChatEngine(
                     durationMs = durationMsErr,
                     isSuccess = false,
                     errorMessage = "未收到有效回复内容，请重试",
-                    rawResponseJson = rawResponseAggregator ?: ""
+                    rawResponseJson = rawResponseAggregator ?: "",
+                    functionCalls = extractedFunctionCalls
                 )
             }
 
@@ -653,6 +720,7 @@ class GeminiChatEngine(
                 totalTokens = totalTokens ?: if (promptTokens != null || candidatesTokens != null) (promptTokens ?: 0) + (candidatesTokens ?: 0) else null,
                 generatedImageData = generatedImageData,
                 generatedImageMime = generatedImageMime,
+                functionCalls = extractedFunctionCalls,
                 isSuccess = true
             )
         } catch (e: Exception) {

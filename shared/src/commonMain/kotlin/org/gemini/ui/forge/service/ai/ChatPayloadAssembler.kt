@@ -107,7 +107,8 @@ object ChatPayloadAssembler {
                     }
                     is MentionPayload.BlockPayload -> {
                         val dim = if (p.width > 0 && p.height > 0) " dimensions=\"${p.width}x${p.height}\"" else ""
-                        userPromptBuilder.append("  <referenced_block id=\"${p.blockId}\" name=\"${p.blockName}\" type=\"${p.type}\"$dim is_container=\"${p.isContainer}\"/>\n")
+                        val viewAttr = if (!p.viewName.isNullOrBlank()) " view=\"${p.viewName}\"" else ""
+                        userPromptBuilder.append("  <referenced_block id=\"${p.blockId}\" name=\"${p.blockName}\" type=\"${p.type}\"$dim$viewAttr is_container=\"${p.isContainer}\"/>\n")
                     }
                 }
             }

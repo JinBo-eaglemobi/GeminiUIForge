@@ -707,4 +707,7 @@
     <string name="mention_preview_container_child_count">%1$d child component(s)</string>
     <string name="mention_preview_doc_empty">File is empty or cannot be read</string>
     <string name="mention_preview_no_bound_asset">No asset bound</string>
+    <!-- AppMenu Component -->
+    <string name="app_menu_item_count">%1$d items</string>
+    <string name="app_menu_empty_default">No items available</string>
 </resources>

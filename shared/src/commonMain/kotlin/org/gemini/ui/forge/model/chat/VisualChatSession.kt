@@ -30,7 +30,8 @@ data class ChatToolCallRecord(
     val resultSummary: String? = null,
     val isSuccess: Boolean = true,
     val durationMs: Long = 0L,
-    val rawOutput: String? = null
+    val rawOutput: String? = null,
+    val callId: String? = null
 )
 
 /**

@@ -16,6 +16,9 @@ import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.model.chat.TrafficDirection
 import org.gemini.ui.forge.ui.component.AppSearchField
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.component.AppMenu
+import org.gemini.ui.forge.ui.component.AppMenuItemRow
+import org.gemini.ui.forge.ui.component.AppMenuTier
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.jetbrains.compose.resources.stringResource
@@ -143,28 +146,16 @@ fun TrafficListToolbar(
                 )
             }
 
-            DropdownMenu(
+            AppMenu(
                 expanded = isSortMenuOpen,
-                onDismissRequest = { isSortMenuOpen = false }
+                onDismissRequest = { isSortMenuOpen = false },
+                tier = AppMenuTier.COMPACT,
+                title = stringResource(Res.string.traffic_sort_menu_title)
             ) {
                 TrafficSortOrder.entries.forEach { order ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = stringResource(order.labelRes),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        },
-                        trailingIcon = {
-                            if (sortOrder == order) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        },
+                    AppMenuItemRow(
+                        title = stringResource(order.labelRes),
+                        isSelected = (sortOrder == order),
                         onClick = {
                             onSortOrderChange(order)
                             isSortMenuOpen = false

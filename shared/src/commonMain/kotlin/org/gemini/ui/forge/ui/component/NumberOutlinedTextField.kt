@@ -37,10 +37,14 @@ fun NumberOutlinedTextField(
     step: Float = 1f,
     minVal: Float? = null,
     maxVal: Float? = null,
+    range: ClosedFloatingPointRange<Float>? = null,
     enabled: Boolean = true,
     contentPadding: PaddingValues? = null
 ) {
-    var localText by remember { mutableStateOf(normalizeNumberString(value, isFloat, minVal, maxVal)) }
+    val effectiveMinVal = range?.start ?: minVal
+    val effectiveMaxVal = range?.endInclusive ?: maxVal
+
+    var localText by remember { mutableStateOf(normalizeNumberString(value, isFloat, effectiveMinVal, effectiveMaxVal)) }
     var focusInitialValue by remember { mutableStateOf(value) }
     var isFocused by remember { mutableStateOf(false) }
     var isDraggingState by remember { mutableStateOf(false) }
@@ -48,23 +52,53 @@ fun NumberOutlinedTextField(
 
     LaunchedEffect(value) {
         if (!isFocused && !isDraggingState) {
-            localText = normalizeNumberString(value, isFloat, minVal, maxVal)
+            localText = normalizeNumberString(value, isFloat, effectiveMinVal, effectiveMaxVal)
         }
     }
 
     val focusRequester = remember { FocusRequester() }
     var accumulatedDrag by remember { mutableStateOf(0f) }
 
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier.then(
+            if (enabled) {
+                Modifier.pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            if (event.type == PointerEventType.Scroll) {
+                                event.changes.firstOrNull()?.let { change ->
+                                    val scrollDelta = change.scrollDelta.y
+                                    if (scrollDelta != 0f) {
+                                        change.consume()
+                                        val scrollDir = if (scrollDelta > 0) -1 else 1 // 滚轮向后（下）是减，向前（上）是加
+                                        val currentVal = localText.toFloatOrNull() ?: 0f
+                                        var newVal = currentVal + scrollDir * step
+                                        if (effectiveMinVal != null) newVal = maxOf(effectiveMinVal, newVal)
+                                        if (effectiveMaxVal != null) newVal = minOf(effectiveMaxVal, newVal)
+                                        val formatted = normalizeNumberString(newVal.toString(), isFloat, effectiveMinVal, effectiveMaxVal)
+                                        localText = formatted
+                                        currentOnValueChange(formatted)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                Modifier
+            }
+        )
+    ) {
         SelectAllOutlinedTextField(
             value = localText,
             onValueChange = { input ->
                 if (input.isEmpty()) {
                     localText = input
-                    onValueChange(if (minVal != null && minVal > 0f) minVal.toString() else "0")
+                    onValueChange(if (effectiveMinVal != null && effectiveMinVal > 0f) effectiveMinVal.toString() else "0")
                 } else if (input == "-" || input == "." || input == "-.") {
                     localText = input
-                    onValueChange(if (minVal != null && minVal > 0f) minVal.toString() else "0")
+                    onValueChange(if (effectiveMinVal != null && effectiveMinVal > 0f) effectiveMinVal.toString() else "0")
                 } else {
                     val isValid = if (isFloat) input.toFloatOrNull() != null else input.toIntOrNull() != null
                     if (isValid || (input.endsWith(".") && input.count { it == '.' } == 1)) {
@@ -86,45 +120,16 @@ fun NumberOutlinedTextField(
                         isFocused = false
                         val isValid = if (isFloat) localText.toFloatOrNull() != null else localText.toIntOrNull() != null
                         if (!isValid) {
-                            val fallback = normalizeNumberString(focusInitialValue, isFloat, minVal, maxVal)
+                            val fallback = normalizeNumberString(focusInitialValue, isFloat, effectiveMinVal, effectiveMaxVal)
                             localText = fallback
                             currentOnValueChange(fallback)
                         } else {
-                            val normalized = normalizeNumberString(localText, isFloat, minVal, maxVal)
+                            val normalized = normalizeNumberString(localText, isFloat, effectiveMinVal, effectiveMaxVal)
                             localText = normalized
                             currentOnValueChange(normalized)
                         }
                     }
-                }
-                .then(
-                    if (isFocused && enabled) {
-                        Modifier.pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent(PointerEventPass.Main)
-                                    if (event.type == PointerEventType.Scroll) {
-                                        event.changes.firstOrNull()?.let { change ->
-                                            val scrollDelta = change.scrollDelta.y
-                                            if (scrollDelta != 0f) {
-                                                change.consume()
-                                                val scrollDir = if (scrollDelta > 0) -1 else 1 // 滚轮向后（下）是减，向前（上）是加
-                                                val currentVal = localText.toFloatOrNull() ?: 0f
-                                                var newVal = currentVal + scrollDir * step
-                                                if (minVal != null) newVal = maxOf(minVal, newVal)
-                                                if (maxVal != null) newVal = minOf(maxVal, newVal)
-                                                val formatted = normalizeNumberString(newVal.toString(), isFloat, minVal, maxVal)
-                                                localText = formatted
-                                                currentOnValueChange(formatted)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Modifier
-                    }
-                ),
+                },
             label = label,
             singleLine = singleLine,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -181,9 +186,9 @@ fun NumberOutlinedTextField(
 
                                             val currentVal = localText.toFloatOrNull() ?: 0f
                                             var newVal = currentVal + steps * step
-                                            if (minVal != null) newVal = maxOf(minVal, newVal)
-                                            if (maxVal != null) newVal = minOf(maxVal, newVal)
-                                            val formatted = normalizeNumberString(newVal.toString(), isFloat, minVal, maxVal)
+                                            if (effectiveMinVal != null) newVal = maxOf(effectiveMinVal, newVal)
+                                            if (effectiveMaxVal != null) newVal = minOf(effectiveMaxVal, newVal)
+                                            val formatted = normalizeNumberString(newVal.toString(), isFloat, effectiveMinVal, effectiveMaxVal)
                                             localText = formatted
                                             currentOnValueChange(formatted)
                                         }

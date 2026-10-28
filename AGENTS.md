@@ -266,18 +266,23 @@ rememberUpdatedState 进行安全收拢，拖拽结束/中断时必须通过 onD
     3. `dialogMediumWidth` (720.dp) — 中型详情、普通列表弹窗；
     4. `dialogLargeWidth` (960.dp) — 大型 PC 仪表盘、2 列 Bento、MCP 服务中心与调试控制台；
     5. `dialogHugeWidth` (1280.dp) — 全景宽屏通信档案、全景对比编辑器。
-  - **响应式动态宽度与浮层菜单分级锚定规范 (Responsive Dynamic Menu & Dialog Sizing Specification)**：**【红线规则】**
-    全项目凡是依赖外部宿主容器或视口大小的浮层菜单（如 AI 对话输入底栏的模型选择菜单、专业预设菜单、思考等级调节菜单等），必须严格遵循以下三层几何约束标准：
-    1. **二元分级尺寸铁律 (Two-Tier Menu Sizing Gate)**：
-       - **Tier 1 (复杂宽屏/多Tab面板)**：涉及搜索过滤、分类多 Tab、多列卡片的复合选择器（如模型选择器、素材面板），最大宽度按宿主可用宽度的黄金比例响应：`maxMenuWidth = effectiveDialogWidth * 0.85f`，并通过 `.widthIn(min = anchorButtonWidth, max = maxMenuWidth)` 弹性包裹；
-       - **Tier 2 (单列枚举/紧凑调节菜单)**：涉及状态切换、枚举单选、参数滑块等单列浮层（如思考等级选择、比例选择、协议切换、采样步数），其内容在几何本质上属于紧凑型单列枚举，**强制施加 280dp ~ 360dp 物理安全上限 (Hard Clamp)**，严禁套用 Tier 1 的超宽比例撑大，杜绝卡片过度扁平与留白；
-    2. **弹性收拢与严禁固定宽度铁律 (widthIn vs width)**：
-       - 全项目所有 `DropdownMenu` 与浮层卡片，**一律强制使用 `.widthIn(min = ..., max = ...)`**，绝对禁止在浮层根容器直接硬写 `.width(maxMenuWidth)` 将宽度上限锁死为绝对宽度；
-       - 【触发按钮自适应最小宽度铁律】：浮层菜单的最小宽度必须动态锚定在当前触发按钮的实际可视宽度（`minWidth = maxOf(minSafeWidth, anchorButtonWidth)`），确保菜单展开时底边或顶边至少与触发按钮等宽，形成视觉对齐与物理支撑；
-    3. **底栏向上弹出与防越界漂移铁律 (Bottom-Up Positioning & Anti-Drift Guard)**：
-       - 底部工具条浮层统一遵循向上舒展原则（垂直偏移向上负值，如 `offset = DpOffset(0.dp, (-8).dp)`），底边紧邻按钮顶边；
-       - 菜单最大宽度必须严格约束在触发按钮与视口右边界的可用空间内，严禁超出屏幕右边界导致 Compose Desktop 底层 `PopupPositionProvider` 触发极端向左位移补偿（将菜单甩飞至屏幕最左边缘）。
-    - 浮层菜单最大高度统一严格按 **`dialogHeight * 0.70f`**（或默认 520.dp）动态限制，确保在任何分辨率与视口缩放比下内容横向舒展无挤压、垂直平滑滚动。
+  - **全局统一菜单组件与强制封装规范 (AppMenu & Mandatory Widget Specification)**：**【红线规则】**
+    全项目凡是需要弹出下拉菜单、枚举选择、右键上下文菜单或多 Tab/多组选择器的场景，**严禁在业务端直接裸调 Compose 原生 `DropdownMenu`，严禁在业务界面中散落手写 `widthIn`、`heightIn`、`BoxWithConstraints`、`offset` 或标题栏分割线**！
+    **必须 100% 统一复用公共封装组件 `AppMenu`、`AppMenuItemRow` 与 `AppMenuSectionHeader`**（位于 `org.gemini.ui.forge.ui.component`）：
+    1. **二元分级尺寸契约 (AppMenuTier)**：
+       - `AppMenuTier.COMPACT`：适用于单列枚举、紧凑调节、协议/模式切换、右键上下文菜单等紧凑场景（默认保底 280dp 宽度）；
+       - `AppMenuTier.WIDE`：适用于模型选择器、预设多分类面板、技能多列卡片等复合宽屏选择器（默认保底 320dp 宽度，按视口 85% 弹性舒展）；
+    2. **物理特性全内置**：`AppMenu` 内部 100% 自动接管视口黄金比例自适应、屏幕右边缘防甩飞漂移、底部向上弹出负偏移（`DpOffset(0.dp, (-8).dp)`）、标题栏与项数徽章、以及视口高度 70% 滚动约束；
+    3. **标准条目七态合一**：菜单项一律使用 `AppMenuItemRow`，内置 36dp 黄金触控热区、图标 18dp、文字权重挤压截断、选中对勾（Check）、行尾徽章与悬停态。
+  - **强制封装组件注册表 (Mandatory Encapsulated Widget Registry)**：**【红线规则】**
+    全项目建立统一的强制封装组件注册表。凡注册在案的基础交互组件，**业务层绝对禁止私自手搓裸实现，必须 100% 强制复用**：
+    1. **菜单与浮层**：`AppMenu` + `AppMenuItemRow` + `AppMenuSectionHeader`（位于 `org.gemini.ui.forge.ui.component`）；
+    2. **面板分割与调宽**：`VerticalSplitter` + `HorizontalSplitter`（严禁手写裸 `detectDragGestures`）；
+    3. **数值输入框**：`NumberOutlinedTextField`（已内置 PC 端指针悬停滚轮无缝调值、范围自动 Clamp、非法文本过滤与自适应步长）；
+    4. **搜索与过滤栏**：`AppSearchField`（统一 34dp 紧凑高度、清除按钮与搜索图标）；
+    5. **剪贴板写入与操作**：`Modifier.copyOnClick` + `rememberClipboardAction`（严禁手写协程与 `LocalClipboard`）；
+    6. **轻量气泡通知**：`Toast.show(message, type)`（严禁自建浮层）；
+    7. **交互按钮悬停提示**：`Modifier.tip(...)`（已内置视口边界碰撞自动向上翻转防遮挡）。
   - **平台默认宽度逃逸铁律**：所有自定义 `Dialog` 必须显式声明 `properties = DialogProperties(usePlatformDefaultWidth = false)`，防止 Compose 平台默认窄宽度（约 280~320dp）拦截并破坏 Design Tokens 宽度。
 - **UI Studio 与传统 Slots 模板双轨架构规范 (Dual-Track Project Architecture Specification)**: **【业务铁律】**
   - **自然属性二元解耦判定（referenceImages 零冗余铁律）**：

@@ -717,4 +717,7 @@
     <string name="mention_preview_container_child_count">包含 %1$d 个子组件</string>
     <string name="mention_preview_doc_empty">文件为空或无法读取文本</string>
     <string name="mention_preview_no_bound_asset">未绑定素材</string>
+    <!-- AppMenu Component -->
+    <string name="app_menu_item_count">共 %1$d 项</string>
+    <string name="app_menu_empty_default">暂无可用选项</string>
 </resources>

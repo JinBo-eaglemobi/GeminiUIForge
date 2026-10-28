@@ -24,6 +24,8 @@ import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.ModelStudioGroup
 import org.gemini.ui.forge.model.ModelStudioMeta
 import org.gemini.ui.forge.model.StudioModelResolver
+import org.gemini.ui.forge.ui.component.AppMenu
+import org.gemini.ui.forge.ui.component.AppMenuTier
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -54,105 +56,30 @@ fun CommonModelSelectionMenu(
 ) {
     val spacing = LocalAppSpacing.current
     val studioModels = remember { StudioModelResolver.resolveStudioModels() }
-    val effectiveMinWidth = maxOf(320.dp, minMenuWidth)
-
-    DropdownMenu(
+    AppMenu(
         expanded = expanded,
+        items = studioModels,
         onDismissRequest = onDismissRequest,
+        onItemSelected = { meta -> onModelSelected(meta.model) },
+        tier = AppMenuTier.WIDE,
+        title = "🤖 选择生图 / 多模态大模型",
         offset = offset,
-        properties = PopupProperties(focusable = true),
-        modifier = modifier
-            .widthIn(min = effectiveMinWidth, max = maxMenuWidth)
-            .heightIn(max = maxMenuHeight)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                AppShapes.medium
-            )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(spacing.small),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            // 1. 顶部标题栏
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "🤖 选择生图 / 多模态大模型",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Bold
-                )
-                Surface(
-                    shape = AppShapes.small,
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                ) {
-                    Text(
-                        text = "共 ${studioModels.size} 个模型",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+        maxMenuHeight = maxMenuHeight,
+        modifier = modifier,
+        grouped = { it.group },
+        sectionTitle = { (it as? ModelStudioGroup)?.title ?: it.name },
+        itemContent = { meta ->
+            val isSelected = meta.model == selectedModel
+            CommonModelItemCard(
+                meta = meta,
+                isSelected = isSelected,
+                onClick = {
+                    onModelSelected(meta.model)
+                    onDismissRequest()
                 }
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 4.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
             )
-
-            // 2. 按体系双分组动态渲染
-            ModelStudioGroup.entries.forEach { group ->
-                val groupModels = studioModels.filter { it.group == group }
-                if (groupModels.isNotEmpty()) {
-                    // 分组标题
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 6.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = group.icon,
-                            contentDescription = null,
-                            tint = group.brandColor,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = group.title,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = group.brandColor
-                        )
-                    }
-
-                    // 组内各模型卡片条目
-                    groupModels.forEach { meta ->
-                        val isSelected = meta.model == selectedModel
-                        CommonModelItemCard(
-                            meta = meta,
-                            isSelected = isSelected,
-                            onClick = {
-                                onModelSelected(meta.model)
-                                onDismissRequest()
-                            }
-                        )
-                    }
-
-                    Spacer(Modifier.height(4.dp))
-                }
-            }
         }
-    }
+    )
 }
 
 /**

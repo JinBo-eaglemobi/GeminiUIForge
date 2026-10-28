@@ -37,6 +37,9 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import org.gemini.ui.forge.model.chat.ChatMentionTag
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.component.AppMenu
+import org.gemini.ui.forge.ui.component.AppMenuItemRow
+import org.gemini.ui.forge.ui.component.AppMenuTier
 import androidx.compose.ui.text.font.FontWeight
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -208,16 +211,17 @@ fun CommonUserBubble(
                 }
 
                 // 右键上下文菜单 (跟随光标偏移)
-                DropdownMenu(
+                AppMenu(
                     expanded = showContextMenu,
                     onDismissRequest = { showContextMenu = false },
-                    offset = menuOffset
+                    tier = AppMenuTier.COMPACT,
+                    title = "消息操作"
                 ) {
                     val selText = selectedTextSnapshot
                     if (!selText.isNullOrBlank()) {
-                        DropdownMenuItem(
-                            text = { Text("复制选择文案") },
-                            leadingIcon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(18.dp)) },
+                        AppMenuItemRow(
+                            title = "复制选择文案",
+                            icon = Icons.Default.ContentCopy,
                             onClick = {
                                 showContextMenu = false
                                 copy(selText, "已复制选中内容")
@@ -225,9 +229,9 @@ fun CommonUserBubble(
                         )
                     }
 
-                    DropdownMenuItem(
-                        text = { Text(if (!selText.isNullOrBlank()) "复制全部文案" else "复制提问文本") },
-                        leadingIcon = { Icon(Icons.Default.CopyAll, null, modifier = Modifier.size(18.dp)) },
+                    AppMenuItemRow(
+                        title = if (!selText.isNullOrBlank()) "复制全部文案" else "复制提问文本",
+                        icon = Icons.Default.CopyAll,
                         onClick = {
                             showContextMenu = false
                             copy(userText, "已复制提问内容")
@@ -235,9 +239,9 @@ fun CommonUserBubble(
                     )
 
                     if (onEditRequested != null) {
-                        DropdownMenuItem(
-                            text = { Text("重新编辑并回填") },
-                            leadingIcon = { Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp)) },
+                        AppMenuItemRow(
+                            title = "重新编辑并回填",
+                            icon = Icons.Default.Edit,
                             onClick = {
                                 showContextMenu = false
                                 onEditRequested(userText)
@@ -246,9 +250,9 @@ fun CommonUserBubble(
                     }
 
                     if (onRegenerateRequested != null) {
-                        DropdownMenuItem(
-                            text = { Text("基于本轮重新生成回答") },
-                            leadingIcon = { Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp)) },
+                        AppMenuItemRow(
+                            title = "基于本轮重新生成回答",
+                            icon = Icons.Default.Refresh,
                             onClick = {
                                 showContextMenu = false
                                 onRegenerateRequested(message)
@@ -257,10 +261,11 @@ fun CommonUserBubble(
                     }
 
                     if (onDeleteRequested != null) {
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("删除本轮对话", color = MaterialTheme.colorScheme.error) },
-                            leadingIcon = { Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)) },
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        AppMenuItemRow(
+                            title = "删除本轮对话",
+                            icon = Icons.Default.DeleteOutline,
+                            iconTint = MaterialTheme.colorScheme.error,
                             onClick = {
                                 showContextMenu = false
                                 onDeleteRequested(message)

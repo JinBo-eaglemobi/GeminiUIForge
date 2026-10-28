@@ -46,7 +46,9 @@ sealed interface MentionPayload {
         val bounds: String = "",
         val width: Int = 0,
         val height: Int = 0,
-        val isContainer: Boolean
+        val isContainer: Boolean,
+        val viewId: String? = null,
+        val viewName: String? = null
     ) : MentionPayload
 
     /** 切片素材上下文 */

@@ -164,7 +164,12 @@ fun UIProjectAiStudioDialog(
                         MentionHoverPreviewConfig(
                             resolveAssetPathByHash = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
                             resolveViewBlocks = { viewId -> state.project?.studioPages?.find { it.id == viewId }?.blocks },
-                            resolveBlockById = { id -> state.currentView?.blocks?.findBlockById(id) as? UIStudioBlock }
+                            resolveBlockById = { id ->
+                                (state.currentView?.blocks?.findBlockById(id) as? UIStudioBlock)
+                                    ?: state.project?.studioPages?.asSequence()
+                                        ?.mapNotNull { it.blocks.findBlockById(id) as? UIStudioBlock }
+                                        ?.firstOrNull()
+                            }
                         )
                     },
                     onFilesDropped = { paths ->

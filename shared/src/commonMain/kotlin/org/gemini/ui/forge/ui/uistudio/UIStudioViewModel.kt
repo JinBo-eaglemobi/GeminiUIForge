@@ -88,6 +88,8 @@ import org.gemini.ui.forge.service.ai.GeminiChatEngine
 import org.gemini.ui.forge.service.ai.GeminiChatRequest
 import org.gemini.ui.forge.service.ai.GeminiChatAttachment
 import org.gemini.ui.forge.service.ai.GeminiChatHistoryItem
+import org.gemini.ui.forge.service.ai.GeminiFunctionCallRecord
+import org.gemini.ui.forge.service.ai.GeminiFunctionResponse
 import org.gemini.ui.forge.service.ai.GeminiGenerationConfig
 import org.gemini.ui.forge.service.assetsheet.AssetSheetNormalizer
 import org.gemini.ui.forge.state.ui.ProjectState
@@ -464,16 +466,22 @@ class UIStudioViewModel {
             )
         }
 
-        // 4. 当前视图图层图元 (Blocks - 沉底排列，剥离坐标仅保留尺寸)
-        fun collectBlocks(blocks: List<UIStudioBlock>) {
+        // 4. 全工程所有页面图层图元 (Blocks - 优先排列当前活跃视图，随后遍历所有视图)
+        val currentViewId = state.currentView?.id
+        val allPages = state.project?.studioPages ?: listOfNotNull(state.currentView)
+        val sortedPages = allPages.sortedByDescending { it.id == currentViewId }
+
+        fun collectBlocks(pageId: String, pageName: String, blocks: List<UIStudioBlock>) {
+            val isCurrent = pageId == currentViewId
+            val viewPrefix = if (isCurrent) "视图: $pageName (当前)" else "视图: $pageName"
             blocks.forEach { block ->
                 val w = block.bounds.width.toInt()
                 val h = block.bounds.height.toInt()
                 candidates.add(
                     MentionItem(
-                        id = "block_${block.id}",
+                        id = "block_${pageId}_${block.id}",
                         title = block.id,
-                        subtitle = "类型: ${block.type.name} · 尺寸: ${w}x${h}",
+                        subtitle = "$viewPrefix · 类型: ${block.type.name} · 尺寸: ${w}x${h}",
                         category = MentionCategory.BLOCK,
                         icon = Icons.Default.Layers,
                         payload = MentionPayload.BlockPayload(
@@ -483,14 +491,18 @@ class UIStudioViewModel {
                             bounds = "",
                             width = w,
                             height = h,
-                            isContainer = block.isPureContainer
+                            isContainer = block.isPureContainer,
+                            viewId = pageId,
+                            viewName = pageName
                         )
                     )
                 )
-                collectBlocks(block.children)
+                collectBlocks(pageId, pageName, block.children)
             }
         }
-        state.currentView?.blocks?.let { collectBlocks(it) }
+        sortedPages.forEach { page ->
+            collectBlocks(page.id, page.nameStr, page.blocks)
+        }
 
         if (tokens.isEmpty()) return candidates
         return candidates.mapNotNull { item ->
@@ -2679,7 +2691,7 @@ class UIStudioViewModel {
                     val executedToolRecords = if (result.isSuccess) {
                         state = state.copy(streamingAiThought = "🛠️ 正在执行系统工具...")
                         try {
-                            executeDetectedAiTools(result.rawResponseJson, result.text)
+                            executeDetectedAiTools(result.rawResponseJson, result.text, result.functionCalls)
                         } finally {
                             state = state.copy(streamingAiThought = "")
                         }
@@ -2729,44 +2741,51 @@ class UIStudioViewModel {
                         }
                     }
 
-                    // 否则说明调用了探索类/辅助类元工具，准备将工具执行结果与强收敛指令反哺给大模型继续多轮推理
-                    // 纯化反哺：单工具直传原生纯数据，多工具以工具名为 key 构建纯 JSON 映射，零模版包装词
-                    val pureFeedbackPayload = if (executedToolRecords.size == 1) {
-                        val single = executedToolRecords.first()
-                        val raw = single.rawOutput?.ifBlank { null } ?: single.resultSummary ?: "{}"
-                        if (single.isSuccess) {
+                    // 纯化反哺：对齐 Google Gemini 官方 Function Calling Turnaround 契约
+                    val functionResponses = executedToolRecords.map { rec ->
+                        val raw = rec.rawOutput?.ifBlank { null } ?: rec.resultSummary ?: "{}"
+                        val finalRespJson = if (rec.isSuccess) {
                             raw
                         } else {
                             "{\"error\":${Json.encodeToString(raw)}}"
                         }
-                    } else {
-                        buildJsonObject {
-                            executedToolRecords.forEach { record ->
-                                val raw = record.rawOutput?.ifBlank { null } ?: record.resultSummary ?: "{}"
-                                if (record.isSuccess) {
-                                    try {
-                                        put(record.toolName, Json.parseToJsonElement(raw))
-                                    } catch (_: Exception) {
-                                        put(record.toolName, raw)
-                                    }
-                                } else {
-                                    put(record.toolName, buildJsonObject {
-                                        put("error", raw)
-                                    })
-                                }
-                            }
-                        }.toString()
+                        GeminiFunctionResponse(
+                            name = rec.toolName,
+                            callId = rec.callId,
+                            responseJson = finalRespJson
+                        )
+                    }
+
+                    val modelFunctionCalls = executedToolRecords.map {
+                        GeminiFunctionCallRecord(
+                            name = it.toolName,
+                            argsJson = it.argumentsJson,
+                            callId = it.callId
+                        )
                     }
 
                     val updatedHistory = currentChatRequest.history.toMutableList().apply {
-                        add(GeminiChatHistoryItem(role = "model", text = result.text.ifBlank { "Executed tools: ${executedToolRecords.joinToString { it.toolName }}" }))
-                        add(GeminiChatHistoryItem(role = "user", text = pureFeedbackPayload))
+                        add(
+                            GeminiChatHistoryItem(
+                                role = "model",
+                                text = result.text,
+                                functionCalls = modelFunctionCalls
+                            )
+                        )
+                        add(
+                            GeminiChatHistoryItem(
+                                role = "user",
+                                text = "",
+                                functionResults = functionResponses
+                            )
+                        )
                     }
 
                     currentChatRequest = currentChatRequest.copy(
                         history = updatedHistory,
-                        prompt = pureFeedbackPayload,
-                        userPrompt = pureFeedbackPayload,
+                        prompt = "",
+                        userPrompt = "",
+                        functionResults = functionResponses,
                         previousInteractionId = result.interactionId ?: currentChatRequest.previousInteractionId
                     )
                 }
@@ -2930,10 +2949,20 @@ class UIStudioViewModel {
     /**
      * 自动检测并执行大模型调用的全量系统工具（MCP + 内置通用标配工具）
      */
-    private suspend fun executeDetectedAiTools(rawResponseJson: String, responseText: String): List<ChatToolCallRecord> {
+    private suspend fun executeDetectedAiTools(
+        rawResponseJson: String,
+        responseText: String,
+        detectedFunctionCalls: List<GeminiFunctionCallRecord> = emptyList()
+    ): List<ChatToolCallRecord> {
         val records = mutableListOf<ChatToolCallRecord>()
-        val detected = toolDispatcher.extractFunctionCalls(rawResponseJson, responseText)
-        for ((name, args) in detected) {
+        val detected = if (detectedFunctionCalls.isNotEmpty()) {
+            detectedFunctionCalls
+        } else {
+            toolDispatcher.extractFunctionCallRecords(rawResponseJson, responseText)
+        }
+        for (fc in detected) {
+            val name = fc.name
+            val args = runCatching { jsonHelper.parseToJsonElement(fc.argsJson).jsonObject }.getOrElse { buildJsonObject {} }
             // 自动注入当前 UI Studio 工作区的工程与视图上下文（兜底纠偏模型可能缺省或虚构的工程名）
             val enrichedArgs = buildJsonObject {
                 args.forEach { (k, v) -> put(k, v) }
@@ -2959,7 +2988,8 @@ class UIStudioViewModel {
                 toolName = name,
                 arguments = enrichedArgs,
                 result = toolResult,
-                durationMs = dur
+                durationMs = dur,
+                callId = fc.callId
             )
             records.add(record)
         }
@@ -3442,7 +3472,7 @@ class UIStudioViewModel {
                 val executedToolRecords = if (result.isSuccess) {
                     state = state.copy(streamingAiThought = "🛠️ 正在执行系统工具 [generate_image] 生成并落盘素材...")
                     try {
-                        executeDetectedAiTools(result.rawResponseJson, result.text)
+                        executeDetectedAiTools(result.rawResponseJson, result.text, result.functionCalls)
                     } finally {
                         state = state.copy(streamingAiThought = "")
                     }

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Screenshot
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +45,9 @@ import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
 import org.gemini.ui.forge.model.chat.ThinkingLevel
 import org.gemini.ui.forge.model.chat.MentionCategory
+import org.gemini.ui.forge.ui.component.AppMenu
+import org.gemini.ui.forge.ui.component.AppMenuItemRow
+import org.gemini.ui.forge.ui.component.AppMenuTier
 import org.gemini.ui.forge.model.chat.MentionItem
 import org.gemini.ui.forge.model.chat.MentionPayload
 import org.gemini.ui.forge.data.isFileExistsInternal
@@ -762,12 +767,16 @@ fun CommonChatInputBar(
                                         .tip("切换快照模式"),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
-                                DropdownMenu(
+                                AppMenu(
                                     expanded = isSnapshotMenuExpanded,
-                                    onDismissRequest = { isSnapshotMenuExpanded = false }
+                                    onDismissRequest = { isSnapshotMenuExpanded = false },
+                                    tier = AppMenuTier.COMPACT,
+                                    title = "画布快照模式"
                                 ) {
-                                    DropdownMenuItem(
-                                        text = { Text("纯净整页合成 (100% 原始分辨率)") },
+                                    AppMenuItemRow(
+                                        title = "纯净整页合成",
+                                        subtitle = "100% 原始分辨率 · 无辅助线",
+                                        icon = Icons.Default.Screenshot,
                                         onClick = {
                                             isSnapshotMenuExpanded = false
                                             onCaptureCanvasSnapshotRequested(CanvasSnapshotMode.OFFSCREEN_COMPOSITE) { newAttach ->
@@ -775,8 +784,10 @@ fun CommonChatInputBar(
                                             }
                                         }
                                     )
-                                    DropdownMenuItem(
-                                        text = { Text("当前视口截图 (所见即所得)") },
+                                    AppMenuItemRow(
+                                        title = "当前视口截图",
+                                        subtitle = "所见即所得 · 包含缩放视口",
+                                        icon = Icons.Default.PhotoCamera,
                                         onClick = {
                                             isSnapshotMenuExpanded = false
                                             onCaptureCanvasSnapshotRequested(CanvasSnapshotMode.VIEWPORT_CLIP) { newAttach ->
@@ -891,61 +902,25 @@ fun CommonChatInputBar(
                             }
 
                             val flavorBtnWidthDp = with(LocalDensity.current) { flavorBtnWidthPx.toDp() }
-                            DropdownMenu(
+                            AppMenu(
                                 expanded = isFlavorMenuExpanded,
                                 onDismissRequest = { isFlavorMenuExpanded = false },
-                                offset = DpOffset(0.dp, (-8).dp),
-                                modifier = Modifier
-                                    .widthIn(min = maxOf(flavorBtnWidthDp, 240.dp), max = adaptiveMenuWidth)
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .border(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                                        org.gemini.ui.forge.ui.theme.AppShapes.medium
-                                    )
+                                anchorWidth = flavorBtnWidthDp,
+                                tier = AppMenuTier.COMPACT,
+                                title = "API 通信协议"
                             ) {
                                 config.availableApiFlavors.forEach { flavor ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column(
-                                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                                            ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    modifier = Modifier.fillMaxWidth()
-                                                ) {
-                                                    Text(
-                                                        text = when (flavor) {
-                                                            ApiFlavor.INTERACTIONS -> "⚡ Interactions API"
-                                                            ApiFlavor.GENERATE_CONTENT -> "⚡ generateContent API"
-                                                        },
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        fontWeight = if (flavor == selectedApiFlavor) FontWeight.Bold else FontWeight.Medium,
-                                                        color = if (flavor == selectedApiFlavor) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                                        maxLines = 1
-                                                    )
-                                                    if (flavor == selectedApiFlavor) {
-                                                        Icon(
-                                                            Icons.Default.Check,
-                                                            contentDescription = null,
-                                                            modifier = Modifier.size(14.dp),
-                                                            tint = MaterialTheme.colorScheme.primary
-                                                        )
-                                                    }
-                                                }
-                                                Text(
-                                                    text = when (flavor) {
-                                                        ApiFlavor.INTERACTIONS -> "新一代交互协议 · 链式上下文与高级管道"
-                                                        ApiFlavor.GENERATE_CONTENT -> "官方标准生成协议 · 经典流式响应"
-                                                    },
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                                                    maxLines = 1
-                                                )
-                                            }
+                                    AppMenuItemRow(
+                                        title = when (flavor) {
+                                            ApiFlavor.INTERACTIONS -> "Interactions API"
+                                            ApiFlavor.GENERATE_CONTENT -> "generateContent API"
                                         },
+                                        subtitle = when (flavor) {
+                                            ApiFlavor.INTERACTIONS -> "新一代交互协议 · 链式上下文与高级管道"
+                                            ApiFlavor.GENERATE_CONTENT -> "官方标准生成协议 · 经典流式响应"
+                                        },
+                                        icon = Icons.Default.Bolt,
+                                        isSelected = (flavor == selectedApiFlavor),
                                         onClick = {
                                             onApiFlavorSelected(flavor)
                                             isFlavorMenuExpanded = false

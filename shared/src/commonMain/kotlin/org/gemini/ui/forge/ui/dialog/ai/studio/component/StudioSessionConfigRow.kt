@@ -31,6 +31,9 @@ import org.gemini.ui.forge.model.StudioModelResolver
 import org.gemini.ui.forge.model.chat.ThinkingLevel
 import org.gemini.ui.forge.ui.component.chat.CommonThinkingLevelSelector
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.component.AppMenu
+import org.gemini.ui.forge.ui.component.AppMenuSectionHeader
+import org.gemini.ui.forge.ui.component.AppMenuTier
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -92,96 +95,35 @@ fun StudioSessionConfigRow(
             }
 
             // 卡片化双分组下拉菜单（自适应内容，限制最大宽与最大高）
-            DropdownMenu(
+            AppMenu(
                 expanded = isModelMenuExpanded,
                 onDismissRequest = { isModelMenuExpanded = false },
-                offset = DpOffset(0.dp, (-8).dp),
-                properties = PopupProperties(focusable = true),
-                modifier = Modifier
-                    .widthIn(min = 280.dp, max = maxMenuWidth)
-                    .heightIn(max = maxMenuHeight ?: 520.dp)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), AppShapes.medium)
+                tier = AppMenuTier.WIDE,
+                title = "选择生图 / 多模态大模型",
+                totalCount = studioModels.size
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(spacing.small),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    // 菜单顶部标题行
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 6.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "🤖 选择生图 / 多模态大模型",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.Bold
+                ModelStudioGroup.entries.forEach { group ->
+                    val groupModels = studioModels.filter { it.group == group }
+                    if (groupModels.isNotEmpty()) {
+                        AppMenuSectionHeader(
+                            title = group.title,
+                            icon = group.icon,
+                            iconTint = group.brandColor
                         )
-                        Surface(
-                            shape = AppShapes.small,
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                        ) {
-                            Text(
-                                text = "共 ${studioModels.size} 个模型",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+
+                        groupModels.forEach { meta ->
+                            val isSelected = meta.model == selectedModel
+                            ModelMenuItemCard(
+                                meta = meta,
+                                isSelected = isSelected,
+                                onClick = {
+                                    onModelSelected(meta.model)
+                                    isModelMenuExpanded = false
+                                }
                             )
                         }
-                    }
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                    )
-
-                    // 按体系双分组动态渲染
-                    ModelStudioGroup.entries.forEach { group ->
-                        val groupModels = studioModels.filter { it.group == group }
-                        if (groupModels.isNotEmpty()) {
-                            // 分组标题
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = group.icon,
-                                    contentDescription = null,
-                                    tint = group.brandColor,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = group.title,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = group.brandColor
-                                )
-                            }
-
-                            // 组内各模型卡片条目
-                            groupModels.forEach { meta ->
-                                val isSelected = meta.model == selectedModel
-                                ModelMenuItemCard(
-                                    meta = meta,
-                                    isSelected = isSelected,
-                                    onClick = {
-                                        onModelSelected(meta.model)
-                                        isModelMenuExpanded = false
-                                    }
-                                )
-                            }
-
-                            Spacer(Modifier.height(4.dp))
-                        }
+                        Spacer(Modifier.height(4.dp))
                     }
                 }
             }

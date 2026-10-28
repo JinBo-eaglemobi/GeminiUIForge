@@ -26,6 +26,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
 import org.gemini.ui.forge.manager.MattingPreset
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.component.AppMenu
+import org.gemini.ui.forge.ui.component.AppMenuSectionHeader
+import org.gemini.ui.forge.ui.component.AppMenuTier
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -95,67 +98,35 @@ fun StudioPresetDropdownMenu(
             )
         }
 
-        DropdownMenu(
+        AppMenu(
             expanded = isExpanded,
             onDismissRequest = { isExpanded = false },
-            offset = DpOffset(0.dp, (-8).dp),
-            properties = PopupProperties(focusable = true),
-            modifier = Modifier
-                .widthIn(min = 380.dp, max = maxMenuWidth)
-                .heightIn(max = maxMenuHeight ?: 520.dp)
-                .background(MaterialTheme.colorScheme.surface)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), AppShapes.medium)
+            tier = AppMenuTier.WIDE,
+            title = "场景提示词预设",
+            totalCount = presets.size
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(spacing.small),
-                verticalArrangement = Arrangement.spacedBy(spacing.small)
-            ) {
-                // 3 大分类分别渲染
-                PresetCategoryGroup.entries.forEach { group ->
-                    val groupPresets = presets.filter { group.filterPredicate(it.id) }
-                    if (groupPresets.isNotEmpty()) {
-                        // 分类标题行
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = group.icon,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = group.title,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+            PresetCategoryGroup.entries.forEach { group ->
+                val groupPresets = presets.filter { group.filterPredicate(it.id) }
+                if (groupPresets.isNotEmpty()) {
+                    AppMenuSectionHeader(
+                        title = group.title,
+                        icon = group.icon,
+                        iconTint = MaterialTheme.colorScheme.primary
+                    )
 
-                        // 该分类下的条目
-                        groupPresets.forEach { preset ->
-                            val isSelected = preset.id == selectedPresetId
-                            SingleLinePresetItem(
-                                preset = preset,
-                                isSelected = isSelected,
-                                onClick = {
-                                    onPresetSelected(preset)
-                                    isExpanded = false
-                                }
-                            )
-                        }
-
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 4.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    groupPresets.forEach { preset ->
+                        val isSelected = preset.id == selectedPresetId
+                        SingleLinePresetItem(
+                            preset = preset,
+                            isSelected = isSelected,
+                            onClick = {
+                                onPresetSelected(preset)
+                                isExpanded = false
+                            }
                         )
                     }
+
+                    Spacer(Modifier.height(4.dp))
                 }
             }
         }

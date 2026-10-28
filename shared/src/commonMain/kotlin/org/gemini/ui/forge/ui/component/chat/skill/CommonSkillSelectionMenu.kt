@@ -18,6 +18,8 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import org.gemini.ui.forge.ui.component.AppMenu
+import org.gemini.ui.forge.ui.component.AppMenuTier
 import org.gemini.ui.forge.ui.component.tip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,32 +62,18 @@ fun CommonSkillSelectionMenu(
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
-    val effectiveMinWidth = maxOf(380.dp, minMenuWidth)
     val colorScheme = MaterialTheme.colorScheme
-
     val activeCount = skills.count { it.id in enabledSkillIds }
-
-    DropdownMenu(
+    AppMenu(
         expanded = expanded,
+        items = skills,
         onDismissRequest = onDismissRequest,
+        onItemSelected = { },
+        tier = AppMenuTier.WIDE,
         offset = offset,
-        properties = PopupProperties(focusable = true),
-        modifier = modifier
-            .widthIn(min = effectiveMinWidth, max = maxMenuWidth)
-            .heightIn(max = maxMenuHeight)
-            .background(colorScheme.surface)
-            .border(
-                1.dp,
-                colorScheme.outlineVariant.copy(alpha = 0.6f),
-                AppShapes.medium
-            )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(spacing.small),
-            verticalArrangement = Arrangement.spacedBy(spacing.small)
-        ) {
+        maxMenuHeight = maxMenuHeight,
+        modifier = modifier,
+        headerContent = {
             // 1. 顶部 Header：技能列表信息与总览徽章
             Row(
                 modifier = Modifier
@@ -160,46 +148,38 @@ fun CommonSkillSelectionMenu(
 
             HorizontalDivider(
                 color = colorScheme.outlineVariant.copy(alpha = 0.4f),
-                modifier = Modifier.padding(horizontal = spacing.extraSmall)
+                modifier = Modifier.padding(horizontal = spacing.extraSmall, vertical = 4.dp)
             )
-
-            // 2. 纯技能列表内容区（文字 100% 取自技能文件）
-            if (skills.isEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = spacing.large),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = "暂无已注册技能",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "技能配置文件位于 skills/ 目录",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                }
-            } else {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(spacing.small)
-                ) {
-                    skills.forEach { skill ->
-                        val isSkillEnabled = skill.id in enabledSkillIds
-                        SkillItemCard(
-                            skill = skill,
-                            isEnabled = isSkillEnabled,
-                            onToggle = { isChecked ->
-                                onToggleSkill(skill.id, isChecked)
-                            }
-                        )
-                    }
-                }
+        },
+        emptyContent = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = spacing.large),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "暂无已注册技能",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "技能配置文件位于 skills/ 目录",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
             }
+        },
+        itemContent = { skill ->
+            val isSkillEnabled = skill.id in enabledSkillIds
+            SkillItemCard(
+                skill = skill,
+                isEnabled = isSkillEnabled,
+                onToggle = { isChecked ->
+                    onToggleSkill(skill.id, isChecked)
+                }
+            )
         }
-    }
+    )
 }

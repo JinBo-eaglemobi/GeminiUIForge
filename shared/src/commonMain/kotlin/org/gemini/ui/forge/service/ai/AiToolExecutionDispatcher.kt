@@ -14,6 +14,166 @@ class AiToolExecutionDispatcher {
 
     companion object {
         private const val TAG = "AiToolExecutionDispatcher"
+
+        /**
+         * 从原始响应 JSON 或正文文本中提取所有由大模型触发的结构化函数调用记录（带 callId / step.id 支持）
+         */
+        fun extractFunctionCallRecords(rawJson: String, responseText: String): List<GeminiFunctionCallRecord> {
+            val calls = mutableListOf<GeminiFunctionCallRecord>()
+
+            if (rawJson.isNotBlank()) {
+                try {
+                    val element = looseJson.parseToJsonElement(rawJson)
+
+                    // 0. 优先精准提取 Google 官方 Interactions API: interactions.steps 结构
+                    if (element is JsonObject) {
+                        val steps = element["steps"]?.jsonArray
+                        if (steps != null) {
+                            for (stepItem in steps) {
+                                if (stepItem is JsonObject) {
+                                    val stepId = stepItem["id"]?.jsonPrimitive?.contentOrNull
+                                    val callObj = stepItem["call"]?.jsonObject
+                                        ?: stepItem["tool_call"]?.jsonObject
+                                        ?: stepItem["function_call"]?.jsonObject
+                                    if (callObj != null) {
+                                        val name = callObj["name"]?.jsonPrimitive?.contentOrNull
+                                        val args = callObj["arguments"]?.jsonObject
+                                            ?: callObj["args"]?.jsonObject
+                                            ?: callObj["parameters"]?.jsonObject
+                                            ?: buildJsonObject {}
+                                        if (!name.isNullOrBlank()) {
+                                            calls.add(GeminiFunctionCallRecord(name, args.toString(), stepId))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 递归提取其余标准/兼容结构
+                    findAllFunctionCallRecordsRecursive(element, calls)
+                } catch (e: Exception) {
+                    AppLogger.w(TAG, "解析原始流 JSON 工具调用异常: ${e.message}")
+                }
+            }
+
+            // 若原始 JSON 未匹配到工具调用，则尝试从响应正文 Markdown 代码块或伪 JSON 中提取
+            if (calls.isEmpty() && responseText.isNotBlank()) {
+                val toolPatterns = listOf(
+                    """```json\s*(\{[\s\S]*?"(?:tool|name|function)"[\s\S]*?\})\s*```""".toRegex(RegexOption.IGNORE_CASE),
+                    """(\{\s*"(?:tool|name|function)"\s*:\s*"[^"]+"\s*,\s*"(?:parameters|arguments|args)"\s*:\s*\{[\s\S]*?\}\s*\})""".toRegex(RegexOption.IGNORE_CASE)
+                )
+
+                for (pattern in toolPatterns) {
+                    val matches = pattern.findAll(responseText)
+                    for (match in matches) {
+                        try {
+                            val snippet = match.groupValues[1]
+                            val parsed = looseJson.parseToJsonElement(snippet).jsonObject
+                            val name = parsed["name"]?.jsonPrimitive?.contentOrNull
+                                ?: parsed["tool"]?.jsonPrimitive?.contentOrNull
+                                ?: parsed["function"]?.jsonPrimitive?.contentOrNull
+                            val args = parsed["parameters"]?.jsonObject
+                                ?: parsed["arguments"]?.jsonObject
+                                ?: parsed["args"]?.jsonObject
+                                ?: buildJsonObject {}
+                            val callId = parsed["id"]?.jsonPrimitive?.contentOrNull
+                                ?: parsed["call_id"]?.jsonPrimitive?.contentOrNull
+
+                            if (!name.isNullOrBlank() && calls.none { it.name == name && it.argsJson == args.toString() }) {
+                                calls.add(GeminiFunctionCallRecord(name, args.toString(), callId))
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    if (calls.isNotEmpty()) break
+                }
+
+                // 兜底正则提取 name 与 arguments
+                if (calls.isEmpty()) {
+                    val fallbackRegex = """"(?:name|tool|function)"\s*:\s*"([^"]+)"""".toRegex()
+                    val match = fallbackRegex.find(responseText)
+                    if (match != null) {
+                        val name = match.groupValues[1]
+                        calls.add(GeminiFunctionCallRecord(name, "{}", null))
+                    }
+                }
+            }
+
+            return calls
+        }
+
+        /**
+         * 从原始响应 JSON 或正文文本中提取所有由大模型触发的工具调用
+         */
+        fun extractFunctionCalls(rawJson: String, responseText: String): List<Pair<String, JsonObject>> {
+            return extractFunctionCallRecords(rawJson, responseText).map { rec ->
+                val parsedArgs = try {
+                    if (rec.argsJson.isNotBlank()) looseJson.parseToJsonElement(rec.argsJson).jsonObject else buildJsonObject {}
+                } catch (_: Exception) {
+                    buildJsonObject {}
+                }
+                rec.name to parsedArgs
+            }
+        }
+
+        private fun findAllFunctionCallRecordsRecursive(element: JsonElement, outList: MutableList<GeminiFunctionCallRecord>) {
+            when (element) {
+                is JsonObject -> {
+                    val callId = element["id"]?.jsonPrimitive?.contentOrNull
+                        ?: element["call_id"]?.jsonPrimitive?.contentOrNull
+
+                    // 1. Google 官方 Interactions API: step/item 本身即为 function_call 或 tool_call
+                    val typeStr = element["type"]?.jsonPrimitive?.contentOrNull
+                    if (typeStr == "function_call" || typeStr == "tool_call") {
+                        val name = element["name"]?.jsonPrimitive?.contentOrNull
+                        val args = element["arguments"]?.jsonObject
+                            ?: element["args"]?.jsonObject
+                            ?: element["parameters"]?.jsonObject
+                            ?: buildJsonObject {}
+                        if (!name.isNullOrBlank()) {
+                            outList.add(GeminiFunctionCallRecord(name, args.toString(), callId))
+                        }
+                    }
+
+                    // 2. 匹配常规 generateContent 中的 functionCall: { name, args }
+                    val fc = element["functionCall"]?.jsonObject ?: element["function_call"]?.jsonObject
+                    if (fc != null) {
+                        val name = fc["name"]?.jsonPrimitive?.contentOrNull
+                        val args = fc["args"]?.jsonObject
+                            ?: fc["arguments"]?.jsonObject
+                            ?: buildJsonObject {}
+                        val fcCallId = fc["id"]?.jsonPrimitive?.contentOrNull ?: fc["call_id"]?.jsonPrimitive?.contentOrNull ?: callId
+                        if (!name.isNullOrBlank()) {
+                            outList.add(GeminiFunctionCallRecord(name, args.toString(), fcCallId))
+                        }
+                    }
+
+                    // 3. 匹配常规 tool_call: { name, arguments } 或 step 中的 call
+                    val toolCall = element["tool_call"]?.jsonObject ?: element["call"]?.jsonObject
+                    if (toolCall != null) {
+                        val name = toolCall["name"]?.jsonPrimitive?.contentOrNull
+                        val args = toolCall["arguments"]?.jsonObject
+                            ?: toolCall["args"]?.jsonObject
+                            ?: buildJsonObject {}
+                        val tcCallId = toolCall["id"]?.jsonPrimitive?.contentOrNull ?: toolCall["call_id"]?.jsonPrimitive?.contentOrNull ?: callId
+                        if (!name.isNullOrBlank()) {
+                            outList.add(GeminiFunctionCallRecord(name, args.toString(), tcCallId))
+                        }
+                    }
+
+                    // 递归子节点
+                    for ((_, v) in element) {
+                        findAllFunctionCallRecordsRecursive(v, outList)
+                    }
+                }
+                is JsonArray -> {
+                    for (item in element) {
+                        findAllFunctionCallRecordsRecursive(item, outList)
+                    }
+                }
+                else -> {}
+            }
+        }
     }
 
     /**
@@ -60,7 +220,8 @@ class AiToolExecutionDispatcher {
         toolName: String,
         arguments: JsonObject,
         result: McpToolResult,
-        durationMs: Long
+        durationMs: Long,
+        callId: String? = null
     ): ChatToolCallRecord {
         val rawText = result.content.filterIsInstance<McpContent.Text>().joinToString("\n") { it.text }
         val summary = when {
@@ -87,156 +248,17 @@ class AiToolExecutionDispatcher {
             resultSummary = summary,
             isSuccess = !result.isError,
             durationMs = durationMs,
-            rawOutput = rawText.ifBlank { if (result.isError) "{\"error\":\"执行失败\"}" else "{}" }
+            rawOutput = rawText.ifBlank { if (result.isError) "{\"error\":\"执行失败\"}" else "{}" },
+            callId = callId
         )
     }
 
     /**
-     * 从原始响应 JSON 或正文文本中提取所有由大模型触发的工具调用
+     * 实例代理转发至 companion object
      */
-    fun extractFunctionCalls(rawJson: String, responseText: String): List<Pair<String, JsonObject>> {
-        val calls = mutableListOf<Pair<String, JsonObject>>()
+    fun extractFunctionCallRecords(rawJson: String, responseText: String): List<GeminiFunctionCallRecord> =
+        Companion.extractFunctionCallRecords(rawJson, responseText)
 
-        // 1. 优先从官方原始响应 JSON 查找
-        try {
-            if (rawJson.isNotBlank()) {
-                val element = looseJson.parseToJsonElement(rawJson)
-
-                // 针对 Google Interactions API 流式事件数组做高保真 step/delta 参数聚合
-                if (element is JsonArray) {
-                    val stepNamesByIndex = mutableMapOf<Int, String>()
-                    val stepArgsByIndex = mutableMapOf<Int, StringBuilder>()
-
-                    for (item in element) {
-                        val obj = item as? JsonObject ?: continue
-                        val index = obj["index"]?.jsonPrimitive?.intOrNull
-                        val step = obj["step"]?.let { it as? JsonObject }
-                        if (index != null && step != null) {
-                            val typeStr = step["type"]?.jsonPrimitive?.contentOrNull
-                            if (typeStr == "function_call" || typeStr == "tool_call") {
-                                val name = step["name"]?.jsonPrimitive?.contentOrNull
-                                if (!name.isNullOrBlank()) {
-                                    stepNamesByIndex[index] = name
-                                    val initialArgs = step["arguments"]?.let { it as? JsonObject }
-                                    if (initialArgs != null && initialArgs.isNotEmpty()) {
-                                        stepArgsByIndex[index] = StringBuilder(initialArgs.toString())
-                                    }
-                                }
-                            }
-                        }
-                        val delta = obj["delta"]?.let { it as? JsonObject }
-                        if (index != null && delta != null) {
-                            val deltaArgs = delta["arguments"]?.jsonPrimitive?.contentOrNull
-                            if (!deltaArgs.isNullOrBlank()) {
-                                stepArgsByIndex.getOrPut(index) { StringBuilder() }.append(deltaArgs)
-                            }
-                        }
-                    }
-
-                    if (stepNamesByIndex.isNotEmpty()) {
-                        for ((idx, name) in stepNamesByIndex) {
-                            val argsStr = stepArgsByIndex[idx]?.toString() ?: ""
-                            val parsedArgs = try {
-                                if (argsStr.isNotBlank()) {
-                                    looseJson.parseToJsonElement(argsStr).jsonObject
-                                } else {
-                                    buildJsonObject {}
-                                }
-                            } catch (_: Exception) {
-                                buildJsonObject {}
-                            }
-                            calls.add(name to parsedArgs)
-                        }
-                    }
-                }
-
-                // 递归兜底遍历其它格式（如常规 generateContent 中的 functionCall）
-                if (calls.isEmpty()) {
-                    findAllFunctionCallsRecursive(element, calls)
-                }
-            }
-        } catch (e: Exception) {
-            AppLogger.d(TAG, "从 rawJson 提取函数调用忽略异常: ${e.message}")
-        }
-
-        // 2. 若未从 JSON 中解析出工具调用，尝试从正文 Markdown 代码块中捕获
-        if (calls.isEmpty() && responseText.isNotBlank()) {
-            val codeBlockRegex = Regex("```(?:json)?\\s*([\\s\\S]*?)```", RegexOption.IGNORE_CASE)
-            for (match in codeBlockRegex.findAll(responseText)) {
-                val snippet = match.groupValues[1].trim()
-                if (snippet.startsWith("{")) {
-                    try {
-                        val parsed = looseJson.parseToJsonElement(snippet).jsonObject
-                        val name = parsed["tool_name"]?.jsonPrimitive?.contentOrNull
-                            ?: parsed["name"]?.jsonPrimitive?.contentOrNull
-                            ?: parsed["function"]?.jsonPrimitive?.contentOrNull
-                        val args = parsed["arguments"]?.jsonObject
-                            ?: parsed["parameters"]?.jsonObject
-                            ?: parsed["args"]?.jsonObject
-                            ?: parsed
-
-                        if (!name.isNullOrBlank() && UniversalAiToolRegistry.findTool(name) != null) {
-                            calls.add(name to args)
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
-        }
-
-        return calls
-    }
-
-    private fun findAllFunctionCallsRecursive(element: JsonElement, outList: MutableList<Pair<String, JsonObject>>) {
-        when (element) {
-            is JsonObject -> {
-                // 1. Google 官方 Interactions API: step/item 本身即为 function_call 或 tool_call
-                val typeStr = element["type"]?.jsonPrimitive?.contentOrNull
-                if (typeStr == "function_call" || typeStr == "tool_call") {
-                    val name = element["name"]?.jsonPrimitive?.contentOrNull
-                    val args = element["arguments"]?.jsonObject
-                        ?: element["args"]?.jsonObject
-                        ?: element["parameters"]?.jsonObject
-                        ?: buildJsonObject {}
-                    if (!name.isNullOrBlank()) {
-                        outList.add(name to args)
-                    }
-                }
-
-                // 2. 匹配常规 generateContent 中的 functionCall: { name, args }
-                val fc = element["functionCall"]?.jsonObject ?: element["function_call"]?.jsonObject
-                if (fc != null) {
-                    val name = fc["name"]?.jsonPrimitive?.contentOrNull
-                    val args = fc["args"]?.jsonObject
-                        ?: fc["arguments"]?.jsonObject
-                        ?: buildJsonObject {}
-                    if (!name.isNullOrBlank()) {
-                        outList.add(name to args)
-                    }
-                }
-
-                // 3. 匹配常规 tool_call: { name, arguments } 或 step 中的 call
-                val toolCall = element["tool_call"]?.jsonObject ?: element["call"]?.jsonObject
-                if (toolCall != null) {
-                    val name = toolCall["name"]?.jsonPrimitive?.contentOrNull
-                    val args = toolCall["arguments"]?.jsonObject
-                        ?: toolCall["args"]?.jsonObject
-                        ?: buildJsonObject {}
-                    if (!name.isNullOrBlank()) {
-                        outList.add(name to args)
-                    }
-                }
-
-                // 递归子节点
-                for ((_, v) in element) {
-                    findAllFunctionCallsRecursive(v, outList)
-                }
-            }
-            is JsonArray -> {
-                for (item in element) {
-                    findAllFunctionCallsRecursive(item, outList)
-                }
-            }
-            else -> {}
-        }
-    }
+    fun extractFunctionCalls(rawJson: String, responseText: String): List<Pair<String, JsonObject>> =
+        Companion.extractFunctionCalls(rawJson, responseText)
 }

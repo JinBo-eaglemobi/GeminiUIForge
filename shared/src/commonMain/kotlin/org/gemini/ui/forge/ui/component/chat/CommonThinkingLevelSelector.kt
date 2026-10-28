@@ -24,6 +24,8 @@ import geminiuiforge.composeapp.generated.resources.chat_thinking_level_menu_tit
 import geminiuiforge.composeapp.generated.resources.chat_thinking_level_tip
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.chat.ThinkingLevel
+import org.gemini.ui.forge.ui.component.AppMenu
+import org.gemini.ui.forge.ui.component.AppMenuTier
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.jetbrains.compose.resources.stringResource
@@ -116,67 +118,29 @@ fun CommonThinkingLevelSelector(
             }
         }
 
-        val effectiveMaxWidth = minOf(380.dp, if (maxMenuWidth > 0.dp) maxMenuWidth else 380.dp)
-
-        DropdownMenu(
+        AppMenu(
             expanded = isExpanded,
+            items = ThinkingLevel.entries,
             onDismissRequest = { isExpanded = false },
+            onItemSelected = { level ->
+                onLevelSelected(level)
+                isExpanded = false
+            },
+            tier = AppMenuTier.COMPACT,
+            anchorWidth = anchorWidthDp,
+            title = stringResource(Res.string.chat_thinking_level_menu_title),
             offset = offset,
-            properties = PopupProperties(focusable = true),
-            modifier = Modifier
-                .widthIn(min = effectiveMinWidth, max = maxOf(effectiveMinWidth, effectiveMaxWidth))
-                .heightIn(max = maxMenuHeight)
-                .background(MaterialTheme.colorScheme.surface)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), MaterialTheme.shapes.medium)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(spacing.small)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = spacing.extraSmall, vertical = spacing.extraSmall),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(Res.string.chat_thinking_level_menu_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Surface(
-                        shape = MaterialTheme.shapes.extraSmall,
-                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
-                    ) {
-                        Text(
-                            text = "当前: ${currentLevel.shortLabel}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+            maxMenuHeight = maxMenuHeight,
+            itemContent = { level ->
+                CommonThinkingLevelCard(
+                    level = level,
+                    isSelected = level == currentLevel,
+                    onSelect = {
+                        onLevelSelected(level)
+                        isExpanded = false
                     }
-                }
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = spacing.extraSmall),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                 )
-
-                ThinkingLevel.entries.forEach { level ->
-                    CommonThinkingLevelCard(
-                        level = level,
-                        isSelected = level == currentLevel,
-                        onSelect = {
-                            onLevelSelected(level)
-                            isExpanded = false
-                        }
-                    )
-                }
             }
-        }
+        )
     }
 }

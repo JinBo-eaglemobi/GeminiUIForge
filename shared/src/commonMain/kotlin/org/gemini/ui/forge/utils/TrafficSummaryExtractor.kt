@@ -39,7 +39,33 @@ object TrafficSummaryExtractor {
     }
 
     private fun extractRequestSummary(root: JsonObject): String {
-        // 1. 检查 contents 数组
+        // 1. 检查 Interactions 规范的 input 数组
+        val input = root["input"]?.jsonArray
+        if (input != null && input.isNotEmpty()) {
+            val funcResults = mutableListOf<String>()
+            var userText = ""
+            for (item in input) {
+                if (item !is JsonObject) continue
+                val type = item["type"]?.jsonPrimitive?.content
+                if (type == "function_result") {
+                    val name = item["name"]?.jsonPrimitive?.content ?: "未知工具"
+                    funcResults.add(name)
+                } else if (type == "text") {
+                    val txt = item["text"]?.jsonPrimitive?.content
+                    if (!txt.isNullOrBlank()) {
+                        userText += txt
+                    }
+                }
+            }
+            if (funcResults.isNotEmpty()) {
+                return "回传工具执行结果: ${funcResults.joinToString(", ")}"
+            }
+            if (userText.isNotBlank()) {
+                return "用户指令: ${cleanSummaryText(userText)}"
+            }
+        }
+
+        // 2. 检查 contents 数组 (generateContent 规范)
         val contents = root["contents"]?.jsonArray
         if (contents != null && contents.isNotEmpty()) {
             val lastContent = contents.last().jsonObject
@@ -59,7 +85,7 @@ object TrafficSummaryExtractor {
                 }
             }
         }
-        // 2. 检查 prompt / message 顶层
+        // 3. 检查 prompt / message 顶层
         val directText = root["prompt"]?.jsonPrimitive?.content
             ?: root["message"]?.jsonPrimitive?.content
         if (!directText.isNullOrBlank()) {
@@ -69,7 +95,34 @@ object TrafficSummaryExtractor {
     }
 
     private fun extractResponseSummary(root: JsonObject): String {
-        // 1. 检查 candidates 数组
+        // 1. 检查 Interactions 规范的 outputs 数组
+        val interactionObj = root["interaction"]?.jsonObject
+        val outputs = (interactionObj?.get("outputs") ?: root["outputs"])?.jsonArray
+        if (outputs != null && outputs.isNotEmpty()) {
+            val funcCalls = mutableListOf<String>()
+            var responseText = ""
+            for (out in outputs) {
+                if (out !is JsonObject) continue
+                val type = out["type"]?.jsonPrimitive?.content
+                if (type == "function_call") {
+                    val name = out["name"]?.jsonPrimitive?.content ?: "未知工具"
+                    funcCalls.add(name)
+                } else if (type == "text") {
+                    val txt = out["text"]?.jsonPrimitive?.content
+                    if (!txt.isNullOrBlank()) {
+                        responseText += txt
+                    }
+                }
+            }
+            if (funcCalls.isNotEmpty()) {
+                return "模型请求调用工具: ${funcCalls.joinToString(", ")}"
+            }
+            if (responseText.isNotBlank()) {
+                return "模型回复: ${cleanSummaryText(responseText)}"
+            }
+        }
+
+        // 2. 检查 candidates 数组 (generateContent 规范)
         val candidates = root["candidates"]?.jsonArray
         if (candidates != null && candidates.isNotEmpty()) {
             val firstCandidate = candidates.first().jsonObject
@@ -98,7 +151,7 @@ object TrafficSummaryExtractor {
                 }
             }
         }
-        // 2. 检查顶层 text / message
+        // 3. 检查顶层 text / message
         val topText = root["text"]?.jsonPrimitive?.content
             ?: root["response"]?.jsonPrimitive?.content
         if (!topText.isNullOrBlank()) {
