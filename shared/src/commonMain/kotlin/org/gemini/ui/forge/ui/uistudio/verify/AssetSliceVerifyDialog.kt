@@ -148,11 +148,11 @@ fun AssetSliceVerifyDialog(
     var panOffset by remember { mutableStateOf(Offset(32f, 32f)) }
     var canvasViewportSize by remember { mutableStateOf(IntSize.Zero) }
 
-    // 首次进入预览自动执行一次智能微观吸附标记
-    var hasAutoSnapped by rememberSaveable(imagePath) { mutableStateOf(false) }
+    // 首次进入预览自动执行吸附按钮标记 (生命周期跟随弹窗，每次打开均重置)
+    var hasAutoTriggeredSnap by remember { mutableStateOf(false) }
 
-    // 核心智能吸附执行管道 (支持首次自动触发与用户手动点击)
-    fun executeSmartSnap(isInitialAuto: Boolean = false) {
+    // 触发一键智能吸附校准 (顶栏吸附按钮绑定的标准流程，快捷键: Alt+A 或自动调用)
+    fun triggerSmartSnap() {
         if (isSnapping || editableItems.isEmpty()) return
         val bytes = imageBytes ?: return
         val imgW = imageBitmap?.width?.toFloat() ?: 1280f
@@ -179,17 +179,8 @@ fun AssetSliceVerifyDialog(
 
             isSnapping = false
             autoPersistDraft()
-            if (isInitialAuto) {
-                Toast.show("首次预览已自动执行边缘微观吸附，已智能校准 $snappedCount 个图元", ToastType.SUCCESS)
-            } else {
-                Toast.show("边缘微观吸附完成，已智能校对 $snappedCount 个图元", ToastType.SUCCESS)
-            }
+            Toast.show("边缘微观吸附完成，已智能校对 $snappedCount 个图元", ToastType.SUCCESS)
         }
-    }
-
-    // 触发一键智能吸附校准 (快捷键: Alt+A 或顶栏按钮)
-    fun triggerSmartSnap() {
-        executeSmartSnap(isInitialAuto = false)
     }
 
     // 重置全部图元及视口坐标至初始状态 (快捷键: Ctrl+R)
@@ -225,11 +216,11 @@ fun AssetSliceVerifyDialog(
         isLoadingImage = false
     }
 
-    // 当原图与图元就绪时，首次进入预览自动执行一次智能吸附微观纠偏
-    LaunchedEffect(imageBytes, editableItems.size, hasAutoSnapped, isLoadingImage) {
-        if (imageBytes != null && editableItems.isNotEmpty() && !hasAutoSnapped && !isLoadingImage) {
-            hasAutoSnapped = true
-            executeSmartSnap(isInitialAuto = true)
+    // 当原图与图元就绪时，首次进入预览全自动调用吸附按钮流程执行一次
+    LaunchedEffect(imageBytes, isLoadingImage) {
+        if (imageBytes != null && !isLoadingImage && editableItems.isNotEmpty() && !hasAutoTriggeredSnap) {
+            hasAutoTriggeredSnap = true
+            triggerSmartSnap()
         }
     }
 

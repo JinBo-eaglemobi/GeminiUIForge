@@ -287,14 +287,22 @@ fun AssetSliceVerifyTopBar(
 
                 Button(
                     onClick = onConfirm,
-                    enabled = totalCount > 0,
+                    enabled = !isSnapping && totalCount > 0,
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                    modifier = Modifier.height(34.dp).tip("确认当前所有图元坐标并进入物理切片入库")
+                    modifier = Modifier.height(34.dp).tip(
+                        if (isSnapping) "正在智能吸附纠偏中，请稍候..." else "确认当前所有图元坐标并进入物理切片入库"
+                    )
                 ) {
-                    Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("确认切图并入库 ($totalCount)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    if (isSnapping) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(6.dp))
+                        Text("吸附校对中...", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    } else {
+                        Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("确认切图并入库 ($totalCount)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

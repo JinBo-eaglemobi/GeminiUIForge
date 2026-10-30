@@ -4385,6 +4385,8 @@ class UIStudioViewModel {
                 val imgHeight = baseImage.height
                 val srcBitmap = Bitmap.makeFromImage(baseImage).apply { setImmutable() }
 
+                AppLogger.i("UIStudioViewModel", "=== [SLICE_VERIFY] 确认切图开始: 首个图元[${items.firstOrNull()?.name}] bounds=${items.firstOrNull()?.bounds}, 大图分辨率=${imgWidth}x${imgHeight} ===")
+
                 val targetFolderId = state.selectedFolderId
                 val targetFolder = state.assetLibrary.folders.find { it.id == targetFolderId }
                 val folderSubDir = if (targetFolder != null) "${targetFolder.name.trim().replace(" ", "_")}/" else ""
@@ -4432,14 +4434,14 @@ class UIStudioViewModel {
                                     }
                                 }
 
-                                // 1. 调用 Skia 执行微秒级物理切片
+                                // 1. 调用 Skia 执行微秒级物理切片 (原图绝对物理像素 1:1 精准无损裁切)
                                 val sliceBytes = cropImage(
                                     srcBitmap = srcBitmap,
                                     imageWidth = imgWidth,
                                     imageHeight = imgHeight,
                                     bounds = item.bounds,
-                                    originalWidth = canvasW,
-                                    originalHeight = canvasH,
+                                    originalWidth = imgWidth.toFloat(),
+                                    originalHeight = imgHeight.toFloat(),
                                     isPng = true
                                 )
 
