@@ -19,6 +19,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
+import org.gemini.ui.forge.extend.onEnterConfirm
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
@@ -47,7 +48,9 @@ fun SelectAllOutlinedTextField(
     minLines: Int = 1,
     singleLine: Boolean = maxLines == 1,
     visualTransformation: VisualTransformation = VisualTransformation.None,
-    contentPadding: PaddingValues? = null
+    isError: Boolean = false,
+    contentPadding: PaddingValues? = null,
+    onEnterConfirm: (() -> Unit)? = null
 ) {
     // 维护带光标和选择状态的 TextFieldValue
     var textFieldValue by remember { mutableStateOf(TextFieldValue(text = value)) }
@@ -98,6 +101,9 @@ fun SelectAllOutlinedTextField(
                     }
                 }
                 isFocused = focusState.isFocused
+            }
+            .onEnterConfirm(enabled = onEnterConfirm != null) {
+                onEnterConfirm?.invoke()
             },
         enabled = enabled,
         readOnly = readOnly,
@@ -120,7 +126,7 @@ fun SelectAllOutlinedTextField(
                 trailingIcon = trailingIcon,
                 singleLine = singleLine,
                 enabled = enabled,
-                isError = false,
+                isError = isError,
                 interactionSource = interactionSource,
                 colors = colors,
                 // 自适应双端间距：紧凑模式保留 6dp 优雅呼吸感（对标 IDEA）；触控模式采用 12dp 大热区（绝不偏上）

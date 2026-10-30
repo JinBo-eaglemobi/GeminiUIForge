@@ -363,7 +363,11 @@ fun UIStudioScreen(
         if (state.isSlicingAssets) {
             AssetSlicingProgressOverlay(
                 progress = state.sliceProgress,
-                statusText = state.sliceStatusText
+                statusText = state.sliceStatusText,
+                stage = state.sliceCurrentStage,
+                taskItems = state.sliceTaskItems,
+                currentItemName = state.sliceCurrentItemName,
+                startTimeMillis = state.sliceStartTimeMillis
             )
         }
 
@@ -438,6 +442,7 @@ fun UIStudioScreen(
             ApplyLayoutConfirmDialog(
                 layoutResult = pendingLayout,
                 currentViewName = state.currentView?.nameStr ?: "当前视图",
+                existingViewNames = state.project?.studioPages?.map { it.nameStr } ?: emptyList(),
                 onDismiss = { viewModel.cancelApplyLayout() },
                 onConfirm = { replaceCurrent, customName ->
                     viewModel.confirmApplyLayout(replaceCurrent, customName)

@@ -648,6 +648,8 @@
     <string name="apply_layout_mode_new_desc">Keep existing views intact and create a brand new view page.</string>
     <string name="apply_layout_input_view_name">New View Name</string>
     <string name="apply_layout_input_view_name_placeholder">Enter new view name...</string>
+    <string name="apply_layout_input_view_name_placeholder_suggested">Enter new view name (e.g. %1$s)...</string>
+    <string name="apply_layout_error_duplicate_name">This view name already exists. Please choose a different name.</string>
     <string name="apply_layout_btn_confirm">Apply Layout</string>
     <string name="apply_layout_btn_cancel">Discard</string>
     <string name="apply_layout_toast_replace_success">View [%1$s] updated with AI layout</string>
@@ -662,6 +664,9 @@
     <string name="uistudio_import_folder">Import Folder</string>
     <string name="uistudio_import_sheet_slices">Import Sheet Slices</string>
     <string name="uistudio_drop_hint">Drop images or folders to import</string>
+    <string name="uistudio_refresh_assets">Refresh Assets</string>
+    <string name="uistudio_refresh_assets_tooltip">Refresh asset library (scan physical disk, prune missing and sync new)</string>
+    <string name="uistudio_refresh_assets_toast">Asset library refreshed: %1$d active (%2$d pruned, %3$d added)</string>
 
     <!-- Default Image Generation Model Preset & Routing -->
     <string name="settings_auto_switch_image_gen_model_title">Auto-switch Model on Image Intent</string>

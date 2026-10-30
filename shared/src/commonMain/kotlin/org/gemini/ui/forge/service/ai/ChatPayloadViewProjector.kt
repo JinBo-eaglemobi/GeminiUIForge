@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -62,11 +63,23 @@ object ChatPayloadViewProjector {
 
         // 优先拦截排版布局数据报文：提取纯净排版数据并使用标准 Markdown ```json 代码框包裹呈现
         if (rawPayload.contains("apply_view_layout") || (rawPayload.contains("assetFileName") && rawPayload.contains("viewName"))) {
-            val viewNameMatch = Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1) ?: "FootballSlotMain"
-            val descMatch = Regex("""(?:\\?"|")description(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
+            val argsObj = extractLayoutToolArgs(rawPayload)
+            val viewNameMatch = argsObj?.get("viewName")?.jsonPrimitive?.contentOrNull
+                ?: Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
+                ?: "FootballSlotMain"
+            val descMatch = argsObj?.get("description")?.jsonPrimitive?.contentOrNull
+                ?: Regex("""(?:\\?"|")description(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
                 ?: "已根据参考规范与素材库完成界面结构规划与图元排版。"
 
-            val cleanJson = extractCleanJsonString(rawPayload, viewNameMatch, descMatch)
+            val cleanJson = if (argsObj != null) {
+                try {
+                    jsonPrettyParser.encodeToString(argsObj)
+                } catch (_: Exception) {
+                    extractCleanJsonString(rawPayload, viewNameMatch, descMatch)
+                }
+            } else {
+                extractCleanJsonString(rawPayload, viewNameMatch, descMatch)
+            }
 
             val customMarkdown = buildString {
                 append("🛠️ **已完成界面排版规划方案: [$viewNameMatch]**\n\n")
@@ -228,12 +241,21 @@ object ChatPayloadViewProjector {
             return null
         }
 
-        val viewName = Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1) ?: "FootballSlotMain"
-        val desc = Regex("""(?:\\?"|")description(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
+        val argsObj = extractLayoutToolArgs(rawPayload)
+
+        val viewName = argsObj?.get("viewName")?.jsonPrimitive?.contentOrNull
+            ?: Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
+            ?: "FootballSlotMain"
+        val desc = argsObj?.get("description")?.jsonPrimitive?.contentOrNull
+            ?: Regex("""(?:\\?"|")description(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
             ?: "已根据传入的 UX 规范文档与素材清单完成足球老虎机高精度界面排版装配。"
 
-        val width = Regex("""(?:\\?"|")width(?:\\?"|")\s*:\s*(\d+)""").find(rawPayload)?.groupValues?.get(1) ?: "1280"
-        val height = Regex("""(?:\\?"|")height(?:\\?"|")\s*:\s*(\d+)""").find(rawPayload)?.groupValues?.get(1) ?: "720"
+        val width = argsObj?.get("width")?.jsonPrimitive?.contentOrNull
+            ?: Regex("""(?:\\?"|")width(?:\\?"|")\s*:\s*(\d+)""").find(rawPayload)?.groupValues?.get(1)
+            ?: "1920"
+        val height = argsObj?.get("height")?.jsonPrimitive?.contentOrNull
+            ?: Regex("""(?:\\?"|")height(?:\\?"|")\s*:\s*(\d+)""").find(rawPayload)?.groupValues?.get(1)
+            ?: "1080"
 
         val modules = mutableListOf<LayoutModuleSummary>()
         val blockIdRegex = Regex("""(?:\\?"|")id(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)(?:\\?"|")[^}]*?(?:\\?"|")type(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""")
@@ -268,9 +290,113 @@ object ChatPayloadViewProjector {
     }
 
     /**
+     * 从原始报文中反序列化提取 apply_view_layout 工具调用的原生 arguments 参数对象 (保持 100% 真实入参，杜绝硬编码篡改)
+     */
+    fun extractLayoutToolArgs(rawPayload: String): JsonObject? {
+        if (!rawPayload.contains("apply_view_layout") && !rawPayload.contains("blocks")) {
+            return null
+        }
+
+        // 0. 优先使用统一工具分发器精准组装的官方 Interactions 流式/非流式入参
+        try {
+            val fc = AiToolExecutionDispatcher.extractFunctionCallRecords(rawPayload, "")
+                .firstOrNull { it.name == "apply_view_layout" }
+            if (fc != null && fc.argsJson.isNotBlank()) {
+                val parsed = org.gemini.ui.forge.utils.looseJson.parseToJsonElement(fc.argsJson)
+                if (parsed is JsonObject && parsed.containsKey("blocks")) {
+                    return parsed
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 1. 尝试使用 looseJson 整体反序列化并深层检索
+        try {
+            val root = org.gemini.ui.forge.utils.looseJson.parseToJsonElement(rawPayload)
+            val foundArgs = findLayoutArgsRecursive(root)
+            if (foundArgs != null) return foundArgs
+        } catch (_: Exception) {}
+
+        // 2. 尝试从 Markdown 代码块中提取
+        try {
+            val codeBlockRegex = Regex("```(?:json)?\\s*([\\s\\S]*?)```", RegexOption.IGNORE_CASE)
+            for (match in codeBlockRegex.findAll(rawPayload)) {
+                val snippet = match.groupValues[1].trim()
+                if (snippet.startsWith("{") && snippet.contains("blocks")) {
+                    val parsed = org.gemini.ui.forge.utils.looseJson.parseToJsonElement(snippet)
+                    if (parsed is JsonObject) {
+                        if (parsed.containsKey("blocks")) return parsed
+                        val inner = parsed["arguments"]?.jsonObject ?: parsed["args"]?.jsonObject
+                        if (inner != null && inner.containsKey("blocks")) return inner
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 3. 尝试从 arguments_delta 或 arguments 内部提取未转义的 JSON
+        try {
+            val argsPattern = Regex("""(?:\\?"|")arguments(?:\\?"|")\s*:\s*"([\s\S]*?)",\s*(?:\\?"|")type(?:\\?"|")""")
+            val match = argsPattern.find(rawPayload)
+            if (match != null) {
+                val unescaped = match.groupValues[1]
+                    .replace("\\\"", "\"")
+                    .replace("\\\\", "\\")
+                    .replace("\\n", "\n")
+                val parsed = org.gemini.ui.forge.utils.looseJson.parseToJsonElement(unescaped)
+                if (parsed is JsonObject && parsed.containsKey("blocks")) {
+                    return parsed
+                }
+            }
+        } catch (_: Exception) {}
+
+        return null
+    }
+
+    private fun findLayoutArgsRecursive(element: JsonElement): JsonObject? {
+        if (element is JsonObject) {
+            // 直接检查是否是 arguments 载体本身
+            if (element.containsKey("blocks") && (element.containsKey("viewName") || element.containsKey("width"))) {
+                return element
+            }
+            // 检查 call / tool_call / function_call
+            val callObj = element["call"]?.jsonObject
+                ?: element["tool_call"]?.jsonObject
+                ?: element["function_call"]?.jsonObject
+                ?: element["functionCall"]?.jsonObject
+            if (callObj != null) {
+                val name = callObj["name"]?.jsonPrimitive?.contentOrNull
+                if (name == "apply_view_layout" || name.isNullOrBlank()) {
+                    val args = callObj["arguments"] ?: callObj["args"] ?: callObj["parameters"]
+                    if (args is JsonObject && args.containsKey("blocks")) {
+                        return args
+                    } else if (args is JsonPrimitive && args.isString) {
+                        try {
+                            val parsed = org.gemini.ui.forge.utils.looseJson.parseToJsonElement(args.content)
+                            if (parsed is JsonObject && parsed.containsKey("blocks")) return parsed
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+            // 遍历所有子项
+            for (value in element.values) {
+                val res = findLayoutArgsRecursive(value)
+                if (res != null) return res
+            }
+        } else if (element is JsonArray) {
+            for (item in element) {
+                val res = findLayoutArgsRecursive(item)
+                if (res != null) return res
+            }
+        }
+        return null
+    }
+
+    /**
      * 提取纯净且格式化的排版 JSON 字符串 (美化缩进，供代码框高亮呈现)
      */
     private fun extractCleanJsonString(raw: String, fallbackViewName: String, desc: String): String {
+        val detectedWidth = Regex("""(?:\\?"|")width(?:\\?"|")\s*:\s*(\d+)""").find(raw)?.groupValues?.get(1)?.toIntOrNull() ?: 1920
+        val detectedHeight = Regex("""(?:\\?"|")height(?:\\?"|")\s*:\s*(\d+)""").find(raw)?.groupValues?.get(1)?.toIntOrNull() ?: 1080
+
         // 1. 优先通过平衡括号从报文中提取完整的 blocks 数组并重组为标准排版规范 JSON
         try {
             val blocksIdx = raw.indexOf("blocks")
@@ -296,14 +422,14 @@ object ChatPayloadViewProjector {
                             val parsedArray = org.gemini.ui.forge.utils.looseJson.parseToJsonElement(rawArray)
                             val wrapperObj = buildJsonObject {
                                 put("viewName", fallbackViewName)
-                                put("width", 1280)
-                                put("height", 720)
+                                put("width", detectedWidth)
+                                put("height", detectedHeight)
                                 put("description", desc)
                                 put("blocks", parsedArray)
                             }
                             jsonPrettyParser.encodeToString(wrapperObj)
                         } catch (_: Exception) {
-                            "{\n  \"viewName\": \"$fallbackViewName\",\n  \"width\": 1280,\n  \"height\": 720,\n  \"description\": \"$desc\",\n  \"blocks\": $rawArray\n}"
+                            "{\n  \"viewName\": \"$fallbackViewName\",\n  \"width\": $detectedWidth,\n  \"height\": $detectedHeight,\n  \"description\": \"$desc\",\n  \"blocks\": $rawArray\n}"
                         }
                     }
                 }

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Menu
@@ -47,10 +48,12 @@ import org.gemini.ui.forge.ui.component.AppMenu
 import org.gemini.ui.forge.ui.component.AppMenuItemRow
 import org.gemini.ui.forge.ui.component.AppMenuTier
 import org.gemini.ui.forge.ui.component.VerticalSplitter
+import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.doc.DocumentPreviewDialog
 import org.gemini.ui.forge.service.canvas.CanvasSnapshotMode
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.gemini.ui.forge.utils.Toast
 
 /**
  * 附件文档与详情预览数据载荷
@@ -170,6 +173,9 @@ fun CommonChatStudioContent(
     // 全局拖拽文件透传至底部输入框附件的中间状态
     var filesToInject by remember { mutableStateOf<List<String>?>(null) }
 
+    // 待删除会话对象（统一由最外层全景模态覆层处理，杜绝多窗口与层级遮挡）
+    var sessionToDelete by remember { mutableStateOf<VisualChatSession?>(null) }
+
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -199,6 +205,7 @@ fun CommonChatStudioContent(
                     onNewSession = onNewSession,
                     onDeleteSession = onDeleteSession,
                     config = config,
+                    onDeleteRequest = { sessionToDelete = it },
                     modifier = Modifier.width(sidebarWidthDp)
                 )
 
@@ -315,7 +322,25 @@ fun CommonChatStudioContent(
                                                     onClick = {
                                                         isSessionMenuExpanded = false
                                                         onSessionSelected(sess.id)
-                                                    }
+                                                    },
+                                                    trailingAction = if (sessions.size > 1) {
+                                                        {
+                                                            IconButton(
+                                                                onClick = {
+                                                                    isSessionMenuExpanded = false
+                                                                    sessionToDelete = sess
+                                                                },
+                                                                modifier = Modifier.size(24.dp).tip("删除此对话")
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.DeleteOutline,
+                                                                    contentDescription = "删除会话",
+                                                                    modifier = Modifier.size(15.dp),
+                                                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                                                )
+                                                            }
+                                                        }
+                                                    } else null
                                                 )
                                             }
                                         }
@@ -356,7 +381,7 @@ fun CommonChatStudioContent(
                                         IconButton(
                                             onClick = onCompressRequested,
                                             modifier = Modifier
-                                                .size(28.dp)
+                                                .size(32.dp)
                                                 .tip(if (isHighContext) "当前有 $uncompressedCount 条未压缩消息，建议执行长对话结晶压缩以大幅降低 Token 消耗" else "手动提炼长对话设计记忆并压缩上下文")
                                         ) {
                                             BadgedBox(
@@ -369,7 +394,7 @@ fun CommonChatStudioContent(
                                                 Icon(
                                                     Icons.Default.AutoAwesome,
                                                     contentDescription = "智能压缩",
-                                                    modifier = Modifier.size(15.dp),
+                                                    modifier = Modifier.size(19.dp),
                                                     tint = if (isHighContext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
@@ -643,6 +668,10 @@ fun CommonChatStudioContent(
                                     },
                                     onDeleteSession = onDeleteSession,
                                     config = config,
+                                    onDeleteRequest = {
+                                        isNarrowSessionDrawerOpen = false
+                                        sessionToDelete = it
+                                    },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -667,6 +696,24 @@ fun CommonChatStudioContent(
                 filePath = data.filePath,
                 content = data.content,
                 onDismissRequest = { previewDocumentData = null }
+            )
+        }
+
+        // 删除会话通用模态覆层（居中置顶，完全杜绝系统 JDialog 嵌套层级遮蔽）
+        sessionToDelete?.let { session ->
+            CommonConfirmModalOverlay(
+                title = "删除对话确认",
+                message = "确定要删除对话 \"${session.title}\" 吗？此操作无法撤销。",
+                confirmText = "确认删除",
+                isDestructive = true,
+                onConfirm = {
+                    onDeleteSession(session.id)
+                    sessionToDelete = null
+                    Toast.show("会话已安全删除", ToastType.INFO)
+                },
+                onDismiss = {
+                    sessionToDelete = null
+                }
             )
         }
     }

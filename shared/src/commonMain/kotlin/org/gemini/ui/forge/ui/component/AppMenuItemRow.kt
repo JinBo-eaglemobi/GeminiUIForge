@@ -49,7 +49,8 @@ fun AppMenuItemRow(
     textColor: Color? = null,
     trailingBadge: String? = null,
     isSelected: Boolean = false,
-    isEnabled: Boolean = true
+    isEnabled: Boolean = true,
+    trailingAction: (@Composable () -> Unit)? = null
 ) {
     val spacing = LocalAppSpacing.current
     val interactionSource = remember { MutableInteractionSource() }
@@ -133,7 +134,9 @@ fun AppMenuItemRow(
             }
         }
 
-        if (isSelected) {
+        if (trailingAction != null) {
+            trailingAction()
+        } else if (isSelected) {
             Icon(
                 imageVector = Icons.Default.Check,
                 contentDescription = "Selected",

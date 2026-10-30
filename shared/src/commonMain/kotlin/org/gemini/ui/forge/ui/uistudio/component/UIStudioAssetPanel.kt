@@ -1,5 +1,11 @@
 package org.gemini.ui.forge.ui.uistudio.component
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +30,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.UnfoldLess
 import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material3.*
@@ -34,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -89,6 +97,18 @@ fun UIStudioAssetPanel(
     var deletingFolderTarget by remember { mutableStateOf<UIAssetFolder?>(null) }
     var deletingAssetTarget by remember { mutableStateOf<UIAssetItem?>(null) }
     val folderBoundsMap = remember { mutableStateMapOf<String, Rect>() }
+
+    // 刷新动画旋转角度
+    val refreshInfiniteTransition = rememberInfiniteTransition(label = "assetRefreshAnim")
+    val refreshRotation by refreshInfiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "assetRefreshRotation"
+    )
 
     // 导入菜单展开状态与外部拖放悬停高亮状态
     var showImportMenu by remember { mutableStateOf(false) }
@@ -179,6 +199,28 @@ fun UIStudioAssetPanel(
                                 modifier = Modifier.size(16.dp)
                             )
                         }
+                    }
+
+                    // 刷新素材库（扫描物理磁盘，校验清理失效项并同步新增）
+                    IconButton(
+                        onClick = { viewModel.refreshAssetLibrary() },
+                        enabled = !state.isRefreshingAssetLibrary,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .tip("刷新素材库 (扫描物理磁盘，校验清理失效项并同步新增)")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "刷新素材库",
+                            tint = if (state.isRefreshingAssetLibrary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .graphicsLayer {
+                                    if (state.isRefreshingAssetLibrary) {
+                                        rotationZ = refreshRotation
+                                    }
+                                }
+                        )
                     }
 
                     IconButton(

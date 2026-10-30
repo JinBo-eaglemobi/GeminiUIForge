@@ -67,6 +67,7 @@ import org.gemini.ui.forge.manager.UiStudioSkillManager
 import org.gemini.ui.forge.model.skill.SkillActivationMode
 import org.gemini.ui.forge.model.skill.UiStudioSkill
 import org.gemini.ui.forge.service.studio.UiStudioLayoutService
+import org.gemini.ui.forge.service.MattingTaskItem
 import org.gemini.ui.forge.utils.asset.AssetManifestHelper
 import org.gemini.ui.forge.manager.SessionTrafficStore
 import org.gemini.ui.forge.model.chat.TrafficDirection
@@ -760,6 +761,75 @@ class UIStudioViewModel {
      */
     fun updateAutoRemoveBgOnSlice(enabled: Boolean) {
         state = state.copy(autoRemoveBgOnSlice = enabled)
+    }
+
+    /**
+     * 手动触发素材库物理全量刷新与双向对齐校验。
+     * 1. 物理存在性校验：扫描并剔除磁盘中已被手动删除的失效孤儿项；
+     * 2. 本地新增自愈：扫描物理磁盘 assets 目录，自动收录未登记的切片；
+     * 3. 配置持久化与状态更新：将清洗后的干净配置回写至 asset_library.json，并弹出统计 Toast。
+     */
+    fun refreshAssetLibrary() {
+        if (state.isRefreshingAssetLibrary) return
+        val proj = state.project ?: return
+        val sanitized = proj.projectId.trim().replace(" ", "_")
+
+        state = state.copy(isRefreshingAssetLibrary = true)
+
+        scope.launch(Dispatchers.Default) {
+            try {
+                AppLogger.i("UIStudioViewModel", "🔄 开始手动触发素材库物理全量刷新与校验: $sanitized")
+                val currentLib = state.assetLibrary
+                var prunedCount = 0
+
+                // 1. 物理存在性校验：检查每个已登记素材的物理文件是否存在
+                val validItems = mutableListOf<UIAssetItem>()
+                for (item in currentLib.items) {
+                    val fileExists = try {
+                        storage.exists(item.relativePath) || TemplateFile(item.relativePath).exists()
+                    } catch (e: Exception) {
+                        false
+                    }
+                    if (fileExists) {
+                        validItems.add(item)
+                    } else {
+                        prunedCount++
+                        AppLogger.w("UIStudioViewModel", "🗑️ 探测到物理文件已删除，自动剔除失效素材: ${item.name} (${item.relativePath})")
+                    }
+                }
+
+                // 2. 磁盘物理新增扫描自愈
+                val intermediateLib = currentLib.copy(items = validItems)
+                val healedLib = healAssetLibrary(sanitized, intermediateLib)
+                val addedCount = (healedLib.items.size - validItems.size).coerceAtLeast(0)
+
+                // 3. 选中项状态安全修复（若当前选中的素材被删除了，重置选中态）
+                val newSelectedAssetId = if (validItems.any { it.id == state.selectedAssetId }) {
+                    state.selectedAssetId
+                } else null
+
+                // 4. 更新 UI 状态
+                state = state.copy(
+                    assetLibrary = healedLib,
+                    selectedAssetId = newSelectedAssetId,
+                    isRefreshingAssetLibrary = false
+                )
+
+                // 5. 若有变动（剔除或新增），自动持久化更新 asset_library.json
+                if (prunedCount > 0 || addedCount > 0) {
+                    saveAssetLibrary()
+                }
+
+                // 6. 弹出统计 Toast
+                val msg = "素材库已刷新：有效 ${healedLib.items.size} 项 (清理失效 $prunedCount 项，同步新增 $addedCount 项)"
+                Toast.show(msg, ToastType.SUCCESS)
+                AppLogger.i("UIStudioViewModel", "✅ $msg")
+            } catch (e: Exception) {
+                AppLogger.e("UIStudioViewModel", "刷新素材库失败", e)
+                Toast.show("素材库刷新失败: ${e.message}", ToastType.ERROR)
+                state = state.copy(isRefreshingAssetLibrary = false)
+            }
+        }
     }
 
     /**
@@ -2500,21 +2570,13 @@ class UIStudioViewModel {
                     enabledSkillIds = enabledSkillIds
                 )
 
-                // 若用户意图涉及界面生成或排版，且素材库不为空且未手动挂载全部素材清单，则自动补充注入素材库切片清单
+                // 严格遵循不自动注入铁律：彻底删除基于关键词或意图的私自注入；仅当用户显式附带全部素材药丸时才装配清单
                 var autoAssetManifestXml: String? = null
                 val hasAllAssetsMention = attachedMentionsList.any {
                     val p = it.payload
                     p is MentionPayload.AssetPayload && p.fileName == "ALL_ASSETS_MANIFEST"
                 }
-                if (!hasAllAssetsMention && state.assetLibrary.items.isNotEmpty()) {
-                    val isLayoutIntent = triggeredSkills.any { it.id == UiStudioSkillManager.SPEC_TO_VIEW_SKILL_ID } ||
-                            userText.contains("生成界面") || userText.contains("创建界面") || userText.contains("排版") ||
-                            userText.contains("布局") || userText.contains("老虎机") || userText.contains("slot")
-                    if (isLayoutIntent) {
-                        val manifest = AssetManifestHelper.buildCompactManifest(state.assetLibrary.items)
-                        autoAssetManifestXml = "  <asset_library_manifest total=\"${state.assetLibrary.items.size}\">\n$manifest\n  </asset_library_manifest>"
-                    }
-                } else if (hasAllAssetsMention) {
+                if (hasAllAssetsMention) {
                     val manifest = AssetManifestHelper.buildCompactManifest(state.assetLibrary.items)
                     autoAssetManifestXml = "  <asset_library_manifest total=\"${state.assetLibrary.items.size}\">\n$manifest\n  </asset_library_manifest>"
                 }
@@ -3125,7 +3187,11 @@ class UIStudioViewModel {
             )
         } else {
             // 作为新视图创建
-            val cleanName = targetName.ifBlank { rawPage.nameStr }
+            val cleanName = targetName.trim().ifBlank { rawPage.nameStr }
+            if (existingPages.any { it.nameStr.equals(cleanName, ignoreCase = true) }) {
+                Toast.show("视图名称 \"$cleanName\" 已存在，请更换其他新名称", ToastType.ERROR)
+                return
+            }
             val newId = "page_${cleanName.replace(" ", "_")}_${getCurrentTimeMillis() % 10000}"
             rawPage.copy(
                 id = newId,
@@ -4264,12 +4330,30 @@ class UIStudioViewModel {
             return
         }
 
+        val initialTaskItems = items.mapIndexed { idx, item ->
+            val assetId = item.id.ifBlank { "asset_${getCurrentTimeMillis()}_$idx" }
+            SliceTaskItemState(
+                id = assetId,
+                name = item.name,
+                width = item.bounds.width.toInt().coerceAtLeast(1),
+                height = item.bounds.height.toInt().coerceAtLeast(1),
+                category = item.type.name.lowercase(),
+                status = SliceItemStatus.PENDING
+            )
+        }
+
+        val startTime = getCurrentTimeMillis()
+
         state = state.copy(
             isVerifySliceDialogVisible = false,
             verifySliceItems = items,
             isSlicingAssets = true,
             sliceProgress = 0f,
-            sliceStatusText = "正在读取图集大图..."
+            sliceStatusText = "正在读取图集大图...",
+            sliceTaskItems = initialTaskItems,
+            sliceStartTimeMillis = startTime,
+            sliceCurrentStage = SliceStage.PREPARING,
+            sliceCurrentItemName = ""
         )
 
         scope.launch(Dispatchers.Default) {
@@ -4308,18 +4392,47 @@ class UIStudioViewModel {
                 val total = items.size
                 val shouldRemoveBg = state.autoRemoveBgOnSlice
 
-                // ★ 多协程多核并发池：充分榨干 CPU 多核并发切片算力
+                // ★ 阶段一：极速物理多核切片（零大图重复解码，切片瞬间全量保底落盘）
+                state = state.copy(
+                    sliceCurrentStage = SliceStage.SLICING,
+                    sliceStatusText = "正在执行微秒级物理多核切片..."
+                )
+
                 val concurrencyLimit = 8
                 val sliceSemaphore = Semaphore(concurrencyLimit)
-                val mattingSemaphore = Semaphore(2) // 去背脚本独立并发限制，防止子进程打满
                 val progressMutex = Mutex()
-                var completedCount = 0
+                var slicedCount = 0
 
-                val newAssetItems = coroutineScope {
+                data class SlicedItemMeta(
+                    val index: Int,
+                    val item: NormalizedAssetItem,
+                    val assetId: String,
+                    val relPath: String,
+                    val diskAbsolutePath: String
+                )
+
+                val slicedMetas = coroutineScope {
                     items.mapIndexed { idx, item ->
                         async(Dispatchers.Default) {
                             sliceSemaphore.withPermit {
-                                // 1. 调用 Skia 执行微秒级物理切片（零大图重复解码）
+                                val assetId = initialTaskItems[idx].id
+                                val relPath = "templates/$sanitizedName/assets/image/${folderSubDir}${assetId}.png"
+                                val tFile = TemplateFile(relPath)
+                                val diskAbsolutePath = tFile.getAbsolutePath()
+
+                                // 更新单项状态为切片中
+                                progressMutex.withLock {
+                                    val currentList = state.sliceTaskItems.toMutableList()
+                                    if (idx < currentList.size) {
+                                        currentList[idx] = currentList[idx].copy(status = SliceItemStatus.SLICING)
+                                        state = state.copy(
+                                            sliceTaskItems = currentList,
+                                            sliceCurrentItemName = item.name
+                                        )
+                                    }
+                                }
+
+                                // 1. 调用 Skia 执行微秒级物理切片
                                 val sliceBytes = cropImage(
                                     srcBitmap = srcBitmap,
                                     imageWidth = imgWidth,
@@ -4330,65 +4443,113 @@ class UIStudioViewModel {
                                     isPng = true
                                 )
 
-                                val assetId = item.id.ifBlank { "asset_${getCurrentTimeMillis()}_$idx" }
-                                val relPath = "templates/$sanitizedName/assets/image/${folderSubDir}${assetId}.png"
-
-                                // 2. 将切片物理写入磁盘素材库目录 (支持自动透明去背)
+                                // 2. 物理写入磁盘素材库目录
                                 if (sliceBytes != null && sliceBytes.isNotEmpty()) {
-                                    val finalBytes = if (shouldRemoveBg) {
-                                        mattingSemaphore.withPermit {
-                                            val matted = mattingService.removeBackground(sliceBytes)
-                                            if (matted != null && matted.isNotEmpty()) matted else sliceBytes
+                                    tFile.writeBytes(sliceBytes)
+                                }
+
+                                // 3. 更新进度与单项状态
+                                progressMutex.withLock {
+                                    slicedCount++
+                                    val currentList = state.sliceTaskItems.toMutableList()
+                                    if (idx < currentList.size) {
+                                        currentList[idx] = currentList[idx].copy(
+                                            status = if (shouldRemoveBg) SliceItemStatus.PENDING else SliceItemStatus.SUCCESS
+                                        )
+                                        val slicePartProgress = if (shouldRemoveBg) {
+                                            (slicedCount.toFloat() / total) * 0.2f
+                                        } else {
+                                            slicedCount.toFloat() / total
                                         }
-                                    } else {
-                                        sliceBytes
+                                        state = state.copy(
+                                            sliceTaskItems = currentList,
+                                            sliceProgress = slicePartProgress,
+                                            sliceStatusText = "正在并发切片 ($slicedCount/$total): ${item.name}"
+                                        )
                                     }
-                                    val tFile = TemplateFile(relPath)
-                                    tFile.writeBytes(finalBytes)
                                 }
 
-                                // 3. 线程安全更新切片进度与状态
-                                val currentDone = progressMutex.withLock {
-                                    completedCount++
-                                    completedCount
-                                }
-                                state = state.copy(
-                                    sliceProgress = currentDone.toFloat() / total,
-                                    sliceStatusText = if (shouldRemoveBg) {
-                                        "正在并发切片并去背 ($currentDone/$total): ${item.name}"
-                                    } else {
-                                        "正在并发切片 ($currentDone/$total): ${item.name}"
-                                    }
-                                )
-
-                                // 4. 构建资产项实体 (带索引保证最终稳定保序；哈希在首次导入时生成，此后终身不变)
-                                IndexedValue(
-                                    idx,
-                                    UIAssetItem(
-                                        id = assetId,
-                                        name = item.name,
-                                        relativePath = relPath,
-                                        width = item.bounds.width.toInt().coerceAtLeast(1),
-                                        height = item.bounds.height.toInt().coerceAtLeast(1),
-                                        category = item.type.name.lowercase(),
-                                        folderId = targetFolderId,
-                                        createdAt = getCurrentTimeMillis(),
-                                        hash = calculateShortFileHash(relPath)
-                                    )
+                                SlicedItemMeta(
+                                    index = idx,
+                                    item = item,
+                                    assetId = assetId,
+                                    relPath = relPath,
+                                    diskAbsolutePath = diskAbsolutePath
                                 )
                             }
                         }
-                    }.awaitAll()
-                        .sortedBy { it.index }
-                        .map { it.value }
+                    }.awaitAll().sortedBy { it.index }
                 }
 
-                // 4. 将切片生成的素材归入素材库 (Asset Library)，同步更新状态并持久化落盘
+                // ★ 阶段二：若开启自动去背，启动常驻单进程 AI 批量去背景（仅启动 1 次 Python + 模型常驻复用！）
+                if (shouldRemoveBg) {
+                    state = state.copy(
+                        sliceCurrentStage = SliceStage.MATTING,
+                        sliceProgress = 0.2f,
+                        sliceStatusText = "⚡ 正在初始化常驻 AI 去背引擎并批量处理..."
+                    )
+
+                    val mattingTasks = slicedMetas.map { meta ->
+                        MattingTaskItem(
+                            id = meta.assetId,
+                            name = meta.item.name,
+                            input = meta.diskAbsolutePath,
+                            output = meta.diskAbsolutePath
+                        )
+                    }
+
+                    val mattingSuccess = mattingService.batchRemoveBackground(
+                        tasks = mattingTasks,
+                        onProgress = { current, totalCount, itemId, itemName ->
+                            val currentList = state.sliceTaskItems.toMutableList()
+                            val targetIdx = currentList.indexOfFirst { it.id == itemId }
+                            if (targetIdx != -1) {
+                                currentList[targetIdx] = currentList[targetIdx].copy(status = SliceItemStatus.SUCCESS)
+                            }
+                            val mattingProgress = 0.2f + (current.toFloat() / totalCount.coerceAtLeast(1)) * 0.75f
+                            state = state.copy(
+                                sliceTaskItems = currentList,
+                                sliceProgress = mattingProgress,
+                                sliceCurrentItemName = itemName,
+                                sliceStatusText = "正在批量 AI 去背景 ($current/$totalCount): $itemName"
+                            )
+                        },
+                        onLog = { logLine ->
+                            AppLogger.d("UIStudioViewModel", "[BatchMattingLog] $logLine")
+                        }
+                    )
+
+                    if (!mattingSuccess) {
+                        AppLogger.w("UIStudioViewModel", "⚠️ 批量去背部分完成或异常，原始切片均已完整保底保留")
+                    }
+                }
+
+                // ★ 阶段三：登记入库与素材库持久化
+                state = state.copy(
+                    sliceCurrentStage = SliceStage.REGISTERING,
+                    sliceProgress = 0.96f,
+                    sliceStatusText = "正在登记素材库并持久化..."
+                )
+
+                val newAssetItems = slicedMetas.map { meta ->
+                    UIAssetItem(
+                        id = meta.assetId,
+                        name = meta.item.name,
+                        relativePath = meta.relPath,
+                        width = meta.item.bounds.width.toInt().coerceAtLeast(1),
+                        height = meta.item.bounds.height.toInt().coerceAtLeast(1),
+                        category = meta.item.type.name.lowercase(),
+                        folderId = targetFolderId,
+                        createdAt = getCurrentTimeMillis(),
+                        hash = calculateShortFileHash(meta.relPath)
+                    )
+                }
+
                 val updatedLibrary = state.assetLibrary.copy(
                     items = state.assetLibrary.items.filterNot { old -> newAssetItems.any { it.id == old.id } } + newAssetItems
                 )
 
-                // 5. 物理清理切片校对草稿文件
+                // 物理清理切片校对草稿文件
                 try {
                     val draftPath = "templates/$sanitizedName/import_draft.json"
                     TemplateFile(draftPath).delete()
@@ -4396,18 +4557,25 @@ class UIStudioViewModel {
 
                 state = state.copy(
                     assetLibrary = updatedLibrary,
-                    isSlicingAssets = false,
-                    importDraft = null,
-                    isDraftPromptVisible = false,
-                    sliceStatusText = ""
+                    sliceProgress = 1.0f,
+                    sliceCurrentStage = SliceStage.FINISHED,
+                    sliceStatusText = "🎉 全部切片与去背已完成！"
                 )
 
-                // 6. 持久化素材库到 asset_library.json
+                // 持久化素材库到 asset_library.json
                 saveAssetLibrary()
 
                 withContext(Dispatchers.Main) {
                     onProjectUpdated?.invoke(proj)
                 }
+
+                delay(600)
+                state = state.copy(
+                    isSlicingAssets = false,
+                    importDraft = null,
+                    isDraftPromptVisible = false,
+                    sliceStatusText = ""
+                )
 
                 Toast.show("🎉 成功切片并入库 ${newAssetItems.size} 个素材到素材库中！", ToastType.SUCCESS)
                 AppLogger.i("UIStudioViewModel", "✅ 物理切片与素材库持久化完成: 共 ${newAssetItems.size} 个素材入库")

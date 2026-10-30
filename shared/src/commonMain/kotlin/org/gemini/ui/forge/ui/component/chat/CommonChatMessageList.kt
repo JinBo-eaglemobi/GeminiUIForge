@@ -265,9 +265,11 @@ fun CommonChatMessageList(
                                     onDeleteRequested = onDeleteRequested
                                 )
                             } else {
+                                val isCurrentModelGenerating = isGenerating && (index == effectiveMessages.lastIndex)
                                 CommonModelBubble(
                                     message = msg,
                                     maxBubbleWidth = maxBubbleWidth,
+                                    isGenerating = isCurrentModelGenerating,
                                     onImageClick = onImageClick,
                                     onVariantIndexChanged = { newIdx ->
                                         onVariantIndexChanged?.invoke(msg, newIdx)
@@ -282,8 +284,8 @@ fun CommonChatMessageList(
                             }
                         }
 
-                        // 流式打字中或正在生成气泡
-                        if (isGenerating) {
+                        // 流式打字中或正在生成气泡 (仅当列表末尾不是当前正在生成的实时模型气泡时，才由外部独立气泡兜底渲染)
+                        if (isGenerating && effectiveMessages.lastOrNull()?.role != "model") {
                             CommonGeneratingBubble(streamingText = streamingText)
                         }
 

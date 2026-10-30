@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -147,13 +148,17 @@ fun AssetSliceVerifyDialog(
     var panOffset by remember { mutableStateOf(Offset(32f, 32f)) }
     var canvasViewportSize by remember { mutableStateOf(IntSize.Zero) }
 
-    // 触发一键智能吸附校准 (快捷键: Alt+A)
-    fun triggerSmartSnap() {
+    // 首次进入预览自动执行一次智能微观吸附标记
+    var hasAutoSnapped by rememberSaveable(imagePath) { mutableStateOf(false) }
+
+    // 核心智能吸附执行管道 (支持首次自动触发与用户手动点击)
+    fun executeSmartSnap(isInitialAuto: Boolean = false) {
         if (isSnapping || editableItems.isEmpty()) return
+        val bytes = imageBytes ?: return
+        val imgW = imageBitmap?.width?.toFloat() ?: 1280f
+        val imgH = imageBitmap?.height?.toFloat() ?: 720f
+
         coroutineScope.launch(Dispatchers.Default) {
-            val bytes = imageBytes ?: return@launch
-            val imgW = imageBitmap?.width?.toFloat() ?: 1280f
-            val imgH = imageBitmap?.height?.toFloat() ?: 720f
             recordSnapshot()
             isSnapping = true
             var snappedCount = 0
@@ -174,8 +179,17 @@ fun AssetSliceVerifyDialog(
 
             isSnapping = false
             autoPersistDraft()
-            Toast.show("边缘微观吸附完成，已智能校对 $snappedCount 个图元", ToastType.SUCCESS)
+            if (isInitialAuto) {
+                Toast.show("首次预览已自动执行边缘微观吸附，已智能校准 $snappedCount 个图元", ToastType.SUCCESS)
+            } else {
+                Toast.show("边缘微观吸附完成，已智能校对 $snappedCount 个图元", ToastType.SUCCESS)
+            }
         }
+    }
+
+    // 触发一键智能吸附校准 (快捷键: Alt+A 或顶栏按钮)
+    fun triggerSmartSnap() {
+        executeSmartSnap(isInitialAuto = false)
     }
 
     // 重置全部图元及视口坐标至初始状态 (快捷键: Ctrl+R)
@@ -209,6 +223,14 @@ fun AssetSliceVerifyDialog(
             imageBitmap = null
         }
         isLoadingImage = false
+    }
+
+    // 当原图与图元就绪时，首次进入预览自动执行一次智能吸附微观纠偏
+    LaunchedEffect(imageBytes, editableItems.size, hasAutoSnapped, isLoadingImage) {
+        if (imageBytes != null && editableItems.isNotEmpty() && !hasAutoSnapped && !isLoadingImage) {
+            hasAutoSnapped = true
+            executeSmartSnap(isInitialAuto = true)
+        }
     }
 
     Dialog(

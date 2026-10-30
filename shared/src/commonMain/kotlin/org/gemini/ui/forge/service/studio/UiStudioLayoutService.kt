@@ -50,12 +50,21 @@ object UiStudioLayoutService {
 
             val rawBlocks = args["blocks"]?.jsonArray ?: JsonArray(emptyList())
 
-            // 建立素材库文件名快速索引 (忽略大小写)
+            // 建立素材库文件名快速索引 (忽略大小写：覆盖显示名、物理文件名及内容哈希)
             val assetMap = mutableMapOf<String, UIAssetItem>()
             assetLibrary.items.forEach { asset ->
                 assetMap[asset.name.lowercase()] = asset
                 val cleanName = asset.name.substringBeforeLast('.').lowercase()
                 assetMap[cleanName] = asset
+
+                val realFileName = asset.relativePath.substringAfterLast('/').substringAfterLast('\\').lowercase()
+                if (realFileName.isNotBlank()) {
+                    assetMap[realFileName] = asset
+                    assetMap[realFileName.substringBeforeLast('.')] = asset
+                }
+                asset.hash?.lowercase()?.takeIf { it.isNotBlank() }?.let { hash ->
+                    assetMap[hash] = asset
+                }
             }
 
             // 递归解析图元列表与插槽角色映射
@@ -133,10 +142,14 @@ object UiStudioLayoutService {
             slotRoleMap[id] = it
         }
 
-        // 匹配素材库切片（命中即持有其唯一哈希引用）
+        // 匹配素材库切片（命中即持有其唯一哈希引用，优先匹配 assetHash，次之 assetFileName）
+        val assetHash = obj["assetHash"]?.jsonPrimitive?.contentOrNull?.trim()
         val assetFileName = obj["assetFileName"]?.jsonPrimitive?.contentOrNull?.trim()
         var matchedAsset: UIAssetItem? = null
-        if (!assetFileName.isNullOrBlank()) {
+        if (!assetHash.isNullOrBlank()) {
+            matchedAsset = assetMap[assetHash.lowercase()]
+        }
+        if (matchedAsset == null && !assetFileName.isNullOrBlank()) {
             matchedAsset = assetMap[assetFileName.lowercase()]
                 ?: assetMap[assetFileName.substringBeforeLast('.').lowercase()]
         }

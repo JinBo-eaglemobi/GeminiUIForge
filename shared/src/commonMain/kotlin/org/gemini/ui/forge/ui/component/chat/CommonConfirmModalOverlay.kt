@@ -21,20 +21,32 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 
 /**
- * 带有全屏深色半透明遮罩的模态覆盖层 (一文件一 Composable 规范)。
+ * 带有全屏深色半透明遮罩的通用操作确认模态覆盖层。
  *
- * 核心特性：
- * 1. 绝对置顶并自动获取键盘焦点；
- * 2. 本地优先拦截 Esc 键并就地消费，杜绝冒泡穿透关闭外层对话框；
- * 3. 点击暗色半透明遮罩外部区域自动触发 dismiss 关闭；
- * 4. 内部嵌入居中的 [CommonSystemInstructionCard] 双模指令卡片。
+ * 遵循一文件一 Composable 铁律与设计系统规范：
+ * - 绝对置顶并自动获取键盘焦点；
+ * - 本地优先拦截 Esc 键并就地消费，杜绝冒泡穿透关闭外层对话框；
+ * - 点击暗色半透明遮罩外部区域自动触发 dismiss 关闭；
+ * - 彻底根除 Compose Desktop 嵌套 Dialog (JDialog) 导致的 Z-order 物理层级遮蔽缺陷。
+ *
+ * @param title 标题
+ * @param message 提示消息正文
+ * @param confirmText 确认按钮文案
+ * @param cancelText 取消按钮文案
+ * @param isDestructive 是否为破坏性操作
+ * @param onConfirm 用户点击确认按钮的回调
+ * @param onDismiss 用户点击关闭、取消或遮罩外部的回调
  */
 @Composable
-fun CommonSystemInstructionModalOverlay(
-    currentInstruction: String,
-    defaultInstruction: String = "",
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
+fun CommonConfirmModalOverlay(
+    title: String,
+    message: String,
+    confirmText: String = "确认",
+    cancelText: String = "取消",
+    isDestructive: Boolean = false,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
 
@@ -43,14 +55,14 @@ fun CommonSystemInstructionModalOverlay(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Escape) {
                     onDismiss()
-                    true // 成功消费 Esc 事件，彻底阻断向父级 Dialog 冒泡！
+                    true // 成功消费 Esc 事件，杜绝向外层冒泡
                 } else {
                     false
                 }
@@ -63,12 +75,19 @@ fun CommonSystemInstructionModalOverlay(
             ),
         contentAlignment = Alignment.Center
     ) {
-        CommonSystemInstructionCard(
-            currentInstruction = currentInstruction,
-            defaultInstruction = defaultInstruction,
+        CommonConfirmCard(
+            title = title,
+            message = message,
+            confirmText = confirmText,
+            cancelText = cancelText,
+            isDestructive = isDestructive,
             onConfirm = onConfirm,
-            onDismiss = onDismiss
+            onDismiss = onDismiss,
+            modifier = Modifier.clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {} // 拦截卡片内部点击，防遮罩冒泡
+            )
         )
     }
 }
-

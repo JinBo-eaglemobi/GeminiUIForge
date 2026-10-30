@@ -21,13 +21,13 @@ class ReadSkillSpecTool : McpToolDefinition {
     override val inputSchema: JsonObject = buildJsonObject {
         put("type", "object")
         putJsonObject("properties") {
-            putJsonObject("skill_id") {
+            putJsonObject("skillId") {
                 put("type", "string")
-                put("description", "要读取的技能唯一标识 ID（如 spec_to_view）")
+                put("description", "要读取的技能唯一标识 ID")
             }
         }
         putJsonArray("required") {
-            add("skill_id")
+            add("skillId")
         }
     }
 
@@ -35,10 +35,10 @@ class ReadSkillSpecTool : McpToolDefinition {
         arguments: JsonObject,
         onProgress: ((progress: Float, message: String?) -> Unit)?
     ): McpToolResult {
-        val skillId = arguments["skill_id"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        val skillId = arguments["skillId"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
 
         if (skillId.isBlank()) {
-            return McpToolResult.error("参数 'skill_id' 不能为空")
+            return McpToolResult.error("缺少必填参数 'skillId'")
         }
 
         // 校验技能是否已启用

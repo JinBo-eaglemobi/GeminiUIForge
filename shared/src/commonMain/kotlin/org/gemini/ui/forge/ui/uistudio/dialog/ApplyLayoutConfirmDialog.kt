@@ -45,6 +45,7 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
  *
  * @param layoutResult 大模型生成的排版结果
  * @param currentViewName 当前正在编辑的视图名称
+ * @param existingViewNames 当前工程中已存在的所有视图名称列表（用于重名防呆校验）
  * @param onDismiss 放弃应用回调
  * @param onConfirm 确认应用回调 (replaceCurrent: Boolean, customName: String)
  */
@@ -52,15 +53,28 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 fun ApplyLayoutConfirmDialog(
     layoutResult: UiStudioLayoutService.ApplyLayoutResult,
     currentViewName: String,
+    existingViewNames: List<String> = emptyList(),
     onDismiss: () -> Unit,
     onConfirm: (replaceCurrent: Boolean, customName: String) -> Unit
 ) {
     val spacing = LocalAppSpacing.current
-    var replaceCurrent by remember { mutableStateOf(false) }
-    var customViewName by remember(layoutResult.viewName) {
-        mutableStateOf(layoutResult.viewName.ifBlank { "NewView" })
-    }
+    var replaceCurrent by remember { mutableStateOf(true) }
+    var customViewName by remember { mutableStateOf("") }
     val draggableState = rememberDraggableDialogState()
+
+    val suggestedName = remember(layoutResult.viewName) { layoutResult.viewName.ifBlank { "NewView" } }
+    val trimmedName = customViewName.trim()
+    val isDuplicateName = remember(trimmedName, existingViewNames) {
+        trimmedName.isNotEmpty() && existingViewNames.any { it.equals(trimmedName, ignoreCase = true) }
+    }
+    val canConfirm = replaceCurrent || (trimmedName.isNotEmpty() && !isDuplicateName)
+
+    val doConfirm: () -> Unit = {
+        if (canConfirm) {
+            val finalName = if (replaceCurrent) currentViewName else trimmedName
+            onConfirm(replaceCurrent, finalName)
+        }
+    }
 
     val page = layoutResult.createdPage
     val widthInt = page?.width?.toInt() ?: 1280
@@ -280,11 +294,28 @@ fun ApplyLayoutConfirmDialog(
                                     value = customViewName,
                                     onValueChange = { customViewName = it },
                                     label = { Text(stringResource(Res.string.apply_layout_input_view_name)) },
-                                    placeholder = { Text(stringResource(Res.string.apply_layout_input_view_name_placeholder)) },
+                                    placeholder = {
+                                        val placeholderText = if (suggestedName.isNotBlank() && !existingViewNames.any { it.equals(suggestedName, ignoreCase = true) }) {
+                                            stringResource(Res.string.apply_layout_input_view_name_placeholder_suggested, suggestedName)
+                                        } else {
+                                            stringResource(Res.string.apply_layout_input_view_name_placeholder)
+                                        }
+                                        Text(placeholderText)
+                                    },
+                                    isError = isDuplicateName,
+                                    onEnterConfirm = doConfirm,
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(8.dp)
                                 )
+                                if (isDuplicateName) {
+                                    Text(
+                                        text = stringResource(Res.string.apply_layout_error_duplicate_name),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -307,11 +338,8 @@ fun ApplyLayoutConfirmDialog(
                     }
                     Spacer(Modifier.width(spacing.medium))
                     Button(
-                        onClick = {
-                            val finalName = if (replaceCurrent) currentViewName else customViewName.ifBlank { "NewView" }
-                            onConfirm(replaceCurrent, finalName)
-                        },
-                        enabled = replaceCurrent || customViewName.isNotBlank(),
+                        onClick = doConfirm,
+                        enabled = canConfirm,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.height(40.dp),
                         colors = ButtonDefaults.buttonColors(

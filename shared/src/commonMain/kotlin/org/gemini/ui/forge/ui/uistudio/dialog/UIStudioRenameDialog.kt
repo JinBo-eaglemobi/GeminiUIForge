@@ -62,12 +62,20 @@ fun UIStudioRenameDialog(
                         .draggableDialogHandle(draggableState)
                 )
 
+                val canConfirm = nameInput.isNotBlank() && nameInput != initialName
+                val doConfirm = {
+                    if (canConfirm) {
+                        onConfirm(nameInput.trim())
+                    }
+                }
+
                 SelectAllOutlinedTextField(
                     value = nameInput,
                     onValueChange = { nameInput = it },
                     label = { Text("名称") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    onEnterConfirm = doConfirm
                 )
 
                 Row(
@@ -80,12 +88,8 @@ fun UIStudioRenameDialog(
                     }
                     Spacer(modifier = Modifier.width(spacing.small))
                     Button(
-                        onClick = {
-                            if (nameInput.isNotBlank()) {
-                                onConfirm(nameInput.trim())
-                            }
-                        },
-                        enabled = nameInput.isNotBlank() && nameInput != initialName
+                        onClick = doConfirm,
+                        enabled = canConfirm
                     ) {
                         Text("确认修改")
                     }

@@ -36,10 +36,17 @@ fun NewViewDialog(
     onConfirm: (name: String, width: Float, height: Float) -> Unit
 ) {
     val spacing = LocalAppSpacing.current
+    val inheritOption = "${defaultWidth.toInt()} × ${defaultHeight.toInt()} (继承工程)"
+    val resolutions = listOf(
+        inheritOption,
+        "1920 × 1080 (横屏大屏)",
+        "1280 × 720 (横屏标清)",
+        "1080 × 1920 (竖屏高清)",
+        "720 × 1280 (移动端小屏)"
+    )
+
     var viewName by remember { mutableStateOf("") }
-    var selectedResolution by remember { mutableStateOf("${defaultWidth.toInt()} × ${defaultHeight.toInt()}") }
-    var customWidth by remember { mutableStateOf(defaultWidth.toInt().toString()) }
-    var customHeight by remember { mutableStateOf(defaultHeight.toInt().toString()) }
+    var selectedResolution by remember(defaultWidth, defaultHeight) { mutableStateOf(inheritOption) }
     val draggableState = rememberDraggableDialogState()
 
     AppDraggableDialog(
@@ -69,6 +76,29 @@ fun NewViewDialog(
                         .draggableDialogHandle(draggableState)
                 )
 
+                val canConfirm = viewName.isNotBlank()
+                val doConfirm = {
+                    if (canConfirm) {
+                        val finalWidth = when {
+                            selectedResolution.contains("(继承工程)") -> defaultWidth
+                            selectedResolution.contains("1920 × 1080") -> 1920f
+                            selectedResolution.contains("1280 × 720") -> 1280f
+                            selectedResolution.contains("1080 × 1920") -> 1080f
+                            selectedResolution.contains("720 × 1280") -> 720f
+                            else -> defaultWidth
+                        }
+                        val finalHeight = when {
+                            selectedResolution.contains("(继承工程)") -> defaultHeight
+                            selectedResolution.contains("1920 × 1080") -> 1080f
+                            selectedResolution.contains("1280 × 720") -> 720f
+                            selectedResolution.contains("1080 × 1920") -> 1920f
+                            selectedResolution.contains("720 × 1280") -> 1280f
+                            else -> defaultHeight
+                        }
+                        onConfirm(viewName.trim(), finalWidth, finalHeight)
+                    }
+                }
+
                 // 界面名称输入框
                 SelectAllOutlinedTextField(
                     value = viewName,
@@ -77,22 +107,8 @@ fun NewViewDialog(
                     placeholder = { Text("请输入视图唯一英文/中文名称") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
-                )
-
-                // 分辨率选择
-                Text(
-                    text = "画布分辨率",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                val resolutions = listOf(
-                    "${defaultWidth.toInt()} × ${defaultHeight.toInt()} (继承工程)",
-                    "1920 × 1080 (横屏大屏)",
-                    "1280 × 720 (横屏标清)",
-                    "1080 × 1920 (竖屏高清)",
-                    "720 × 1280 (移动端小屏)"
+                    shape = RoundedCornerShape(8.dp),
+                    onEnterConfirm = doConfirm
                 )
 
                 Column(verticalArrangement = Arrangement.spacedBy(spacing.extraSmall)) {
@@ -137,24 +153,8 @@ fun NewViewDialog(
                     }
                     Spacer(modifier = Modifier.width(spacing.small))
                     Button(
-                        onClick = {
-                            val finalWidth = when {
-                                selectedResolution.contains("1920 × 1080") -> 1920f
-                                selectedResolution.contains("1280 × 720") -> 1280f
-                                selectedResolution.contains("1080 × 1920") -> 1080f
-                                selectedResolution.contains("720 × 1280") -> 720f
-                                else -> defaultWidth
-                            }
-                            val finalHeight = when {
-                                selectedResolution.contains("1920 × 1080") -> 1080f
-                                selectedResolution.contains("1280 × 720") -> 720f
-                                selectedResolution.contains("1080 × 1920") -> 1920f
-                                selectedResolution.contains("720 × 1280") -> 1280f
-                                else -> defaultHeight
-                            }
-                            onConfirm(viewName.trim(), finalWidth, finalHeight)
-                        },
-                        enabled = viewName.isNotBlank(),
+                        onClick = doConfirm,
+                        enabled = canConfirm,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.tip("创建该视图并立即切换到画布")
                     ) {

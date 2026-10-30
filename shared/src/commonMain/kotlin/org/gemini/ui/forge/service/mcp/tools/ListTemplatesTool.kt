@@ -39,7 +39,7 @@ class ListTemplatesTool(
             templates.forEach { (name, state) ->
                 val firstPage = state.pages.firstOrNull()
                 add(buildJsonObject {
-                    put("name", name)
+                    put("projectName", name)
                     put("canvasWidth", firstPage?.width ?: 1280)
                     put("canvasHeight", firstPage?.height ?: 720)
                     put("blockCount", firstPage?.blocks?.size ?: 0)

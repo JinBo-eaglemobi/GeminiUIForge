@@ -11,14 +11,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.gemini.ui.forge.manager.PromptManager
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.chat.CommonChatStudioConfig
 import org.gemini.ui.forge.ui.component.chat.CommonChatStudioContent
+import org.gemini.ui.forge.ui.component.chat.CommonConfirmModalOverlay
+import org.gemini.ui.forge.ui.component.chat.CommonSystemInstructionDialog
 import org.gemini.ui.forge.ui.component.chat.LayoutDiffSummaryCard
 import org.gemini.ui.forge.ui.component.chat.mention.MentionHoverPreviewConfig
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.dialog.ai.studio.component.StudioSessionLogDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import org.gemini.ui.forge.utils.Toast
@@ -44,6 +48,7 @@ fun UIStudioEmbeddedChatPanel(
     val state = viewModel.state
     val spacing = LocalAppSpacing.current
     val currentSession = state.currentChatSession
+    var showTrafficLogDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.project?.projectId) {
         viewModel.loadExternalDocs(state.project?.projectId ?: "default")
@@ -172,12 +177,12 @@ fun UIStudioEmbeddedChatPanel(
                 // 1. 系统人设配置
                 IconButton(
                     onClick = { viewModel.openSystemInstructionDialog() },
-                    modifier = Modifier.size(28.dp).tip("配置当前项目 AI 系统人设指令")
+                    modifier = Modifier.size(32.dp).tip("配置当前项目 AI 系统人设指令")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Psychology,
                         contentDescription = "系统指令",
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(19.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -186,30 +191,71 @@ fun UIStudioEmbeddedChatPanel(
                 IconButton(
                     onClick = { viewModel.requestClearCurrentSession() },
                     enabled = (currentSession?.messages?.isNotEmpty() == true) && !state.isAiChatSending,
-                    modifier = Modifier.size(28.dp).tip("清空当前会话历史")
+                    modifier = Modifier.size(32.dp).tip("清空当前会话历史")
                 ) {
                     Icon(
                         imageVector = Icons.Default.DeleteSweep,
                         contentDescription = "清空会话",
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(19.dp),
                         tint = if (currentSession?.messages?.isNotEmpty() == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                     )
                 }
 
                 // 3. 通信抓包与报文日志
                 IconButton(
-                    onClick = { viewModel.openAiChatDialog() },
-                    modifier = Modifier.size(28.dp).tip("进入全景大窗查看通信报文")
+                    onClick = { showTrafficLogDialog = true },
+                    modifier = Modifier.size(32.dp).tip("查看网络通信报文与 API 真实日志")
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
                         contentDescription = "报文档案",
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(19.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        // 独立通信报文与 API 真实日志查看器
+        if (showTrafficLogDialog) {
+            StudioSessionLogDialog(
+                scopeId = viewModel.trafficScopeId,
+                sessionId = currentSession?.id ?: "default_sess",
+                trafficStore = viewModel.trafficStore,
+                onDismiss = { showTrafficLogDialog = false }
+            )
+        }
+
+        // 项目系统人设指令弹窗（独立全景居中大弹窗，彻底脱离右侧栏物理宽度限制）
+        if (state.isSystemInstructionDialogVisible) {
+            var defaultInstruction by remember { mutableStateOf("") }
+            LaunchedEffect(Unit) {
+                defaultInstruction = PromptManager.getUiStudioAgentPrompt()
+            }
+
+            CommonSystemInstructionDialog(
+                currentInstruction = state.projectAgentConfig.systemPrompt.ifBlank { defaultInstruction },
+                defaultInstruction = defaultInstruction,
+                onConfirm = { newPrompt ->
+                    viewModel.updateProjectSystemPrompt(newPrompt)
+                },
+                onDismiss = {
+                    viewModel.closeSystemInstructionDialog()
+                }
+            )
+        }
+
+        // 清空会话消息二次确认模态覆层（零系统窗口竞争）
+        if (state.isClearingCurrentSession) {
+            CommonConfirmModalOverlay(
+                title = "清空对话记录确认",
+                message = "确定要清空当前会话的全部聊天记录吗？此操作将立即覆盖磁盘文件，不可恢复。",
+                confirmText = "确认清空",
+                isDestructive = true,
+                onConfirm = { viewModel.confirmClearCurrentSession() },
+                onDismiss = { viewModel.cancelClearCurrentSession() }
+            )
+        }
     }
 }

@@ -3,6 +3,7 @@ package org.gemini.ui.forge.service.ai
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.service.ai.tools.CalculateGeometryTool
 import org.gemini.ui.forge.service.ai.tools.GetCurrentTimeTool
+import org.gemini.ui.forge.service.ai.tools.ListAssetsTool
 import org.gemini.ui.forge.service.ai.tools.ListToolsTool
 import org.gemini.ui.forge.service.ai.tools.ReadProjectFileTool
 import org.gemini.ui.forge.service.ai.tools.ReadSkillSpecTool
@@ -26,6 +27,7 @@ object UniversalAiToolRegistry {
         CalculateGeometryTool(),
         WebFetchTool(),
         ReadProjectFileTool(),
+        ListAssetsTool(),
         SearchToolsTool(),
         ListToolsTool(),
         SearchSkillsTool(),
@@ -150,6 +152,7 @@ object UniversalAiToolRegistry {
         // 核心工作区工具名：内置基础工具与探索元工具 + UI Studio 核心交互工具
         val coreStudioToolNames = setOf(
             "apply_view_layout",
+            "list_assets",
             "generate_image",
             "generate_block_asset",
             "crop_image",

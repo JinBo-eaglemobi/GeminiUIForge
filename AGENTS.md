@@ -35,48 +35,11 @@
 ## 质量与校验（红线规则）
 
 - **IntelliJ IDEA 研发编译与局部增量初筛校验规范**: **【红线规则】**
-  - **【热重载与增量开发互斥阻断铁律】**：**若当前处于 `@forge-loop` 智能体接管、Compose 热重载开发模式或纯 UI 排版迭代场景下，严禁调用任何全量编译任务（如 `compileDesktop` 或全量 `:desktopApp:compileKotlin`）**；代码改动必须先通过 `idea_build_project(filesToRebuild = listOf(...))` 对修改文件执行精准毫秒级局部增量编译，确认 0 错误后交付热重载通道（优先通过官方 Compose Hot Reload MCP 极速热更；若涉及不可热更的结构级变更，**强制遵循本条第 3 点官方全生命周期规范，调用 `tools["compose-hot-reload"].restart()` 原生极速重启生效**）。
-  - **常规冷编译模式执行通道**：仅在明确处于**非热重载开发模式**（如底层平台配置变更、Gradle 依赖增删、KMP 多模块架构重构等无法热替换且未处于 `@forge-loop` 模式时），如果影响项目代码编译，才允许执行桌面端真实编译校验：
-    1. **首选通道 (IDEA 局部增量构建)**：优先调用 `idea_build_project(filesToRebuild = [...])` 对变动文件毫秒级编译；
-    2. **语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 做毫秒级文件语法速查；
-    3. **兜底通道 (命令行 Gradle)**：回退命令行终端：`./gradlew :desktopApp:compileKotlin`（严格遵循单一终端原则，严禁并列 `:shared`）；
-    4. 纯文档、注释或非代码修改不触发编译校验。
-- **Compose Hot Reload 保活优先与严禁滥杀冷启铁律 (Compose Hot Reload First & Anti-Kill Restart Redline)**: **【红线规则】**
-  1. **【保活最高优先级】桌面应用常驻保活，严禁滥杀进程**：
-     接入官方 `compose-hot-reload` 体系的核心价值在于：**桌面窗口常驻保活、内存与导航状态不丢、修改秒级热替换**。在日常开发、调试与多轮会话中，**绝对禁止因局部代码修改、短时工具超时或 MCP 探针瞬时断开/未连上而擅自调用 `Stop-Process`、`kill` 或系统命令强行杀死桌面应用进程**！严禁将“冷重启应用”作为偷懒手段，彻底消除频繁冷启动对开发沉浸流的严重破坏；
-  2. **【MCP 掉线原生自愈与自动重连铁律 (Native MCP Reconnect Protocol)】**：
-     在开发调试过程中，若发现 `compose-hot-reload`（或其它 MCP 服务）连接断开（例如报错 `Not connected`、`McpServerNotFoundError`、或在工具目录中瞬时缺失）：
-     - **第一动作：执行原生非侵入式自动重连**：
-       智能体必须且仅能通过 OpenCode 原生底层 MCP REST API 发起重连，严禁杀进程：
-       ```powershell
-       opencode api post /api/experimental/mcp/compose-hot-reload/connect --header "x-opencode-directory: D:/WorkSpace/Idea/Kotlin/GeminiUIForge"
-       ```
-     - **有限重试上限**：允许连续执行最多 3 次自动重连尝试（重连后调用 `tools["compose-hot-reload"].status()` 验证握手）；
-     - **不可恢复物理熔断与弹窗仲裁门禁 (Circuit Breaker & Explicit MCP Name Gate)**：
-       **若连续 3 次重连依然无法建立连接（或应用已彻底物理崩溃退出），智能体必须立刻强制中止当前任务！**
-       **绝对禁止擅自执行 kill 强杀进程，绝对禁止私自调度拉起新进程或盲目降级！**
-       必须立即调用 `question` 工具弹出单选卡片向用户详细汇报断连现状并移交决策权，**且问题标题、内容描述以及所有选项（Label 与 Description）中必须清晰、明确指明具体的 MCP 服务名（如【compose-hot-reload】）以及所涉及的具体目标程序（如【GeminiUIForge 桌面客户端 (PID: xxx)】），严禁使用含糊、抽象或让用户产生歧义的代词**：
-       - 弹窗问题格式范式：`"【<具体MCP服务名，如 compose-hot-reload>】自动重连 3 次均失败（原因: ...），已触发物理熔断。请裁决针对【<具体目标程序，如 GeminiUIForge 桌面端>】的后续方案："`；
-       - 选项 1 范式：`"忽略【compose-hot-reload】掉线，继续针对【GeminiUIForge 桌面端】执行开发/排版"`；
-       - 选项 2 范式：`"授权关闭并重启【GeminiUIForge 桌面端】，以重新接入【compose-hot-reload】"`；
-       - 选项 3 范式：`"终止本次针对【GeminiUIForge 桌面端】的全部任务"`；
-  3. **【Compose Hot Reload 官方全生命周期生效与重启闭环规范 (Official Lifecycle & Native Restart Specification)】**：
-     全项目涉及界面刷新、代码生效、状态重置与程序重启时，必须严格按以下四级官方闭环标准执行，彻底杜绝强杀进程与无效编译：
-     - **第一级（状态级零杀重置，首选通道）**：
-       当仅需丢弃当前界面状态、重新触发 `LaunchedEffect` 或重置 Compose 树时，**强制且仅能调用 `tools["compose-hot-reload"].reset_ui()`**。该工具在毫秒级内丢弃全部 `remember` 运行时状态并从根重构 UI，保持系统窗口与 JVM 进程常驻保活，耗时 < 50ms；
-     - **第二级（字节码热替换与状态闭环验证通道，日常代码开发）**：
-       日常 UI 组件、排版、ViewModel 与业务逻辑修改后，必须遵循完整的双向闭环流水线：
-       1. 发起热更：调用 `tools["compose-hot-reload"].reload({ timeout_seconds: 30 })`；
-       2. 状态闭环等待：若结果返回 `status == "reloading"`，必须轮询调用 `tools["compose-hot-reload"].status()`，直至 `reloadState` 从 `"reloading"` 稳定变为 `"ok"`（热更成功生效）或 `"failed"`（热更编译报错）；
-       3. 错误归因：若为 `"failed"`，必须调用 `status({ max_error_detail_lines: 50 })` 读取 `lastErrorDetails` 进行语法诊断，严禁未查明报错盲目尝试重启；
-     - **第三级（官方原生极速重启通道，不可热更结构变更时唯一通道）**：
-       仅当修改了核心类契约、依赖配置导致 Hot Reload 底层明确报错且无法热替换时，方允许触发进程重启。**此时必须且仅能调用官方原生重启工具**：
-       ```typescript
-       tools["compose-hot-reload"].restart({ timeout_seconds: 60 })
-       ```
-       由 Hot Reload Runner 守护进程以既有类路径和参数极速拉起新进程并自动重连，耗时仅 3~5 秒。**【绝对铁律】严禁使用 PowerShell `Stop-Process` 强杀应用进程，严禁将内部原生重启降级为 Gradle 全量冷启动**；
-     - **第四级（仅限进程消亡冷启动兜底）**：
-       仅当应用程序物理崩溃已自行退出（进程表中不存在且 Hot Reload 离线无法重连）时，先调用 `tools.idea.build_project(filesToRebuild = [...])` 进行增量初筛，再调度 IDEA 运行配置 `desktopApp [hot] 🔥`（`waitForExit = false`）后台拉起并重新握手。
+  - **首选增量构建通道 (IDEA 局部增量构建)**：代码改动后，优先调用 `idea_build_project(filesToRebuild = [...])` 对变动文件毫秒级编译，确认 0 语法与编译错误后再推进；
+  - **语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 做毫秒级文件语法速查；
+  - **兜底通道 (命令行 Gradle)**：仅在底层架构变更或无 IDE 构建环境时，回退命令行终端：`./gradlew :desktopApp:compileKotlin`（严格遵循单一终端原则，严禁并列 `:shared`）；
+  - 纯文档、注释或非代码修改不触发编译校验。
+
 - **IntelliJ IDEA xdebug 调试模式接入与实机断点取证规范 (IntelliJ IDEA xdebug Debugger & Runtime Data Inspection Specification)**: **【红线规则】**
   1. **【准入首要硬前提：IDEA MCP 在线 + 调试模式启动】**：
      - **首要前提门禁**：只要同时满足 **① 当前 IntelliJ IDEA MCP 通信连接可用** 且 **② 应用程序已处于调试模式（Debug）启动或附加运行中**（通过 `tools.idea.xdebug_get_debugger_status` 能探测到活跃会话 `sessionId`），智能体即可直接选择开启断点调试；

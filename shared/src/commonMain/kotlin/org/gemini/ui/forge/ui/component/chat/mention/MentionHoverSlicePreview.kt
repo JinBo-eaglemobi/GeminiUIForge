@@ -155,7 +155,7 @@ fun MentionHoverSlicePreview(
                     color = MaterialTheme.colorScheme.secondaryContainer
                 ) {
                     Text(
-                        text = "${payload.width.toInt()} × ${payload.height.toInt()} px",
+                        text = "${payload.width} × ${payload.height} px",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp

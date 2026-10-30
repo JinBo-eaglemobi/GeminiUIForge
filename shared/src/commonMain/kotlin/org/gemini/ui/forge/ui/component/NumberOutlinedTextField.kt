@@ -39,7 +39,8 @@ fun NumberOutlinedTextField(
     maxVal: Float? = null,
     range: ClosedFloatingPointRange<Float>? = null,
     enabled: Boolean = true,
-    contentPadding: PaddingValues? = null
+    contentPadding: PaddingValues? = null,
+    onEnterConfirm: (() -> Unit)? = null
 ) {
     val effectiveMinVal = range?.start ?: minVal
     val effectiveMaxVal = range?.endInclusive ?: maxVal
@@ -134,7 +135,8 @@ fun NumberOutlinedTextField(
             singleLine = singleLine,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             enabled = enabled,
-            contentPadding = contentPadding
+            contentPadding = contentPadding,
+            onEnterConfirm = onEnterConfirm
         )
 
         // 当没有焦点且启用时，覆盖一个透明层来拦截 Hover 和 Drag

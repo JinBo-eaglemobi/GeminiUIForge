@@ -658,6 +658,8 @@
     <string name="apply_layout_mode_new_desc">保留当前已有视图不变，独立创建全新视图并打开</string>
     <string name="apply_layout_input_view_name">新视图名称</string>
     <string name="apply_layout_input_view_name_placeholder">输入新视图名称...</string>
+    <string name="apply_layout_input_view_name_placeholder_suggested">请输入新视图名称（例如：%1$s）</string>
+    <string name="apply_layout_error_duplicate_name">该视图名称已存在，请更换新名称</string>
     <string name="apply_layout_btn_confirm">确认应用排版</string>
     <string name="apply_layout_btn_cancel">放弃</string>
     <string name="apply_layout_toast_replace_success">视图 [%1$s] 已成功应用 AI 排版！</string>
@@ -672,6 +674,9 @@
     <string name="uistudio_import_folder">导入文件夹</string>
     <string name="uistudio_import_sheet_slices">导入图集切片</string>
     <string name="uistudio_drop_hint">拖入图片或文件夹即可导入</string>
+    <string name="uistudio_refresh_assets">刷新素材库</string>
+    <string name="uistudio_refresh_assets_tooltip">刷新素材库（扫描物理磁盘，清理失效项并同步新增）</string>
+    <string name="uistudio_refresh_assets_toast">素材库已刷新：有效 %1$d 项（清理失效 %2$d 项，同步新增 %3$d 项）</string>
 
     <!-- 默认生图模型预设与动态路由 -->
     <string name="settings_auto_switch_image_gen_model_title">生图意图自动切换模型</string>

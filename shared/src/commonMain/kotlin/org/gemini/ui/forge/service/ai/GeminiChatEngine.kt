@@ -676,7 +676,7 @@ class GeminiChatEngine(
 
             if (generatedImageData == null && rawResponseAggregator != null) {
                 try {
-                    val parsed = jsonParser.parseToJsonElement(rawResponseAggregator!!)
+                    val parsed = jsonParser.parseToJsonElement(rawResponseAggregator)
                     val imgPair = extractInlineImageData(parsed)
                     if (imgPair != null) {
                         generatedImageData = imgPair.first

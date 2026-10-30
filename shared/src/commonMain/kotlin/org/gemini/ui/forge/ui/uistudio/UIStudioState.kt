@@ -91,9 +91,14 @@ data class UIStudioState(
     val isSlicingAssets: Boolean = false,
     val sliceProgress: Float = 0f,
     val sliceStatusText: String = "",
+    val sliceTaskItems: List<SliceTaskItemState> = emptyList(),
+    val sliceStartTimeMillis: Long = 0L,
+    val sliceCurrentStage: SliceStage = SliceStage.PREPARING,
+    val sliceCurrentItemName: String = "",
     val isAiDetectingCoords: Boolean = false,
     val aiDetectStatusText: String = "",
     val assetLibrary: UIAssetLibrary = UIAssetLibrary(),
+    val isRefreshingAssetLibrary: Boolean = false,
     val selectedFolderId: String? = null,
     val selectedAssetId: String? = null,
     val isNewFolderDialogVisible: Boolean = false,
@@ -250,5 +255,41 @@ data class UIStudioLayoutConfig(
     val activeRightTabName: String = "PROPERTY",
     val isRightSidebarVisible: Boolean = true
 )
+
+/**
+ * 切片任务单项状态
+ */
+enum class SliceItemStatus {
+    PENDING,    // 排队等待
+    SLICING,    // 物理切片中
+    MATTING,    // AI 去背中
+    SUCCESS,    // 处理完成
+    FAILED      // 失败/已降级
+}
+
+/**
+ * 切片入库当前整体阶段
+ */
+enum class SliceStage {
+    PREPARING,   // 准备解码图集
+    SLICING,     // 物理多核切片
+    MATTING,     // AI 批量透明去背
+    REGISTERING, // 素材库登记
+    FINISHED     // 全部完成
+}
+
+/**
+ * 切片条目实时状态模型
+ */
+data class SliceTaskItemState(
+    val id: String,
+    val name: String,
+    val width: Int,
+    val height: Int,
+    val category: String = "",
+    val status: SliceItemStatus = SliceItemStatus.PENDING,
+    val errorMessage: String? = null
+)
+
 
 

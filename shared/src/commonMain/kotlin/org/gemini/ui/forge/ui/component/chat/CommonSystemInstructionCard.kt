@@ -54,8 +54,6 @@ fun CommonSystemInstructionCard(
     val copyToClipboard = rememberClipboardAction()
 
     val cardModifier = modifier
-        .fillMaxWidth(0.96f)
-        .fillMaxHeight(0.95f)
         .clickable(enabled = false) {}
 
     Surface(

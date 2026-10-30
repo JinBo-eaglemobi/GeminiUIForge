@@ -30,6 +30,12 @@ import org.gemini.ui.forge.ui.theme.AppShapes
 @Composable
 fun RenameLayerDialog(initialId: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var newId by remember { mutableStateOf(initialId) }
+    val canConfirm = newId.isNotBlank()
+    val doConfirm = {
+        if (canConfirm) {
+            onConfirm(newId)
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         // 引入标准弹窗黄金宽度 Design Token（440.dp），横向拉撑，杜绝硬编码，使微型确认框在 0.7 密度下依旧舒展大气并添加中文注释
@@ -42,9 +48,10 @@ fun RenameLayerDialog(initialId: String, onDismiss: () -> Unit, onConfirm: (Stri
                 label = { Text("新 ID/名称") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                shape = AppShapes.medium
+                shape = AppShapes.medium,
+                onEnterConfirm = doConfirm
             )
         },
-        confirmButton = { Button(onClick = { onConfirm(newId) }, shape = AppShapes.medium) { Text("确认") } },
+        confirmButton = { Button(onClick = doConfirm, enabled = canConfirm, shape = AppShapes.medium) { Text("确认") } },
         dismissButton = { TextButton(onClick = onDismiss, shape = AppShapes.medium) { Text("取消") } })
 }

@@ -39,8 +39,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.chat.VisualChatSession
 import org.gemini.ui.forge.ui.component.ToastType
+import org.gemini.ui.forge.ui.component.chat.CommonConfirmModalOverlay
 import org.gemini.ui.forge.ui.component.tip
-import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.Toast
 
@@ -65,6 +65,7 @@ fun CommonChatSessionSidebar(
     onDeleteSession: (String) -> Unit,
     modifier: Modifier = Modifier,
     config: CommonChatStudioConfig = CommonChatStudioConfig(),
+    onDeleteRequest: ((VisualChatSession) -> Unit)? = null,
     headerActions: @Composable RowScope.() -> Unit = {}
 ) {
     val spacing = LocalAppSpacing.current
@@ -158,7 +159,13 @@ fun CommonChatSessionSidebar(
                             session = session,
                             isSelected = session.id == currentSessionId,
                             onSelect = { onSessionSelected(session.id) },
-                            onDeleteRequest = { sessionToDelete = session }
+                            onDeleteRequest = {
+                                if (onDeleteRequest != null) {
+                                    onDeleteRequest(session)
+                                } else {
+                                    sessionToDelete = session
+                                }
+                            }
                         )
                     }
                 }
@@ -166,9 +173,9 @@ fun CommonChatSessionSidebar(
         }
     }
 
-    // 4. 删除会话二次确认弹窗
+    // 4. 删除会话二次确认模态覆层（零系统窗口竞争，绝对不被父 Dialog 遮挡）
     sessionToDelete?.let { session ->
-        AppConfirmDialog(
+        CommonConfirmModalOverlay(
             title = "删除对话确认",
             message = "确定要删除对话 \"${session.title}\" 吗？此操作无法撤销。",
             confirmText = "确认删除",

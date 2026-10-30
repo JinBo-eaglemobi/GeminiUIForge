@@ -24,7 +24,8 @@ import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
 import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import org.gemini.ui.forge.ui.component.chat.CommonChatStudioConfig
 import org.gemini.ui.forge.ui.component.chat.CommonChatStudioContent
-import org.gemini.ui.forge.ui.component.chat.CommonSystemInstructionModalOverlay
+import org.gemini.ui.forge.ui.component.chat.CommonConfirmModalOverlay
+import org.gemini.ui.forge.ui.component.chat.CommonSystemInstructionDialog
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.ai.studio.component.StudioSessionLogDialog
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
@@ -299,14 +300,14 @@ fun UIProjectAiStudioDialog(
                 )
             }
 
-            // 项目系统人设指令模态覆盖层（绝对居中置顶，零窗口竞争冲突）
+            // 项目系统人设指令弹窗（统一独立居中大弹窗，与侧边栏完全对称一致）
             if (state.isSystemInstructionDialogVisible) {
                 var defaultInstruction by remember { mutableStateOf("") }
                 LaunchedEffect(Unit) {
                     defaultInstruction = PromptManager.getUiStudioAgentPrompt()
                 }
 
-                CommonSystemInstructionModalOverlay(
+                CommonSystemInstructionDialog(
                     currentInstruction = state.projectAgentConfig.systemPrompt.ifBlank { defaultInstruction },
                     defaultInstruction = defaultInstruction,
                     onConfirm = { newPrompt ->
@@ -318,9 +319,9 @@ fun UIProjectAiStudioDialog(
                 )
             }
 
-            // 清空会话消息二次确认弹窗
+            // 清空会话消息二次确认模态覆层（零系统窗口竞争，绝对置顶）
             if (state.isClearingCurrentSession) {
-                AppConfirmDialog(
+                CommonConfirmModalOverlay(
                     title = "清空对话记录确认",
                     message = "确定要清空当前会话的全部聊天记录吗？此操作将立即持久化覆盖磁盘文件，不可恢复。",
                     confirmText = "确认清空",
@@ -330,9 +331,9 @@ fun UIProjectAiStudioDialog(
                 )
             }
 
-            // 最大工具轮询续轮确认弹窗
+            // 最大工具轮询续轮确认模态覆层
             if (state.showMaxToolRoundsContinueDialog) {
-                AppConfirmDialog(
+                CommonConfirmModalOverlay(
                     title = "工具轮询上限提醒",
                     message = "AI Agent 已达到当前单次最大轮询上限（${state.currentToolLoopRound} 轮），当前仍在全力推演中。\n\n是否继续追加 ${state.maxToolLoopRoundLimit} 轮继续推演？",
                     confirmText = "继续执行 (+${state.maxToolLoopRoundLimit}轮)",
@@ -357,6 +358,7 @@ fun UIProjectAiStudioDialog(
                 ApplyLayoutConfirmDialog(
                     layoutResult = pendingLayout,
                     currentViewName = state.currentView?.nameStr ?: "当前视图",
+                    existingViewNames = state.project?.studioPages?.map { it.nameStr } ?: emptyList(),
                     onDismiss = { viewModel.cancelApplyLayout() },
                     onConfirm = { replaceCurrent, customName ->
                         viewModel.confirmApplyLayout(replaceCurrent, customName)

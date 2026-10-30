@@ -51,6 +51,7 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 fun CommonModelBubble(
     message: VisualChatMessage,
     maxBubbleWidth: Dp,
+    isGenerating: Boolean = false,
     onImageClick: ((String) -> Unit)? = null,
     onVariantIndexChanged: ((newIndex: Int) -> Unit)? = null,
     onRegenerateRequested: ((VisualChatMessage) -> Unit)? = null,
@@ -82,15 +83,23 @@ fun CommonModelBubble(
         Surface(
             shape = RoundedCornerShape(10.dp),
             color = MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier.size(32.dp).tip("Gemini AI 助手")
+            modifier = Modifier.size(32.dp).tip(if (isGenerating) "AI 思考与生成中" else "Gemini AI 助手")
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    Icons.Default.AutoAwesome,
-                    contentDescription = "AI",
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer
-                )
+                if (isGenerating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = "AI",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
             }
         }
         Spacer(Modifier.width(spacing.small))
@@ -127,12 +136,16 @@ fun CommonModelBubble(
                 ) {
                     Column(modifier = Modifier.padding(spacing.medium)) {
                         // 1. 思维链思考过程 (Thought Chain，高阶折叠与耗时呈现)
-                        if (!message.thought.isNullOrBlank()) {
+                        // 核心防空白铁律：若当前正处于生成中且正文尚未输出，即便第一段 thought 仍在网络传输途中，
+                        // 也直接在气泡原位呈现脉冲微光呼吸动画与秒表计时，绝不展现空 Surface
+                        val isThinkingNow = isGenerating && modelText.isBlank() && !message.isError
+                        val shouldShowThinking = !message.thought.isNullOrBlank() || (isThinkingNow && message.toolCalls.isEmpty())
+                        if (shouldShowThinking) {
                             ThinkingProcessCard(
-                                thought = message.thought,
-                                isThinking = false,
+                                thought = message.thought ?: "",
+                                isThinking = isThinkingNow,
                                 durationMs = message.durationMs,
-                                modifier = Modifier.padding(bottom = spacing.small)
+                                modifier = Modifier.padding(bottom = if (modelText.isNotBlank() || message.toolCalls.isNotEmpty()) spacing.small else 0.dp)
                             )
                         }
 
@@ -150,14 +163,16 @@ fun CommonModelBubble(
 
                         // 2. 模型核心正文 或 专属错误卡片
                         // 必须以当前选中的具体回答版本 (modelText) 判定，严禁被历史整体消息的 isError 误伤成功版本
-                        // 核心防误判铁律：若本轮消息成功执行了系统/MCP工具调用，正文为空属于合法正常现象，严禁误报为服务异常卡片
+                        // 核心防误判铁律：
+                        // ① 若本轮消息执行了系统/MCP工具调用，正文为空属于合法正常现象，严禁误报为服务异常卡片；
+                        // ② 严禁在消息处于初始占位或流式推演未完成阶段 (isError == false 且没有明确的 ⚠️ 异常前缀) 时，
+                        //    仅仅因为 modelText 和 thought 暂时为空就误报为服务响应异常（API Error）！
                         val hasToolCalls = message.toolCalls.isNotEmpty()
                         val isCurrentVariantFailed = if (hasToolCalls) {
                             message.isError && message.toolCalls.all { !it.isSuccess }
                         } else {
-                            (modelText.isBlank() && message.thought.isNullOrBlank()) ||
-                                modelText.startsWith("⚠️") ||
-                                (message.isError && modelText.isBlank())
+                            modelText.startsWith("⚠️") ||
+                                (message.isError && (modelText.isBlank() || message.errorMessage != null))
                         }
                         if (isCurrentVariantFailed) {
                             val errDetail = message.errorMessage?.ifBlank { null }
@@ -170,7 +185,7 @@ fun CommonModelBubble(
                                 onFallbackFlashModel = onFallbackFlashModelRequested?.let { cb -> { cb(message) } },
                                 onSwitchProtocol = onSwitchProtocolRequested?.let { cb -> { cb(message) } }
                             )
-                        } else {
+                        } else if (modelText.isNotBlank()) {
                             SelectionContainer {
                                 AppMarkdown(
                                     content = modelText

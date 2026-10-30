@@ -17,6 +17,12 @@ class AiToolExecutionDispatcher {
 
         /**
          * 从原始响应 JSON 或正文文本中提取所有由大模型触发的结构化函数调用记录（带 callId / step.id 支持）
+         *
+         * 严格对齐 Google Gemini Interactions 官方流式 (SSE) 与非流式协议规范：
+         * 1. 流式事件流 (Streaming Event Array): 自动将同 step 索引 (index) 或 id 的 step.start 初始骨架
+         *    与随后的一个或多个 step.delta (type: arguments_delta) 增量分块片段进行内存累加组装；
+         * 2. 多工具并发调用 (Parallel Function Calling): 按 step index / callId 隔离组装，彻底根除参数截断与串包；
+         * 3. 双模容错反序列化 (Dual-Mode Deserialization): 兼容 JsonObject、JSON 字符串、内嵌转义文本三级管道。
          */
         fun extractFunctionCallRecords(rawJson: String, responseText: String): List<GeminiFunctionCallRecord> {
             val calls = mutableListOf<GeminiFunctionCallRecord>()
@@ -25,24 +31,33 @@ class AiToolExecutionDispatcher {
                 try {
                     val element = looseJson.parseToJsonElement(rawJson)
 
-                    // 0. 优先精准提取 Google 官方 Interactions API: interactions.steps 结构
-                    if (element is JsonObject) {
+                    // 1. Interactions 流式分块事件流集合 (JsonArray 结构)
+                    if (element is JsonArray) {
+                        val streamCalls = extractStreamingFunctionCalls(element)
+                        if (streamCalls.isNotEmpty()) {
+                            calls.addAll(streamCalls)
+                        }
+                    }
+
+                    // 2. 优先精准提取 Google 官方 Interactions API: interactions.steps 结构 (JsonObject 根实体)
+                    if (calls.isEmpty() && element is JsonObject) {
                         val steps = element["steps"]?.jsonArray
+                            ?: element["interaction"]?.jsonObject?.get("steps")?.jsonArray
                         if (steps != null) {
                             for (stepItem in steps) {
                                 if (stepItem is JsonObject) {
                                     val stepId = stepItem["id"]?.jsonPrimitive?.contentOrNull
+                                        ?: stepItem["call_id"]?.jsonPrimitive?.contentOrNull
                                     val callObj = stepItem["call"]?.jsonObject
                                         ?: stepItem["tool_call"]?.jsonObject
                                         ?: stepItem["function_call"]?.jsonObject
+                                        ?: (if (stepItem["type"]?.jsonPrimitive?.contentOrNull in setOf("function_call", "tool_call")) stepItem else null)
                                     if (callObj != null) {
                                         val name = callObj["name"]?.jsonPrimitive?.contentOrNull
-                                        val args = callObj["arguments"]?.jsonObject
-                                            ?: callObj["args"]?.jsonObject
-                                            ?: callObj["parameters"]?.jsonObject
-                                            ?: buildJsonObject {}
+                                        val argsRaw = callObj["arguments"] ?: callObj["args"] ?: callObj["parameters"]
+                                        val argsJsonStr = serializeArgsElement(argsRaw)
                                         if (!name.isNullOrBlank()) {
-                                            calls.add(GeminiFunctionCallRecord(name, args.toString(), stepId))
+                                            calls.add(GeminiFunctionCallRecord(name, argsJsonStr, stepId))
                                         }
                                     }
                                 }
@@ -50,8 +65,10 @@ class AiToolExecutionDispatcher {
                         }
                     }
 
-                    // 递归提取其余标准/兼容结构
-                    findAllFunctionCallRecordsRecursive(element, calls)
+                    // 3. 递归提取其余标准/兼容结构 (generateContent candidates.functionCall 等)
+                    if (calls.isEmpty()) {
+                        findAllFunctionCallRecordsRecursive(element, calls)
+                    }
                 } catch (e: Exception) {
                     AppLogger.w(TAG, "解析原始流 JSON 工具调用异常: ${e.message}")
                 }
@@ -73,15 +90,15 @@ class AiToolExecutionDispatcher {
                             val name = parsed["name"]?.jsonPrimitive?.contentOrNull
                                 ?: parsed["tool"]?.jsonPrimitive?.contentOrNull
                                 ?: parsed["function"]?.jsonPrimitive?.contentOrNull
-                            val args = parsed["parameters"]?.jsonObject
-                                ?: parsed["arguments"]?.jsonObject
-                                ?: parsed["args"]?.jsonObject
-                                ?: buildJsonObject {}
+                            val args = parsed["parameters"]
+                                ?: parsed["arguments"]
+                                ?: parsed["args"]
+                            val argsJsonStr = serializeArgsElement(args)
                             val callId = parsed["id"]?.jsonPrimitive?.contentOrNull
                                 ?: parsed["call_id"]?.jsonPrimitive?.contentOrNull
 
-                            if (!name.isNullOrBlank() && calls.none { it.name == name && it.argsJson == args.toString() }) {
-                                calls.add(GeminiFunctionCallRecord(name, args.toString(), callId))
+                            if (!name.isNullOrBlank() && calls.none { it.name == name && it.argsJson == argsJsonStr }) {
+                                calls.add(GeminiFunctionCallRecord(name, argsJsonStr, callId))
                             }
                         } catch (_: Exception) {}
                     }
@@ -100,6 +117,118 @@ class AiToolExecutionDispatcher {
             }
 
             return calls
+        }
+
+        /**
+         * 从 Interactions API 流式事件流数组中精确装配函数调用与增量参数 (处理 step.start + 多分片 step.delta arguments_delta)
+         */
+        private fun extractStreamingFunctionCalls(events: JsonArray): List<GeminiFunctionCallRecord> {
+            val stepBuilders = mutableMapOf<Int, StepCallAssembler>()
+
+            for (eventItem in events) {
+                if (eventItem !is JsonObject) continue
+
+                val index = eventItem["index"]?.jsonPrimitive?.intOrNull
+                val eventType = eventItem["event_type"]?.jsonPrimitive?.contentOrNull
+
+                // 1. 匹配 step.start 或 step 对象
+                val stepObj = eventItem["step"]?.jsonObject
+                if (stepObj != null) {
+                    val type = stepObj["type"]?.jsonPrimitive?.contentOrNull
+                    if (type == "function_call" || type == "tool_call") {
+                        val effectiveIndex = index ?: (stepBuilders.size + 1)
+                        val assembler = stepBuilders.getOrPut(effectiveIndex) { StepCallAssembler(effectiveIndex) }
+                        assembler.id = stepObj["id"]?.jsonPrimitive?.contentOrNull
+                            ?: stepObj["call_id"]?.jsonPrimitive?.contentOrNull
+                            ?: assembler.id
+                        assembler.name = stepObj["name"]?.jsonPrimitive?.contentOrNull ?: assembler.name
+                        val initialArgs = stepObj["arguments"] ?: stepObj["args"] ?: stepObj["parameters"]
+                        if (initialArgs != null) {
+                            assembler.initialArgsElement = initialArgs
+                        }
+                    }
+                }
+
+                // 2. 匹配 step.delta 中的增量 arguments_delta
+                val deltaObj = eventItem["delta"]?.jsonObject
+                if (deltaObj != null) {
+                    val deltaType = deltaObj["type"]?.jsonPrimitive?.contentOrNull
+                    val argsChunk = deltaObj["arguments"]?.jsonPrimitive?.contentOrNull
+                    if (argsChunk != null && (deltaType == null || deltaType == "arguments_delta")) {
+                        val effectiveIndex = index ?: stepBuilders.keys.lastOrNull() ?: 1
+                        val assembler = stepBuilders.getOrPut(effectiveIndex) { StepCallAssembler(effectiveIndex) }
+                        assembler.argumentsDeltaBuffer.append(argsChunk)
+                    }
+                }
+            }
+
+            if (stepBuilders.isEmpty()) return emptyList()
+
+            val results = mutableListOf<GeminiFunctionCallRecord>()
+            // 按 index 排序确保多工具调用的有序性
+            stepBuilders.entries.sortedBy { it.key }.forEach { (_, assembler) ->
+                val toolName = assembler.name
+                if (!toolName.isNullOrBlank()) {
+                    val deltaStr = assembler.argumentsDeltaBuffer.toString().trim()
+                    val finalArgsJson = if (deltaStr.isNotEmpty()) {
+                        normalizeJsonString(deltaStr)
+                    } else {
+                        serializeArgsElement(assembler.initialArgsElement)
+                    }
+                    results.add(GeminiFunctionCallRecord(toolName, finalArgsJson, assembler.id))
+                }
+            }
+            return results
+        }
+
+        private class StepCallAssembler(
+            val index: Int,
+            var id: String? = null,
+            var name: String? = null,
+            val argumentsDeltaBuffer: StringBuilder = StringBuilder(),
+            var initialArgsElement: JsonElement? = null
+        )
+
+        /**
+         * 将 JsonElement 宽容序列化为规整的 JSON 字符串 (如 {"query": "asset"})
+         */
+        private fun serializeArgsElement(element: JsonElement?): String {
+            if (element == null) return "{}"
+            return when (element) {
+                is JsonObject -> element.toString()
+                is JsonPrimitive -> {
+                    if (element.isString) {
+                        normalizeJsonString(element.content)
+                    } else {
+                        element.content
+                    }
+                }
+                else -> "{}"
+            }
+        }
+
+        /**
+         * 规整化 JSON 文本，自动处理转义、嵌套反序列化与边界情况
+         */
+        private fun normalizeJsonString(rawStr: String): String {
+            val trimmed = rawStr.trim()
+            if (trimmed.isEmpty()) return "{}"
+            // 通道 1: 尝试直接解析为 JsonObject
+            try {
+                val parsed = looseJson.parseToJsonElement(trimmed)
+                if (parsed is JsonObject) return parsed.toString()
+            } catch (_: Exception) {}
+
+            // 通道 2: 尝试处理包含反斜杠转义的情况（如 \"query\": \"asset\"）
+            try {
+                if (trimmed.contains("\\\"")) {
+                    val unescaped = trimmed.replace("\\\"", "\"").replace("\\\\", "\\").replace("\\n", "\n")
+                    val parsed = looseJson.parseToJsonElement(unescaped)
+                    if (parsed is JsonObject) return parsed.toString()
+                }
+            } catch (_: Exception) {}
+
+            return if (trimmed.startsWith("{") && trimmed.endsWith("}")) trimmed else "{}"
         }
 
         /**
@@ -126,12 +255,10 @@ class AiToolExecutionDispatcher {
                     val typeStr = element["type"]?.jsonPrimitive?.contentOrNull
                     if (typeStr == "function_call" || typeStr == "tool_call") {
                         val name = element["name"]?.jsonPrimitive?.contentOrNull
-                        val args = element["arguments"]?.jsonObject
-                            ?: element["args"]?.jsonObject
-                            ?: element["parameters"]?.jsonObject
-                            ?: buildJsonObject {}
+                        val argsRaw = element["arguments"] ?: element["args"] ?: element["parameters"]
+                        val argsJsonStr = serializeArgsElement(argsRaw)
                         if (!name.isNullOrBlank()) {
-                            outList.add(GeminiFunctionCallRecord(name, args.toString(), callId))
+                            outList.add(GeminiFunctionCallRecord(name, argsJsonStr, callId))
                         }
                     }
 
@@ -139,12 +266,11 @@ class AiToolExecutionDispatcher {
                     val fc = element["functionCall"]?.jsonObject ?: element["function_call"]?.jsonObject
                     if (fc != null) {
                         val name = fc["name"]?.jsonPrimitive?.contentOrNull
-                        val args = fc["args"]?.jsonObject
-                            ?: fc["arguments"]?.jsonObject
-                            ?: buildJsonObject {}
+                        val argsRaw = fc["args"] ?: fc["arguments"] ?: fc["parameters"]
+                        val argsJsonStr = serializeArgsElement(argsRaw)
                         val fcCallId = fc["id"]?.jsonPrimitive?.contentOrNull ?: fc["call_id"]?.jsonPrimitive?.contentOrNull ?: callId
                         if (!name.isNullOrBlank()) {
-                            outList.add(GeminiFunctionCallRecord(name, args.toString(), fcCallId))
+                            outList.add(GeminiFunctionCallRecord(name, argsJsonStr, fcCallId))
                         }
                     }
 
@@ -152,12 +278,11 @@ class AiToolExecutionDispatcher {
                     val toolCall = element["tool_call"]?.jsonObject ?: element["call"]?.jsonObject
                     if (toolCall != null) {
                         val name = toolCall["name"]?.jsonPrimitive?.contentOrNull
-                        val args = toolCall["arguments"]?.jsonObject
-                            ?: toolCall["args"]?.jsonObject
-                            ?: buildJsonObject {}
+                        val argsRaw = toolCall["arguments"] ?: toolCall["args"] ?: toolCall["parameters"]
+                        val argsJsonStr = serializeArgsElement(argsRaw)
                         val tcCallId = toolCall["id"]?.jsonPrimitive?.contentOrNull ?: toolCall["call_id"]?.jsonPrimitive?.contentOrNull ?: callId
                         if (!name.isNullOrBlank()) {
-                            outList.add(GeminiFunctionCallRecord(name, args.toString(), tcCallId))
+                            outList.add(GeminiFunctionCallRecord(name, argsJsonStr, tcCallId))
                         }
                     }
 

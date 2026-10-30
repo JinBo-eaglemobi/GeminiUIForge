@@ -44,6 +44,16 @@ fun AddLayerDialog(onDismiss: () -> Unit, onConfirm: (String, UIBlockType, Float
     var widthStr by remember { mutableStateOf("200") }
     var heightStr by remember { mutableStateOf("200") }
     var expandedType by remember { mutableStateOf(false) }
+
+    val doConfirm = {
+        onConfirm(
+            name,
+            selectedType,
+            widthStr.toFloatOrNull() ?: 200f,
+            heightStr.toFloatOrNull() ?: 200f
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         // 引入标准弹窗黄金宽度 Design Token（440.dp），横向拉撑，杜绝硬编码，使微型确认框在 0.7 密度下依旧舒展大气并添加中文注释
@@ -56,7 +66,8 @@ fun AddLayerDialog(onDismiss: () -> Unit, onConfirm: (String, UIBlockType, Float
                     onValueChange = { name = it },
                     label = { Text("图层名称/ID (可选)") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = AppShapes.medium
+                    shape = AppShapes.medium,
+                    onEnterConfirm = doConfirm
                 )
                 ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = { expandedType = !expandedType }) {
                     SelectAllOutlinedTextField(
@@ -82,27 +93,22 @@ fun AddLayerDialog(onDismiss: () -> Unit, onConfirm: (String, UIBlockType, Float
                         onValueChange = { widthStr = it },
                         label = { Text("宽度") },
                         modifier = Modifier.weight(1f),
-                        isFloat = true
+                        isFloat = true,
+                        onEnterConfirm = doConfirm
                     )
                     org.gemini.ui.forge.ui.component.NumberOutlinedTextField(
                         value = heightStr,
                         onValueChange = { heightStr = it },
                         label = { Text("高度") },
                         modifier = Modifier.weight(1f),
-                        isFloat = true
+                        isFloat = true,
+                        onEnterConfirm = doConfirm
                     )
                 }
             }
         },
         confirmButton = {
-            Button(onClick = {
-                onConfirm(
-                    name,
-                    selectedType,
-                    widthStr.toFloatOrNull() ?: 200f,
-                    heightStr.toFloatOrNull() ?: 200f
-                )
-            }, shape = AppShapes.medium) { Text("添加") }
+            Button(onClick = doConfirm, shape = AppShapes.medium) { Text("添加") }
         },
         dismissButton = { TextButton(onClick = onDismiss, shape = AppShapes.medium) { Text("取消") } }
     )

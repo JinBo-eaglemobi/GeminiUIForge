@@ -66,6 +66,13 @@ fun NewFolderDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+                val canConfirm = folderName.isNotBlank()
+                val doConfirm = {
+                    if (canConfirm) {
+                        onConfirm(folderName.trim())
+                    }
+                }
+
                 SelectAllOutlinedTextField(
                     value = folderName,
                     onValueChange = { folderName = it },
@@ -73,7 +80,8 @@ fun NewFolderDialog(
                     placeholder = { Text("请输入文件夹名称") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    onEnterConfirm = doConfirm
                 )
 
                 Row(
@@ -89,8 +97,8 @@ fun NewFolderDialog(
                     }
                     Spacer(modifier = Modifier.width(spacing.small))
                     Button(
-                        onClick = { onConfirm(folderName.trim()) },
-                        enabled = folderName.isNotBlank(),
+                        onClick = doConfirm,
+                        enabled = canConfirm,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.tip("确认创建文件夹并同步磁盘")
                     ) {
