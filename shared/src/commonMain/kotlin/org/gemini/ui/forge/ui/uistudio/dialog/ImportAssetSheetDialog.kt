@@ -184,7 +184,7 @@ fun ImportAssetSheetDialog(
                     OutlinedTextField(
                         value = state.sourceImagePath,
                         onValueChange = { viewModel.updateSourceImagePath(it) },
-                        placeholder = { Text("例如：E:\\god_cup_assets.png") },
+                        placeholder = { Text("例如：E:\\dir/xxx.png") },
                         leadingIcon = {
                             Box(
                                 modifier = Modifier.padding(start = 14.dp, end = 6.dp),
@@ -291,7 +291,7 @@ fun ImportAssetSheetDialog(
                         OutlinedTextField(
                             value = state.sourceJsonPath,
                             onValueChange = { viewModel.updateSourceJsonPath(it) },
-                            placeholder = { Text("选填，例如：E:\\god_cup_assets_coords.json") },
+                            placeholder = { Text("选填，例如：E:\\dir/xxx/xxx.json") },
                             leadingIcon = {
                                 Box(
                                     modifier = Modifier.padding(start = 14.dp, end = 6.dp),

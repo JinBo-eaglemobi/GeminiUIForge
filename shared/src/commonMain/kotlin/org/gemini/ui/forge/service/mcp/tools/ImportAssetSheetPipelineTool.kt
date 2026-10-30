@@ -63,11 +63,11 @@ class ImportAssetSheetPipelineTool(
             })
             put("imagePath", buildJsonObject {
                 put("type", "string")
-                put("description", "图集大图文件绝对物理路径或网络URL (如 E:\\god_cup_assets.png)")
+                put("description", "图集大图文件绝对物理路径或网络URL (如 E:\\dir/img.png)")
             })
             put("jsonPath", buildJsonObject {
                 put("type", "string")
-                put("description", "可选：坐标配置文件绝对物理路径 (如 E:\\god_cup_assets_coords.json)；缺省时自动走纯图 AI 视觉目标检测分支")
+                put("description", "可选：坐标配置文件绝对物理路径 (如 E:\\dir/img_doc.json)；缺省时自动走纯图 AI 视觉目标检测分支")
             })
             put("jsonContent", buildJsonObject {
                 put("type", "string")
