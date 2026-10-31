@@ -89,13 +89,13 @@ fun UIStudioAssetTreeLeafItem(
     val state = viewModel.state
     val copy = rememberClipboardAction()
     val coroutineScope = rememberCoroutineScope()
-    var bitmap by remember(item.relativePath) { mutableStateOf<ImageBitmap?>(null) }
+    var bitmap by remember(item.relativePath, item.updatedAt) { mutableStateOf<ImageBitmap?>(null) }
     var showContextMenu by remember { mutableStateOf(false) }
     var showMoveFolderDialog by remember { mutableStateOf(false) }
     var rowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val isBeingDragged = state.draggedAssetId == item.id
 
-    LaunchedEffect(item.relativePath) {
+    LaunchedEffect(item.relativePath, item.updatedAt) {
         withContext(Dispatchers.Default) {
             val bytes = readLocalFileBytes(item.relativePath)
                 ?: try {
@@ -103,8 +103,10 @@ fun UIStudioAssetTreeLeafItem(
                 } catch (_: Exception) {
                     null
                 }
-            if (bytes != null) {
+            if (bytes != null && bytes.isNotEmpty()) {
                 bitmap = bytes.toImageBitmap()
+            } else {
+                bitmap = null
             }
         }
     }

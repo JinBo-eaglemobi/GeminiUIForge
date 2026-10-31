@@ -75,14 +75,23 @@ suspend fun String.decodeBase64ToBitmap(): ImageBitmap? {
 suspend fun TemplateFile.decodeToBitmap(): ImageBitmap? = this.getAbsolutePath().decodeBase64ToBitmap()
 
 /**
- * 将字节数组（ByteArray）转换为 Compose [ImageBitmap]。
- * 内部基于 Skia 的 [Image.makeFromEncoded] 实现。
+ * 将字节数组（ByteArray）安全转换为 Compose [ImageBitmap]。
+ * 内部基于 Skia 的 [Image.makeFromEncoded] 实现，内置空字节与损坏异常拦截，并详细收集错误日志。
  * 
  * @receiver 包含图像数据的字节数组（如 PNG/JPEG 编码数据）。
- * @return 转换后的 [ImageBitmap]。
+ * @return 转换后的 [ImageBitmap]，若为空字节、格式损坏或解码失败则记录日志并优雅返回 null，杜绝 Skia 原生崩溃。
  */
-fun ByteArray.toImageBitmap(): ImageBitmap {
-    return Image.makeFromEncoded(this).toComposeImageBitmap()
+fun ByteArray.toImageBitmap(): ImageBitmap? {
+    if (this.isEmpty()) {
+        AppLogger.w("ImageUtils", "⚠️ 尝试将 0 字节空数组解码为图片 (ByteArray.size == 0)，已安全拦截并返回 null")
+        return null
+    }
+    return try {
+        Image.makeFromEncoded(this).toComposeImageBitmap()
+    } catch (e: Throwable) {
+        AppLogger.e("ImageUtils", "💥 Skia 底层解码图片失败 (数据大小: ${this.size} 字节): ${e.message}", e)
+        null
+    }
 }
 
 /**

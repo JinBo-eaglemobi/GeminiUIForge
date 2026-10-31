@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material3.*
@@ -87,6 +88,14 @@ fun AssetSlicingItemCard(
                         color = colorScheme.secondary
                     )
                 }
+                SliceItemStatus.SLICED -> {
+                    Icon(
+                        imageVector = Icons.Default.ContentCut,
+                        contentDescription = "已切片",
+                        tint = colorScheme.secondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
                 SliceItemStatus.MATTING -> {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
@@ -150,6 +159,7 @@ fun AssetSlicingItemCard(
         val (statusText, statusColor) = when (item.status) {
             SliceItemStatus.PENDING -> "等待中" to colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             SliceItemStatus.SLICING -> "切片中" to colorScheme.secondary
+            SliceItemStatus.SLICED -> "已切片" to colorScheme.secondary
             SliceItemStatus.MATTING -> "去背中" to colorScheme.primary
             SliceItemStatus.SUCCESS -> "已就绪" to Color(0xFF4CAF50)
             SliceItemStatus.FAILED -> "失败" to colorScheme.error

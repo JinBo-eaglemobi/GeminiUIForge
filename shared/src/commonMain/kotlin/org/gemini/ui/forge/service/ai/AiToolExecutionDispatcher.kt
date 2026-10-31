@@ -366,6 +366,11 @@ class AiToolExecutionDispatcher {
             }
         }
 
+        val imageContent = result.content.filterIsInstance<McpContent.Image>().firstOrNull()
+        val imageUri = imageContent?.let { img ->
+            "data:${img.mimeType};base64,${img.base64Data}"
+        }
+
         return ChatToolCallRecord(
             id = id,
             toolName = toolName,
@@ -374,7 +379,8 @@ class AiToolExecutionDispatcher {
             isSuccess = !result.isError,
             durationMs = durationMs,
             rawOutput = rawText.ifBlank { if (result.isError) "{\"error\":\"执行失败\"}" else "{}" },
-            callId = callId
+            callId = callId,
+            imageUri = imageUri
         )
     }
 

@@ -67,6 +67,7 @@ data class McpUiSequenceResult(
 object McpUiActionPipeline {
 
     private var activeViewModel: ProjectWorkspaceViewModel? = null
+    private var activeUiStudioViewModel: org.gemini.ui.forge.ui.uistudio.UIStudioViewModel? = null
 
     // 用于恢复图层显隐状态的快照映射: blockId -> isVisible
     private var visibilitySnapshot: Map<String, Boolean>? = null
@@ -91,6 +92,27 @@ object McpUiActionPipeline {
      * 获取当前活动的 ViewModel
      */
     fun getActiveViewModel(): ProjectWorkspaceViewModel? = activeViewModel
+
+    /**
+     * UI Studio 界面进入时注册当前活动的 UIStudioViewModel 引用
+     */
+    fun registerActiveUiStudioViewModel(viewModel: org.gemini.ui.forge.ui.uistudio.UIStudioViewModel) {
+        activeUiStudioViewModel = viewModel
+    }
+
+    /**
+     * UI Studio 界面销毁或离开时注销引用
+     */
+    fun unregisterActiveUiStudioViewModel(viewModel: org.gemini.ui.forge.ui.uistudio.UIStudioViewModel) {
+        if (activeUiStudioViewModel === viewModel) {
+            activeUiStudioViewModel = null
+        }
+    }
+
+    /**
+     * 获取当前活动的 UIStudioViewModel
+     */
+    fun getActiveUiStudioViewModel(): org.gemini.ui.forge.ui.uistudio.UIStudioViewModel? = activeUiStudioViewModel
 
     /**
      * 顺序执行一系列 UI 真实操作动作

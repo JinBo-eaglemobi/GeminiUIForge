@@ -80,6 +80,7 @@ import org.gemini.ui.forge.utils.calculateShortFileHash
 import org.gemini.ui.forge.utils.toShortHash
 import org.gemini.ui.forge.utils.copyLocalFile
 import org.gemini.ui.forge.utils.listFilesRecursively
+import org.gemini.ui.forge.utils.isFileExists
 import org.gemini.ui.forge.utils.isSupportedImageFile
 import org.gemini.ui.forge.utils.TrafficSummaryExtractor
 import kotlin.random.Random
@@ -630,6 +631,15 @@ class UIStudioViewModel {
             for (file in directFiles) {
                 if (file.endsWith(".png", ignoreCase = true) || file.endsWith(".webp", ignoreCase = true)) {
                     val relPath = "$assetsDirRel/$file"
+                    val tFile = TemplateFile(relPath)
+                    val fileBytes = try { tFile.readBytes() ?: readLocalFileBytes(relPath) } catch (_: Exception) { null }
+                    if (fileBytes == null || fileBytes.isEmpty()) {
+                        AppLogger.w("UIStudioViewModel", "🗑️ 自愈扫描探测到 0 字节损坏坏文件，拒绝收录并自动物理清除: $relPath")
+                        try {
+                            tFile.delete()
+                        } catch (_: Exception) {}
+                        continue
+                    }
                     if (!existingPaths.contains(relPath)) {
                         val baseId = file.substringBeforeLast(".")
                         val fileHash = calculateShortFileHash(relPath)
@@ -639,13 +649,11 @@ class UIStudioViewModel {
                             newItems.add(
                                 UIAssetItem(
                                     id = baseId,
-                                    name = baseId,
                                     relativePath = relPath,
                                     width = 100,
                                     height = 100,
                                     category = "image",
                                     folderId = null,
-                                    createdAt = getCurrentTimeMillis(),
                                     hash = fileHash
                                 )
                             )
@@ -664,6 +672,15 @@ class UIStudioViewModel {
                 for (file in subFiles) {
                     if (file.endsWith(".png", ignoreCase = true) || file.endsWith(".webp", ignoreCase = true)) {
                         val relPath = "$subRel/$file"
+                        val tFile = TemplateFile(relPath)
+                        val fileBytes = try { tFile.readBytes() ?: readLocalFileBytes(relPath) } catch (_: Exception) { null }
+                        if (fileBytes == null || fileBytes.isEmpty()) {
+                            AppLogger.w("UIStudioViewModel", "🗑️ 自愈扫描探测到 0 字节损坏坏文件，拒绝收录并自动物理清除: $relPath")
+                            try {
+                                tFile.delete()
+                            } catch (_: Exception) {}
+                            continue
+                        }
                         if (!existingPaths.contains(relPath)) {
                             val baseId = file.substringBeforeLast(".")
                             val effectiveId = if (existingIds.contains(baseId)) "${sub}_$baseId" else baseId
@@ -673,13 +690,11 @@ class UIStudioViewModel {
                             newItems.add(
                                 UIAssetItem(
                                     id = effectiveId,
-                                    name = if (sub.isNotBlank()) sub else baseId,
                                     relativePath = relPath,
                                     width = 100,
                                     height = 100,
                                     category = "image",
                                     folderId = null,
-                                    createdAt = getCurrentTimeMillis(),
                                     hash = fileHash
                                 )
                             )
@@ -733,9 +748,23 @@ class UIStudioViewModel {
                 if (transparentBytes != null && transparentBytes.isNotEmpty()) {
                     // 原地覆盖写入透明 PNG
                     tFile.writeBytes(transparentBytes)
-                    // 更新素材更新时间以触发 UI 重组刷新
+                    val now = getCurrentTimeMillis()
+                    // 解析透明处理后的物理分辨率
+                    val (newW, newH) = try {
+                        val skiaImg = Image.makeFromEncoded(transparentBytes)
+                        skiaImg.width to skiaImg.height
+                    } catch (_: Exception) {
+                        asset.width to asset.height
+                    }
+                    // 保持 hash 守恒不变，仅更新 updatedAt 与物理宽高以触发 UI 刷新
                     val updatedItems = state.assetLibrary.items.map {
-                        if (it.id == assetId) it.copy(createdAt = getCurrentTimeMillis()) else it
+                        if (it.id == assetId) {
+                            it.copy(
+                                updatedAt = now,
+                                width = newW,
+                                height = newH
+                            )
+                        } else it
                     }
                     state = state.copy(
                         assetLibrary = state.assetLibrary.copy(items = updatedItems),
@@ -765,11 +794,12 @@ class UIStudioViewModel {
 
     /**
      * 手动触发素材库物理全量刷新与双向对齐校验。
-     * 1. 物理存在性校验：扫描并剔除磁盘中已被手动删除的失效孤儿项；
+     * 1. 物理存在性校验：扫描并剔除磁盘中已被手动删除或为 0 字节损坏坏文件的失效孤儿项；
      * 2. 本地新增自愈：扫描物理磁盘 assets 目录，自动收录未登记的切片；
      * 3. 配置持久化与状态更新：将清洗后的干净配置回写至 asset_library.json，并弹出统计 Toast。
+     * @param focusAssetPath 可选：刷新完成后需自动聚焦并高亮选中的素材相对路径
      */
-    fun refreshAssetLibrary() {
+    fun refreshAssetLibrary(focusAssetPath: String? = null) {
         if (state.isRefreshingAssetLibrary) return
         val proj = state.project ?: return
         val sanitized = proj.projectId.trim().replace(" ", "_")
@@ -778,23 +808,30 @@ class UIStudioViewModel {
 
         scope.launch(Dispatchers.Default) {
             try {
-                AppLogger.i("UIStudioViewModel", "🔄 开始手动触发素材库物理全量刷新与校验: $sanitized")
+                AppLogger.i("UIStudioViewModel", "🔄 开始手动触发素材库物理全量刷新与校验: $sanitized (聚焦目标: $focusAssetPath)")
                 val currentLib = state.assetLibrary
                 var prunedCount = 0
 
-                // 1. 物理存在性校验：检查每个已登记素材的物理文件是否存在
+                // 1. 物理存在性校验：检查每个已登记素材的物理文件是否存在且非 0 字节
                 val validItems = mutableListOf<UIAssetItem>()
+                val refreshTimestamp = getCurrentTimeMillis()
                 for (item in currentLib.items) {
-                    val fileExists = try {
-                        storage.exists(item.relativePath) || TemplateFile(item.relativePath).exists()
+                    val fileBytes = try {
+                        val t = TemplateFile(item.relativePath)
+                        if (t.exists()) t.readBytes() else readLocalFileBytes(item.relativePath)
                     } catch (e: Exception) {
-                        false
+                        null
                     }
-                    if (fileExists) {
-                        validItems.add(item)
-                    } else {
+                    val isInvalid = fileBytes == null || fileBytes.isEmpty()
+                    if (isInvalid) {
                         prunedCount++
-                        AppLogger.w("UIStudioViewModel", "🗑️ 探测到物理文件已删除，自动剔除失效素材: ${item.name} (${item.relativePath})")
+                        AppLogger.w("UIStudioViewModel", "🗑️ 探测到物理文件缺失或为 0 字节损坏坏文件，自动剔除失效素材并清理残卷: ${item.name} (${item.relativePath})")
+                        try {
+                            TemplateFile(item.relativePath).delete()
+                        } catch (_: Exception) {}
+                    } else {
+                        // 刷新更新时间戳，强制击穿 Compose 内存位图缓存，确保外部修改的文件被重新加载
+                        validItems.add(item.copy(updatedAt = refreshTimestamp))
                     }
                 }
 
@@ -803,15 +840,28 @@ class UIStudioViewModel {
                 val healedLib = healAssetLibrary(sanitized, intermediateLib)
                 val addedCount = (healedLib.items.size - validItems.size).coerceAtLeast(0)
 
-                // 3. 选中项状态安全修复（若当前选中的素材被删除了，重置选中态）
-                val newSelectedAssetId = if (validItems.any { it.id == state.selectedAssetId }) {
-                    state.selectedAssetId
+                // 3. 选中项与聚焦项状态安全计算
+                val focusedItem = if (focusAssetPath != null) {
+                    healedLib.items.find {
+                        it.relativePath.equals(focusAssetPath, ignoreCase = true) ||
+                        it.relativePath.endsWith(focusAssetPath.substringAfterLast('/'), ignoreCase = true)
+                    }
                 } else null
+
+                val newSelectedAssetId = when {
+                    focusedItem != null -> focusedItem.id
+                    validItems.any { it.id == state.selectedAssetId } -> state.selectedAssetId
+                    else -> null
+                }
+                val newExpandedFolderIds = if (focusedItem?.folderId != null) {
+                    state.expandedFolderIds + focusedItem.folderId
+                } else state.expandedFolderIds
 
                 // 4. 更新 UI 状态
                 state = state.copy(
                     assetLibrary = healedLib,
                     selectedAssetId = newSelectedAssetId,
+                    expandedFolderIds = newExpandedFolderIds,
                     isRefreshingAssetLibrary = false
                 )
 
@@ -1067,7 +1117,7 @@ class UIStudioViewModel {
     }
 
     /**
-     * 删除单个素材并清理磁盘文件。
+     * 删除单个素材并清理磁盘物理文件。
      */
     fun deleteAsset(assetId: String) {
         val target = state.assetLibrary.items.find { it.id == assetId } ?: return
@@ -1079,8 +1129,16 @@ class UIStudioViewModel {
         saveAssetLibrary()
         scope.launch(Dispatchers.Default) {
             try {
-                TemplateFile(target.relativePath).writeBytes(ByteArray(0))
-            } catch (_: Exception) {}
+                val tFile = TemplateFile(target.relativePath)
+                val deleted = tFile.delete()
+                if (deleted) {
+                    AppLogger.i("UIStudioViewModel", "🗑️ 物理删除素材文件成功: ${target.relativePath}")
+                } else {
+                    AppLogger.w("UIStudioViewModel", "⚠️ 物理删除素材文件未成功或文件已不存在: ${target.relativePath}")
+                }
+            } catch (e: Exception) {
+                AppLogger.e("UIStudioViewModel", "💥 物理删除素材文件异常: ${target.relativePath}", e)
+            }
         }
         Toast.show("已删除素材: ${target.name}", ToastType.INFO)
     }
@@ -1175,13 +1233,11 @@ class UIStudioViewModel {
                     newItems.add(
                         UIAssetItem(
                             id = "asset_${fileHash.take(8)}_${getCurrentTimeMillis() % 100000}",
-                            name = displayName,
                             relativePath = relPath,
                             width = imgWidth,
                             height = imgHeight,
                             category = "image",
                             folderId = targetFolderId,
-                            createdAt = getCurrentTimeMillis(),
                             hash = fileHash
                         )
                     )
@@ -3129,11 +3185,24 @@ class UIStudioViewModel {
     private fun extractGeneratedImageUri(toolRecords: List<ChatToolCallRecord>): String? {
         for (record in toolRecords) {
             if (record.isSuccess && (record.toolName == "generate_image" || record.toolName == "chat_refine_image" || record.toolName == "generate_block_asset")) {
+                // 1. 优先直接使用工具返回的高清多模态 imageUri (Data URI)
+                if (!record.imageUri.isNullOrBlank()) {
+                    return record.imageUri
+                }
+                // 2. 兼容落盘路径解析
                 val summary = record.resultSummary
-                if (!summary.isNullOrBlank() && summary.contains("📁 物理落盘: ")) {
-                    val rawPath = summary.substringAfter("📁 物理落盘: ").trim().lines().firstOrNull()?.trim()?.removeSurrounding("`")?.trim()
-                    if (!rawPath.isNullOrBlank()) {
-                        return rawPath
+                if (!summary.isNullOrBlank()) {
+                    val diskMarker = when {
+                        summary.contains("📁 物理落盘: ") -> "📁 物理落盘: "
+                        summary.contains("📁 素材库归档: ") -> "📁 素材库归档: "
+                        summary.contains("📁 本地落盘: ") -> "📁 本地落盘: "
+                        else -> null
+                    }
+                    if (diskMarker != null) {
+                        val rawPath = summary.substringAfter(diskMarker).trim().lines().firstOrNull()?.trim()?.removeSurrounding("`")?.trim()
+                        if (!rawPath.isNullOrBlank()) {
+                            return rawPath
+                        }
                     }
                 }
             }
@@ -4169,6 +4238,12 @@ class UIStudioViewModel {
      */
     fun openImportSheetDialog() {
         state = state.copy(isImportSheetDialogVisible = true)
+        if (state.sourceImagePath.isNotBlank()) {
+            updateSourceImagePath(state.sourceImagePath)
+        }
+        if (state.sourceJsonPath.isNotBlank()) {
+            updateSourceJsonPath(state.sourceJsonPath)
+        }
     }
 
     /**
@@ -4179,19 +4254,98 @@ class UIStudioViewModel {
     }
 
     /**
-     * 更新选中的源图片文件路径。
+     * 更新选中的源图片文件路径并进行磁盘真实物理校验。
+     *
+     * 在入口处第一时间无条件回显路径到状态层，避免文件选择器或输入迟滞，
+     * 随后在后台通过 [isLocalFileExists] 安全探测物理文件真实性与图片格式。
      */
     fun updateSourceImagePath(path: String) {
-        state = state.copy(sourceImagePath = path)
+        val trimmed = path.trim()
+        if (trimmed.isBlank()) {
+            state = state.copy(
+                sourceImagePath = "",
+                isSourceImageFileExists = false,
+                sourceImageError = null
+            )
+            return
+        }
+
+        // 1. 第一时间在主线程回显输入路径，保证界面 0 延迟响应
+        state = state.copy(
+            sourceImagePath = trimmed,
+            sourceImageError = null
+        )
+
+        // 2. 异步执行跨平台轻量物理探测，杜绝任何崩溃或迟滞
+        scope.launch(Dispatchers.Default) {
+            val exists = runCatching { isFileExists(trimmed) }.getOrDefault(false)
+            val isImage = isSupportedImageFile(trimmed)
+            val error = when {
+                !exists -> "大图文件在磁盘上不存在，请检查路径"
+                !isImage -> "不支持的文件格式，仅支持 PNG、JPG、JPEG、WEBP"
+                else -> null
+            }
+            withContext(Dispatchers.Main) {
+                // 仅当用户未进行新输入时才写回校验状态
+                if (state.sourceImagePath == trimmed) {
+                    state = state.copy(
+                        isSourceImageFileExists = exists && isImage,
+                        sourceImageError = error
+                    )
+                }
+            }
+        }
     }
 
     /**
-     * 更新选中的源 JSON 坐标文件路径并触发自适应解析。
+     * 更新选中的源 JSON 坐标文件路径并触发自适应解析与物理存在性校验。
+     *
+     * 在入口处第一时间无条件回显路径到状态层，随后在后台安全探测物理存在性并解析。
      */
     fun updateSourceJsonPath(path: String) {
-        state = state.copy(sourceJsonPath = path)
-        if (path.isNotBlank()) {
-            parseJsonFile(path)
+        val trimmed = path.trim()
+        if (trimmed.isBlank()) {
+            state = state.copy(
+                sourceJsonPath = "",
+                isSourceJsonFileExists = false,
+                sourceJsonError = null,
+                parseResult = null
+            )
+            return
+        }
+
+        // 1. 第一时间在主线程回显输入路径，保证界面 0 延迟响应
+        state = state.copy(
+            sourceJsonPath = trimmed,
+            sourceJsonError = null
+        )
+
+        // 2. 异步执行跨平台轻量物理探测并自适应解析
+        scope.launch(Dispatchers.Default) {
+            val exists = runCatching { isFileExists(trimmed) }.getOrDefault(false)
+            if (!exists) {
+                withContext(Dispatchers.Main) {
+                    if (state.sourceJsonPath == trimmed) {
+                        state = state.copy(
+                            isSourceJsonFileExists = false,
+                            sourceJsonError = "坐标 JSON 文件在磁盘上不存在，请检查路径",
+                            parseResult = null,
+                            isParsingJson = false
+                        )
+                    }
+                }
+                return@launch
+            }
+
+            withContext(Dispatchers.Main) {
+                if (state.sourceJsonPath == trimmed) {
+                    state = state.copy(
+                        isSourceJsonFileExists = true,
+                        sourceJsonError = null
+                    )
+                }
+            }
+            parseJsonFile(trimmed)
         }
     }
 
@@ -4207,13 +4361,23 @@ class UIStudioViewModel {
                 val content = readLocalFileBytes(path)?.decodeToString()
                 if (content.isNullOrBlank()) {
                     Toast.show("JSON 文件为空或无法读取", ToastType.ERROR)
-                    state = state.copy(isParsingJson = false)
+                    state = state.copy(
+                        isParsingJson = false,
+                        isSourceJsonFileExists = false,
+                        sourceJsonError = "JSON 文件内容为空或无法读取",
+                        parseResult = null
+                    )
                     return@launch
                 }
                 parseJsonContent(content)
             } catch (e: Exception) {
                 Toast.show("读取文件失败: ${e.message}", ToastType.ERROR)
-                state = state.copy(isParsingJson = false)
+                state = state.copy(
+                    isParsingJson = false,
+                    isSourceJsonFileExists = false,
+                    sourceJsonError = "读取文件失败: ${e.message}",
+                    parseResult = null
+                )
             }
         }
     }
@@ -4246,8 +4410,24 @@ class UIStudioViewModel {
      * 从导入配置弹窗流转进入切片可视化预审校对弹窗（阶段三）。
      */
     fun proceedToVerifyDialog() {
+        val imagePath = state.sourceImagePath.trim()
+        val imageExists = state.isSourceImageFileExists && imagePath.isNotBlank()
+        if (!imageExists) {
+            Toast.show("大图文件不存在或路径无效，无法进入校对", ToastType.ERROR)
+            state = state.copy(
+                isSourceImageFileExists = false,
+                sourceImageError = "大图文件在磁盘上不存在，请检查路径"
+            )
+            return
+        }
+
         val result = state.parseResult
         val items = result?.items ?: emptyList()
+        if (items.isEmpty()) {
+            Toast.show("图元列表为空，无法进入校对", ToastType.ERROR)
+            return
+        }
+
         state = state.copy(
             isImportSheetDialogVisible = false,
             isVerifySliceDialogVisible = true,
@@ -4263,9 +4443,18 @@ class UIStudioViewModel {
      * @param apiKey 可选自定义 API Key，缺省时自动从本地配置中心读取
      */
     fun startAiDetectAndProceed(apiKey: String? = null) {
-        val imagePath = state.sourceImagePath
+        val imagePath = state.sourceImagePath.trim()
         if (imagePath.isBlank()) {
             Toast.show("请先选择或输入待识别的图集大图路径", ToastType.INFO)
+            return
+        }
+        val imageExists = state.isSourceImageFileExists && imagePath.isNotBlank()
+        if (!imageExists) {
+            Toast.show("大图文件不存在或路径无效，无法启动 AI 识别", ToastType.ERROR)
+            state = state.copy(
+                isSourceImageFileExists = false,
+                sourceImageError = "大图文件在磁盘上不存在，请检查路径"
+            )
             return
         }
 
@@ -4394,10 +4583,11 @@ class UIStudioViewModel {
                 val total = items.size
                 val shouldRemoveBg = state.autoRemoveBgOnSlice
 
-                // ★ 阶段一：极速物理多核切片（零大图重复解码，切片瞬间全量保底落盘）
+                // ★ 阶段一：极速物理多核切片（零大图重复解码，切片流水线全量保底落盘）
                 state = state.copy(
                     sliceCurrentStage = SliceStage.SLICING,
-                    sliceStatusText = "正在执行微秒级物理多核切片..."
+                    sliceProgress = 0f,
+                    sliceStatusText = "正在执行微秒级物理多核切片 (0/$total)..."
                 )
 
                 val concurrencyLimit = 8
@@ -4450,19 +4640,18 @@ class UIStudioViewModel {
                                     tFile.writeBytes(sliceBytes)
                                 }
 
-                                // 3. 更新进度与单项状态
+                                // 视觉节流：保证流水线流转可感知（约 15~20ms）
+                                delay(20)
+
+                                // 3. 更新进度与单项状态 (已切片完成)
                                 progressMutex.withLock {
                                     slicedCount++
                                     val currentList = state.sliceTaskItems.toMutableList()
                                     if (idx < currentList.size) {
                                         currentList[idx] = currentList[idx].copy(
-                                            status = if (shouldRemoveBg) SliceItemStatus.PENDING else SliceItemStatus.SUCCESS
+                                            status = if (shouldRemoveBg) SliceItemStatus.SLICED else SliceItemStatus.SUCCESS
                                         )
-                                        val slicePartProgress = if (shouldRemoveBg) {
-                                            (slicedCount.toFloat() / total) * 0.2f
-                                        } else {
-                                            slicedCount.toFloat() / total
-                                        }
+                                        val slicePartProgress = slicedCount.toFloat() / total.coerceAtLeast(1)
                                         state = state.copy(
                                             sliceTaskItems = currentList,
                                             sliceProgress = slicePartProgress,
@@ -4483,11 +4672,15 @@ class UIStudioViewModel {
                     }.awaitAll().sortedBy { it.index }
                 }
 
+                // 阶段一收口停留：让切片完成态清晰可见
+                delay(200)
+
                 // ★ 阶段二：若开启自动去背，启动常驻单进程 AI 批量去背景（仅启动 1 次 Python + 模型常驻复用！）
                 if (shouldRemoveBg) {
                     state = state.copy(
                         sliceCurrentStage = SliceStage.MATTING,
-                        sliceProgress = 0.2f,
+                        sliceProgress = 0f,
+                        sliceCurrentItemName = "",
                         sliceStatusText = "⚡ 正在初始化常驻 AI 去背引擎并批量处理..."
                     )
 
@@ -4508,7 +4701,7 @@ class UIStudioViewModel {
                             if (targetIdx != -1) {
                                 currentList[targetIdx] = currentList[targetIdx].copy(status = SliceItemStatus.SUCCESS)
                             }
-                            val mattingProgress = 0.2f + (current.toFloat() / totalCount.coerceAtLeast(1)) * 0.75f
+                            val mattingProgress = (current.toFloat() / totalCount.coerceAtLeast(1))
                             state = state.copy(
                                 sliceTaskItems = currentList,
                                 sliceProgress = mattingProgress,
@@ -4536,13 +4729,11 @@ class UIStudioViewModel {
                 val newAssetItems = slicedMetas.map { meta ->
                     UIAssetItem(
                         id = meta.assetId,
-                        name = meta.item.name,
                         relativePath = meta.relPath,
                         width = meta.item.bounds.width.toInt().coerceAtLeast(1),
                         height = meta.item.bounds.height.toInt().coerceAtLeast(1),
                         category = meta.item.type.name.lowercase(),
                         folderId = targetFolderId,
-                        createdAt = getCurrentTimeMillis(),
                         hash = calculateShortFileHash(meta.relPath)
                     )
                 }
@@ -4634,15 +4825,37 @@ class UIStudioViewModel {
     fun cancelRenameAsset() { state = state.copy(renamingAsset = null) }
     fun commitRenameAsset(assetId: String, newName: String) {
         if (newName.isBlank()) return
+        val target = state.assetLibrary.items.find { it.id == assetId } ?: return
+        val clean = newName.trim()
+        val dir = target.relativePath.substringBeforeLast('/', "")
+        val ext = target.relativePath.substringAfterLast('.', "png")
+        val newRelPath = if (dir.isNotBlank()) "$dir/$clean.$ext" else "$clean.$ext"
+        if (newRelPath != target.relativePath) {
+            scope.launch(Dispatchers.Default) {
+                try {
+                    val oldFile = TemplateFile(target.relativePath)
+                    val newFile = TemplateFile(newRelPath)
+                    if (oldFile.exists()) {
+                        val bytes = oldFile.readBytes()
+                        if (bytes != null) {
+                            newFile.writeBytes(bytes)
+                            oldFile.delete()
+                        }
+                    }
+                } catch (e: Exception) {
+                    AppLogger.e("UIStudioViewModel", "重命名素材物理文件失败: ${target.relativePath} -> $newRelPath", e)
+                }
+            }
+        }
         val updatedItems = state.assetLibrary.items.map {
-            if (it.id == assetId) it.copy(name = newName.trim()) else it
+            if (it.id == assetId) it.copy(relativePath = newRelPath, updatedAt = getCurrentTimeMillis()) else it
         }
         state = state.copy(
             assetLibrary = state.assetLibrary.copy(items = updatedItems),
             renamingAsset = null
         )
         saveAssetLibrary()
-        Toast.show("素材已重命名为: $newName", ToastType.SUCCESS)
+        Toast.show("素材已重命名为: $clean", ToastType.SUCCESS)
     }
 
     fun revealAssetInExplorer(asset: UIAssetItem) {
@@ -5366,6 +5579,121 @@ class UIStudioViewModel {
             trafficStore.deleteAll(trafficScopeId, current.id)
         }
         Toast.show("当前会话消息已清空", ToastType.INFO)
+    }
+
+    /**
+     * 将 AI 聊天生成的纯内存图片字节按需持久化存入项目素材库（assets/image/）。
+     * 仅当用户主动触发「存入素材库」或「添加到页面」时调用，彻底告别 assets/generated 垃圾落盘。
+     *
+     * @param imageBytes 原始或去背后的图片字节数据
+     * @param fileName 用户自定义的文件名（如 "gold_chest"）
+     * @param subPath 目标子文件夹相对路径（如 "icons/rewards"，若为空则存入 assets/image/ 根目录）
+     * @param isPng 是否为透明 PNG 格式
+     * @return 成功保存后的素材库相对路径（例如 "templates/MyProj/assets/image/icons/rewards/gold_chest.png"），失败返回 null
+     */
+    suspend fun saveChatImageToAssetLibrary(
+        imageBytes: ByteArray,
+        fileName: String,
+        subPath: String = "",
+        isPng: Boolean = true
+    ): String? {
+        val proj = state.project?.projectId?.ifBlank { null } ?: return null
+        val cleanSubPath = subPath.trim().trim('/', '\\')
+        val ext = if (isPng) "png" else "jpg"
+        val cleanName = fileName.trim().let {
+            if (it.endsWith(".$ext", ignoreCase = true)) it else "$it.$ext"
+        }
+        val targetRelDir = if (cleanSubPath.isBlank()) {
+            "templates/$proj/assets/image"
+        } else {
+            "templates/$proj/assets/image/$cleanSubPath"
+        }
+        val targetFullPath = "$targetRelDir/$cleanName"
+
+        return try {
+            if (imageBytes.isEmpty()) {
+                AppLogger.w("UIStudioViewModel", "⚠️ 尝试保存 0 字节图片至素材库，已安全拦截: $targetFullPath")
+                Toast.show("保存失败: 图像数据为空", ToastType.ERROR)
+                return null
+            }
+            val savedPath = storage.saveBytesToFile(targetFullPath, imageBytes)
+            if (savedPath != null) {
+                // 1. 同步在内存素材库中构建并登记该新素材，确保无论哈希如何均立即生效并高亮
+                val (w, h) = try {
+                    val skiaImg = Image.makeFromEncoded(imageBytes)
+                    skiaImg.width to skiaImg.height
+                } catch (_: Exception) {
+                    100 to 100
+                }
+                val fileHash = calculateShortFileHash(targetFullPath)
+                val baseName = cleanName.substringBeforeLast('.')
+                val targetFolder = if (cleanSubPath.isNotBlank()) {
+                    state.assetLibrary.folders.find { it.name.equals(cleanSubPath, ignoreCase = true) }
+                } else null
+                val newAssetId = baseName.ifBlank { "ai_img_${getCurrentTimeMillis()}" }
+                val newAsset = UIAssetItem(
+                    id = newAssetId,
+                    relativePath = targetFullPath,
+                    width = w,
+                    height = h,
+                    category = "image",
+                    folderId = targetFolder?.id,
+                    hash = fileHash
+                )
+                val existingList = state.assetLibrary.items.filterNot { it.relativePath == targetFullPath }
+                val updatedItems = existingList + newAsset
+                val updatedFolders = state.expandedFolderIds.let {
+                    if (targetFolder != null) it + targetFolder.id else it
+                }
+                state = state.copy(
+                    assetLibrary = state.assetLibrary.copy(items = updatedItems),
+                    selectedAssetId = newAsset.id,
+                    expandedFolderIds = updatedFolders
+                )
+                saveAssetLibrary()
+                refreshAssetLibrary(focusAssetPath = targetFullPath)
+                Toast.show("已成功存入素材库: $cleanName", ToastType.SUCCESS)
+                AppLogger.i("UIStudioViewModel", "✅ AI 聊天图片已成功存入素材库并即时选中聚焦: $targetFullPath (ID: ${newAsset.id})")
+            }
+            savedPath
+        } catch (e: Exception) {
+            AppLogger.e("UIStudioViewModel", "保存 AI 聊天图片至素材库失败: $targetFullPath", e)
+            Toast.show("保存失败: ${e.message}", ToastType.ERROR)
+            null
+        }
+    }
+
+    /**
+     * 将 AI 聊天生成的图片一键存入素材库，并直接作为图元挂载添加到当前激活页面或容器的中心。
+     */
+    suspend fun addChatImageToCurrentView(
+        imageBytes: ByteArray,
+        fileName: String,
+        width: Float = 256f,
+        height: Float = 256f,
+        subPath: String = "",
+        isPng: Boolean = true,
+        repo: TemplateRepository = TemplateRepository()
+    ): Boolean {
+        val savedRelPath = saveChatImageToAssetLibrary(imageBytes, fileName, subPath, isPng) ?: return false
+        val cleanName = fileName.trim().substringBeforeLast('.')
+        return try {
+            val item = state.assetLibrary.items.find { it.relativePath == savedRelPath }
+                ?: UIAssetItem(
+                    id = "asset_${getCurrentTimeMillis()}",
+                    relativePath = savedRelPath,
+                    width = width.toInt().coerceAtLeast(1),
+                    height = height.toInt().coerceAtLeast(1),
+                    category = "image",
+                    hash = calculateShortFileHash(savedRelPath)
+                )
+            addAssetToCanvas(asset = item, repo = repo)
+            true
+        } catch (e: Exception) {
+            AppLogger.e("UIStudioViewModel", "将 AI 图片添加到视图失败", e)
+            Toast.show("添加到视图失败: ${e.message}", ToastType.ERROR)
+            false
+        }
     }
 
     /**

@@ -59,6 +59,7 @@ fun CommonModelBubble(
     onOpenViewRequested: ((String) -> Unit)? = null,
     onFallbackFlashModelRequested: ((VisualChatMessage) -> Unit)? = null,
     onSwitchProtocolRequested: ((VisualChatMessage) -> Unit)? = null,
+    imageActions: (@Composable (imageUri: String) -> Unit)? = null,
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -229,6 +230,7 @@ fun CommonModelBubble(
                                     .clickable { onImageClick?.invoke(imgUri) },
                                 contentScale = ContentScale.Fit
                             )
+                            imageActions?.invoke(imgUri)
                         }
                     }
                 }

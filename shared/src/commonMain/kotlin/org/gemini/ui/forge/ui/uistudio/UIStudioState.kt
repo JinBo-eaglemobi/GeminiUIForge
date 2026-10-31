@@ -82,6 +82,10 @@ data class UIStudioState(
     val isImportSheetDialogVisible: Boolean = false,
     val sourceImagePath: String = "",
     val sourceJsonPath: String = "",
+    val isSourceImageFileExists: Boolean = false,
+    val isSourceJsonFileExists: Boolean = false,
+    val sourceImageError: String? = null,
+    val sourceJsonError: String? = null,
     val parseResult: AssetSheetParseResult? = null,
     val isParsingJson: Boolean = false,
     val isVerifySliceDialogVisible: Boolean = false,
@@ -262,6 +266,7 @@ data class UIStudioLayoutConfig(
 enum class SliceItemStatus {
     PENDING,    // 排队等待
     SLICING,    // 物理切片中
+    SLICED,     // 物理切片已保底落盘 (待去背)
     MATTING,    // AI 去背中
     SUCCESS,    // 处理完成
     FAILED      // 失败/已降级

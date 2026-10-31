@@ -38,6 +38,12 @@ import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.chat.mention.MentionHoverPreviewConfig
 import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.utils.findBlockById
+import kotlinx.coroutines.launch
+import org.gemini.ui.forge.model.chat.VisualChatMessage
+import org.gemini.ui.forge.utils.readLocalFileBytes
+import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.ui.uistudio.component.ChatImageActionRow
+import org.gemini.ui.forge.ui.uistudio.dialog.SaveChatImageToAssetDialog
 
 /**
  * UI Studio 专属项目级 AI 智能工作台全景弹窗
@@ -93,6 +99,10 @@ fun UIProjectAiStudioDialog(
         onDismissRequest = handleModalDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) { draggableState ->
+        // 待存入素材库的聊天图片 URI
+        var pendingSaveImageUri by remember { mutableStateOf<String?>(null) }
+        val coroutineScope = rememberCoroutineScope()
+
         LaunchedEffect(Unit) {
             viewModel.loadExternalDocs(state.project?.projectId ?: "default")
             viewModel.loadChatSessions()
@@ -296,7 +306,65 @@ fun UIProjectAiStudioDialog(
                             Icon(Icons.Default.Close, contentDescription = "关闭", modifier = Modifier.size(18.dp))
                         }
                     },
+                    imageActions = { uri ->
+                        org.gemini.ui.forge.ui.uistudio.component.ChatImageActionRow(
+                            imageUri = uri,
+                            onSaveToAsset = { pendingSaveImageUri = uri },
+                            onAddToPage = { targetUri ->
+                                coroutineScope.launch {
+                                    val bytes = if (targetUri.startsWith("data:image")) {
+                                        @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                                        kotlin.io.encoding.Base64.decode(if (targetUri.contains(",")) targetUri.substringAfter(",") else targetUri)
+                                    } else {
+                                        org.gemini.ui.forge.utils.readLocalFileBytes(targetUri)
+                                    } ?: return@launch
+                                    val isPng = targetUri.contains("image/png", ignoreCase = true) || targetUri.endsWith(".png", ignoreCase = true)
+                                    val autoName = "ai_chat_${getCurrentTimeMillis()}"
+                                    viewModel.addChatImageToCurrentView(
+                                        imageBytes = bytes,
+                                        fileName = autoName,
+                                        width = 256f,
+                                        height = 256f,
+                                        subPath = "",
+                                        isPng = isPng
+                                    )
+                                }
+                            }
+                        )
+                    },
                     draggableModifier = Modifier.draggableDialogHandle(draggableState)
+                )
+            }
+
+            // 按需存入素材库弹窗
+            val saveUri = pendingSaveImageUri
+            if (saveUri != null) {
+                val autoName = remember(saveUri) { "ai_img_${getCurrentTimeMillis()}" }
+                org.gemini.ui.forge.ui.uistudio.dialog.SaveChatImageToAssetDialog(
+                    isOpen = true,
+                    initialFileName = autoName,
+                    folders = state.assetLibrary.folders,
+                    onDismissRequest = { pendingSaveImageUri = null },
+                    onConfirmSave = { fileName, subPath ->
+                        coroutineScope.launch {
+                            val bytes = if (saveUri.startsWith("data:image")) {
+                                @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+                                kotlin.io.encoding.Base64.decode(if (saveUri.contains(",")) saveUri.substringAfter(",") else saveUri)
+                            } else {
+                                org.gemini.ui.forge.utils.readLocalFileBytes(saveUri)
+                            }
+                            if (bytes != null) {
+                                val isPng = saveUri.contains("image/png", ignoreCase = true) || saveUri.endsWith(".png", ignoreCase = true)
+                                viewModel.saveChatImageToAssetLibrary(
+                                    imageBytes = bytes,
+                                    fileName = fileName,
+                                    subPath = subPath,
+                                    isPng = isPng
+                                )
+                            }
+                            pendingSaveImageUri = null
+                        }
+                    }
                 )
             }
 

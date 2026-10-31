@@ -56,6 +56,13 @@ fun UIStudioScreen(
     var containerCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val focusRequester = remember { FocusRequester() }
 
+    DisposableEffect(viewModel) {
+        org.gemini.ui.forge.service.mcp.McpUiActionPipeline.registerActiveUiStudioViewModel(viewModel)
+        onDispose {
+            org.gemini.ui.forge.service.mcp.McpUiActionPipeline.unregisterActiveUiStudioViewModel(viewModel)
+        }
+    }
+
     LaunchedEffect(projectState) {
         viewModel.loadProject(projectState)
         viewModel.checkDraft()
@@ -252,6 +259,7 @@ fun UIStudioScreen(
                     UIStudioCanvasArea(
                         viewModel = viewModel,
                         assetPathResolver = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
+                        assetUpdatedAtResolver = { hash -> viewModel.findAssetByHash(hash)?.updatedAt },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)

@@ -1,5 +1,10 @@
 package org.gemini.ui.forge.ui.uistudio.dialog
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import org.gemini.ui.forge.utils.rememberFilePicker
@@ -105,7 +111,7 @@ fun ImportAssetSheetDialog(
     ) {
         Surface(
             modifier = Modifier
-                .widthIn(min = 600.dp, max = spacing.dialogMediumWidth)
+                .widthIn(min = 760.dp, max = 840.dp)
                 .padding(spacing.medium),
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -177,14 +183,26 @@ fun ImportAssetSheetDialog(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(spacing.extraSmall))
+                val isImageError = state.sourceImageError != null
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
+                    SelectAllOutlinedTextField(
                         value = state.sourceImagePath,
                         onValueChange = { viewModel.updateSourceImagePath(it) },
-                        placeholder = { Text("例如：E:\\dir/xxx.png") },
+                        isError = isImageError,
+                        placeholder = {
+                            Text(
+                                text = "例如：E:\\dir/xxx.png",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 13.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                        },
+                        contentPadding = PaddingValues(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 8.dp),
                         leadingIcon = {
                             Box(
                                 modifier = Modifier.padding(start = 14.dp, end = 6.dp),
@@ -193,13 +211,38 @@ fun ImportAssetSheetDialog(
                                 Icon(
                                     imageVector = Icons.Default.Image,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = if (isImageError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
                         },
-                        modifier = Modifier.weight(1f),
+                        trailingIcon = {
+                            if (state.sourceImagePath.isNotBlank()) {
+                                Box(
+                                    modifier = Modifier.padding(end = 12.dp, start = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (state.isSourceImageFileExists) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "文件存在",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    } else if (isImageError) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "文件不存在",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(56.dp),
                         singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
                         textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
                     )
                     Spacer(modifier = Modifier.width(spacing.small))
@@ -218,6 +261,29 @@ fun ImportAssetSheetDialog(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("浏览", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+                AnimatedVisibility(
+                    visible = isImageError,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp, start = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = state.sourceImageError ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
 
@@ -284,14 +350,26 @@ fun ImportAssetSheetDialog(
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
                 } else {
+                    val isJsonError = state.sourceJsonError != null
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OutlinedTextField(
+                        SelectAllOutlinedTextField(
                             value = state.sourceJsonPath,
                             onValueChange = { viewModel.updateSourceJsonPath(it) },
-                            placeholder = { Text("选填，例如：E:\\dir/xxx/xxx.json") },
+                            isError = isJsonError,
+                            placeholder = {
+                                Text(
+                                    text = "选填，例如：E:\\dir/xxx/xxx.json",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 13.sp
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                            },
+                            contentPadding = PaddingValues(start = 0.dp, top = 8.dp, end = 0.dp, bottom = 8.dp),
                             leadingIcon = {
                                 Box(
                                     modifier = Modifier.padding(start = 14.dp, end = 6.dp),
@@ -300,13 +378,38 @@ fun ImportAssetSheetDialog(
                                     Icon(
                                         imageVector = Icons.Default.Description,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary,
+                                        tint = if (isJsonError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
                             },
-                            modifier = Modifier.weight(1f),
+                            trailingIcon = {
+                                if (state.sourceJsonPath.isNotBlank()) {
+                                    Box(
+                                        modifier = Modifier.padding(end = 12.dp, start = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (state.isSourceJsonFileExists) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = "文件存在",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        } else if (isJsonError) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "文件不存在",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(56.dp),
                             singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
                             textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
                         )
                         Spacer(modifier = Modifier.width(spacing.small))
@@ -325,6 +428,29 @@ fun ImportAssetSheetDialog(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("浏览", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = isJsonError,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(top = 4.dp, start = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = state.sourceJsonError ?: "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
                 }
@@ -577,9 +703,12 @@ fun ImportAssetSheetDialog(
 
                     Spacer(modifier = Modifier.width(spacing.medium))
 
-                    val hasImage = state.sourceImagePath.isNotBlank()
-                    val hasJsonResult = result != null && result.items.isNotEmpty()
-                    val canProceed = hasImage && !state.isAiDetectingCoords && !state.isParsingJson
+                    val hasImage = state.isSourceImageFileExists
+                    val hasJsonConfigured = state.sourceJsonPath.isNotBlank() || isManualTextMode
+                    val hasJsonResult = result != null && result.items.isNotEmpty() && (isManualTextMode || state.isSourceJsonFileExists)
+                    // 门禁：大图必须物理存在；若配置了 JSON 则 JSON 必须物理存在且解析出 items，若未配置 JSON 则可启动 AI 识别
+                    val canProceed = hasImage && !state.isAiDetectingCoords && !state.isParsingJson &&
+                            (if (hasJsonConfigured) hasJsonResult else true)
 
                     Button(
                         onClick = {
@@ -592,8 +721,12 @@ fun ImportAssetSheetDialog(
                         },
                         enabled = canProceed,
                         modifier = Modifier.height(44.dp).tip(
-                            if (hasJsonResult) "确认识别结果并进入切图前交互式预审"
-                            else "使用 AI 视觉模型自动识别图集图元并进入校对"
+                            when {
+                                !hasImage -> "大图文件在磁盘上不存在，无法继续"
+                                hasJsonConfigured && !hasJsonResult -> "坐标 JSON 尚未正确解析或文件不存在，无法继续"
+                                hasJsonResult -> "确认识别结果并进入切图前交互式预审"
+                                else -> "使用 AI 视觉模型自动识别图集图元并进入校对"
+                            }
                         )
                     ) {
                         if (state.isAiDetectingCoords) {

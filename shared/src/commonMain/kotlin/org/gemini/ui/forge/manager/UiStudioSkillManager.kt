@@ -28,6 +28,7 @@ object UiStudioSkillManager {
 
     /** 核心技能 ID 标识常量 */
     const val SPEC_TO_VIEW_SKILL_ID = "spec_to_view"
+    const val TRANSPARENT_IMAGE_SKILL_ID = "transparent_image_generation"
 
     private val storage = LocalFileStorage()
     val resourceLoader = ExternalResourceLoader(storage)
@@ -56,20 +57,24 @@ object UiStudioSkillManager {
 
         val loadedMap = LinkedHashMap<String, UiStudioSkill>()
 
-        // 1. 加载核心 Spec-to-View Markdown 技能（若外部磁盘不存在，通过 loadText 自动触发强制释放落盘）
-        try {
-            val mdContent = resourceLoader.loadText(SKILLS_DIR, "$SPEC_TO_VIEW_SKILL_ID.md", bypassCache = !hasExternalFile)
-            val skill = SkillMarkdownParser.parse(mdContent, defaultId = SPEC_TO_VIEW_SKILL_ID)
-            loadedMap[skill.id] = skill
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "加载技能 [$SPEC_TO_VIEW_SKILL_ID.md] 失败", e)
+        // 1. 加载内置核心 Markdown 技能
+        val builtinSkillIds = listOf(SPEC_TO_VIEW_SKILL_ID, TRANSPARENT_IMAGE_SKILL_ID)
+        for (skillId in builtinSkillIds) {
+            try {
+                val hasFile = storage.exists("$SKILLS_DIR/$skillId.md")
+                val mdContent = resourceLoader.loadText(SKILLS_DIR, "$skillId.md", bypassCache = !hasFile)
+                val skill = SkillMarkdownParser.parse(mdContent, defaultId = skillId)
+                loadedMap[skill.id] = skill
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "加载内置技能 [$skillId.md] 失败", e)
+            }
         }
 
         // 2. 扫描外部 skills/ 目录下的所有 *.md 与 *.json 自定义技能
         try {
             val files = storage.listFiles(SKILLS_DIR)
             for (fileName in files) {
-                if (fileName.equals("$SPEC_TO_VIEW_SKILL_ID.md", ignoreCase = true)) continue
+                if (builtinSkillIds.any { fileName.equals("$it.md", ignoreCase = true) }) continue
                 if (fileName.equals("disabled_skills.json", ignoreCase = true) || fileName.startsWith(".")) continue
                 val relativePath = "$SKILLS_DIR/$fileName"
                 try {

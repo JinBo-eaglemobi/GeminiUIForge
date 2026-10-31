@@ -52,6 +52,7 @@ import org.gemini.ui.forge.utils.toImageBitmap
 fun UIStudioPreviewPanel(
     viewModel: UIStudioViewModel,
     assetPathResolver: (String?) -> String? = { null },
+    assetUpdatedAtResolver: (String?) -> Long? = { hash -> viewModel.findAssetByHash(hash)?.updatedAt },
     modifier: Modifier = Modifier
 ) {
     val state = viewModel.state
@@ -166,11 +167,19 @@ fun UIStudioPreviewPanel(
                     }
                     selectedBlock != null && (selectedBlock.isPureContainer || selectedBlock.children.isNotEmpty() || selectedBlock.type == UIBlockType.CONTAINER) -> {
                         // 2. 预览选中的父组件渲染效果（渲染内部子布局）
-                        ContainerPreviewView(container = selectedBlock, assetPathResolver = assetPathResolver)
+                        ContainerPreviewView(
+                            container = selectedBlock,
+                            assetPathResolver = assetPathResolver,
+                            assetUpdatedAtResolver = assetUpdatedAtResolver
+                        )
                     }
                     selectedBlock != null -> {
                         // 3. 预览选中的普通组件切片
-                        BlockPreviewView(block = selectedBlock, assetPathResolver = assetPathResolver)
+                        BlockPreviewView(
+                            block = selectedBlock,
+                            assetPathResolver = assetPathResolver,
+                            assetUpdatedAtResolver = assetUpdatedAtResolver
+                        )
                     }
                     else -> {
                         // 4. 空状态
@@ -187,9 +196,9 @@ fun UIStudioPreviewPanel(
  */
 @Composable
 private fun AssetPreviewView(asset: UIAssetItem) {
-    var bitmap by remember(asset.relativePath) { mutableStateOf<ImageBitmap?>(null) }
+    var bitmap by remember(asset.relativePath, asset.updatedAt) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(asset.relativePath) {
+    LaunchedEffect(asset.relativePath, asset.updatedAt) {
         withContext(Dispatchers.Default) {
             val bytes = readLocalFileBytes(asset.relativePath)
                 ?: try {
@@ -197,8 +206,10 @@ private fun AssetPreviewView(asset: UIAssetItem) {
                 } catch (_: Exception) {
                     null
                 }
-            if (bytes != null) {
+            if (bytes != null && bytes.isNotEmpty()) {
                 bitmap = bytes.toImageBitmap()
+            } else {
+                bitmap = null
             }
         }
     }
@@ -292,7 +303,8 @@ private fun AssetPreviewView(asset: UIAssetItem) {
 @Composable
 private fun ContainerPreviewView(
     container: UIStudioBlock,
-    assetPathResolver: (String?) -> String?
+    assetPathResolver: (String?) -> String?,
+    assetUpdatedAtResolver: (String?) -> Long? = { null }
 ) {
     val containerW = container.bounds.width.coerceAtLeast(1f)
     val containerH = container.bounds.height.coerceAtLeast(1f)
@@ -334,7 +346,8 @@ private fun ContainerPreviewView(
                                 child = child,
                                 scale = scale,
                                 inheritedOpacity = container.effectiveOpacity,
-                                assetPathResolver = assetPathResolver
+                                assetPathResolver = assetPathResolver,
+                                assetUpdatedAtResolver = assetUpdatedAtResolver
                             )
                         }
                     }
@@ -392,15 +405,17 @@ private fun ContainerPreviewView(
 @Composable
 private fun BlockPreviewView(
     block: UIStudioBlock,
-    assetPathResolver: (String?) -> String?
+    assetPathResolver: (String?) -> String?,
+    assetUpdatedAtResolver: (String?) -> Long? = { null }
 ) {
     // 哈希引用模型：图元仅持有 assetHash，路径由素材库动态解析
     val imagePath = assetPathResolver(block.assetHash)
-    var bitmap by remember(imagePath) { mutableStateOf<ImageBitmap?>(null) }
+    val assetUpdatedAt = assetUpdatedAtResolver(block.assetHash)
+    var bitmap by remember(imagePath, assetUpdatedAt) { mutableStateOf<ImageBitmap?>(null) }
     val blockW = (block.bounds.right - block.bounds.left).toInt()
     val blockH = (block.bounds.bottom - block.bounds.top).toInt()
 
-    LaunchedEffect(imagePath) {
+    LaunchedEffect(imagePath, assetUpdatedAt) {
         if (!imagePath.isNullOrBlank()) {
             withContext(Dispatchers.Default) {
                 val bytes = readLocalFileBytes(imagePath)

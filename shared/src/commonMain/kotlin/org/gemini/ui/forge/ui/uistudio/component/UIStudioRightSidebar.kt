@@ -86,6 +86,7 @@ fun UIStudioRightSidebar(
                             UIStudioPreviewPanel(
                                 viewModel = viewModel,
                                 assetPathResolver = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
+                                assetUpdatedAtResolver = { hash -> viewModel.findAssetByHash(hash)?.updatedAt },
                                 modifier = Modifier
                                     .weight((1f - state.propertyPanelHeightRatio).coerceIn(0.05f, 0.95f))
                                     .fillMaxWidth()

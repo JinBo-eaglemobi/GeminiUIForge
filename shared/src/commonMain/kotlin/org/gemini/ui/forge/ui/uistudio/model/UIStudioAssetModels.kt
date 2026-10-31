@@ -10,28 +10,33 @@ import org.gemini.ui.forge.model.chat.VisualChatSession
  * UI Studio 单个素材资产实体。
  *
  * @property id 素材唯一标识 ID
- * @property name 素材显示名称
  * @property relativePath 相对数据存储目录的相对路径（如 "templates/{proj}/assets/{folder}/{id}.png"）
  * @property width 素材物理宽度（像素）
  * @property height 素材物理高度（像素）
  * @property category 业务分类标签（如 "button", "symbol", "icon" 等）
  * @property folderId 所属文件夹 ID，为 null 时表示归属于根目录
- * @property createdAt 创建时间戳
  * @property hash 素材内容 SHA-256 哈希码（仅首次导入时生成，此后对图片的更新/修改/改名均不再变化；
  *                页面图元通过该哈希引用素材而非路径，素材移动/改名后图元引用自动跟随无需修改）
+ * @property updatedAt 最近一次修改/更新时间戳，用于 UI 内存图片缓存击穿与版本感知
  */
 @Serializable
 data class UIAssetItem(
     val id: String,
-    val name: String,
     val relativePath: String,
     val width: Int,
     val height: Int,
     val category: String = "default",
     val folderId: String? = null,
-    val createdAt: Long = 0L,
-    val hash: String? = null
-)
+    val hash: String? = null,
+    val updatedAt: Long = 0L
+) {
+    /**
+     * 素材显示名称（不参与序列化，只读计算属性）。
+     * 读取规则：将路径 relativePath 读取文件名字，去除目录前缀与扩展名后缀。
+     */
+    val name: String
+        get() = relativePath.substringAfterLast('/').substringAfterLast('\\').substringBeforeLast('.')
+}
 
 /**
  * UI Studio 素材文件夹实体。

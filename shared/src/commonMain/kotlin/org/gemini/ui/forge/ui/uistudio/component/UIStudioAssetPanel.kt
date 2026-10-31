@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -97,6 +98,44 @@ fun UIStudioAssetPanel(
     var deletingFolderTarget by remember { mutableStateOf<UIAssetFolder?>(null) }
     var deletingAssetTarget by remember { mutableStateOf<UIAssetItem?>(null) }
     val folderBoundsMap = remember { mutableStateMapOf<String, Rect>() }
+    val listState = rememberLazyListState()
+
+    // 监听选中的素材变化（如从 AI 聊天存入素材库），自动平滑展开并精准滚动聚焦呈现
+    LaunchedEffect(state.selectedAssetId, library.items) {
+        val selectedId = state.selectedAssetId ?: return@LaunchedEffect
+        var currentIndex = 0
+        var targetIndex: Int? = null
+
+        for (folder in library.folders) {
+            if (targetIndex != null) break
+            currentIndex++ // 文件夹标题卡片占用 1 个 item index
+            if (state.expandedFolderIds.contains(folder.id)) {
+                val folderItems = library.getItemsInFolder(folder.id)
+                for (fItem in folderItems) {
+                    if (fItem.id == selectedId) {
+                        targetIndex = currentIndex
+                        break
+                    }
+                    currentIndex++
+                }
+            }
+        }
+
+        if (targetIndex == null) {
+            val rootItems = library.getItemsInFolder(null)
+            for (rItem in rootItems) {
+                if (rItem.id == selectedId) {
+                    targetIndex = currentIndex
+                    break
+                }
+                currentIndex++
+            }
+        }
+
+        if (targetIndex != null) {
+            listState.animateScrollToItem(targetIndex)
+        }
+    }
 
     // 刷新动画旋转角度
     val refreshInfiniteTransition = rememberInfiniteTransition(label = "assetRefreshAnim")
@@ -327,6 +366,7 @@ fun UIStudioAssetPanel(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),

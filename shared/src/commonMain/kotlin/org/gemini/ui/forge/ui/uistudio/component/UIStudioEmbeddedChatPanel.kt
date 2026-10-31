@@ -28,6 +28,15 @@ import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.utils.findBlockById
 
+import org.gemini.ui.forge.ui.uistudio.component.ChatImageActionRow
+import org.gemini.ui.forge.ui.uistudio.dialog.SaveChatImageToAssetDialog
+import org.gemini.ui.forge.utils.readLocalFileBytes
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlinx.coroutines.launch
+import org.gemini.ui.forge.model.chat.VisualChatMessage
+import org.gemini.ui.forge.getCurrentTimeMillis
+
 /**
  * UI Studio 右侧边栏嵌入式 AI 对话面板 (Embedded AI Chat Panel)。
  *
@@ -47,8 +56,10 @@ fun UIStudioEmbeddedChatPanel(
 ) {
     val state = viewModel.state
     val spacing = LocalAppSpacing.current
+    val coroutineScope = rememberCoroutineScope()
     val currentSession = state.currentChatSession
     var showTrafficLogDialog by remember { mutableStateOf(false) }
+    var pendingSaveImageUri by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(state.project?.projectId) {
         viewModel.loadExternalDocs(state.project?.projectId ?: "default")
@@ -164,6 +175,33 @@ fun UIStudioEmbeddedChatPanel(
             viewSizeText = if (state.currentView != null) "${state.currentView?.width?.toInt() ?: 0} × ${state.currentView?.height?.toInt() ?: 0}" else "",
             readyAssetCount = state.assetLibrary.items.size,
             config = studioConfig,
+            imageActions = { uri ->
+                ChatImageActionRow(
+                    imageUri = uri,
+                    onSaveToAsset = { pendingSaveImageUri = uri },
+                    onAddToPage = { targetUri ->
+                        coroutineScope.launch {
+                            @OptIn(ExperimentalEncodingApi::class)
+                            val bytes = if (targetUri.startsWith("data:image")) {
+                                val pureB64 = if (targetUri.contains(",")) targetUri.substringAfter(",") else targetUri
+                                try { Base64.decode(pureB64) } catch (_: Throwable) { null }
+                            } else {
+                                readLocalFileBytes(targetUri)
+                            } ?: return@launch
+
+                            val defaultName = "ai_img_${getCurrentTimeMillis()}"
+                            viewModel.addChatImageToCurrentView(
+                                imageBytes = bytes,
+                                fileName = defaultName,
+                                width = 200f,
+                                height = 200f,
+                                subPath = "",
+                                isPng = targetUri.contains("png", ignoreCase = true)
+                            )
+                        }
+                    }
+                )
+            },
             chatNoticeContent = {
                 state.lastLayoutUndoSnapshot?.let { snapshot ->
                     LayoutDiffSummaryCard(
@@ -255,6 +293,39 @@ fun UIStudioEmbeddedChatPanel(
                 isDestructive = true,
                 onConfirm = { viewModel.confirmClearCurrentSession() },
                 onDismiss = { viewModel.cancelClearCurrentSession() }
+            )
+        }
+
+        // 保存图片至项目素材库对话框
+        val saveUri = pendingSaveImageUri
+        if (saveUri != null) {
+            val autoName = remember(saveUri) { "ai_img_${getCurrentTimeMillis()}" }
+            SaveChatImageToAssetDialog(
+                isOpen = true,
+                initialFileName = autoName,
+                folders = state.assetLibrary.folders,
+                onDismissRequest = { pendingSaveImageUri = null },
+                onConfirmSave = { fileName, subPath ->
+                    coroutineScope.launch {
+                        @OptIn(ExperimentalEncodingApi::class)
+                        val bytes = if (saveUri.startsWith("data:image")) {
+                            val pureB64 = if (saveUri.contains(",")) saveUri.substringAfter(",") else saveUri
+                            try { Base64.decode(pureB64) } catch (_: Throwable) { null }
+                        } else {
+                            readLocalFileBytes(saveUri)
+                        }
+                        if (bytes != null) {
+                            val isPng = saveUri.contains("png", ignoreCase = true)
+                            viewModel.saveChatImageToAssetLibrary(
+                                imageBytes = bytes,
+                                fileName = fileName,
+                                subPath = subPath,
+                                isPng = isPng
+                            )
+                        }
+                        pendingSaveImageUri = null
+                    }
+                }
             )
         }
     }

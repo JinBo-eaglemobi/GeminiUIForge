@@ -31,16 +31,18 @@ fun UIStudioChildPreviewThumbnail(
     scale: Float,
     inheritedOpacity: Float = 1.0f,
     assetPathResolver: (String?) -> String? = { null },
+    assetUpdatedAtResolver: (String?) -> Long? = { null },
     modifier: Modifier = Modifier
 ) {
     // 哈希引用模型：图元仅持有 assetHash，路径由素材库动态解析
     val imagePath = assetPathResolver(child.assetHash)
+    val assetUpdatedAt = assetUpdatedAtResolver(child.assetHash)
 
-    var bitmap by remember(imagePath, child.id) {
+    var bitmap by remember(imagePath, child.id, assetUpdatedAt) {
         mutableStateOf<ImageBitmap?>(null)
     }
 
-    LaunchedEffect(imagePath, child.id) {
+    LaunchedEffect(imagePath, child.id, assetUpdatedAt) {
         withContext(Dispatchers.Default) {
             val bytes = imagePath?.let { path ->
                 readLocalFileBytes(path)

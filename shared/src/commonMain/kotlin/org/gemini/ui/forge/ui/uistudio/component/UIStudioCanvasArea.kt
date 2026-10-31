@@ -53,6 +53,7 @@ import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 fun UIStudioCanvasArea(
     viewModel: UIStudioViewModel,
     assetPathResolver: (String?) -> String? = { null },
+    assetUpdatedAtResolver: (String?) -> Long? = { hash -> viewModel.findAssetByHash(hash)?.updatedAt },
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
@@ -364,6 +365,7 @@ fun UIStudioCanvasArea(
                                     isSelected = info.block.id == state.selectedBlockId,
                                     scale = state.scale,
                                     assetPathResolver = assetPathResolver,
+                                    assetUpdatedAtResolver = assetUpdatedAtResolver,
                                     onClick = {
                                         if (activeContainer == null) {
                                             // 主视图模式层级门禁：严禁绕过父容器直接选中子组件，点击必须选中所属顶层根父容器

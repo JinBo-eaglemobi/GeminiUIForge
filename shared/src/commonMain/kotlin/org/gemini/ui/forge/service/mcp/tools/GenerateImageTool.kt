@@ -31,7 +31,7 @@ class GenerateImageTool(
     override val name: String = "generate_image"
 
     override val description: String =
-        "执行通用独立文生图（Text-to-Image）任务。根据用户的自然语言视觉描述生成高品质图片，支持画面宽高比（1:1、16:9 等）与透明背景去背，自动落盘并回传图像。"
+        "执行通用独立文生图（Text-to-Image）任务。根据用户的自然语言视觉描述生成高品质图片，支持画面宽高比（1:1、16:9 等）与透明背景去背，纯内存生成与 Data URI 返回；支持可选直接保存至素材库或添加到当前页面。"
 
     override val annotations: McpToolAnnotations = McpToolAnnotations(
         readOnlyHint = false,
@@ -50,7 +50,7 @@ class GenerateImageTool(
             })
             put("projectName", buildJsonObject {
                 put("type", "string")
-                put("description", "可选：保存的目标项目工程名称。若未指定将自动归入当前活跃工程或通用资产目录")
+                put("description", "可选：目标项目工程名称。若未指定将自动归入当前活跃工程")
             })
             put("aspectRatio", buildJsonObject {
                 put("type", "string")
@@ -63,6 +63,18 @@ class GenerateImageTool(
             put("modelName", buildJsonObject {
                 put("type", "string")
                 put("description", "可选：调用的生图模型代号。若系统设置了默认生图模型预设，将自动强制锁定为预设模型")
+            })
+            put("customSubPath", buildJsonObject {
+                put("type", "string")
+                put("description", "可选：指定存入素材库的子文件夹路径（例如 'icons/buttons'，留空存入 assets/image/ 根目录）")
+            })
+            put("customFileName", buildJsonObject {
+                put("type", "string")
+                put("description", "可选：指定存入素材库的文件名（无需后缀）。若提供该参数将直接持久化落盘至素材库，否则仅保留在内存与日志中")
+            })
+            put("addToView", buildJsonObject {
+                put("type", "boolean")
+                put("description", "可选：是否在生成后直接作为图元添加到当前 UI Studio 页面画布中心，默认为 false")
             })
         })
         put("required", buildJsonArray {
@@ -151,17 +163,59 @@ class GenerateImageTool(
             initialBytes
         }
 
-        onProgress?.invoke(0.9f, "正在保存图片资产至本地磁盘...")
-        val timestamp = getCurrentTimeMillis()
-        val ext = if (isPng) "png" else "jpg"
-        val relativeDir = "templates/$projectName/assets/generated"
-        val fileName = "gen_${timestamp}.$ext"
+        val customSubPath = arguments["customSubPath"]?.jsonPrimitive?.contentOrNull?.trim()?.trim('/', '\\') ?: ""
+        val customFileName = arguments["customFileName"]?.jsonPrimitive?.contentOrNull?.trim()
+        val addToView = arguments["addToView"]?.jsonPrimitive?.booleanOrNull ?: false
 
-        val savedPath = try {
-            storage.saveBytesToFile("$relativeDir/$fileName", processedBytes)
-        } catch (e: Exception) {
-            AppLogger.e("GenerateImageTool", "保存生成资产失败", e)
-            null
+        val ext = if (isPng) "png" else "jpg"
+        var savedRelativePath: String? = null
+
+        // 仅当用户或 AI 显式指定了 customFileName 时，才直接将图片物理落盘存入 assets/image/
+        if (!customFileName.isNullOrBlank()) {
+            onProgress?.invoke(0.9f, "正在保存图片至项目素材库...")
+            val cleanFileName = if (customFileName.endsWith(".$ext", ignoreCase = true)) customFileName else "$customFileName.$ext"
+            val targetRelDir = if (customSubPath.isBlank()) {
+                "templates/$projectName/assets/image"
+            } else {
+                "templates/$projectName/assets/image/$customSubPath"
+            }
+            val targetFullPath = "$targetRelDir/$cleanFileName"
+
+            savedRelativePath = try {
+                storage.saveBytesToFile(targetFullPath, processedBytes)
+            } catch (e: Exception) {
+                AppLogger.e("GenerateImageTool", "保存资产至素材库失败: $targetFullPath", e)
+                null
+            }
+
+            // 若有活跃 UIStudioViewModel，触发素材库自动自愈刷新
+            if (savedRelativePath != null) {
+                try {
+                    McpUiActionPipeline.getActiveUiStudioViewModel()?.refreshAssetLibrary()
+                } catch (e: Throwable) {
+                    AppLogger.w("GenerateImageTool", "刷新素材库失败", e)
+                }
+            }
+        }
+
+        // 若要求直接添加到页面
+        if (addToView && savedRelativePath != null) {
+            try {
+                val studioVm = McpUiActionPipeline.getActiveUiStudioViewModel()
+                if (studioVm != null) {
+                    val blockName = customFileName?.ifBlank { "ai_img_${getCurrentTimeMillis()}" } ?: "ai_img_${getCurrentTimeMillis()}"
+                    studioVm.addChatImageToCurrentView(
+                        imageBytes = processedBytes,
+                        fileName = blockName,
+                        width = targetWidth,
+                        height = targetHeight,
+                        subPath = customSubPath,
+                        isPng = isPng
+                    )
+                }
+            } catch (e: Throwable) {
+                AppLogger.w("GenerateImageTool", "添加图元到当前页面失败", e)
+            }
         }
 
         @OptIn(ExperimentalEncodingApi::class)
@@ -176,8 +230,13 @@ class GenerateImageTool(
             if (isPng) {
                 append("✂️ 透明背景: 已完成本地 AI 自动去背 (PNG)\n")
             }
-            if (savedPath != null) {
-                append("📁 物理落盘: `$savedPath`")
+            if (savedRelativePath != null) {
+                append("📁 素材库归档: `$savedRelativePath`\n")
+                if (addToView) {
+                    append("🖼️ 页面挂载: 已作为图元挂载至当前视图中心")
+                }
+            } else {
+                append("💾 内存模式: 图片数据已完整持久化于会话日志中，可通过操作栏按需存入素材库。")
             }
         }
 

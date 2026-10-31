@@ -23,27 +23,43 @@ class ScriptManager(private val storage: LocalFileStorage) {
         val relativePath = "$SCRIPTS_DIR/$fileName"
 
         try {
-            // 强制每次从资源中提取脚本以保证最新（解决尺寸问题脚本缓存未更新）
-            AppLogger.i(TAG, "🚀 正在从资源中提取脚本并覆盖: $fileName")
             val resourcePath = "scripts/$fileName"
-            val bytes = try {
+            val resBytes = try {
                 readResourceBytes(resourcePath)
             } catch (e: Exception) {
-                AppLogger.e(TAG, "❌ 无法从资源读取脚本: $resourcePath", e)
+                AppLogger.w(TAG, "⚠️ 无法从内置资源读取脚本: $resourcePath, 尝试降级使用本地磁盘既有文件", e)
                 null
             }
 
-            if (bytes != null) {
-                storage.saveBytesToFile(relativePath, bytes)
-                AppLogger.i(TAG, "✅ 脚本提取成功: $fileName")
-            } else {
+            val existsOnDisk = storage.exists(relativePath)
+
+            if (resBytes != null) {
+                var shouldOverwrite = !existsOnDisk
+                if (existsOnDisk) {
+                    val localBytes = storage.readBytesFromFile(relativePath)
+                    // 严密对比大小与内容/CRC（contentEquals），只要有任一差异立刻拷贝覆盖
+                    if (localBytes == null || localBytes.size != resBytes.size || !localBytes.contentEquals(resBytes)) {
+                        AppLogger.i(
+                            TAG,
+                            "🔄 检测到脚本版本/内容差异: $fileName (本地: ${localBytes?.size ?: 0} 字节, 内置资源: ${resBytes.size} 字节)，正在执行覆盖同步"
+                        )
+                        shouldOverwrite = true
+                    }
+                }
+
+                if (shouldOverwrite) {
+                    storage.saveBytesToFile(relativePath, resBytes)
+                    AppLogger.i(TAG, "✅ 脚本已更新同步至本地: $fileName")
+                }
+            } else if (!existsOnDisk) {
+                AppLogger.e(TAG, "❌ 内置资源缺失且本地无脚本文件: $fileName")
                 return null
             }
-            
-            // 2. 返回绝对路径
+
+            // 返回脚本本地绝对路径
             return storage.getFilePath(relativePath)
         } catch (e: Exception) {
-            AppLogger.e(TAG, "❌ 获取脚本路径失败: $fileName", e)
+            AppLogger.e(TAG, "❌ 获取/同步脚本失败: $fileName", e)
             return null
         }
     }

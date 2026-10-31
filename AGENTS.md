@@ -132,11 +132,21 @@
 
 ## 代码规范
 
-- **一文件一 Composable 强制红线 (One Composable Per File Specification)**: **【红线规则】**
-  严格遵循**“一文件一 Composable（One Composable Per File）”**的绝对铁律。
-  1. **严禁同文件内多 Composable 声明**：除合法的内联 Slot 插槽 Lambda（如 `content: @Composable () -> Unit`）外，**绝对禁止在同一个物理 `.kt` 文件中声明 2 个或以上带有独立命名的 `@Composable fun`**（不论其可见性为 `public`、`internal` 还是 `private`）；
-  2. **严禁就地声明私有辅助组件**：严禁在主界面或主弹窗文件中编写如 `private fun CredentialSection`、`private fun LogPanel`、`private fun StepRow` 等局部卡片或行项组件。所有的子卡片、行项（Item/Row）、子面板、弹窗覆层必须按功能职责拆分成独立的物理文件，统一归入对应功能模块的 `component/` 子目录组织；
-  3. **单文件规模严格受控**：单个 UI 文件代码量原则上严格控制在 **100 ~ 300 行** 黄金可维护区间（上限不得超过 400 行）。做到“一文件一职责，看文件名即可秒懂其 UI 渲染结构”。
+- **单一实体与单一 Composable 单一物理文件强制红线 (One Entity / One Composable Per File Specification)**: **【红线规则】**
+  全项目严格遵循**“单一实体单一物理文件（One Entity / One Composable Per File）”**的绝对铁律。
+  1. **Java / Kotlin 语法实体一文件一声明原则 (One Top-Level Entity Per File)**：
+     - **绝对禁止同文件多顶层实体声明**：凡在 Java / Kotlin 中声明的 `class`（标准类、数据类 `data class`、抽象类 `abstract class`）、`interface`（接口）、`enum class`（枚举）、`object`（单例对象/静态工具类），**必须且仅能独立保存在与其名称严格同名的单一物理文件内**（例如 `UserSession.kt`、`IProjectService.kt`、`BlockType.kt`、`GeometryHelper.kt`）；
+     - **严禁杂糅与就地派生声明**：绝对禁止在一个主类文件底部或头部随意“顺手”编写独立的枚举类、伴生数据类、异常类或回调接口（例如严禁在 `AppConfig.kt` 中就地声明 `enum class AppTheme` 或 `data class NetworkConfig`，必须分别拆分为独立的物理文件）；
+     - **伴生对象与密封体系的作用域边界**：
+       - `companion object` 专职作为宿主类的内部工厂或伴生常量命名空间，允许内嵌于其宿主类内部；
+       - `sealed class` / `sealed interface` 的状态分支，若仅为极简的 1~2 行无行为数据承载（如 `data class Success(val data: String) : State`），允许定义在 sealed 族内部；但只要具备独立复杂字段、衍生计算属性或业务方法，**必须剥离至独立的物理文件**；
+  2. **UI 视图组件一文件一 Composable 铁律 (One Composable Per File)**：
+     - 除合法的内联 Slot 插槽 Lambda（如 `content: @Composable () -> Unit`）外，**绝对禁止在同一个物理 `.kt` 文件中声明 2 个或以上带有独立命名的 `@Composable fun`**（不论其可见性为 `public`、`internal` 还是 `private`）；
+     - **严禁就地声明私有辅助组件**：严禁在主界面或主弹窗文件中编写如 `private fun CredentialSection`、`private fun LogPanel`、`private fun StepRow` 等局部卡片或行项组件。所有的子卡片、行项（Item/Row）、子面板、弹窗覆层必须按功能职责拆分成独立的物理文件，统一归入对应功能模块的 `component/` 子目录组织；
+     - **单文件规模严格受控**：单个 UI 文件代码量原则上严格控制在 **100 ~ 300 行** 黄金可维护区间（**硬性上限不得超过 400 行**）。做到“一文件一职责，看文件名即可秒懂其 UI 渲染结构”；
+  3. **业务逻辑类与 ViewModel 委托拆分红线 (ViewModel & Business Delegate Specification)**：
+     - ViewModel、Manager、Service 等业务中枢类的单文件代码量**严禁无限制膨胀**（建议上限控制在 **500 ~ 800 行**）；
+     - 一旦业务子域增加（如画布手势、选区变换、素材库管理、AI 对话协同），**必须强制采用 Delegate（委托模式）**（参考项目中已有的 `LayoutEditorDelegate.kt`、`AssetManagerDelegate.kt`），将独立子域抽取为独立的 Delegate 类并存放在独立的物理文件中，通过组合注入 ViewModel，彻底杜绝单文件数千行的超级巨石类（God Class）。
 - **禁止硬编码数字与尺寸 (Design Tokens & Spacing System)**: **【红线规则】** 严禁在 UI 代码中随意写死硬编码数字（如 `8.dp`, `16.dp`, `440.dp` 等物理常数）。所有的边距、间隙、内边距、组件宽高以及弹窗尺寸等，必须统一使用项目中公用的设计系统配置（Design Tokens，如 `LocalAppSpacing.current` / `AppSpacing.kt` 中声明的语义化属性）来进行赋值。弹窗宽度（如 `dialogConfirmWidth`, `dialogConfigWidth`）与通用组件尺寸必须统一收拢到 `AppSpacing.kt` 或对应的公共维度配置中管理，实现一处修改、全局自动响应。
 - **PC 端交互按钮 Tooltip 规范**: 所有 PC 桌面端的交互型按钮（包括但不限于 `Button`、`IconButton`、`TextButton`、`OutlinedButton` 以及各类可点击的操作图标/胶囊等所有可交互按钮）均必须使用项目内置的轻量单例修饰符 `Modifier.tip(...)`（来自 `AppTooltip.kt`）挂载悬浮提示信息，提示文案必须严格遵循下述 I18n 规范通过 `stringResource(...)` 注入，严禁硬编码文案。
 - **多层树状图元层级坐标系通用规范 (Hierarchical Coordinate System Specification)**: **【红线规则】**

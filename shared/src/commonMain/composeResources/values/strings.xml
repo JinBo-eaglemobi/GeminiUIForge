@@ -723,4 +723,20 @@
     <string name="ui_studio_tab_collapse_tip">Collapse Right Sidebar</string>
     <string name="ui_studio_tab_expand_tip">Expand Right Sidebar</string>
     <string name="ui_studio_dialog_dock_to_sidebar_tip">Dock to right sidebar</string>
+
+    <!-- AI Chat Image Save & Mount to View -->
+    <string name="chat_image_ready_hint">Image Generated (Pending Save)</string>
+    <string name="chat_image_apply_asset">Save to Assets...</string>
+    <string name="chat_image_apply_asset_done">Saved to Assets</string>
+    <string name="chat_image_add_to_page">Add to Page</string>
+    <string name="chat_image_add_to_page_done">Added to Page</string>
+    <string name="chat_image_dialog_title">Save Image to Asset Library</string>
+    <string name="chat_image_dialog_filename">Asset Name</string>
+    <string name="chat_image_dialog_folder">Target Folder / Relative Path</string>
+    <string name="chat_image_dialog_root_folder">All Assets (Root: assets/image/)</string>
+    <string name="chat_image_dialog_custom_folder">Custom Subfolder (e.g. icons/shop)</string>
+    <string name="chat_image_dialog_preview_path">Target File Path:</string>
+    <string name="chat_image_dialog_confirm">Save to Assets</string>
+    <string name="chat_image_toast_asset_success">Successfully saved image to assets: %1$s</string>
+    <string name="chat_image_toast_page_success">Added image block to page [%1$s]</string>
 </resources>

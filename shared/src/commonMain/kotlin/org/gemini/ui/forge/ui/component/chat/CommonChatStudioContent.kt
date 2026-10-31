@@ -144,6 +144,7 @@ fun CommonChatStudioContent(
     hoverPreviewConfig: MentionHoverPreviewConfig? = null,
     topBarActions: @Composable RowScope.() -> Unit = {},
     chatNoticeContent: @Composable ColumnScope.() -> Unit = {},
+    imageActions: (@Composable (imageUri: String) -> Unit)? = null,
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     inputLeadingActions: @Composable RowScope.() -> Unit = {},
     inputTrailingActions: @Composable RowScope.() -> Unit = {},
@@ -555,6 +556,7 @@ fun CommonChatStudioContent(
                             )
                         },
                         messageActions = messageActions,
+                        imageActions = imageActions,
                         modifier = Modifier.weight(1f)
                     )
 

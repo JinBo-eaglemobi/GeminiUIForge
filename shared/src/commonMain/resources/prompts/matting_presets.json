@@ -79,5 +79,32 @@
     "nameEn": "Generate Active / Glowing State",
     "descriptionEn": "Create an illuminated active state with vibrant golden glow and particle effects.",
     "promptEn": "Based on the base component in the reference image, generate its corresponding Active / Highlighted State variant. Enhance lighting contrast, adding radiant golden glow, shimmering outer particle effects, and strong visual punch around the contours to convey an activated energy feel."
+  },
+  {
+    "id": "universal_easy_matting",
+    "nameZh": "全场景万能易抠图（纯白无影悬浮）",
+    "descriptionZh": "生成悬浮于纯平白底的单体图元，杜绝脏灰地面投影与假棋盘格，保持边缘清晰锐利",
+    "promptZh": "将核心主体居中完全悬浮于纯平白底（#FFFFFF）正中央，摄影棚无影箱柔和光照，轮廓外边缘锐利分明且与背景高对比，悬浮半空无地面接触，零地面投影，背景无任何渐变、暗角或脏污，无反光倒影，严禁生成伪透明棋盘格网格与地面遮蔽污渍。",
+    "nameEn": "Universal Easy-Matting (Shadowless White)",
+    "descriptionEn": "Isolate the subject centered and floating in mid-air on a solid pure flat white background, eliminating all floor shadows and fake grids.",
+    "promptEn": "Keep the core subject centered and isolated on a solid pure flat white background (#FFFFFF), floating in mid-air, studio lightbox illumination, clean sharp silhouette, high-contrast well-defined outer edges, zero floor shadows, no ground contact shadow, no ambient occlusion on background, no reflections, strictly avoid fake transparent checkerboard grids, drop shadows, or background gradients."
+  },
+  {
+    "id": "sprite_sheet_matting",
+    "nameZh": "雪碧图/多图元合集表排版",
+    "descriptionZh": "将多个图元整齐排列在纯白合集网格中，留出宽裕安全间距，每个图元独立不相交",
+    "promptZh": "将各个独立的图元整齐排列在合集网格中，图元之间留出充足宽裕的纯平白底（#FFFFFF）空白间隙，严格禁止任何图元发生重叠、接触或遮挡，每个图元边缘轮廓清晰锐利各自闭环，零地面投影与接触阴影，背景极致纯净单一。",
+    "nameEn": "Sprite Sheet Asset Pack (Isolated Grid)",
+    "descriptionEn": "Neatly arrange multiple game icons on a pure white grid with generous spacing and distinct outer contours.",
+    "promptEn": "Neatly arrange all individual game UI icons/elements in a separated sprite sheet grid, leaving generous and clear flat white (#FFFFFF) spacing between all items, strictly no overlapping or touching elements, crisp individual contours, zero floor contact shadows, studio lightbox illumination, pristine uniform background."
+  },
+  {
+    "id": "glowing_fx_black_matting",
+    "nameZh": "自发光/光效微光黑底无损",
+    "descriptionZh": "针对法阵、火焰、光晕与粒子，置于纯黑背景，保留细腻半透明亮度衰减与高反差",
+    "promptZh": "将发光特效、魔法符文或能量粒子置于纯平黑底（#000000）深邃虚空中央，强化半透明羽化光晕与细腻色彩过渡，无地面倒影，无背景光照反射，呈现极度纯净的半透明羽化微光与强烈的明暗反差，无杂质噪点。",
+    "nameEn": "Glowing FX & Light Aura (Lossless Black Void)",
+    "descriptionEn": "Place glowing magic circles, particles, or flames on a solid pure black background to preserve soft falloffs and high contrast.",
+    "promptEn": "Place the glowing visual effect, magic rune circle, or luminous particle dust on a solid pure flat black background (#000000) in deep void space, emphasizing feathered bloom halos and delicate semi-transparent luminance falloffs, zero floor reflections, no ambient clutter, delivering pristine luminescence with maximum contrast and zero noise."
   }
 ]

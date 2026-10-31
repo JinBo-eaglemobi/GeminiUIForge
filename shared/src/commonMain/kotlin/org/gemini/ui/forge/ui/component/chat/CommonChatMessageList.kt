@@ -69,6 +69,7 @@ fun CommonChatMessageList(
     onSwitchProtocolRequested: ((VisualChatMessage) -> Unit)? = null,
     designMemoryContext: String? = null,
     onRecompressRequested: (() -> Unit)? = null,
+    imageActions: (@Composable (imageUri: String) -> Unit)? = null,
     messageActions: @Composable RowScope.(message: VisualChatMessage) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -279,6 +280,7 @@ fun CommonChatMessageList(
                                     onOpenViewRequested = onOpenViewRequested,
                                     onFallbackFlashModelRequested = onFallbackFlashModelRequested,
                                     onSwitchProtocolRequested = onSwitchProtocolRequested,
+                                    imageActions = imageActions,
                                     messageActions = messageActions
                                 )
                             }

@@ -83,9 +83,18 @@ fun AssetSlicingProgressOverlay(
 
     val totalItems = taskItems.size
     val successCount = taskItems.count { it.status == SliceItemStatus.SUCCESS }
+    val slicedCount = taskItems.count {
+        it.status == SliceItemStatus.SLICED || it.status == SliceItemStatus.MATTING || it.status == SliceItemStatus.SUCCESS
+    }
+
+    val readyCountText = when (stage) {
+        SliceStage.PREPARING, SliceStage.SLICING -> "($slicedCount / $totalItems 项已切片)"
+        SliceStage.MATTING -> "($successCount / $totalItems 项已去背 · 原始切片 100% 保底)"
+        SliceStage.REGISTERING, SliceStage.FINISHED -> "($successCount / $totalItems 项全部就绪)"
+    }
 
     // 预估剩余时间推算
-    val remainingText = remember(animatedProgress, elapsedMillis, totalItems, successCount) {
+    val remainingText = remember(animatedProgress, elapsedMillis, totalItems, successCount, slicedCount, stage) {
         if (animatedProgress >= 0.99f || stage == SliceStage.FINISHED) {
             "已完成"
         } else if (animatedProgress > 0.05f && elapsedMillis > 1000L) {
@@ -98,10 +107,11 @@ fun AssetSlicingProgressOverlay(
     }
 
     // 处理速率 (张/秒)
-    val speedText = remember(elapsedMillis, successCount) {
+    val speedText = remember(elapsedMillis, successCount, slicedCount, stage) {
         val elapsedSec = elapsedMillis / 1000f
-        if (elapsedSec > 0.5f && successCount > 0) {
-            val speed = (successCount / elapsedSec)
+        val countForSpeed = if (stage == SliceStage.SLICING) slicedCount else successCount
+        if (elapsedSec > 0.3f && countForSpeed > 0) {
+            val speed = (countForSpeed / elapsedSec)
             "${(speed * 10).toInt() / 10f} 项/s"
         } else {
             "--"
@@ -197,8 +207,16 @@ fun AssetSlicingProgressOverlay(
                             }
                         }
 
+                        val subTitleText = when (stage) {
+                            SliceStage.PREPARING -> "正在初始化图集解码与切片流水线..."
+                            SliceStage.SLICING -> "阶段 ①/②：微秒级多核物理切片 ($slicedCount/$totalItems)"
+                            SliceStage.MATTING -> "阶段 ②/②：常驻单进程 AI 批量去背景 ($successCount/$totalItems)"
+                            SliceStage.REGISTERING -> "正在登记入库并持久化素材库..."
+                            SliceStage.FINISHED -> "全部切片与去背处理完成"
+                        }
+
                         Text(
-                            text = "微秒级多核裁剪与常驻单进程 AI 批量去背景",
+                            text = subTitleText,
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                             color = colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -291,7 +309,7 @@ fun AssetSlicingProgressOverlay(
                             )
 
                             Text(
-                                text = "($successCount / $totalItems 项就绪)",
+                                text = readyCountText,
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                                 color = colorScheme.onSurfaceVariant
                             )

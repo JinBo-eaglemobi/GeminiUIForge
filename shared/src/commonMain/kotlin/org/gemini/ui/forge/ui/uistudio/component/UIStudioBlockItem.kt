@@ -59,15 +59,17 @@ fun UIStudioBlockItem(
     onDragDelta: (dx: Float, dy: Float) -> Unit = { _, _ -> },
     onDragEnd: () -> Unit = {},
     assetPathResolver: (String?) -> String? = { null },
+    assetUpdatedAtResolver: (String?) -> Long? = { null },
     modifier: Modifier = Modifier
 ) {
     // 通过哈希解析出的素材当前物理路径（素材库账本实时换算，路径变化自动跟随）
     val resolvedPath = assetPathResolver(block.assetHash)
-    var imageBitmap by remember(block.id, block.assetHash, resolvedPath) { mutableStateOf<ImageBitmap?>(null) }
+    val assetUpdatedAt = assetUpdatedAtResolver(block.assetHash)
+    var imageBitmap by remember(block.id, block.assetHash, resolvedPath, assetUpdatedAt) { mutableStateOf<ImageBitmap?>(null) }
     // 资源丢失判定：图元持有哈希但物理文件读取失败（素材条目被删或外部文件丢失）
-    var isAssetMissing by remember(block.id, block.assetHash, resolvedPath) { mutableStateOf(false) }
+    var isAssetMissing by remember(block.id, block.assetHash, resolvedPath, assetUpdatedAt) { mutableStateOf(false) }
 
-    LaunchedEffect(block.id, block.assetHash, resolvedPath) {
+    LaunchedEffect(block.id, block.assetHash, resolvedPath, assetUpdatedAt) {
         withContext(Dispatchers.Default) {
             isAssetMissing = false
             if (resolvedPath.isNullOrBlank()) {
