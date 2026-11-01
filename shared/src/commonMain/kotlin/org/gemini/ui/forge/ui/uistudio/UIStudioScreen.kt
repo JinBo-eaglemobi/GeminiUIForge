@@ -340,7 +340,7 @@ fun UIStudioScreen(
             ImportAssetSheetDialog(
                 viewModel = viewModel,
                 onProceedToVerify = {
-                    viewModel.proceedToVerifyDialog()
+                    viewModel.sliceImport.proceedToVerifyDialog()
                 }
             )
         }
@@ -353,9 +353,9 @@ fun UIStudioScreen(
                 initialItems = state.verifySliceItems,
                 autoRemoveBg = state.autoRemoveBgOnSlice,
                 onToggleAutoRemoveBg = { viewModel.assetLibrary.updateAutoRemoveBgOnSlice(it) },
-                onDismiss = { viewModel.closeVerifySliceDialog() },
+                onDismiss = { viewModel.sliceImport.closeVerifySliceDialog() },
                 onConfirmSlice = { items ->
-                    viewModel.onConfirmSlice(
+                    viewModel.sliceImport.onConfirmSlice(
                         items = items,
                         repo = templateRepository,
                         onProjectUpdated = { updatedProject ->
@@ -391,7 +391,7 @@ fun UIStudioScreen(
         // 挂载最大工具轮询续轮确认弹窗
         if (state.showMaxToolRoundsContinueDialog) {
             AppDraggableAlertDialog(
-                onDismissRequest = { viewModel.cancelToolLoop() },
+                onDismissRequest = { viewModel.aiAgent.cancelToolLoop() },
                 modifier = Modifier.width(LocalAppSpacing.current.dialogAlertWidth),
                 title = { Text("工具轮询上限提醒") },
                 text = {
@@ -400,12 +400,12 @@ fun UIStudioScreen(
                     )
                 },
                 confirmButton = {
-                    Button(onClick = { viewModel.continueToolLoop() }) {
+                    Button(onClick = { viewModel.aiAgent.continueToolLoop() }) {
                         Text("继续执行 (+${state.maxToolLoopRoundLimit}轮)")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { viewModel.cancelToolLoop() }) {
+                    TextButton(onClick = { viewModel.aiAgent.cancelToolLoop() }) {
                         Text("停止推演")
                     }
                 }
@@ -451,9 +451,9 @@ fun UIStudioScreen(
                 layoutResult = pendingLayout,
                 currentViewName = state.currentView?.nameStr ?: "当前视图",
                 existingViewNames = state.project?.studioPages?.map { it.nameStr } ?: emptyList(),
-                onDismiss = { viewModel.cancelApplyLayout() },
+                onDismiss = { viewModel.aiLayout.cancelApplyLayout() },
                 onConfirm = { replaceCurrent, customName ->
-                    viewModel.confirmApplyLayout(replaceCurrent, customName)
+                    viewModel.aiLayout.confirmApplyLayout(replaceCurrent, customName)
                 }
             )
         }

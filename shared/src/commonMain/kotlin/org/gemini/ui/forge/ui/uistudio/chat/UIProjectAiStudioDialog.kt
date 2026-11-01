@@ -78,16 +78,16 @@ fun UIProjectAiStudioDialog(
     val handleModalDismiss: () -> Unit = {
         when {
             state.isSystemInstructionDialogVisible -> {
-                viewModel.closeSystemInstructionDialog()
+                viewModel.aiConfig.closeSystemInstructionDialog()
             }
             state.isClearingCurrentSession -> {
-                viewModel.cancelClearCurrentSession()
+                viewModel.chatSession.cancelClearCurrentSession()
             }
             showTrafficLogDialog -> {
                 showTrafficLogDialog = false
             }
             state.pendingLayoutResult != null -> {
-                viewModel.cancelApplyLayout()
+                viewModel.aiLayout.cancelApplyLayout()
             }
             else -> {
                 onDismiss()
@@ -104,8 +104,8 @@ fun UIProjectAiStudioDialog(
         val coroutineScope = rememberCoroutineScope()
 
         LaunchedEffect(Unit) {
-            viewModel.loadExternalDocs(state.project?.projectId ?: "default")
-            viewModel.loadChatSessions()
+            viewModel.aiConfig.loadExternalDocs(state.project?.projectId ?: "default")
+            viewModel.chatSession.loadChatSessions()
         }
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Surface(
@@ -122,36 +122,36 @@ fun UIProjectAiStudioDialog(
                 CommonChatStudioContent(
                     sessions = state.chatSessions,
                     currentSessionId = state.currentChatSessionId,
-                    onSessionSelected = { viewModel.selectChatSession(it) },
-                    onNewSession = { viewModel.createNewChatSession() },
-                    onDeleteSession = { viewModel.deleteChatSession(it) },
+                    onSessionSelected = { viewModel.chatSession.selectChatSession(it) },
+                    onNewSession = { viewModel.chatSession.createNewChatSession() },
+                    onDeleteSession = { viewModel.chatSession.deleteChatSession(it) },
                     messages = currentSession?.messages ?: emptyList(),
                     isGenerating = state.isAiChatSending,
                     streamingText = state.streamingAiText,
                     selectedModel = currentModel,
-                    onModelSelected = { viewModel.updateProjectModel(it) },
+                    onModelSelected = { viewModel.aiConfig.updateProjectModel(it) },
                     currentThinkingLevel = state.projectAgentConfig.thinkingLevel,
-                    onThinkingLevelSelected = { viewModel.updateProjectThinkingLevel(it) },
+                    onThinkingLevelSelected = { viewModel.aiConfig.updateProjectThinkingLevel(it) },
                     selectedApiFlavor = state.projectAgentConfig.apiFlavor,
-                    onApiFlavorSelected = { viewModel.updateProjectApiFlavor(it) },
+                    onApiFlavorSelected = { viewModel.aiConfig.updateProjectApiFlavor(it) },
                     onSendMessage = { text, attachments ->
-                        viewModel.sendChatMessage(text, attachments)
+                        viewModel.aiAgent.sendChatMessage(text, attachments)
                     },
                     onStopGeneration = {
-                        viewModel.cancelCurrentChatGeneration()
+                        viewModel.aiAgent.cancelCurrentChatGeneration()
                     },
                     designMemoryContext = currentSession?.designMemoryContext,
                     onCompressRequested = {
-                        viewModel.compressCurrentSession()
+                        viewModel.chatSession.compressCurrentSession()
                     },
                     onSwitchVariant = { messageId, variantIndex ->
-                        viewModel.switchChatMessageVariant(messageId, variantIndex)
+                        viewModel.aiAgent.switchChatMessageVariant(messageId, variantIndex)
                     },
                     onRegenerate = { messageId ->
-                        viewModel.regenerateChatMessage(messageId)
+                        viewModel.aiAgent.regenerateChatMessage(messageId)
                     },
                     onDeleteMessage = { messageId ->
-                        viewModel.deleteChatMessage(messageId)
+                        viewModel.aiAgent.deleteChatMessage(messageId)
                     },
                     onOpenViewRequested = { viewName ->
                         // 优先检查当前会话是否存在排版方案，若存在则重新调起排版应用决策弹窗，让用户选择替换当前视图或新建视图
@@ -159,7 +159,7 @@ fun UIProjectAiStudioDialog(
                             it.effectiveText.contains("已完成界面排版规划方案") || it.effectiveText.contains("apply_view_layout")
                         }
                         if (lastLayoutMsg != null) {
-                            viewModel.reapplyLayoutFromText(lastLayoutMsg.effectiveText)
+                            viewModel.aiLayout.reapplyLayoutFromText(lastLayoutMsg.effectiveText)
                         } else {
                             val matchedPage = state.project?.studioPages?.find {
                                 it.nameStr.equals(viewName, ignoreCase = true) || it.id.equals(viewName, ignoreCase = true)
@@ -173,8 +173,8 @@ fun UIProjectAiStudioDialog(
                             }
                         }
                     },
-                    mentionState = viewModel.mentionState,
-                    mentionCandidates = viewModel.getMentionCandidates(viewModel.mentionState.searchQuery),
+                    mentionState = viewModel.aiConfig.mentionState,
+                    mentionCandidates = viewModel.aiConfig.getMentionCandidates(viewModel.aiConfig.mentionState.searchQuery),
                     hoverPreviewConfig = remember(state.project, state.currentView, state.assetLibrary) {
                         MentionHoverPreviewConfig(
                             resolveAssetPathByHash = { hash -> viewModel.assetLibrary.findAssetByHash(hash)?.relativePath },
@@ -188,25 +188,25 @@ fun UIProjectAiStudioDialog(
                         )
                     },
                     onFilesDropped = { paths ->
-                        paths.forEach { viewModel.handleFileDropped(it) }
+                        paths.forEach { viewModel.aiConfig.handleFileDropped(it) }
                     },
-                    onDeleteExternalDoc = { viewModel.deleteExternalDoc(it) },
-                    activeSkills = viewModel.activeSkills,
-                    allSkills = viewModel.allSkills,
-                    enabledSkillIds = viewModel.enabledSkillIds,
-                    onToggleSkill = { skillId, isEnabled -> viewModel.toggleSkill(skillId, isEnabled) },
-                    onRefreshSkills = { viewModel.refreshSkills(userInitiated = true) },
-                    onOpenSkillsDirectory = { viewModel.openSkillsDirectory() },
-                    skillMode = viewModel.skillMode,
-                    onSkillModeChanged = { viewModel.skillMode = it },
-                    onFallbackFlashModelRequested = { msg -> viewModel.fallbackToFlashAndRetry(msg) },
-                    onSwitchProtocolRequested = { msg -> viewModel.fallbackProtocolAndRetry(msg) },
+                    onDeleteExternalDoc = { viewModel.aiConfig.deleteExternalDoc(it) },
+                    activeSkills = viewModel.aiConfig.activeSkills,
+                    allSkills = viewModel.aiConfig.allSkills,
+                    enabledSkillIds = viewModel.aiConfig.enabledSkillIds,
+                    onToggleSkill = { skillId, isEnabled -> viewModel.aiConfig.toggleSkill(skillId, isEnabled) },
+                    onRefreshSkills = { viewModel.aiConfig.refreshSkills(userInitiated = true) },
+                    onOpenSkillsDirectory = { viewModel.aiConfig.openSkillsDirectory() },
+                    skillMode = viewModel.aiConfig.skillMode,
+                    onSkillModeChanged = { viewModel.aiConfig.skillMode = it },
+                    onFallbackFlashModelRequested = { msg -> viewModel.aiConfig.fallbackToFlashAndRetry(msg) },
+                    onSwitchProtocolRequested = { msg -> viewModel.aiConfig.fallbackProtocolAndRetry(msg) },
                     onCaptureCanvasSnapshotRequested = { mode, onAttachmentReady ->
-                        viewModel.captureAndAttachCanvas(mode) { attachment ->
+                        viewModel.aiAgent.captureAndAttachCanvas(mode) { attachment ->
                             onAttachmentReady(attachment)
                         }
                     },
-                    isCapturingCanvasSnapshot = viewModel.isCapturingCanvasSnapshot,
+                    isCapturingCanvasSnapshot = viewModel.aiAgent.isCapturingCanvasSnapshot,
                     viewName = state.currentView?.nameStr ?: "",
                     viewSizeText = if (state.currentView != null) "${state.currentView?.width?.toInt() ?: 0} × ${state.currentView?.height?.toInt() ?: 0}" else "",
                     readyAssetCount = state.assetLibrary.items.size,
@@ -215,7 +215,7 @@ fun UIProjectAiStudioDialog(
                         state.lastLayoutUndoSnapshot?.let { snapshot ->
                             org.gemini.ui.forge.ui.component.chat.LayoutDiffSummaryCard(
                                 diffResult = snapshot.diff,
-                                onUndo = { viewModel.undoLastLayoutChanges() },
+                                onUndo = { viewModel.aiLayout.undoLastLayoutChanges() },
                                 modifier = Modifier.padding(horizontal = spacing.medium, vertical = spacing.extraSmall)
                             )
                         }
@@ -236,7 +236,7 @@ fun UIProjectAiStudioDialog(
 
                         // 2. 项目系统人设指令弹窗入口
                         IconButton(
-                            onClick = { viewModel.openSystemInstructionDialog() },
+                            onClick = { viewModel.aiConfig.openSystemInstructionDialog() },
                             modifier = Modifier.size(32.dp).tip("配置当前项目 AI 系统人设指令")
                         ) {
                             Icon(
@@ -263,7 +263,7 @@ fun UIProjectAiStudioDialog(
                         // 4. 清空当前会话消息按钮（二次确认保护）
                         if (currentSession != null && currentSession.messages.isNotEmpty()) {
                             IconButton(
-                                onClick = { viewModel.requestClearCurrentSession() },
+                                onClick = { viewModel.chatSession.requestClearCurrentSession() },
                                 modifier = Modifier.size(32.dp).tip("清空当前对话记录")
                             ) {
                                 Icon(
@@ -279,7 +279,7 @@ fun UIProjectAiStudioDialog(
                         IconButton(
                             onClick = {
                                 if (state.isSystemInstructionDialogVisible) {
-                                    viewModel.closeSystemInstructionDialog()
+                                    viewModel.aiConfig.closeSystemInstructionDialog()
                                 }
                                 viewModel.pageManager.dockAiChatToSidebar()
                             },
@@ -297,7 +297,7 @@ fun UIProjectAiStudioDialog(
                         IconButton(
                             onClick = {
                                 if (state.isSystemInstructionDialogVisible) {
-                                    viewModel.closeSystemInstructionDialog()
+                                    viewModel.aiConfig.closeSystemInstructionDialog()
                                 }
                                 onDismiss()
                             },
@@ -379,10 +379,10 @@ fun UIProjectAiStudioDialog(
                     currentInstruction = state.projectAgentConfig.systemPrompt.ifBlank { defaultInstruction },
                     defaultInstruction = defaultInstruction,
                     onConfirm = { newPrompt ->
-                        viewModel.updateProjectSystemPrompt(newPrompt)
+                        viewModel.aiConfig.updateProjectSystemPrompt(newPrompt)
                     },
                     onDismiss = {
-                        viewModel.closeSystemInstructionDialog()
+                        viewModel.aiConfig.closeSystemInstructionDialog()
                     }
                 )
             }
@@ -394,8 +394,8 @@ fun UIProjectAiStudioDialog(
                     message = "确定要清空当前会话的全部聊天记录吗？此操作将立即持久化覆盖磁盘文件，不可恢复。",
                     confirmText = "确认清空",
                     isDestructive = true,
-                    onConfirm = { viewModel.confirmClearCurrentSession() },
-                    onDismiss = { viewModel.cancelClearCurrentSession() }
+                    onConfirm = { viewModel.chatSession.confirmClearCurrentSession() },
+                    onDismiss = { viewModel.chatSession.cancelClearCurrentSession() }
                 )
             }
 
@@ -405,8 +405,8 @@ fun UIProjectAiStudioDialog(
                     title = "工具轮询上限提醒",
                     message = "AI Agent 已达到当前单次最大轮询上限（${state.currentToolLoopRound} 轮），当前仍在全力推演中。\n\n是否继续追加 ${state.maxToolLoopRoundLimit} 轮继续推演？",
                     confirmText = "继续执行 (+${state.maxToolLoopRoundLimit}轮)",
-                    onConfirm = { viewModel.continueToolLoop() },
-                    onDismiss = { viewModel.cancelToolLoop() }
+                    onConfirm = { viewModel.aiAgent.continueToolLoop() },
+                    onDismiss = { viewModel.aiAgent.cancelToolLoop() }
                 )
             }
 
@@ -427,9 +427,9 @@ fun UIProjectAiStudioDialog(
                     layoutResult = pendingLayout,
                     currentViewName = state.currentView?.nameStr ?: "当前视图",
                     existingViewNames = state.project?.studioPages?.map { it.nameStr } ?: emptyList(),
-                    onDismiss = { viewModel.cancelApplyLayout() },
+                    onDismiss = { viewModel.aiLayout.cancelApplyLayout() },
                     onConfirm = { replaceCurrent, customName ->
-                        viewModel.confirmApplyLayout(replaceCurrent, customName)
+                        viewModel.aiLayout.confirmApplyLayout(replaceCurrent, customName)
                     }
                 )
             }

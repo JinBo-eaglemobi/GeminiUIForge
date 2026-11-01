@@ -91,7 +91,7 @@ fun ImportAssetSheetDialog(
         isFolder = false,
         extensions = listOf("png", "jpg", "jpeg", "webp")
     ) { path ->
-        path?.let { viewModel.updateSourceImagePath(it) }
+        path?.let { viewModel.sliceImport.updateSourceImagePath(it) }
     }
 
     // 文件选择器：选择异构坐标 JSON
@@ -100,13 +100,13 @@ fun ImportAssetSheetDialog(
         isFolder = false,
         extensions = listOf("json", "txt")
     ) { path ->
-        path?.let { viewModel.updateSourceJsonPath(it) }
+        path?.let { viewModel.sliceImport.updateSourceJsonPath(it) }
     }
 
     val draggableState = rememberDraggableDialogState()
 
     AppDraggableDialog(
-        onDismissRequest = { viewModel.closeImportSheetDialog() },
+        onDismissRequest = { viewModel.sliceImport.closeImportSheetDialog() },
         state = draggableState
     ) {
         Surface(
@@ -162,7 +162,7 @@ fun ImportAssetSheetDialog(
                     }
 
                     IconButton(
-                        onClick = { viewModel.closeImportSheetDialog() },
+                        onClick = { viewModel.sliceImport.closeImportSheetDialog() },
                         modifier = Modifier.tip("关闭")
                     ) {
                         Icon(
@@ -190,7 +190,7 @@ fun ImportAssetSheetDialog(
                 ) {
                     SelectAllOutlinedTextField(
                         value = state.sourceImagePath,
-                        onValueChange = { viewModel.updateSourceImagePath(it) },
+                        onValueChange = { viewModel.sliceImport.updateSourceImagePath(it) },
                         isError = isImageError,
                         placeholder = {
                             Text(
@@ -342,7 +342,7 @@ fun ImportAssetSheetDialog(
                         onValueChange = {
                             manualJsonText = it
                             if (it.isNotBlank()) {
-                                viewModel.parseJsonContent(it)
+                                viewModel.sliceImport.parseJsonContent(it)
                             }
                         },
                         placeholder = { Text("在此粘贴任意格式的坐标 JSON（可选），如 {\"btn_spin\": [500, 600, 120, 120]} ...") },
@@ -357,7 +357,7 @@ fun ImportAssetSheetDialog(
                     ) {
                         SelectAllOutlinedTextField(
                             value = state.sourceJsonPath,
-                            onValueChange = { viewModel.updateSourceJsonPath(it) },
+                            onValueChange = { viewModel.sliceImport.updateSourceJsonPath(it) },
                             isError = isJsonError,
                             placeholder = {
                                 Text(
@@ -695,7 +695,7 @@ fun ImportAssetSheetDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedButton(
-                        onClick = { viewModel.closeImportSheetDialog() },
+                        onClick = { viewModel.sliceImport.closeImportSheetDialog() },
                         modifier = Modifier.height(44.dp).tip("取消并关闭弹窗")
                     ) {
                         Text("取消")
@@ -713,10 +713,10 @@ fun ImportAssetSheetDialog(
                     Button(
                         onClick = {
                             if (hasJsonResult) {
-                                viewModel.closeImportSheetDialog()
+                                viewModel.sliceImport.closeImportSheetDialog()
                                 onProceedToVerify()
                             } else {
-                                viewModel.startAiDetectAndProceed()
+                                viewModel.sliceImport.startAiDetectAndProceed()
                             }
                         },
                         enabled = canProceed,

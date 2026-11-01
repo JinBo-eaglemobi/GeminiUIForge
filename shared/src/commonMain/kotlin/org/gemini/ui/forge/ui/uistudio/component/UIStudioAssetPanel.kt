@@ -311,7 +311,7 @@ fun UIStudioAssetPanel(
                                 leadingIcon = { Icon(Icons.Default.Collections, null, modifier = Modifier.size(16.dp)) },
                                 onClick = {
                                     showImportMenu = false
-                                    viewModel.openImportSheetDialog()
+                                    viewModel.sliceImport.openImportSheetDialog()
                                 }
                             )
                             DropdownMenuItem(
