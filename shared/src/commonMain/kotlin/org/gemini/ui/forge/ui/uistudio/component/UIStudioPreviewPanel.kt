@@ -52,7 +52,7 @@ import org.gemini.ui.forge.utils.toImageBitmap
 fun UIStudioPreviewPanel(
     viewModel: UIStudioViewModel,
     assetPathResolver: (String?) -> String? = { null },
-    assetUpdatedAtResolver: (String?) -> Long? = { hash -> viewModel.findAssetByHash(hash)?.updatedAt },
+    assetUpdatedAtResolver: (String?) -> Long? = { hash -> viewModel.assetLibrary.findAssetByHash(hash)?.updatedAt },
     modifier: Modifier = Modifier
 ) {
     val state = viewModel.state

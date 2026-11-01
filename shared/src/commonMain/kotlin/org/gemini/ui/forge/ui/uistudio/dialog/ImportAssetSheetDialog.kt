@@ -680,7 +680,7 @@ fun ImportAssetSheetDialog(
                         }
                         Switch(
                             checked = state.autoRemoveBgOnSlice,
-                            onCheckedChange = { viewModel.updateAutoRemoveBgOnSlice(it) },
+                            onCheckedChange = { viewModel.assetLibrary.updateAutoRemoveBgOnSlice(it) },
                             modifier = Modifier.scale(0.85f)
                         )
                     }

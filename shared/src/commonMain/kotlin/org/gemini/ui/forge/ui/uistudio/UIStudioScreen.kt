@@ -75,27 +75,27 @@ fun UIStudioScreen(
     LaunchedEffect(Unit) {
         appViewModel.shortcutEvent.collect { action ->
             when (action) {
-                ShortcutAction.UNDO -> viewModel.undo()
-                ShortcutAction.REDO -> viewModel.redo()
+                ShortcutAction.UNDO -> viewModel.canvasEditor.undo()
+                ShortcutAction.REDO -> viewModel.canvasEditor.redo()
                 ShortcutAction.SAVE -> viewModel.saveProject(templateRepository)
-                ShortcutAction.COPY -> viewModel.copySelectedBlock()
-                ShortcutAction.PASTE -> viewModel.pasteBlock(templateRepository)
-                ShortcutAction.CUT -> viewModel.cutSelectedBlock(templateRepository)
+                ShortcutAction.COPY -> viewModel.canvasEditor.copySelectedBlock()
+                ShortcutAction.PASTE -> viewModel.canvasEditor.pasteBlock(templateRepository)
+                ShortcutAction.CUT -> viewModel.canvasEditor.cutSelectedBlock(templateRepository)
                 ShortcutAction.DELETE -> {
                     val selId = viewModel.state.selectedBlockId
-                    if (selId != null) viewModel.deleteSelectedBlock(selId, templateRepository)
+                    if (selId != null) viewModel.canvasEditor.deleteSelectedBlock(selId, templateRepository)
                 }
-                ShortcutAction.MOVE_UP -> viewModel.nudgeSelectedBlock(0f, -1f)
-                ShortcutAction.MOVE_UP_FAST -> viewModel.nudgeSelectedBlock(0f, -10f)
-                ShortcutAction.MOVE_DOWN -> viewModel.nudgeSelectedBlock(0f, 1f)
-                ShortcutAction.MOVE_DOWN_FAST -> viewModel.nudgeSelectedBlock(0f, 10f)
-                ShortcutAction.MOVE_LEFT -> viewModel.nudgeSelectedBlock(-1f, 0f)
-                ShortcutAction.MOVE_LEFT_FAST -> viewModel.nudgeSelectedBlock(-10f, 0f)
-                ShortcutAction.MOVE_RIGHT -> viewModel.nudgeSelectedBlock(1f, 0f)
-                ShortcutAction.MOVE_RIGHT_FAST -> viewModel.nudgeSelectedBlock(10f, 0f)
+                ShortcutAction.MOVE_UP -> viewModel.canvasEditor.nudgeSelectedBlock(0f, -1f)
+                ShortcutAction.MOVE_UP_FAST -> viewModel.canvasEditor.nudgeSelectedBlock(0f, -10f)
+                ShortcutAction.MOVE_DOWN -> viewModel.canvasEditor.nudgeSelectedBlock(0f, 1f)
+                ShortcutAction.MOVE_DOWN_FAST -> viewModel.canvasEditor.nudgeSelectedBlock(0f, 10f)
+                ShortcutAction.MOVE_LEFT -> viewModel.canvasEditor.nudgeSelectedBlock(-1f, 0f)
+                ShortcutAction.MOVE_LEFT_FAST -> viewModel.canvasEditor.nudgeSelectedBlock(-10f, 0f)
+                ShortcutAction.MOVE_RIGHT -> viewModel.canvasEditor.nudgeSelectedBlock(1f, 0f)
+                ShortcutAction.MOVE_RIGHT_FAST -> viewModel.canvasEditor.nudgeSelectedBlock(10f, 0f)
                 ShortcutAction.RENAME -> {
                     val selId = viewModel.state.selectedBlockId
-                    if (selId != null) viewModel.startRenameBlock(selId)
+                    if (selId != null) viewModel.canvasEditor.startRenameBlock(selId)
                 }
             }
         }
@@ -127,12 +127,12 @@ fun UIStudioScreen(
                 when {
                     // Ctrl+Z / Cmd+Z: 撤销
                     isCtrl && !isShift && event.key == Key.Z -> {
-                        viewModel.undo()
+                        viewModel.canvasEditor.undo()
                         true
                     }
                     // Ctrl+Y / Ctrl+Shift+Z / Cmd+Shift+Z: 重做
                     (isCtrl && event.key == Key.Y) || (isCtrl && isShift && event.key == Key.Z) -> {
-                        viewModel.redo()
+                        viewModel.canvasEditor.redo()
                         true
                     }
                     // Ctrl+S / Cmd+S: 保存
@@ -142,29 +142,29 @@ fun UIStudioScreen(
                     }
                     // Ctrl+C: 复制组件
                     isCtrl && event.key == Key.C -> {
-                        viewModel.copySelectedBlock()
+                        viewModel.canvasEditor.copySelectedBlock()
                         true
                     }
                     // Ctrl+V: 粘贴组件
                     isCtrl && event.key == Key.V -> {
-                        viewModel.pasteBlock(templateRepository)
+                        viewModel.canvasEditor.pasteBlock(templateRepository)
                         true
                     }
                     // Ctrl+X: 剪切组件
                     isCtrl && event.key == Key.X -> {
-                        viewModel.cutSelectedBlock(templateRepository)
+                        viewModel.canvasEditor.cutSelectedBlock(templateRepository)
                         true
                     }
                     // Ctrl+D: 快速克隆组件
                     isCtrl && event.key == Key.D -> {
-                        viewModel.duplicateSelectedBlock(templateRepository)
+                        viewModel.canvasEditor.duplicateSelectedBlock(templateRepository)
                         true
                     }
                     // F2: 重命名组件
                     event.key == Key.F2 -> {
                         val selId = viewModel.state.selectedBlockId
                         if (selId != null) {
-                            viewModel.startRenameBlock(selId)
+                            viewModel.canvasEditor.startRenameBlock(selId)
                             true
                         } else false
                     }
@@ -172,32 +172,32 @@ fun UIStudioScreen(
                     isDeleteKey && !isCtrl -> {
                         val selId = viewModel.state.selectedBlockId
                         if (selId != null && viewModel.state.renamingBlockId == null && viewModel.state.renamingView == null) {
-                            viewModel.deleteSelectedBlock(selId, templateRepository)
+                            viewModel.canvasEditor.deleteSelectedBlock(selId, templateRepository)
                             true
                         } else false
                     }
                     // 方向键平移组件
                     event.key == Key.DirectionUp -> {
                         if (viewModel.state.selectedBlockId != null) {
-                            viewModel.nudgeSelectedBlock(0f, if (isShift) -10f else -1f)
+                            viewModel.canvasEditor.nudgeSelectedBlock(0f, if (isShift) -10f else -1f)
                             true
                         } else false
                     }
                     event.key == Key.DirectionDown -> {
                         if (viewModel.state.selectedBlockId != null) {
-                            viewModel.nudgeSelectedBlock(0f, if (isShift) 10f else 1f)
+                            viewModel.canvasEditor.nudgeSelectedBlock(0f, if (isShift) 10f else 1f)
                             true
                         } else false
                     }
                     event.key == Key.DirectionLeft -> {
                         if (viewModel.state.selectedBlockId != null) {
-                            viewModel.nudgeSelectedBlock(if (isShift) -10f else -1f, 0f)
+                            viewModel.canvasEditor.nudgeSelectedBlock(if (isShift) -10f else -1f, 0f)
                             true
                         } else false
                     }
                     event.key == Key.DirectionRight -> {
                         if (viewModel.state.selectedBlockId != null) {
-                            viewModel.nudgeSelectedBlock(if (isShift) 10f else 1f, 0f)
+                            viewModel.canvasEditor.nudgeSelectedBlock(if (isShift) 10f else 1f, 0f)
                             true
                         } else false
                     }
@@ -232,13 +232,13 @@ fun UIStudioScreen(
                     VerticalSplitter(
                         onDrag = { deltaPx ->
                             val deltaDp = with(density) { deltaPx.toDp() }
-                            viewModel.updateLeftPanelWidth(
+                            viewModel.viewport.updateLeftPanelWidth(
                                 viewModel.state.leftPanelWidth + deltaDp,
                                 totalContainerWidth = totalContainerWidth
                             )
                         },
                         onDragEnd = {
-                            viewModel.saveWorkspaceLayout()
+                            viewModel.viewport.saveWorkspaceLayout()
                         }
                     )
                 }
@@ -258,8 +258,8 @@ fun UIStudioScreen(
                     // 核心交互画布
                     UIStudioCanvasArea(
                         viewModel = viewModel,
-                        assetPathResolver = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
-                        assetUpdatedAtResolver = { hash -> viewModel.findAssetByHash(hash)?.updatedAt },
+                        assetPathResolver = { hash -> viewModel.assetLibrary.findAssetByHash(hash)?.relativePath },
+                        assetUpdatedAtResolver = { hash -> viewModel.assetLibrary.findAssetByHash(hash)?.updatedAt },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -271,13 +271,13 @@ fun UIStudioScreen(
                     VerticalSplitter(
                         onDrag = { deltaPx ->
                             val deltaDp = with(density) { deltaPx.toDp() }
-                            viewModel.updateRightPanelWidth(
+                            viewModel.viewport.updateRightPanelWidth(
                                 viewModel.state.rightPanelWidth - deltaDp,
                                 totalContainerWidth = totalContainerWidth
                             )
                         },
                         onDragEnd = {
-                            viewModel.saveWorkspaceLayout()
+                            viewModel.viewport.saveWorkspaceLayout()
                         }
                     )
 
@@ -298,9 +298,9 @@ fun UIStudioScreen(
             NewViewDialog(
                 defaultWidth = state.canvasWidth,
                 defaultHeight = state.canvasHeight,
-                onDismiss = { viewModel.closeNewViewDialog() },
+                onDismiss = { viewModel.pageManager.closeNewViewDialog() },
                 onConfirm = { name, w, h ->
-                    viewModel.createView(name, w, h, templateRepository)
+                    viewModel.pageManager.createView(name, w, h, templateRepository)
                 }
             )
         }
@@ -308,9 +308,9 @@ fun UIStudioScreen(
         // 挂载新建素材文件夹弹窗
         if (state.isNewFolderDialogVisible) {
             NewFolderDialog(
-                onDismiss = { viewModel.closeNewFolderDialog() },
+                onDismiss = { viewModel.assetLibrary.closeNewFolderDialog() },
                 onConfirm = { name ->
-                    viewModel.createAssetFolder(name)
+                    viewModel.assetLibrary.createAssetFolder(name)
                 }
             )
         }
@@ -319,7 +319,7 @@ fun UIStudioScreen(
         if (state.isAiChatDialogVisible) {
             UIProjectAiStudioDialog(
                 viewModel = viewModel,
-                onDismiss = { viewModel.closeAiChatDialog() }
+                onDismiss = { viewModel.pageManager.closeAiChatDialog() }
             )
         }
 
@@ -352,7 +352,7 @@ fun UIStudioScreen(
                 imagePath = state.sourceImagePath,
                 initialItems = state.verifySliceItems,
                 autoRemoveBg = state.autoRemoveBgOnSlice,
-                onToggleAutoRemoveBg = { viewModel.updateAutoRemoveBgOnSlice(it) },
+                onToggleAutoRemoveBg = { viewModel.assetLibrary.updateAutoRemoveBgOnSlice(it) },
                 onDismiss = { viewModel.closeVerifySliceDialog() },
                 onConfirmSlice = { items ->
                     viewModel.onConfirmSlice(

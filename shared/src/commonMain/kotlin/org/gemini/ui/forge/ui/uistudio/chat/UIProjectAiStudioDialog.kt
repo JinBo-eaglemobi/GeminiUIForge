@@ -165,7 +165,7 @@ fun UIProjectAiStudioDialog(
                                 it.nameStr.equals(viewName, ignoreCase = true) || it.id.equals(viewName, ignoreCase = true)
                             }
                             if (matchedPage != null) {
-                                viewModel.selectView(matchedPage.id)
+                                viewModel.pageManager.selectView(matchedPage.id)
                                 onDismiss()
                                 Toast.show("已切换至视图 [${matchedPage.nameStr}]", ToastType.SUCCESS)
                             } else {
@@ -177,7 +177,7 @@ fun UIProjectAiStudioDialog(
                     mentionCandidates = viewModel.getMentionCandidates(viewModel.mentionState.searchQuery),
                     hoverPreviewConfig = remember(state.project, state.currentView, state.assetLibrary) {
                         MentionHoverPreviewConfig(
-                            resolveAssetPathByHash = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
+                            resolveAssetPathByHash = { hash -> viewModel.assetLibrary.findAssetByHash(hash)?.relativePath },
                             resolveViewBlocks = { viewId -> state.project?.studioPages?.find { it.id == viewId }?.blocks },
                             resolveBlockById = { id ->
                                 (state.currentView?.blocks?.findBlockById(id) as? UIStudioBlock)
@@ -281,7 +281,7 @@ fun UIProjectAiStudioDialog(
                                 if (state.isSystemInstructionDialogVisible) {
                                     viewModel.closeSystemInstructionDialog()
                                 }
-                                viewModel.dockAiChatToSidebar()
+                                viewModel.pageManager.dockAiChatToSidebar()
                             },
                             modifier = Modifier.size(32.dp).tip(stringResource(Res.string.ui_studio_dialog_dock_to_sidebar_tip))
                         ) {
@@ -320,7 +320,7 @@ fun UIProjectAiStudioDialog(
                                     } ?: return@launch
                                     val isPng = targetUri.contains("image/png", ignoreCase = true) || targetUri.endsWith(".png", ignoreCase = true)
                                     val autoName = "ai_chat_${getCurrentTimeMillis()}"
-                                    viewModel.addChatImageToCurrentView(
+                                    viewModel.assetLibrary.addChatImageToCurrentView(
                                         imageBytes = bytes,
                                         fileName = autoName,
                                         width = 256f,
@@ -355,7 +355,7 @@ fun UIProjectAiStudioDialog(
                             }
                             if (bytes != null) {
                                 val isPng = saveUri.contains("image/png", ignoreCase = true) || saveUri.endsWith(".png", ignoreCase = true)
-                                viewModel.saveChatImageToAssetLibrary(
+                                viewModel.assetLibrary.saveChatImageToAssetLibrary(
                                     imageBytes = bytes,
                                     fileName = fileName,
                                     subPath = subPath,

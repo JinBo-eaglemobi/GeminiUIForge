@@ -51,7 +51,7 @@ fun UIStudioCanvasToolbar(
         ) {
             // 1. 缩小
             IconButton(
-                onClick = { viewModel.zoomOut() },
+                onClick = { viewModel.viewport.zoomOut() },
                 modifier = Modifier
                     .size(28.dp)
                     .tip("缩小画布 (滚轮向下)")
@@ -70,7 +70,7 @@ fun UIStudioCanvasToolbar(
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
                     .clickable {
-                        viewModel.resetZoomTo100()
+                        viewModel.viewport.resetZoomTo100()
                     }
                     .padding(horizontal = 6.dp, vertical = 4.dp)
                     .tip("还原为 100% 原始比例 (保持当前坐标)")
@@ -85,7 +85,7 @@ fun UIStudioCanvasToolbar(
 
             // 3. 放大
             IconButton(
-                onClick = { viewModel.zoomIn() },
+                onClick = { viewModel.viewport.zoomIn() },
                 modifier = Modifier
                     .size(28.dp)
                     .tip("放大画布 (滚轮向上)")
@@ -111,7 +111,7 @@ fun UIStudioCanvasToolbar(
             // 4. 一键还原 100% 缩放值 (仅还原缩放比例，不改变画布坐标)
             IconButton(
                 onClick = {
-                    viewModel.resetZoomTo100()
+                    viewModel.viewport.resetZoomTo100()
                 },
                 modifier = Modifier
                     .size(28.dp)
@@ -127,7 +127,7 @@ fun UIStudioCanvasToolbar(
 
             // 5. 一键自适应居中
             IconButton(
-                onClick = { viewModel.triggerFitToViewport() },
+                onClick = { viewModel.viewport.triggerFitToViewport() },
                 modifier = Modifier
                     .size(28.dp)
                     .tip("一键自适应视口居中")

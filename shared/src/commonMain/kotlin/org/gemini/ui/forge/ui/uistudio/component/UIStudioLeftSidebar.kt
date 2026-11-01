@@ -63,10 +63,10 @@ fun UIStudioLeftSidebar(
         HorizontalSplitter(
             onDrag = { deltaPx ->
                 val deltaRatio = deltaPx / totalHeightPx
-                viewModel.updateViewsPanelHeightRatio(viewModel.state.viewsPanelHeightRatio + deltaRatio)
+                viewModel.viewport.updateViewsPanelHeightRatio(viewModel.state.viewsPanelHeightRatio + deltaRatio)
             },
             onDragEnd = {
-                viewModel.saveWorkspaceLayout()
+                viewModel.viewport.saveWorkspaceLayout()
             }
         )
 
@@ -102,7 +102,7 @@ fun UIStudioLeftSidebar(
                             .weight(1f)
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(6.dp))
-                            .clickable { viewModel.switchLeftBottomTab(UIStudioLeftBottomTab.ASSETS) }
+                            .clickable { viewModel.pageManager.switchLeftBottomTab(UIStudioLeftBottomTab.ASSETS) }
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -137,7 +137,7 @@ fun UIStudioLeftSidebar(
                             .weight(1f)
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(6.dp))
-                            .clickable { viewModel.switchLeftBottomTab(UIStudioLeftBottomTab.HIERARCHY) }
+                            .clickable { viewModel.pageManager.switchLeftBottomTab(UIStudioLeftBottomTab.HIERARCHY) }
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -177,7 +177,7 @@ fun UIStudioLeftSidebar(
                     UIStudioHierarchyPanel(
                         viewModel = viewModel,
                         templateRepo = templateRepo,
-                        assetPathResolver = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
+                        assetPathResolver = { hash -> viewModel.assetLibrary.findAssetByHash(hash)?.relativePath },
                         modifier = Modifier.fillMaxSize()
                     )
                 }

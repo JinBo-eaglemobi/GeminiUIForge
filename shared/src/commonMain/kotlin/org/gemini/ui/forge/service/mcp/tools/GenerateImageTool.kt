@@ -191,7 +191,7 @@ class GenerateImageTool(
             // 若有活跃 UIStudioViewModel，触发素材库自动自愈刷新
             if (savedRelativePath != null) {
                 try {
-                    McpUiActionPipeline.getActiveUiStudioViewModel()?.refreshAssetLibrary()
+                    McpUiActionPipeline.getActiveUiStudioViewModel()?.assetLibrary?.refreshAssetLibrary()
                 } catch (e: Throwable) {
                     AppLogger.w("GenerateImageTool", "刷新素材库失败", e)
                 }
@@ -204,7 +204,7 @@ class GenerateImageTool(
                 val studioVm = McpUiActionPipeline.getActiveUiStudioViewModel()
                 if (studioVm != null) {
                     val blockName = customFileName?.ifBlank { "ai_img_${getCurrentTimeMillis()}" } ?: "ai_img_${getCurrentTimeMillis()}"
-                    studioVm.addChatImageToCurrentView(
+                    studioVm.assetLibrary.addChatImageToCurrentView(
                         imageBytes = processedBytes,
                         fileName = blockName,
                         width = targetWidth,

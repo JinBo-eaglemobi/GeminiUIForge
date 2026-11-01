@@ -151,7 +151,7 @@ fun UIStudioPropertyPanel(
 
                     // 核心功能：一键去除背景生成透明图片
                     Button(
-                        onClick = { viewModel.removeAssetBackground(selectedAsset.id) },
+                        onClick = { viewModel.assetLibrary.removeAssetBackground(selectedAsset.id) },
                         enabled = !isMatting,
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -266,7 +266,7 @@ fun UIStudioPropertyPanel(
                                         onClick = {
                                             val trimmed = nameText.trim()
                                             if (trimmed.isNotBlank() && trimmed != selectedBlock.id) {
-                                                viewModel.renameBlock(selectedBlock.id, trimmed, templateRepo)
+                                                viewModel.canvasEditor.renameBlock(selectedBlock.id, trimmed, templateRepo)
                                             }
                                         },
                                         enabled = nameText.isNotBlank() && nameText != selectedBlock.id,
@@ -342,7 +342,7 @@ fun UIStudioPropertyPanel(
                                                 scaleXText = "1"
                                                 scaleYText = "1"
                                                 opacityText = "1"
-                                                viewModel.resetBlockTransform(
+                                                viewModel.viewport.resetBlockTransform(
                                                     selectedBlock.id,
                                                     templateRepo
                                                 )
@@ -385,7 +385,7 @@ fun UIStudioPropertyPanel(
                                             posXText = it
                                             val newLeft = it.toFloatOrNull()
                                             if (newLeft != null) {
-                                                viewModel.updateBlockBounds(
+                                                viewModel.canvasEditor.updateBlockBounds(
                                                     selectedBlock.id,
                                                     newLeft,
                                                     selectedBlock.bounds.top,
@@ -409,7 +409,7 @@ fun UIStudioPropertyPanel(
                                             posYText = it
                                             val newTop = it.toFloatOrNull()
                                             if (newTop != null) {
-                                                viewModel.updateBlockBounds(
+                                                viewModel.canvasEditor.updateBlockBounds(
                                                     selectedBlock.id,
                                                     selectedBlock.bounds.left,
                                                     newTop,
@@ -439,7 +439,7 @@ fun UIStudioPropertyPanel(
                                             widthText = it
                                             val newW = it.toFloatOrNull()
                                             if (newW != null && newW > 0) {
-                                                viewModel.updateBlockBounds(
+                                                viewModel.canvasEditor.updateBlockBounds(
                                                     selectedBlock.id,
                                                     selectedBlock.bounds.left,
                                                     selectedBlock.bounds.top,
@@ -463,7 +463,7 @@ fun UIStudioPropertyPanel(
                                             heightText = it
                                             val newH = it.toFloatOrNull()
                                             if (newH != null && newH > 0) {
-                                                viewModel.updateBlockBounds(
+                                                viewModel.canvasEditor.updateBlockBounds(
                                                     selectedBlock.id,
                                                     selectedBlock.bounds.left,
                                                     selectedBlock.bounds.top,
@@ -491,7 +491,7 @@ fun UIStudioPropertyPanel(
                                             val scaleVal = input.toFloatOrNull()
                                             if (scaleVal != null) {
                                                 val clamped = scaleVal.coerceIn(0.0f, 1.0f)
-                                                viewModel.updateBlockScale(
+                                                viewModel.viewport.updateBlockScale(
                                                     selectedBlock.id,
                                                     clamped,
                                                     selectedBlock.scaleY,
@@ -514,7 +514,7 @@ fun UIStudioPropertyPanel(
                                             val scaleVal = input.toFloatOrNull()
                                             if (scaleVal != null) {
                                                 val clamped = scaleVal.coerceIn(0.0f, 1.0f)
-                                                viewModel.updateBlockScale(
+                                                viewModel.viewport.updateBlockScale(
                                                     selectedBlock.id,
                                                     selectedBlock.scaleX,
                                                     clamped,
@@ -542,7 +542,7 @@ fun UIStudioPropertyPanel(
                                             val opVal = input.toFloatOrNull()
                                             if (opVal != null) {
                                                 val clamped = opVal.coerceIn(0.0f, 1.0f)
-                                                viewModel.updateBlockOpacity(
+                                                viewModel.viewport.updateBlockOpacity(
                                                     selectedBlock.id,
                                                     clamped,
                                                     templateRepo
@@ -583,7 +583,7 @@ fun UIStudioPropertyPanel(
                                     DropdownMenuItem(
                                         text = { Text(blockType.name) },
                                         onClick = {
-                                            viewModel.updateBlockType(selectedBlock.id, blockType, templateRepo)
+                                            viewModel.canvasEditor.updateBlockType(selectedBlock.id, blockType, templateRepo)
                                             typeExpanded = false
                                         }
                                     )
@@ -595,7 +595,7 @@ fun UIStudioPropertyPanel(
 
                         // 4. 危险操作：删除当前组件
                         OutlinedButton(
-                            onClick = { viewModel.requestDeleteBlock(selectedBlock.id, templateRepo) },
+                            onClick = { viewModel.canvasEditor.requestDeleteBlock(selectedBlock.id, templateRepo) },
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = MaterialTheme.colorScheme.error
                             ),

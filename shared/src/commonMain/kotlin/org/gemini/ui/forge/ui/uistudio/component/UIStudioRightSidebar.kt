@@ -43,9 +43,9 @@ fun UIStudioRightSidebar(
         // 1. 顶部控制栏 (Tab 切换 + 独立弹窗入口 + 折叠边栏)
         UIStudioRightSidebarHeader(
             selectedTab = state.activeRightTab,
-            onTabSelected = { viewModel.selectRightTab(it) },
-            onOpenFullDialog = { viewModel.openAiChatDialog() },
-            onCollapseSidebar = { viewModel.setRightSidebarVisible(false) },
+            onTabSelected = { viewModel.viewport.selectRightTab(it) },
+            onOpenFullDialog = { viewModel.pageManager.openAiChatDialog() },
+            onCollapseSidebar = { viewModel.viewport.setRightSidebarVisible(false) },
             isAiChatDialogVisible = state.isAiChatDialogVisible,
             modifier = Modifier.fillMaxWidth()
         )
@@ -75,18 +75,18 @@ fun UIStudioRightSidebar(
                             HorizontalSplitter(
                                 onDrag = { deltaPx ->
                                     val deltaRatio = deltaPx / totalHeightPx
-                                    viewModel.updatePropertyPanelHeightRatio(viewModel.state.propertyPanelHeightRatio + deltaRatio)
+                                    viewModel.viewport.updatePropertyPanelHeightRatio(viewModel.state.propertyPanelHeightRatio + deltaRatio)
                                 },
                                 onDragEnd = {
-                                    viewModel.saveWorkspaceLayout()
+                                    viewModel.viewport.saveWorkspaceLayout()
                                 }
                             )
 
                             // 下半部分：高保真独立实时预览面板
                             UIStudioPreviewPanel(
                                 viewModel = viewModel,
-                                assetPathResolver = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
-                                assetUpdatedAtResolver = { hash -> viewModel.findAssetByHash(hash)?.updatedAt },
+                                assetPathResolver = { hash -> viewModel.assetLibrary.findAssetByHash(hash)?.relativePath },
+                                assetUpdatedAtResolver = { hash -> viewModel.assetLibrary.findAssetByHash(hash)?.updatedAt },
                                 modifier = Modifier
                                     .weight((1f - state.propertyPanelHeightRatio).coerceIn(0.05f, 0.95f))
                                     .fillMaxWidth()

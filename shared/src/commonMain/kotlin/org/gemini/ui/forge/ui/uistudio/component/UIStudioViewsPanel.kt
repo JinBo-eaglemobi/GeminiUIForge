@@ -103,7 +103,7 @@ fun UIStudioViewsPanel(
                 }
 
                 FilledTonalButton(
-                    onClick = { viewModel.openNewViewDialog() },
+                    onClick = { viewModel.pageManager.openNewViewDialog() },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                     shape = RoundedCornerShape(6.dp),
                     modifier = Modifier
@@ -119,7 +119,7 @@ fun UIStudioViewsPanel(
             // 独立紧凑自定义搜索框（彻底解决 M3 原生 OutlinedTextField 文字截断缺陷）
             UIStudioSearchField(
                 value = state.viewSearchQuery,
-                onValueChange = { viewModel.updateViewSearchQuery(it) },
+                onValueChange = { viewModel.pageManager.updateViewSearchQuery(it) },
                 placeholder = "搜索视图..."
             )
 
@@ -151,14 +151,14 @@ fun UIStudioViewsPanel(
                                     Key.F2 -> {
                                         val currentPage = allPages.find { it.id == state.currentViewId }
                                         if (currentPage != null) {
-                                            viewModel.startRenameView(currentPage)
+                                            viewModel.canvasEditor.startRenameView(currentPage)
                                             true
                                         } else false
                                     }
                                     Key.Delete, Key.Backslash -> {
                                         val currentPage = allPages.find { it.id == state.currentViewId }
                                         if (currentPage != null && allPages.size > 1) {
-                                            viewModel.requestDeleteView(currentPage)
+                                            viewModel.pageManager.requestDeleteView(currentPage)
                                             true
                                         } else false
                                     }
@@ -188,9 +188,9 @@ fun UIStudioViewsPanel(
             title = "重命名视图",
             initialName = page.nameStr,
             onConfirm = { newName ->
-                viewModel.commitRenameView(page.id, newName, templateRepo)
+                viewModel.canvasEditor.commitRenameView(page.id, newName, templateRepo)
             },
-            onDismiss = { viewModel.cancelRenameView() }
+            onDismiss = { viewModel.canvasEditor.cancelRenameView() }
         )
     }
 
@@ -201,8 +201,8 @@ fun UIStudioViewsPanel(
             message = "确定要删除视图「${page.nameStr}」吗？该视图下的所有图元将被物理移除且不可撤销。",
             confirmText = "删除",
             isDestructive = true,
-            onConfirm = { viewModel.confirmDeleteView(templateRepo) },
-            onDismiss = { viewModel.cancelDeleteView() }
+            onConfirm = { viewModel.pageManager.confirmDeleteView(templateRepo) },
+            onDismiss = { viewModel.pageManager.cancelDeleteView() }
         )
     }
 }

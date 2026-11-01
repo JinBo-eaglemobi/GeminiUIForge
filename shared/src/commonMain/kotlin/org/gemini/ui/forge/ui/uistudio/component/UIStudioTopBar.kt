@@ -139,7 +139,7 @@ fun UIStudioTopBar(
             ) {
                 // 素材库侧栏显隐切换按钮
                 IconButton(
-                    onClick = { viewModel.toggleAssetPanel() },
+                    onClick = { viewModel.viewport.toggleAssetPanel() },
                     modifier = Modifier
                         .size(36.dp)
                         .tip("切换左侧面板 (Toggle Sidebar)")
@@ -153,7 +153,7 @@ fun UIStudioTopBar(
 
                 // 右侧面板显隐切换按钮
                 IconButton(
-                    onClick = { viewModel.toggleRightSidebar() },
+                    onClick = { viewModel.viewport.toggleRightSidebar() },
                     modifier = Modifier
                         .size(36.dp)
                         .tip(if (state.isRightSidebarVisible) "收起右侧面板" else "展开右侧面板")
@@ -167,7 +167,7 @@ fun UIStudioTopBar(
 
                 // 撤销按钮 (Ctrl+Z)
                 IconButton(
-                    onClick = { viewModel.undo() },
+                    onClick = { viewModel.canvasEditor.undo() },
                     enabled = state.canUndo,
                     modifier = Modifier
                         .size(36.dp)
@@ -182,7 +182,7 @@ fun UIStudioTopBar(
 
                 // 重做按钮 (Ctrl+Y)
                 IconButton(
-                    onClick = { viewModel.redo() },
+                    onClick = { viewModel.canvasEditor.redo() },
                     enabled = state.canRedo,
                     modifier = Modifier
                         .size(36.dp)

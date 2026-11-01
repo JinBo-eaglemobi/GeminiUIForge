@@ -98,7 +98,7 @@ fun UIStudioPageTabBar(
                                 .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
                                 .background(tabBgColor)
                                 .contextMenuClickable(
-                                    onClick = { viewModel.selectView(viewId) },
+                                    onClick = { viewModel.pageManager.selectView(viewId) },
                                     onContextMenu = { showContextMenu = true }
                                 )
                                 .padding(horizontal = spacing.medium)
@@ -122,7 +122,7 @@ fun UIStudioPageTabBar(
                             Spacer(modifier = Modifier.width(2.dp))
                             // 关闭标签按钮
                             IconButton(
-                                onClick = { viewModel.closeViewTab(viewId) },
+                                onClick = { viewModel.pageManager.closeViewTab(viewId) },
                                 modifier = Modifier
                                     .size(18.dp)
                                     .clip(RoundedCornerShape(4.dp))
@@ -157,7 +157,7 @@ fun UIStudioPageTabBar(
                                 },
                                 onClick = {
                                     showContextMenu = false
-                                    viewModel.closeViewTab(viewId)
+                                    viewModel.pageManager.closeViewTab(viewId)
                                 }
                             )
                             DropdownMenuItem(
@@ -168,7 +168,7 @@ fun UIStudioPageTabBar(
                                 enabled = openIds.size > 1,
                                 onClick = {
                                     showContextMenu = false
-                                    viewModel.closeOtherViewTabs(viewId)
+                                    viewModel.pageManager.closeOtherViewTabs(viewId)
                                 }
                             )
                             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp))
@@ -190,7 +190,7 @@ fun UIStudioPageTabBar(
                                 },
                                 onClick = {
                                     showContextMenu = false
-                                    viewModel.closeAllViewTabs()
+                                    viewModel.pageManager.closeAllViewTabs()
                                 }
                             )
                         }
@@ -224,7 +224,7 @@ fun UIStudioPageTabBar(
                             .padding(top = 2.dp)
                             .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
                             .background(tabBgColor)
-                            .clickable { viewModel.selectContainerTab(containerId) }
+                            .clickable { viewModel.pageManager.selectContainerTab(containerId) }
                             .padding(horizontal = spacing.medium)
                     ) {
                         Icon(
@@ -246,7 +246,7 @@ fun UIStudioPageTabBar(
                         Spacer(modifier = Modifier.width(2.dp))
                         // 关闭容器标签按钮
                         IconButton(
-                            onClick = { viewModel.closeContainerTab(containerId) },
+                            onClick = { viewModel.pageManager.closeContainerTab(containerId) },
                             modifier = Modifier
                                 .size(18.dp)
                                 .clip(RoundedCornerShape(4.dp))
@@ -268,7 +268,7 @@ fun UIStudioPageTabBar(
             // 右侧一键关闭全部标签入口
             if (openIds.isNotEmpty()) {
                 IconButton(
-                    onClick = { viewModel.closeAllViewTabs() },
+                    onClick = { viewModel.pageManager.closeAllViewTabs() },
                     modifier = Modifier
                         .size(28.dp)
                         .clip(RoundedCornerShape(6.dp))
@@ -286,7 +286,7 @@ fun UIStudioPageTabBar(
 
             // 右侧轻量新建页面入口
             IconButton(
-                onClick = { viewModel.openNewViewDialog() },
+                onClick = { viewModel.pageManager.openNewViewDialog() },
                 modifier = Modifier
                     .size(28.dp)
                     .clip(RoundedCornerShape(6.dp))

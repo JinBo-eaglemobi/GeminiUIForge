@@ -130,7 +130,7 @@ fun UIStudioEmbeddedChatPanel(
                         it.nameStr.equals(viewName, ignoreCase = true) || it.id.equals(viewName, ignoreCase = true)
                     }
                     if (matchedPage != null) {
-                        viewModel.selectView(matchedPage.id)
+                        viewModel.pageManager.selectView(matchedPage.id)
                         Toast.show("已切换至视图 [${matchedPage.nameStr}]", ToastType.SUCCESS)
                     } else {
                         Toast.show("未找到视图: $viewName", ToastType.INFO)
@@ -141,7 +141,7 @@ fun UIStudioEmbeddedChatPanel(
             mentionCandidates = viewModel.getMentionCandidates(viewModel.mentionState.searchQuery),
             hoverPreviewConfig = remember(state.project, state.currentView, state.assetLibrary) {
                 MentionHoverPreviewConfig(
-                    resolveAssetPathByHash = { hash -> viewModel.findAssetByHash(hash)?.relativePath },
+                    resolveAssetPathByHash = { hash -> viewModel.assetLibrary.findAssetByHash(hash)?.relativePath },
                     resolveViewBlocks = { viewId -> state.project?.studioPages?.find { it.id == viewId }?.blocks },
                     resolveBlockById = { id ->
                         (state.currentView?.blocks?.findBlockById(id) as? UIStudioBlock)
@@ -190,7 +190,7 @@ fun UIStudioEmbeddedChatPanel(
                             } ?: return@launch
 
                             val defaultName = "ai_img_${getCurrentTimeMillis()}"
-                            viewModel.addChatImageToCurrentView(
+                            viewModel.assetLibrary.addChatImageToCurrentView(
                                 imageBytes = bytes,
                                 fileName = defaultName,
                                 width = 200f,
@@ -316,7 +316,7 @@ fun UIStudioEmbeddedChatPanel(
                         }
                         if (bytes != null) {
                             val isPng = saveUri.contains("png", ignoreCase = true)
-                            viewModel.saveChatImageToAssetLibrary(
+                            viewModel.assetLibrary.saveChatImageToAssetLibrary(
                                 imageBytes = bytes,
                                 fileName = fileName,
                                 subPath = subPath,

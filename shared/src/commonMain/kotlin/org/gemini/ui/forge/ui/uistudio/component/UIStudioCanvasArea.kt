@@ -53,7 +53,7 @@ import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 fun UIStudioCanvasArea(
     viewModel: UIStudioViewModel,
     assetPathResolver: (String?) -> String? = { null },
-    assetUpdatedAtResolver: (String?) -> Long? = { hash -> viewModel.findAssetByHash(hash)?.updatedAt },
+    assetUpdatedAtResolver: (String?) -> Long? = { hash -> viewModel.assetLibrary.findAssetByHash(hash)?.updatedAt },
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
@@ -64,7 +64,7 @@ fun UIStudioCanvasArea(
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
 
     LaunchedEffect(density) {
-        viewModel.updateDensity(density)
+        viewModel.viewport.updateDensity(density)
     }
 
     // 自适应居中与初始视口联动（仅在用户显式触发居中、或首次打开未配置视口时执行一次，严禁随边栏拖动连续缩放！）
@@ -80,14 +80,14 @@ fun UIStudioCanvasArea(
             val hasCache = activeKey != null && state.viewViewportCache[activeKey] != null
             if (state.fitToViewportTrigger > 0L) {
                 // 用户显式点击「自适应居中」按钮，基于当前视口执行一次居中
-                viewModel.fitToViewport(
+                viewModel.viewport.fitToViewport(
                     viewportWidth = containerSize.width.toFloat(),
                     viewportHeight = containerSize.height.toFloat(),
                     density = density
                 )
             } else if (!hasCache && state.panOffset == Offset.Zero) {
                 // 首次打开全新工程视图且无任何历史记录，执行一次初始 100% 居中
-                viewModel.resetZoom(
+                viewModel.viewport.resetZoom(
                     viewportWidth = containerSize.width.toFloat(),
                     viewportHeight = containerSize.height.toFloat(),
                     density = density
@@ -104,7 +104,7 @@ fun UIStudioCanvasArea(
             .onSizeChanged { containerSize = it }
             .onGloballyPositioned { coords ->
                 val b = coords.boundsInWindow()
-                viewModel.updateCanvasWindowBounds(SerialRect(b.left, b.top, b.right, b.bottom))
+                viewModel.viewport.updateCanvasWindowBounds(SerialRect(b.left, b.top, b.right, b.bottom))
             }
             .then(
                 if (state.isCanvasDragHovered) {
@@ -134,14 +134,14 @@ fun UIStudioCanvasArea(
                                     logicalY >= r.top && logicalY <= r.bottom
                                 }
                                 if (hitRoot != null && (hitRoot.isPureContainer || hitRoot.children.isNotEmpty())) {
-                                    viewModel.openContainerTab(hitRoot.id)
+                                    viewModel.pageManager.openContainerTab(hitRoot.id)
                                 }
                             }
                         },
                         onTap = { tapOffset ->
                             val currentV = currentView
                             if (currentV == null) {
-                                viewModel.clearSelection()
+                                viewModel.pageManager.clearSelection()
                                 return@detectTapGestures
                             }
                             // 将点击绝对坐标通过当前平移与缩放矩阵逆映射至视图逻辑坐标
@@ -158,9 +158,9 @@ fun UIStudioCanvasArea(
                                     logicalY >= r.top && logicalY <= r.bottom
                                 }
                                 if (hitChild != null) {
-                                    viewModel.selectBlock(hitChild.id)
+                                    viewModel.canvasEditor.selectBlock(hitChild.id)
                                 } else {
-                                    viewModel.selectBlock(activeContainer.id)
+                                    viewModel.canvasEditor.selectBlock(activeContainer.id)
                                 }
                             } else {
                                 // 模式 B：全局主视图视口（旧版铁律）：严禁绕过父组件选中子组件，点击任何子组件返回父组件本身
@@ -171,10 +171,10 @@ fun UIStudioCanvasArea(
                                     logicalY >= r.top && logicalY <= r.bottom
                                 }
                                 if (hitRoot != null) {
-                                    viewModel.selectBlock(hitRoot.id)
+                                    viewModel.canvasEditor.selectBlock(hitRoot.id)
                                 } else {
                                     // 点击脱离 Page 范围或未点中任何组件，默认清空所有选中，联动展示页面属性
-                                    viewModel.clearSelection()
+                                    viewModel.pageManager.clearSelection()
                                 }
                             }
                         }
@@ -190,7 +190,7 @@ fun UIStudioCanvasArea(
                                 val delta = change.scrollDelta.y
                                 if (delta != 0f) {
                                     val multiplier = if (delta > 0) 0.9f else 1.1f
-                                    viewModel.onZoom(multiplier, change.position)
+                                    viewModel.viewport.onZoom(multiplier, change.position)
                                 }
                                 event.changes.forEach { it.consume() }
                             }
@@ -208,7 +208,7 @@ fun UIStudioCanvasArea(
                                     if (change != null) {
                                         val delta = change.position - change.previousPosition
                                         if (delta.x != 0f || delta.y != 0f) {
-                                            viewModel.onPan(delta)
+                                            viewModel.viewport.onPan(delta)
                                             change.consume()
                                         }
                                     }
@@ -253,7 +253,7 @@ fun UIStudioCanvasArea(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             FilledTonalButton(
-                                onClick = { viewModel.openNewViewDialog() },
+                                onClick = { viewModel.pageManager.openNewViewDialog() },
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text("立即新建视图")
@@ -375,10 +375,10 @@ fun UIStudioCanvasArea(
                                                 }
                                             }
                                             val targetId = rootParent?.id ?: info.block.id
-                                            viewModel.selectBlock(targetId)
+                                            viewModel.canvasEditor.selectBlock(targetId)
                                         } else {
                                             // 容器专属独立编辑视口下：允许直接选中该容器内的子组件
-                                            viewModel.selectBlock(info.block.id)
+                                            viewModel.canvasEditor.selectBlock(info.block.id)
                                         }
                                     },
                                     onDoubleTap = {
@@ -391,12 +391,12 @@ fun UIStudioCanvasArea(
                                             }
                                             val targetContainer = rootParent ?: info.block
                                             if (targetContainer.isPureContainer || targetContainer.children.isNotEmpty() || targetContainer.type == org.gemini.ui.forge.model.ui.UIBlockType.CONTAINER) {
-                                                viewModel.openContainerTab(targetContainer.id)
+                                                viewModel.pageManager.openContainerTab(targetContainer.id)
                                             }
                                         }
                                     },
                                     onDragDelta = { dx, dy ->
-                                        viewModel.moveBlockDelta(info.block.id, dx, dy)
+                                        viewModel.canvasEditor.moveBlockDelta(info.block.id, dx, dy)
                                     },
                                     onDragEnd = {
                                         // 移动操作已在内存中实时更新并标记 isDirty，绝不执行任何自动刷盘或 Toast 弹窗
@@ -432,8 +432,8 @@ fun UIStudioCanvasArea(
             ) {
                 ExtendedFloatingActionButton(
                     onClick = {
-                        viewModel.setRightSidebarVisible(true)
-                        viewModel.selectRightTab(UIStudioRightTab.AI_CHAT)
+                        viewModel.viewport.setRightSidebarVisible(true)
+                        viewModel.viewport.selectRightTab(UIStudioRightTab.AI_CHAT)
                     },
                     icon = {
                         Icon(

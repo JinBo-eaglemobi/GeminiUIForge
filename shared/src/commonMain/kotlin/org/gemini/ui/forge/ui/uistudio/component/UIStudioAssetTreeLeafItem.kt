@@ -152,22 +152,22 @@ fun UIStudioAssetTreeLeafItem(
                             totalDistance += dragAmount.getDistance()
                             if (!isDragging && totalDistance > 6f) {
                                 isDragging = true
-                                viewModel.setDraggedAssetId(item.id)
+                                viewModel.assetLibrary.setDraggedAssetId(item.id)
                             }
                             if (isDragging) {
                                 rowCoords?.localToWindow(change.position)?.let { winPos ->
                                     onDragHover(winPos)
-                                    viewModel.updateDragCursorPosition(winPos)
+                                    viewModel.viewport.updateDragCursorPosition(winPos)
                                 }
                                 change.consume()
                             }
                         }
 
                         if (isDragging) {
-                            viewModel.updateDragCursorPosition(null)
+                            viewModel.viewport.updateDragCursorPosition(null)
                             onDragEnd()
                         } else if (totalDistance <= 6f) {
-                            viewModel.selectAsset(item.id)
+                            viewModel.assetLibrary.selectAsset(item.id)
                         }
                     }
                 }
@@ -178,7 +178,7 @@ fun UIStudioAssetTreeLeafItem(
                     .padding(horizontal = 4.dp, vertical = 4.dp)
                     .semantics {
                         onClick {
-                            viewModel.selectAsset(item.id)
+                            viewModel.assetLibrary.selectAsset(item.id)
                             true
                         }
                     },
@@ -259,7 +259,7 @@ fun UIStudioAssetTreeLeafItem(
                 leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 onClick = {
                     showContextMenu = false
-                    viewModel.removeAssetBackground(item.id)
+                    viewModel.assetLibrary.removeAssetBackground(item.id)
                 }
             )
             DropdownMenuItem(
@@ -267,7 +267,7 @@ fun UIStudioAssetTreeLeafItem(
                 leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 onClick = {
                     showContextMenu = false
-                    viewModel.addAssetToCanvas(item, repo = templateRepo)
+                    viewModel.assetLibrary.addAssetToCanvas(item, repo = templateRepo)
                 }
             )
             DropdownMenuItem(
@@ -283,7 +283,7 @@ fun UIStudioAssetTreeLeafItem(
                 leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 onClick = {
                     showContextMenu = false
-                    viewModel.revealAssetInExplorer(item)
+                    viewModel.assetLibrary.revealAssetInExplorer(item)
                 }
             )
             DropdownMenuItem(
@@ -312,7 +312,7 @@ fun UIStudioAssetTreeLeafItem(
                         copy(hash, "已复制资源哈希: $hash")
                     } else {
                         coroutineScope.launch {
-                            val computed = viewModel.getOrComputeAssetHash(item)?.toShortHash()
+                            val computed = viewModel.assetLibrary.getOrComputeAssetHash(item)?.toShortHash()
                             if (!computed.isNullOrBlank()) {
                                 copy(computed, "已复制资源哈希: $computed")
                             } else {
@@ -368,7 +368,7 @@ fun UIStudioAssetTreeLeafItem(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                viewModel.moveAssetToFolder(item.id, null, templateRepo)
+                                viewModel.assetLibrary.moveAssetToFolder(item.id, null, templateRepo)
                                 showMoveFolderDialog = false
                             }
                     ) {
@@ -404,7 +404,7 @@ fun UIStudioAssetTreeLeafItem(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    viewModel.moveAssetToFolder(item.id, folder.id, templateRepo)
+                                    viewModel.assetLibrary.moveAssetToFolder(item.id, folder.id, templateRepo)
                                     showMoveFolderDialog = false
                                 }
                         ) {

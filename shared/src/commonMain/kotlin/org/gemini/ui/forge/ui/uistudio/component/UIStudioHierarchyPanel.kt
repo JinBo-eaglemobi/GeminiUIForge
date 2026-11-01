@@ -77,9 +77,9 @@ fun UIStudioHierarchyPanel(
             title = "重命名组件",
             initialName = initialName,
             onConfirm = { newName ->
-                viewModel.renameBlock(renamingBlockId, newName, templateRepo)
+                viewModel.canvasEditor.renameBlock(renamingBlockId, newName, templateRepo)
             },
-            onDismiss = { viewModel.cancelRenameBlock() }
+            onDismiss = { viewModel.canvasEditor.cancelRenameBlock() }
         )
     }
 
@@ -91,8 +91,8 @@ fun UIStudioHierarchyPanel(
             title = "创建父容器",
             message = "是否将组件「$draggedId」与「$targetId」放入新建的纯父容器中？",
             confirmText = "创建容器",
-            onConfirm = { viewModel.confirmCreateContainer(draggedId, targetId, templateRepo) },
-            onDismiss = { viewModel.cancelCreateContainer() }
+            onConfirm = { viewModel.canvasEditor.confirmCreateContainer(draggedId, targetId, templateRepo) },
+            onDismiss = { viewModel.canvasEditor.cancelCreateContainer() }
         )
     }
 
@@ -106,8 +106,8 @@ fun UIStudioHierarchyPanel(
             message = "组件「$childId」是容器「$containerId」中的最后一个子图层。${actionText}后该父容器将自动解散删除，是否继续？",
             confirmText = "确认$actionText",
             isDestructive = isDelete,
-            onConfirm = { viewModel.confirmRemoveLastChildAction(templateRepo) },
-            onDismiss = { viewModel.cancelRemoveLastChildAction() }
+            onConfirm = { viewModel.canvasEditor.confirmRemoveLastChildAction(templateRepo) },
+            onDismiss = { viewModel.canvasEditor.cancelRemoveLastChildAction() }
         )
     }
 
@@ -139,7 +139,7 @@ fun UIStudioHierarchyPanel(
                     // 1. 一键全部锁定 / 解锁组件 (对齐下方行项的锁定开关)
                     val isAnyUnlocked = currentView?.blocks?.any { !it.isLocked } == true
                     IconButton(
-                        onClick = { viewModel.toggleAllBlocksLocked(templateRepo) },
+                        onClick = { viewModel.canvasEditor.toggleAllBlocksLocked(templateRepo) },
                         modifier = Modifier
                             .size(20.dp)
                             .tip(if (isAnyUnlocked) "锁定全部组件" else "解锁全部组件")
@@ -155,7 +155,7 @@ fun UIStudioHierarchyPanel(
                     // 2. 一键全部显示 / 隐藏组件 (对齐下方行项的眼睛开关)
                     val isAnyHidden = currentView?.blocks?.any { !it.isVisible } == true
                     IconButton(
-                        onClick = { viewModel.toggleAllBlocksVisibility(templateRepo) },
+                        onClick = { viewModel.canvasEditor.toggleAllBlocksVisibility(templateRepo) },
                         modifier = Modifier
                             .size(20.dp)
                             .tip(if (isAnyHidden) "显示全部组件" else "隐藏全部组件")
@@ -282,10 +282,10 @@ fun UIStudioHierarchyPanel(
                                         val dragged = draggedBlockId
                                         val hovered = hoveredBlockId
                                         if (dragged != null && hovered != null && dragged != hovered) {
-                                            viewModel.moveHierarchyBlock(dragged, hovered, dropPosition, templateRepo)
+                                            viewModel.canvasEditor.moveHierarchyBlock(dragged, hovered, dropPosition, templateRepo)
                                         } else if (dragged != null && hovered == null) {
                                             // 拖拽至列表空白处：视为移出父容器至根级末尾，自动检查并触发最后一个子组件保留/解散弹窗
-                                            viewModel.moveHierarchyBlock(dragged, null, DropPosition.AFTER, templateRepo)
+                                            viewModel.canvasEditor.moveHierarchyBlock(dragged, null, DropPosition.AFTER, templateRepo)
                                         }
                                         draggedBlockId = null
                                         hoveredBlockId = null
@@ -340,7 +340,7 @@ fun UIStudioHierarchyPanel(
             // 拖拽移出最后一个子组件确认弹窗 (支持保留父组件或解散删除)
             state.pendingDragRemoveLastChild?.let { ctx ->
                 AppDraggableAlertDialog(
-                    onDismissRequest = { viewModel.cancelDragRemoveLastChild() },
+                    onDismissRequest = { viewModel.canvasEditor.cancelDragRemoveLastChild() },
                     title = {
                         Text(
                             text = "移出组件并处理父容器",
@@ -357,7 +357,7 @@ fun UIStudioHierarchyPanel(
                     confirmButton = {
                         Button(
                             onClick = {
-                                viewModel.confirmDragRemoveLastChild(keepContainer = true, templateRepo)
+                                viewModel.canvasEditor.confirmDragRemoveLastChild(keepContainer = true, templateRepo)
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary
@@ -368,12 +368,12 @@ fun UIStudioHierarchyPanel(
                     },
                     dismissButton = {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { viewModel.cancelDragRemoveLastChild() }) {
+                            TextButton(onClick = { viewModel.canvasEditor.cancelDragRemoveLastChild() }) {
                                 Text("取消")
                             }
                             FilledTonalButton(
                                 onClick = {
-                                    viewModel.confirmDragRemoveLastChild(keepContainer = false, templateRepo)
+                                    viewModel.canvasEditor.confirmDragRemoveLastChild(keepContainer = false, templateRepo)
                                 },
                                 colors = ButtonDefaults.filledTonalButtonColors(
                                     containerColor = MaterialTheme.colorScheme.errorContainer,

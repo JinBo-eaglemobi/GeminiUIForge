@@ -62,7 +62,7 @@ fun UIStudioViewRowItem(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
                 .contextMenuClickable(
-                    onClick = { viewModel.selectView(page.id) },
+                    onClick = { viewModel.pageManager.selectView(page.id) },
                     onContextMenu = {
                         // 弹窗菜单不是选中功能，仅唤出菜单，不修改当前激活视图
                         showContextMenu = true
@@ -94,7 +94,7 @@ fun UIStudioViewRowItem(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
-                        onClick = { viewModel.startRenameView(page) },
+                        onClick = { viewModel.canvasEditor.startRenameView(page) },
                         modifier = Modifier
                             .size(24.dp)
                             .tip("重命名视图 (F2)")
@@ -109,7 +109,7 @@ fun UIStudioViewRowItem(
 
                     if (canDelete) {
                         IconButton(
-                            onClick = { viewModel.requestDeleteView(page) },
+                            onClick = { viewModel.pageManager.requestDeleteView(page) },
                             modifier = Modifier
                                 .size(24.dp)
                                 .tip("删除该视图 (Delete)")
@@ -145,7 +145,7 @@ fun UIStudioViewRowItem(
                 leadingIcon = { Icon(Icons.Default.Layers, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 onClick = {
                     showContextMenu = false
-                    viewModel.selectView(page.id)
+                    viewModel.pageManager.selectView(page.id)
                 }
             )
             DropdownMenuItem(
@@ -153,7 +153,7 @@ fun UIStudioViewRowItem(
                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 onClick = {
                     showContextMenu = false
-                    viewModel.startRenameView(page)
+                    viewModel.canvasEditor.startRenameView(page)
                 }
             )
             DropdownMenuItem(
@@ -161,7 +161,7 @@ fun UIStudioViewRowItem(
                 leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 onClick = {
                     showContextMenu = false
-                    viewModel.duplicateView(page, templateRepo)
+                    viewModel.pageManager.duplicateView(page, templateRepo)
                 }
             )
             if (canDelete) {
@@ -174,7 +174,7 @@ fun UIStudioViewRowItem(
                     leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
                     onClick = {
                         showContextMenu = false
-                        viewModel.requestDeleteView(page)
+                        viewModel.pageManager.requestDeleteView(page)
                     }
                 )
             }

@@ -91,7 +91,7 @@ fun UIStudioMainViewInspector(
                         )
                     }
                     IconButton(
-                        onClick = { viewModel.startRenameView(view) },
+                        onClick = { viewModel.canvasEditor.startRenameView(view) },
                         modifier = Modifier
                             .size(28.dp)
                             .tip("重命名视图")
@@ -142,7 +142,7 @@ fun UIStudioMainViewInspector(
                             widthText = input
                             val newW = input.toFloatOrNull()
                             if (newW != null && newW > 0 && newW != view.width) {
-                                viewModel.updatePageDimensions(view.id, newW, view.height, templateRepo)
+                                viewModel.pageManager.updatePageDimensions(view.id, newW, view.height, templateRepo)
                             }
                         },
                         label = { Text("宽度 W (px)", fontSize = 11.sp) },
@@ -159,7 +159,7 @@ fun UIStudioMainViewInspector(
                             heightText = input
                             val newH = input.toFloatOrNull()
                             if (newH != null && newH > 0 && newH != view.height) {
-                                viewModel.updatePageDimensions(view.id, view.width, newH, templateRepo)
+                                viewModel.pageManager.updatePageDimensions(view.id, view.width, newH, templateRepo)
                             }
                         },
                         label = { Text("高度 H (px)", fontSize = 11.sp) },
@@ -194,7 +194,7 @@ fun UIStudioMainViewInspector(
                             modifier = Modifier
                                 .weight(1f)
                                 .clickable {
-                                    viewModel.updatePageDimensions(view.id, size.first, size.second, templateRepo)
+                                    viewModel.pageManager.updatePageDimensions(view.id, size.first, size.second, templateRepo)
                                 }
                         ) {
                             Text(
@@ -265,7 +265,7 @@ fun UIStudioMainViewInspector(
                             if (percent != null && percent > 0f) {
                                 val targetScale = (percent / 100f).coerceIn(0.1f, 5.0f)
                                 if (state.scale > 0f) {
-                                    viewModel.onZoom(targetScale / state.scale, androidx.compose.ui.geometry.Offset.Zero)
+                                    viewModel.viewport.onZoom(targetScale / state.scale, androidx.compose.ui.geometry.Offset.Zero)
                                 }
                             }
                         },
@@ -280,7 +280,7 @@ fun UIStudioMainViewInspector(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .clickable {
-                                viewModel.resetZoomTo100()
+                                viewModel.viewport.resetZoomTo100()
                             }
                             .padding(horizontal = 8.dp, vertical = 6.dp)
                             .tip("一键还原舞台为 100% 原始缩放值 (保持当前坐标)")
@@ -372,7 +372,7 @@ fun UIStudioMainViewInspector(
                                         }
                                     )
                                     .clickable {
-                                        viewModel.updatePageCanvasBackgroundColor(view.id, hex, templateRepo)
+                                        viewModel.viewport.updatePageCanvasBackgroundColor(view.id, hex, templateRepo)
                                     }
                                     .tip("切换底色: $name ($hex)")
                             )

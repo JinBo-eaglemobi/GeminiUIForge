@@ -204,12 +204,12 @@ fun UIStudioHierarchyItem(
                                 val currentTime = getCurrentTimeMillis()
                                 if (currentTime - lastClickTime < 300L) {
                                     if (block.isPureContainer || hasChildren || block.type == UIBlockType.CONTAINER) {
-                                        viewModel.openContainerTab(block.id)
+                                        viewModel.pageManager.openContainerTab(block.id)
                                     }
                                     lastClickTime = 0L
                                 } else {
                                     lastClickTime = currentTime
-                                    viewModel.selectBlock(block.id)
+                                    viewModel.canvasEditor.selectBlock(block.id)
                                 }
                             }
                         }
@@ -233,7 +233,7 @@ fun UIStudioHierarchyItem(
                             .padding(start = (depth * 14 + 4).dp, end = 4.dp, top = 3.dp, bottom = 3.dp)
                             .semantics {
                                 onClick {
-                                    viewModel.selectBlock(block.id)
+                                    viewModel.canvasEditor.selectBlock(block.id)
                                     true
                                 }
                             }
@@ -284,7 +284,7 @@ fun UIStudioHierarchyItem(
 
                         // 锁定开关
                         IconButton(
-                            onClick = { viewModel.toggleBlockLock(block.id, templateRepo) },
+                            onClick = { viewModel.canvasEditor.toggleBlockLock(block.id, templateRepo) },
                             modifier = Modifier
                                 .size(20.dp)
                                 .tip(if (block.isLocked) "解除锁定" else "锁定组件 (禁止画布移动)")
@@ -299,7 +299,7 @@ fun UIStudioHierarchyItem(
 
                         // 眼睛可见性开关
                         IconButton(
-                            onClick = { viewModel.toggleBlockVisibility(block.id, templateRepo) },
+                            onClick = { viewModel.canvasEditor.toggleBlockVisibility(block.id, templateRepo) },
                             modifier = Modifier
                                 .size(20.dp)
                                 .tip(if (block.isVisible) "隐藏组件" else "显示组件")
@@ -360,7 +360,7 @@ fun UIStudioHierarchyItem(
                     text = { Text("上移一层", fontSize = 13.sp) },
                     leadingIcon = { Icon(Icons.Default.KeyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
                     onClick = {
-                        viewModel.moveBlockUp(block.id, templateRepo)
+                        viewModel.canvasEditor.moveBlockUp(block.id, templateRepo)
                         showContextMenu = false
                     }
                 )
@@ -368,7 +368,7 @@ fun UIStudioHierarchyItem(
                     text = { Text("下移一层", fontSize = 13.sp) },
                     leadingIcon = { Icon(Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(16.dp)) },
                     onClick = {
-                        viewModel.moveBlockDown(block.id, templateRepo)
+                        viewModel.canvasEditor.moveBlockDown(block.id, templateRepo)
                         showContextMenu = false
                     }
                 )
@@ -376,7 +376,7 @@ fun UIStudioHierarchyItem(
                     text = { Text("置于顶层", fontSize = 13.sp) },
                     leadingIcon = { Icon(Icons.Default.VerticalAlignTop, null, modifier = Modifier.size(16.dp)) },
                     onClick = {
-                        viewModel.bringBlockToFront(block.id, templateRepo)
+                        viewModel.canvasEditor.bringBlockToFront(block.id, templateRepo)
                         showContextMenu = false
                     }
                 )
@@ -384,7 +384,7 @@ fun UIStudioHierarchyItem(
                     text = { Text("置于底层", fontSize = 13.sp) },
                     leadingIcon = { Icon(Icons.Default.VerticalAlignBottom, null, modifier = Modifier.size(16.dp)) },
                     onClick = {
-                        viewModel.sendBlockToBack(block.id, templateRepo)
+                        viewModel.canvasEditor.sendBlockToBack(block.id, templateRepo)
                         showContextMenu = false
                     }
                 )
@@ -405,7 +405,7 @@ fun UIStudioHierarchyItem(
                         )
                     },
                     onClick = {
-                        viewModel.toggleBlockLock(block.id, templateRepo)
+                        viewModel.canvasEditor.toggleBlockLock(block.id, templateRepo)
                         showContextMenu = false
                     }
                 )
@@ -416,7 +416,7 @@ fun UIStudioHierarchyItem(
                         text = { Text("打开容器独立视图", fontSize = 13.sp) },
                         leadingIcon = { Icon(Icons.Default.Layers, null, modifier = Modifier.size(16.dp)) },
                         onClick = {
-                            viewModel.openContainerTab(block.id)
+                            viewModel.pageManager.openContainerTab(block.id)
                             showContextMenu = false
                         }
                     )
@@ -425,7 +425,7 @@ fun UIStudioHierarchyItem(
                         text = { Text("解散父容器", fontSize = 13.sp) },
                         leadingIcon = { Icon(Icons.Default.LayersClear, null, modifier = Modifier.size(16.dp)) },
                         onClick = {
-                            viewModel.ungroupContainer(block.id, templateRepo)
+                            viewModel.canvasEditor.ungroupContainer(block.id, templateRepo)
                             showContextMenu = false
                         }
                     )
@@ -461,7 +461,7 @@ fun UIStudioHierarchyItem(
                     text = { Text("重命名", fontSize = 13.sp) },
                     leadingIcon = { Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp)) },
                     onClick = {
-                        viewModel.startRenameBlock(block.id)
+                        viewModel.canvasEditor.startRenameBlock(block.id)
                         showContextMenu = false
                     }
                 )
@@ -470,7 +470,7 @@ fun UIStudioHierarchyItem(
                     text = { Text("删除组件", fontSize = 13.sp, color = MaterialTheme.colorScheme.error) },
                     leadingIcon = { Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
                     onClick = {
-                        viewModel.requestDeleteBlock(block.id, templateRepo)
+                        viewModel.canvasEditor.requestDeleteBlock(block.id, templateRepo)
                         showContextMenu = false
                     }
                 )

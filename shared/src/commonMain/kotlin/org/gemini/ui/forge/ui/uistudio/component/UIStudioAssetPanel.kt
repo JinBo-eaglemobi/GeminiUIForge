@@ -158,13 +158,13 @@ fun UIStudioAssetPanel(
         title = stringResource(Res.string.uistudio_import_files_mixed),
         extensions = SUPPORTED_IMAGE_EXTENSIONS.toList()
     ) { paths ->
-        if (paths.isNotEmpty()) viewModel.importExternalPaths(paths)
+        if (paths.isNotEmpty()) viewModel.assetLibrary.importExternalPaths(paths)
     }
     val launchFolderPicker = rememberFilePicker(
         title = stringResource(Res.string.uistudio_import_folder),
         isFolder = true
     ) { path ->
-        path?.let { viewModel.importExternalPaths(listOf(it)) }
+        path?.let { viewModel.assetLibrary.importExternalPaths(listOf(it)) }
     }
 
     Surface(
@@ -177,7 +177,7 @@ fun UIStudioAssetPanel(
                 onDragStateChanged = { isDragging -> isExternalDragHovered = isDragging },
                 onFilesDropped = { paths ->
                     isExternalDragHovered = false
-                    if (paths.isNotEmpty()) viewModel.importExternalPaths(paths)
+                    if (paths.isNotEmpty()) viewModel.assetLibrary.importExternalPaths(paths)
                 }
             )
     ) {
@@ -227,7 +227,7 @@ fun UIStudioAssetPanel(
                     if (library.folders.isNotEmpty()) {
                         val allFoldersExpanded = library.folders.all { state.expandedFolderIds.contains(it.id) }
                         IconButton(
-                            onClick = { viewModel.toggleAllFoldersExpanded() },
+                            onClick = { viewModel.assetLibrary.toggleAllFoldersExpanded() },
                             modifier = Modifier
                                 .size(28.dp)
                                 .tip(if (allFoldersExpanded) "折叠全部文件夹" else "展开全部文件夹")
@@ -242,7 +242,7 @@ fun UIStudioAssetPanel(
 
                     // 刷新素材库（扫描物理磁盘，校验清理失效项并同步新增）
                     IconButton(
-                        onClick = { viewModel.refreshAssetLibrary() },
+                        onClick = { viewModel.assetLibrary.refreshAssetLibrary() },
                         enabled = !state.isRefreshingAssetLibrary,
                         modifier = Modifier
                             .size(28.dp)
@@ -263,7 +263,7 @@ fun UIStudioAssetPanel(
                     }
 
                     IconButton(
-                        onClick = { viewModel.revealFolderInExplorer(null) },
+                        onClick = { viewModel.assetLibrary.revealFolderInExplorer(null) },
                         modifier = Modifier
                             .size(28.dp)
                             .tip("在本地文件管理器中打开素材目录")
@@ -276,7 +276,7 @@ fun UIStudioAssetPanel(
                     }
 
                     IconButton(
-                        onClick = { viewModel.openNewFolderDialog() },
+                        onClick = { viewModel.assetLibrary.openNewFolderDialog() },
                         modifier = Modifier
                             .size(28.dp)
                             .tip("新建素材分类文件夹")
@@ -402,7 +402,7 @@ fun UIStudioAssetPanel(
                                             folderBoundsMap[folder.id] = coords.boundsInWindow()
                                         }
                                         .contextMenuClickable(
-                                            onClick = { viewModel.toggleFolderExpanded(folder.id) },
+                                            onClick = { viewModel.assetLibrary.toggleFolderExpanded(folder.id) },
                                             onContextMenu = { showFolderMenu = true }
                                         )
                                 ) {
@@ -471,7 +471,7 @@ fun UIStudioAssetPanel(
                                         leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp)) },
                                         onClick = {
                                             showFolderMenu = false
-                                            viewModel.revealFolderInExplorer(folder.id)
+                                            viewModel.assetLibrary.revealFolderInExplorer(folder.id)
                                         }
                                     )
                                     DropdownMenuItem(
@@ -512,14 +512,14 @@ fun UIStudioAssetPanel(
                                     onDragHover = { rootPos ->
                                         val liveState = viewModel.state
                                         val hitFolderId = folderBoundsMap.entries.firstOrNull { it.value.contains(rootPos) }?.key
-                                        viewModel.setHoveredFolderId(hitFolderId)
+                                        viewModel.assetLibrary.setHoveredFolderId(hitFolderId)
 
                                         val canvasRect = liveState.canvasWindowBounds
                                         val isOverCanvas = canvasRect != null &&
                                             rootPos.x >= canvasRect.left && rootPos.x <= canvasRect.right &&
                                             rootPos.y >= canvasRect.top && rootPos.y <= canvasRect.bottom
-                                        viewModel.setCanvasDragHovered(isOverCanvas)
-                                        viewModel.updateLastDragHoverPos(Offset(rootPos.x, rootPos.y))
+                                        viewModel.viewport.setCanvasDragHovered(isOverCanvas)
+                                        viewModel.viewport.updateLastDragHoverPos(Offset(rootPos.x, rootPos.y))
                                     },
                                     onDragEnd = {
                                         val liveState = viewModel.state
@@ -533,16 +533,16 @@ fun UIStudioAssetPanel(
                                             val currentScale = liveState.scale.coerceAtLeast(0.01f)
                                             val logicalX = (((lastPos.x - canvasRect.left) - liveState.panOffset.x) / currentScale) / density
                                             val logicalY = (((lastPos.y - canvasRect.top) - liveState.panOffset.y) / currentScale) / density
-                                            viewModel.addAssetToCanvas(item, logicalX, logicalY, templateRepo)
+                                            viewModel.assetLibrary.addAssetToCanvas(item, logicalX, logicalY, templateRepo)
                                         } else {
                                             val targetFolderId = liveState.hoveredFolderId
                                             val draggedId = liveState.draggedAssetId ?: item.id
-                                            viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
+                                            viewModel.assetLibrary.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
                                         }
-                                        viewModel.setDraggedAssetId(null)
-                                        viewModel.setHoveredFolderId(null)
-                                        viewModel.setCanvasDragHovered(false)
-                                        viewModel.updateLastDragHoverPos(null)
+                                        viewModel.assetLibrary.setDraggedAssetId(null)
+                                        viewModel.assetLibrary.setHoveredFolderId(null)
+                                        viewModel.viewport.setCanvasDragHovered(false)
+                                        viewModel.viewport.updateLastDragHoverPos(null)
                                     }
                                 )
                             }
@@ -563,14 +563,14 @@ fun UIStudioAssetPanel(
                             onDragHover = { rootPos ->
                                 val liveState = viewModel.state
                                 val hitFolderId = folderBoundsMap.entries.firstOrNull { it.value.contains(rootPos) }?.key
-                                viewModel.setHoveredFolderId(hitFolderId)
+                                viewModel.assetLibrary.setHoveredFolderId(hitFolderId)
 
                                 val canvasRect = liveState.canvasWindowBounds
                                 val isOverCanvas = canvasRect != null &&
                                     rootPos.x >= canvasRect.left && rootPos.x <= canvasRect.right &&
                                     rootPos.y >= canvasRect.top && rootPos.y <= canvasRect.bottom
-                                viewModel.setCanvasDragHovered(isOverCanvas)
-                                viewModel.updateLastDragHoverPos(Offset(rootPos.x, rootPos.y))
+                                viewModel.viewport.setCanvasDragHovered(isOverCanvas)
+                                viewModel.viewport.updateLastDragHoverPos(Offset(rootPos.x, rootPos.y))
                             },
                             onDragEnd = {
                                 val liveState = viewModel.state
@@ -584,16 +584,16 @@ fun UIStudioAssetPanel(
                                     val currentScale = liveState.scale.coerceAtLeast(0.01f)
                                     val logicalX = (((lastPos.x - canvasRect.left) - liveState.panOffset.x) / currentScale) / density
                                     val logicalY = (((lastPos.y - canvasRect.top) - liveState.panOffset.y) / currentScale) / density
-                                    viewModel.addAssetToCanvas(item, logicalX, logicalY, templateRepo)
+                                    viewModel.assetLibrary.addAssetToCanvas(item, logicalX, logicalY, templateRepo)
                                 } else {
                                     val targetFolderId = liveState.hoveredFolderId
                                     val draggedId = liveState.draggedAssetId ?: item.id
-                                    viewModel.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
+                                    viewModel.assetLibrary.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
                                 }
-                                viewModel.setDraggedAssetId(null)
-                                viewModel.setHoveredFolderId(null)
-                                viewModel.setCanvasDragHovered(false)
-                                viewModel.updateLastDragHoverPos(null)
+                                viewModel.assetLibrary.setDraggedAssetId(null)
+                                viewModel.assetLibrary.setHoveredFolderId(null)
+                                viewModel.viewport.setCanvasDragHovered(false)
+                                viewModel.viewport.updateLastDragHoverPos(null)
                             }
                         )
                     }
@@ -642,7 +642,7 @@ fun UIStudioAssetPanel(
             title = "重命名文件夹",
             initialName = folder.name,
             onConfirm = {
-                viewModel.commitRenameFolder(folder.id, it)
+                viewModel.assetLibrary.commitRenameFolder(folder.id, it)
                 renamingFolderTarget = null
             },
             onDismiss = { renamingFolderTarget = null }
@@ -655,7 +655,7 @@ fun UIStudioAssetPanel(
             title = "重命名素材",
             initialName = asset.name,
             onConfirm = {
-                viewModel.commitRenameAsset(asset.id, it)
+                viewModel.assetLibrary.commitRenameAsset(asset.id, it)
                 renamingAssetTarget = null
             },
             onDismiss = { renamingAssetTarget = null }
@@ -670,7 +670,7 @@ fun UIStudioAssetPanel(
             confirmText = "删除",
             isDestructive = true,
             onConfirm = {
-                viewModel.deleteAssetFolder(folder.id)
+                viewModel.assetLibrary.deleteAssetFolder(folder.id)
                 deletingFolderTarget = null
             },
             onDismiss = { deletingFolderTarget = null }
@@ -685,7 +685,7 @@ fun UIStudioAssetPanel(
             confirmText = "彻底删除",
             isDestructive = true,
             onConfirm = {
-                viewModel.deleteAsset(asset.id)
+                viewModel.assetLibrary.deleteAsset(asset.id)
                 deletingAssetTarget = null
             },
             onDismiss = { deletingAssetTarget = null }
