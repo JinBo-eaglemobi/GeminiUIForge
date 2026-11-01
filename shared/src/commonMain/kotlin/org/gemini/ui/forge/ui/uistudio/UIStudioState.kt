@@ -10,6 +10,7 @@ import org.gemini.ui.forge.utils.findBlockById
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.model.chat.VisualChatSession
+import org.gemini.ui.forge.ui.uistudio.model.ImportConflictState
 import org.gemini.ui.forge.ui.uistudio.model.ProjectAgentConfig
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetFolder
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
@@ -165,7 +166,8 @@ data class UIStudioState(
     val lastLayoutUndoSnapshot: LayoutUndoSnapshot? = null,
     val showMaxToolRoundsContinueDialog: Boolean = false,
     val currentToolLoopRound: Int = 0,
-    val maxToolLoopRoundLimit: Int = 50
+    val maxToolLoopRoundLimit: Int = 50,
+    val importConflictState: ImportConflictState? = null
 ) {
     val canUndo: Boolean get() = undoStack.isNotEmpty()
     val canRedo: Boolean get() = redoStack.isNotEmpty()

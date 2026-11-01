@@ -20,9 +20,13 @@ import org.gemini.ui.forge.ui.uistudio.UIStudioState
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetFolder
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
+import org.gemini.ui.forge.ui.uistudio.model.ImportConflictFile
+import org.gemini.ui.forge.ui.uistudio.model.ImportConflictState
+import org.gemini.ui.forge.ui.uistudio.model.ImportConflictStrategy
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.utils.asset.AssetFileNameGuard
 import org.gemini.ui.forge.utils.bindParents
 import org.gemini.ui.forge.utils.blockingAwait
 import org.gemini.ui.forge.utils.calculateShortFileHash
@@ -48,7 +52,7 @@ class AssetLibraryDelegate(
     private val setState: (UIStudioState) -> Unit,
     private val scope: CoroutineScope,
     private val jsonHelper: Json,
-    private val storage: LocalFileStorage,
+    internal val storage: LocalFileStorage,
     private val mattingService: LocalMattingService,
     private val canvasEditor: CanvasEditorDelegate
 ) {
@@ -602,66 +606,202 @@ class AssetLibraryDelegate(
                 return@launch
             }
 
-            // 2. 逐文件哈希去重与物理拷贝入库
+            // 2. 逐文件处理：内容去重（保留）→ 文件名改用源文件名 → 冲突分流
             val existingHashes = state.assetLibrary.items.mapNotNull { it.hash?.trim()?.lowercase() }.toMutableSet()
-            val newItems = mutableListOf<UIAssetItem>()
+            val importDirRel = "templates/$sanitized/assets/import"
+            val readyList = mutableListOf<Triple<String, String, String>>() // sourcePath, desiredFileName, fileHash
+            val conflictList = mutableListOf<ImportConflictFile>()
             var skippedCount = 0
+
             for (filePath in candidateFiles) {
                 try {
                     val fileHash = calculateShortFileHash(filePath) ?: continue
-                    // 哈希是素材唯一凭据：库内已有同内容文件直接跳过（重复导入零冗余，支持长短哈希前缀比对）
+                    // ① 内容级去重快速通道保留：内容相同时覆盖/别名均无意义，静默跳过
                     if (existingHashes.any { it == fileHash || it.startsWith(fileHash) || fileHash.startsWith(it) }) {
                         skippedCount++
                         continue
                     }
+                    // ② 文件名改用源文件名（原 hash 文件名废弃；清洗 + blank 兜底 hash）
+                    val rawName = filePath.substringAfterLast('/').substringAfterLast('\\').substringBeforeLast('.')
+                    val safeBase = AssetFileNameGuard.sanitizeFileName(rawName).ifBlank { fileHash }
                     val extension = filePath.substringAfterLast('.', "png").lowercase()
-                    val relPath = "templates/$sanitized/assets/import/$fileHash.$extension"
-                    if (!copyLocalFile(filePath, relPath)) {
-                        AppLogger.w("UIStudioViewModel", "素材拷贝失败，跳过: $filePath")
-                        continue
+                    val desired = "$safeBase.$extension"
+
+                    // ③ 与目标目录已有条目 + 批内准备列表 + 磁盘物理文件做不区分大小写同名检测
+                    val taken = state.assetLibrary.items.any { it.relativePath.equals("$importDirRel/$desired", ignoreCase = true) } ||
+                            readyList.any { it.second.equals(desired, ignoreCase = true) } ||
+                            AssetFileNameGuard.isFileNameTakenInDir(storage, importDirRel, desired)
+
+                    if (taken) {
+                        conflictList.add(ImportConflictFile(sourcePath = filePath, desiredFileName = desired, fileHash = fileHash))
+                    } else {
+                        readyList.add(Triple(filePath, desired, fileHash))
+                        existingHashes.add(fileHash)
                     }
-                    // Skia 解码读取真实物理尺寸（失败兜底 100x100）
-                    var imgWidth = 100
-                    var imgHeight = 100
-                    try {
-                        val bytes = readLocalFileBytes(relPath)
-                        if (bytes != null) {
-                            val image = Image.makeFromEncoded(bytes)
-                            imgWidth = image.width.coerceAtLeast(1)
-                            imgHeight = image.height.coerceAtLeast(1)
-                        }
-                    } catch (_: Exception) {}
-                    val displayName = filePath.substringAfterLast('/').substringBeforeLast('.')
-                    newItems.add(
-                        UIAssetItem(
-                            id = "asset_${fileHash.take(8)}_${getCurrentTimeMillis() % 100000}",
-                            relativePath = relPath,
-                            width = imgWidth,
-                            height = imgHeight,
-                            category = "image",
-                            folderId = targetFolderId,
-                            hash = fileHash
-                        )
-                    )
-                    existingHashes.add(fileHash)
                 } catch (e: Exception) {
-                    AppLogger.w("UIStudioViewModel", "导入单文件失败: $filePath (${e.message})")
+                    AppLogger.w("UIStudioViewModel", "导入单文件解析失败: $filePath (${e.message})")
                 }
             }
 
-            if (newItems.isEmpty()) {
-                Toast.show(if (skippedCount > 0) "所选素材均已存在（跳过 $skippedCount 个重复项）" else "导入失败，未新增任何素材", ToastType.INFO)
-                return@launch
+            // 无冲突项立即物理拷贝入库
+            val newItems = mutableListOf<UIAssetItem>()
+            for ((sourcePath, desired, fileHash) in readyList) {
+                val relPath = "$importDirRel/$desired"
+                val item = importSingleFile(sourcePath, relPath, targetFolderId, fileHash)
+                if (item != null) {
+                    newItems.add(item)
+                }
             }
 
-            // 3. 入库并持久化，同时切换左侧栏到素材库 Tab 便于即时查看
-            state = state.copy(
-                assetLibrary = state.assetLibrary.copy(items = state.assetLibrary.items + newItems),
-                leftBottomTab = UIStudioLeftBottomTab.ASSETS
-            )
-            saveAssetLibrary()
-            val dupHint = if (skippedCount > 0) "，跳过重复 $skippedCount 个" else ""
-            Toast.show("成功导入 ${newItems.size} 个素材$dupHint", ToastType.SUCCESS)
+            // 3. 挂起重名冲突弹窗（若存在同名异内容冲突）
+            if (conflictList.isNotEmpty()) {
+                state = state.copy(
+                    importConflictState = ImportConflictState(
+                        conflicts = conflictList,
+                        targetFolderId = targetFolderId,
+                        projectSanitizedName = sanitized
+                    )
+                )
+            }
+
+            if (newItems.isNotEmpty()) {
+                state = state.copy(
+                    assetLibrary = state.assetLibrary.copy(items = state.assetLibrary.items + newItems),
+                    leftBottomTab = UIStudioLeftBottomTab.ASSETS
+                )
+                saveAssetLibrary()
+            }
+
+            if (newItems.isEmpty() && conflictList.isEmpty()) {
+                Toast.show(if (skippedCount > 0) "所选素材均已存在（跳过 $skippedCount 个重复项）" else "导入失败，未新增任何素材", ToastType.INFO)
+            } else if (newItems.isNotEmpty()) {
+                val dupHint = if (skippedCount > 0) "，跳过重复 $skippedCount 个" else ""
+                val conflictHint = if (conflictList.isNotEmpty()) "，发现 ${conflictList.size} 个重名冲突待决策" else ""
+                Toast.show("成功导入 ${newItems.size} 个素材$dupHint$conflictHint", ToastType.SUCCESS)
+            }
+        }
+    }
+
+    /**
+     * 辅助解码图片真实物理尺寸，失败兜底 100x100
+     */
+    private suspend fun decodeImageSize(relPath: String): Pair<Int, Int> {
+        return try {
+            val bytes = readLocalFileBytes(relPath)
+            if (bytes != null) {
+                val image = Image.makeFromEncoded(bytes)
+                image.width.coerceAtLeast(1) to image.height.coerceAtLeast(1)
+            } else {
+                100 to 100
+            }
+        } catch (_: Exception) {
+            100 to 100
+        }
+    }
+
+    /**
+     * 辅助执行单文件拷贝与条目构建
+     */
+    private suspend fun importSingleFile(
+        sourcePath: String,
+        relPath: String,
+        targetFolderId: String?,
+        fileHash: String
+    ): UIAssetItem? {
+        if (!copyLocalFile(sourcePath, relPath)) {
+            AppLogger.w("UIStudioViewModel", "素材拷贝失败: $sourcePath -> $relPath")
+            return null
+        }
+        val (imgWidth, imgHeight) = decodeImageSize(relPath)
+        return UIAssetItem(
+            id = "asset_${fileHash.take(8)}_${getCurrentTimeMillis() % 100000}",
+            relativePath = relPath,
+            width = imgWidth,
+            height = imgHeight,
+            category = "image",
+            folderId = targetFolderId,
+            hash = fileHash
+        )
+    }
+
+    /**
+     * 处理导入重名冲突（AppImportConflictDialog 回调入口）。
+     * 替换 = 覆盖目标目录下同名文件内容，仅刷新条目宽高与更新时间，hash/id/引用链不动；
+     * 保留两者 = 自动追加 _N 序号别名后作为新条目入库；
+     * 跳过 = 放弃冲突文件。
+     */
+    fun resolveImportConflicts(strategy: ImportConflictStrategy) {
+        val conflict = state.importConflictState ?: return
+        state = state.copy(importConflictState = null)
+        scope.launch(Dispatchers.Default) {
+            val importDirRel = "templates/${conflict.projectSanitizedName}/assets/import"
+            var overwritten = 0
+            var added = 0
+            val newItems = mutableListOf<UIAssetItem>()
+            var currentItems = state.assetLibrary.items
+
+            for (c in conflict.conflicts) {
+                try {
+                    when (strategy) {
+                        ImportConflictStrategy.SKIP -> Unit
+                        ImportConflictStrategy.KEEP_BOTH -> {
+                            val base = c.desiredFileName.substringBeforeLast('.')
+                            val ext = c.desiredFileName.substringAfterLast('.', "")
+                            var n = 1
+                            var candidate = c.desiredFileName
+                            while (
+                                currentItems.any { it.relativePath.equals("$importDirRel/$candidate", ignoreCase = true) } ||
+                                AssetFileNameGuard.isFileNameTakenInDir(storage, importDirRel, candidate)
+                            ) {
+                                candidate = if (ext.isBlank()) "${base}_$n" else "${base}_$n.$ext"
+                                n++
+                            }
+                            val relPath = "$importDirRel/$candidate"
+                            val item = importSingleFile(c.sourcePath, relPath, conflict.targetFolderId, c.fileHash)
+                            if (item != null) {
+                                newItems.add(item)
+                                currentItems = currentItems + item
+                                added++
+                            }
+                        }
+                        ImportConflictStrategy.OVERWRITE -> {
+                            val targetItem = currentItems.firstOrNull {
+                                it.relativePath.equals("$importDirRel/${c.desiredFileName}", ignoreCase = true)
+                            }
+                            if (targetItem != null) {
+                                val bytes = readLocalFileBytes(c.sourcePath)
+                                if (bytes != null) {
+                                    storage.saveBytesToFile(targetItem.relativePath, bytes)
+                                    val (w, h) = decodeImageSize(targetItem.relativePath)
+                                    currentItems = currentItems.map {
+                                        if (it.id == targetItem.id) {
+                                            it.copy(width = w, height = h, updatedAt = getCurrentTimeMillis())
+                                        } else it
+                                    }
+                                    overwritten++
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    AppLogger.w("UIStudioViewModel", "冲突处理失败: ${c.sourcePath} (${e.message})")
+                }
+            }
+
+            if (overwritten > 0 || added > 0) {
+                state = state.copy(
+                    assetLibrary = state.assetLibrary.copy(items = currentItems),
+                    leftBottomTab = UIStudioLeftBottomTab.ASSETS
+                )
+                saveAssetLibrary()
+            }
+
+            val msg = when (strategy) {
+                ImportConflictStrategy.OVERWRITE -> "冲突处理完成：替换 $overwritten 个文件"
+                ImportConflictStrategy.KEEP_BOTH -> "冲突处理完成：别名新增 $added 个文件"
+                ImportConflictStrategy.SKIP -> "冲突处理完成：已跳过"
+            }
+            Toast.show(msg, ToastType.SUCCESS)
         }
     }
 
@@ -715,28 +855,39 @@ class AssetLibraryDelegate(
 
     fun startRenameAsset(asset: UIAssetItem) { state = state.copy(renamingAsset = asset) }
     fun cancelRenameAsset() { state = state.copy(renamingAsset = null) }
-    fun commitRenameAsset(assetId: String, newName: String) {
-        if (newName.isBlank()) return
-        val target = state.assetLibrary.items.find { it.id == assetId } ?: return
-        val clean = newName.trim()
+    suspend fun commitRenameAsset(assetId: String, newName: String): Boolean {
+        val target = state.assetLibrary.items.find { it.id == assetId } ?: return false
+        val clean = AssetFileNameGuard.sanitizeFileName(newName)
+        if (clean.isBlank()) {
+            Toast.show("名称不能为空", ToastType.ERROR)
+            return false
+        }
+        val oldFileName = target.relativePath.substringAfterLast('/').substringAfterLast('\\')
+        val ext = oldFileName.substringAfterLast('.', "png")
+        val newFileName = if (ext.isBlank()) clean else "$clean.$ext"
         val dir = target.relativePath.substringBeforeLast('/', "")
-        val ext = target.relativePath.substringAfterLast('.', "png")
-        val newRelPath = if (dir.isNotBlank()) "$dir/$clean.$ext" else "$clean.$ext"
+
+        // 不区分大小写重名守卫：排除自身原文件名（仅大小写微调亦放行）
+        if (AssetFileNameGuard.isFileNameTakenInDir(storage, dir, newFileName, excludeFileName = oldFileName)) {
+            Toast.show("当前目录已存在同名素材（不区分大小写）：$clean，请修改名称后重试", ToastType.ERROR)
+            return false
+        }
+
+        val newRelPath = if (dir.isNotBlank()) "$dir/$newFileName" else newFileName
         if (newRelPath != target.relativePath) {
-            scope.launch(Dispatchers.Default) {
-                try {
-                    val oldFile = TemplateFile(target.relativePath)
-                    val newFile = TemplateFile(newRelPath)
-                    if (oldFile.exists()) {
-                        val bytes = oldFile.readBytes()
-                        if (bytes != null) {
-                            newFile.writeBytes(bytes)
-                            oldFile.delete()
-                        }
+            try {
+                val oldFile = TemplateFile(target.relativePath)
+                val newFile = TemplateFile(newRelPath)
+                if (oldFile.exists()) {
+                    val bytes = oldFile.readBytes()
+                    if (bytes != null) {
+                        newFile.writeBytes(bytes)
+                        oldFile.delete()
                     }
-                } catch (e: Exception) {
-                    AppLogger.e("UIStudioViewModel", "重命名素材物理文件失败: ${target.relativePath} -> $newRelPath", e)
                 }
+            } catch (e: Exception) {
+                AppLogger.e("UIStudioViewModel", "重命名素材物理文件失败: ${target.relativePath} -> $newRelPath", e)
+                return false
             }
         }
         val updatedItems = state.assetLibrary.items.map {
@@ -748,6 +899,7 @@ class AssetLibraryDelegate(
         )
         saveAssetLibrary()
         Toast.show("素材已重命名为: $clean", ToastType.SUCCESS)
+        return true
     }
 
     fun revealAssetInExplorer(asset: UIAssetItem) {
@@ -875,6 +1027,13 @@ class AssetLibraryDelegate(
             "templates/$proj/assets/image/$cleanSubPath"
         }
         val targetFullPath = "$targetRelDir/$cleanName"
+
+        val targetDir = targetFullPath.substringBeforeLast('/')
+        val targetFileName = targetFullPath.substringAfterLast('/')
+        if (AssetFileNameGuard.isFileNameTakenInDir(storage, targetDir, targetFileName)) {
+            Toast.show("保存被拒绝：当前目录已存在同名文件（不区分大小写）：$targetFileName，请修改文件名后重新保存", ToastType.ERROR)
+            return null
+        }
 
         return try {
             if (imageBytes.isEmpty()) {

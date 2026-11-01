@@ -29,6 +29,7 @@ import org.gemini.ui.forge.ui.uistudio.UIStudioState
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.utils.asset.AssetFileNameGuard
 import org.gemini.ui.forge.utils.calculateShortFileHash
 import org.gemini.ui.forge.utils.cropImage
 import org.gemini.ui.forge.utils.isFileExists
@@ -350,33 +351,66 @@ class SliceImportDelegate(
             return
         }
 
-        val initialTaskItems = items.mapIndexed { idx, item ->
-            val assetId = item.id.ifBlank { "asset_${getCurrentTimeMillis()}_$idx" }
-            SliceTaskItemState(
-                id = assetId,
-                name = item.name,
-                width = item.bounds.width.toInt().coerceAtLeast(1),
-                height = item.bounds.height.toInt().coerceAtLeast(1),
-                category = item.type.name.lowercase(),
-                status = SliceItemStatus.PENDING
-            )
-        }
-
-        val startTime = getCurrentTimeMillis()
-
-        state = state.copy(
-            isVerifySliceDialogVisible = false,
-            verifySliceItems = items,
-            isSlicingAssets = true,
-            sliceProgress = 0f,
-            sliceStatusText = "正在读取图集大图...",
-            sliceTaskItems = initialTaskItems,
-            sliceStartTimeMillis = startTime,
-            sliceCurrentStage = SliceStage.PREPARING,
-            sliceCurrentItemName = ""
-        )
-
         scope.launch(Dispatchers.Default) {
+            val sanitizedName = proj.projectId.trim().replace(" ", "_")
+            val targetFolderId = state.selectedFolderId
+            val targetFolder = state.assetLibrary.folders.find { it.id == targetFolderId }
+            val folderSubDir = if (targetFolder != null) "${targetFolder.name.trim().replace(" ", "_")}/" else ""
+            val targetDir = "templates/$sanitizedName/assets/image/$folderSubDir".trimEnd('/')
+
+            // 1. 计算每个切片图元的文件名（优先使用 name，name 缺失时兜底 id）
+            val safeNames = items.mapIndexed { idx, meta ->
+                AssetFileNameGuard.sanitizeFileName(meta.name)
+                    .ifBlank { AssetFileNameGuard.sanitizeFileName(meta.id).ifBlank { "asset_$idx" } }
+            }
+
+            // 2. 整批重名预检：批内互斥 + 目标目录同名检测（不区分大小写）
+            val conflicts = mutableListOf<String>()
+            val seen = mutableSetOf<String>()
+            safeNames.forEach { n ->
+                if (!seen.add(n.lowercase())) {
+                    conflicts += n
+                }
+            }
+            safeNames.forEach { n ->
+                if (AssetFileNameGuard.isFileNameTakenInDir(assetLibrary.storage, targetDir, "$n.png")) {
+                    conflicts += n
+                }
+            }
+
+            // 任一冲突则整批拒绝，0 文件落盘，保持校对弹窗打开供用户直接改名
+            if (conflicts.isNotEmpty()) {
+                val conflictSummary = conflicts.distinct().joinToString("、")
+                Toast.show("切片保存被拒绝：以下名称在目标目录已存在或批内重复（不区分大小写）：$conflictSummary。请在校对弹窗中修改名称后重试", ToastType.ERROR)
+                return@launch
+            }
+
+            val initialTaskItems = items.mapIndexed { idx, item ->
+                val assetId = item.id.ifBlank { "asset_${getCurrentTimeMillis()}_$idx" }
+                SliceTaskItemState(
+                    id = assetId,
+                    name = item.name,
+                    width = item.bounds.width.toInt().coerceAtLeast(1),
+                    height = item.bounds.height.toInt().coerceAtLeast(1),
+                    category = item.type.name.lowercase(),
+                    status = SliceItemStatus.PENDING
+                )
+            }
+
+            val startTime = getCurrentTimeMillis()
+
+            state = state.copy(
+                isVerifySliceDialogVisible = false,
+                verifySliceItems = items,
+                isSlicingAssets = true,
+                sliceProgress = 0f,
+                sliceStatusText = "正在读取图集大图...",
+                sliceTaskItems = initialTaskItems,
+                sliceStartTimeMillis = startTime,
+                sliceCurrentStage = SliceStage.PREPARING,
+                sliceCurrentItemName = ""
+            )
+
             try {
                 val imageBytes = readLocalFileBytes(imagePath)
                 if (imageBytes == null || imageBytes.isEmpty()) {
@@ -439,7 +473,7 @@ class SliceImportDelegate(
                         async(Dispatchers.Default) {
                             sliceSemaphore.withPermit {
                                 val assetId = initialTaskItems[idx].id
-                                val relPath = "templates/$sanitizedName/assets/image/${folderSubDir}${assetId}.png"
+                                val relPath = "templates/$sanitizedName/assets/image/${folderSubDir}${safeNames[idx]}.png"
                                 val tFile = TemplateFile(relPath)
                                 val diskAbsolutePath = tFile.getAbsolutePath()
 

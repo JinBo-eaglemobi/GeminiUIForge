@@ -47,6 +47,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,9 +65,11 @@ import org.gemini.ui.forge.ui.component.chat.drop.onFileDrop
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.utils.SUPPORTED_IMAGE_EXTENSIONS
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
+import org.gemini.ui.forge.ui.dialog.system.AppImportConflictDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import org.gemini.ui.forge.ui.uistudio.dialog.UIStudioRenameDialog
+import org.gemini.ui.forge.ui.uistudio.model.ImportConflictStrategy
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetFolder
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.utils.rememberFilePicker
@@ -92,6 +95,7 @@ fun UIStudioAssetPanel(
     val library = state.assetLibrary
     val copy = rememberClipboardAction()
     val density = LocalDensity.current.density.coerceAtLeast(0.1f)
+    val coroutineScope = rememberCoroutineScope()
 
     var renamingFolderTarget by remember { mutableStateOf<UIAssetFolder?>(null) }
     var renamingAssetTarget by remember { mutableStateOf<UIAssetItem?>(null) }
@@ -654,11 +658,23 @@ fun UIStudioAssetPanel(
         UIStudioRenameDialog(
             title = "重命名素材",
             initialName = asset.name,
-            onConfirm = {
-                viewModel.assetLibrary.commitRenameAsset(asset.id, it)
-                renamingAssetTarget = null
+            onConfirm = { newName ->
+                coroutineScope.launch {
+                    if (viewModel.assetLibrary.commitRenameAsset(asset.id, newName)) {
+                        renamingAssetTarget = null
+                    }
+                }
             },
             onDismiss = { renamingAssetTarget = null }
+        )
+    }
+
+    // 外部素材导入重名冲突决策弹窗
+    viewModel.state.importConflictState?.let { conflict ->
+        AppImportConflictDialog(
+            conflictNames = conflict.conflicts.map { it.desiredFileName },
+            onResolve = { strategy -> viewModel.assetLibrary.resolveImportConflicts(strategy) },
+            onDismiss = { viewModel.assetLibrary.resolveImportConflicts(ImportConflictStrategy.SKIP) }
         )
     }
 

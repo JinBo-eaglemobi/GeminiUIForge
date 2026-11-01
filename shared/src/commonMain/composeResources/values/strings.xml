@@ -739,4 +739,18 @@
     <string name="chat_image_dialog_confirm">Save to Assets</string>
     <string name="chat_image_toast_asset_success">Successfully saved image to assets: %1$s</string>
     <string name="chat_image_toast_page_success">Added image block to page [%1$s]</string>
+
+    <!-- Asset Library Name Conflict Guard -->
+    <string name="asset_name_blank">Asset name cannot be empty</string>
+    <string name="asset_name_conflict_in_dir">An asset with the same name (case-insensitive) already exists in this folder: %1$s. Please rename and retry</string>
+    <string name="asset_slice_batch_conflict">Slice save rejected: the following names already exist in the target folder or duplicate within the batch (case-insensitive): %1$s. Please rename them in the verify dialog and retry</string>
+    <string name="asset_chat_image_conflict">Save rejected: a file named %1$s (case-insensitive) already exists in the target folder. Please change the file name and save again</string>
+    <string name="import_conflict_title">Import Conflict</string>
+    <string name="import_conflict_message">%1$d file(s) conflict with existing names in the target folder (case-insensitive). Choose how to handle them:</string>
+    <string name="import_conflict_overwrite">Replace</string>
+    <string name="import_conflict_keep_both">Keep Both</string>
+    <string name="import_conflict_skip">Skip</string>
+    <string name="import_conflict_resolved_overwrite">Conflict resolved: replaced %1$d file(s)</string>
+    <string name="import_conflict_resolved_keep_both">Conflict resolved: imported %1$d file(s) with new names</string>
+    <string name="import_conflict_resolved_skip">Conflict resolved: skipped</string>
 </resources>

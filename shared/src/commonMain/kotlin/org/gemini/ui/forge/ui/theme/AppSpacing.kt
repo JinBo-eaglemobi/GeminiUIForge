@@ -69,6 +69,9 @@ data class AppSpacing(
      */
     val dialogHugeWidth: Dp = 1280.dp,
 
+    /** 弹窗内列表/条目滚动区域最大高度约束（默认 240.dp） */
+    val dialogListMaxHeight: Dp = 240.dp,
+
     /** 行内置操作按钮（如“更新”、“卸载”、“安装”）最小安全宽度 */
     val buttonActionMinWidth: Dp = if (isCompact) 60.dp else 64.dp,
 
