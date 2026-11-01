@@ -72,6 +72,8 @@ fun rememberClipboardAction(): ClipboardAction {
                     onResult?.invoke(true)
                 } catch (e: Throwable) {
                     AppLogger.e("Clipboard", "剪贴板写入失败: ${e.message}", e)
+                    // 失败时向用户给出明确可感知的轻量提示，引导重试（不再静默无反馈）
+                    Toast.show("剪贴板被占用，复制失败，请重试", ToastType.ERROR)
                     onResult?.invoke(false)
                 }
             }

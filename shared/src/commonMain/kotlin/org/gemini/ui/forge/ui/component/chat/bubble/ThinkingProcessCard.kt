@@ -29,13 +29,13 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import kotlin.math.roundToInt
 
 /**
- * 模型思考态折叠与微光脉冲动效卡片 (一文件一 Composable)
+ * 模型真实思考思维链折叠与微光脉冲动效卡片 (一文件一 Composable)
  *
  * 核心特性：
- * 1. 思考中状态：呈现微光呼吸脉冲动画 (0.35f ~ 0.9f) 与毫秒级秒表计时，提供沉浸式推理反馈；
- * 2. 思考完成状态：转为淡雅高阶卡片，呈现已完成深度思考标签及推理耗时（秒），默认折叠节省视口空间；
- * 3. 展开查看：支持自由划选文本与一键复制完整思维链；
- * 4. 严格遵循 Design Tokens 与 UI/UX 人机工程学规范。
+ * 1. 去伪存真：仅真实呈现大模型输出的明文思考过程 (thought_summary)，绝不凭空拼凑伪造凭据；
+ * 2. 思考中状态：呈现微光呼吸脉冲动画 (0.35f ~ 0.9f) 与毫秒级秒表计时，提供实时推理反馈；
+ * 3. 思考完成状态：转为淡雅高阶卡片，呈现“查看/收起深度思考过程”标签及推理耗时（秒），支持折叠与一键复制思维链；
+ * 4. 严格遵循 Design Tokens 与 UI/UX 人机工程学规范 (折叠触发条 ≥ 36dp，复制按钮 ≥ 28dp)。
  */
 @Composable
 fun ThinkingProcessCard(
@@ -47,6 +47,15 @@ fun ThinkingProcessCard(
     val spacing = LocalAppSpacing.current
     val copy = rememberClipboardAction()
     var isExpanded by remember { mutableStateOf(false) }
+
+    val hasThoughtContent = thought.isNotBlank()
+
+    // 顶栏标题自适应：思考中 → 查看/收起深度思考过程
+    val headerTitle = when {
+        isThinking -> "深度思考与逻辑推演中..."
+        hasThoughtContent -> if (isExpanded) "收起深度思考过程" else "查看深度思考过程"
+        else -> if (isExpanded) "收起思考过程" else "查看思考过程"
+    }
 
     // 思考中秒表计时器
     var elapsedSeconds by remember { mutableStateOf(0f) }
@@ -92,12 +101,13 @@ fun ThinkingProcessCard(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(horizontal = spacing.medium, vertical = spacing.small)) {
-            // 顶栏操作与状态行 (通过 DisableSelection 阻断外层划选光标侵入)
+            // 顶栏操作与状态行 (通过 DisableSelection 阻断外层划选光标侵入；触发条热区 ≥ 36dp)
             DisableSelection {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = thought.isNotBlank()) { isExpanded = !isExpanded },
+                        .heightIn(min = 36.dp)
+                        .clickable(enabled = hasThoughtContent) { isExpanded = !isExpanded },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isThinking) {
@@ -119,11 +129,7 @@ fun ThinkingProcessCard(
                     Spacer(Modifier.width(spacing.small))
 
                     Text(
-                        text = if (isThinking) {
-                            "深度思考与逻辑推演中..."
-                        } else {
-                            if (isExpanded) "收起深度思考过程" else "查看深度思考过程"
-                        },
+                        text = headerTitle,
                         style = MaterialTheme.typography.labelMedium,
                         color = if (isThinking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     )
@@ -145,7 +151,7 @@ fun ThinkingProcessCard(
 
                     Spacer(Modifier.weight(1f))
 
-                    if (thought.isNotBlank()) {
+                    if (hasThoughtContent) {
                         Icon(
                             if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                             contentDescription = if (isExpanded) "折叠" else "展开",
@@ -156,8 +162,8 @@ fun ThinkingProcessCard(
                 }
             }
 
-            // 展开后的思维链详情
-            AnimatedVisibility(visible = isExpanded && thought.isNotBlank()) {
+            // 展开后的思维链详情区：仅真实呈现大模型输出的真实明文思维链
+            AnimatedVisibility(visible = isExpanded && hasThoughtContent) {
                 Column(modifier = Modifier.padding(top = spacing.small)) {
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
@@ -174,12 +180,12 @@ fun ThinkingProcessCard(
                             onClick = {
                                 copy(thought, "思考过程已复制到剪贴板")
                             },
-                            modifier = Modifier.size(24.dp).tip("复制思维链内容")
+                            modifier = Modifier.size(28.dp).tip("复制思维链内容")
                         ) {
                             Icon(
                                 Icons.Default.ContentCopy,
                                 contentDescription = "复制",
-                                modifier = Modifier.size(13.dp),
+                                modifier = Modifier.size(14.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }

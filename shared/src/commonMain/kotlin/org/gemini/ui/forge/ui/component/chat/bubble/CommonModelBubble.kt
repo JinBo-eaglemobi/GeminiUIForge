@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
-import org.gemini.ui.forge.extend.getSelectedTextOrNull
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.service.chat.ChatErrorClassifier
@@ -68,8 +67,6 @@ fun CommonModelBubble(
     val copy = rememberClipboardAction()
     var showContextMenu by remember { mutableStateOf(false) }
     var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
-    var selectedTextSnapshot by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
 
     val modelText = message.effectiveText
     val variants = message.variants
@@ -126,10 +123,7 @@ fun CommonModelBubble(
                                         with(density) { pos.y.toDp() }
                                     )
                                     event.changes.forEach { it.consume() }
-                                    scope.launch {
-                                        selectedTextSnapshot = getSelectedTextOrNull()
-                                        showContextMenu = true
-                                    }
+                                    showContextMenu = true
                                 }
                             }
                         }
@@ -137,10 +131,13 @@ fun CommonModelBubble(
                 ) {
                     Column(modifier = Modifier.padding(spacing.medium)) {
                         // 1. 思维链思考过程 (Thought Chain，高阶折叠与耗时呈现)
-                        // 核心防空白铁律：若当前正处于生成中且正文尚未输出，即便第一段 thought 仍在网络传输途中，
-                        // 也直接在气泡原位呈现脉冲微光呼吸动画与秒表计时，绝不展现空 Surface
+                        // 去伪存真铁律：
+                        // ① 仅当模型真正输出了明文思维链内容时 (!message.thought.isNullOrBlank())，生成结束后才展示思考卡片并支持折叠；
+                        // ② 若模型未输出明文思维链，绝不凭空拼凑伪造凭据卡片；
+                        // ③ 若当前正处于生成中且正文尚未输出，呈现微光呼吸脉冲动画与秒表计时，绝不展现空 Surface
+                        val hasRealThought = !message.thought.isNullOrBlank()
                         val isThinkingNow = isGenerating && modelText.isBlank() && !message.isError
-                        val shouldShowThinking = !message.thought.isNullOrBlank() || (isThinkingNow && message.toolCalls.isEmpty())
+                        val shouldShowThinking = hasRealThought || (isThinkingNow && message.toolCalls.isEmpty())
                         if (shouldShowThinking) {
                             ThinkingProcessCard(
                                 thought = message.thought ?: "",
@@ -236,55 +233,38 @@ fun CommonModelBubble(
                 }
 
                 // 右键上下文菜单 (阻断原生系统 copy 弹窗，跟随光标偏移)
-                AppMenu(
-                    expanded = showContextMenu,
-                    onDismissRequest = { showContextMenu = false },
-                    tier = AppMenuTier.COMPACT,
-                    title = "消息操作"
-                ) {
-                    val selText = selectedTextSnapshot
-                    if (!selText.isNullOrBlank()) {
-                        AppMenuItemRow(
-                            title = "复制选择文案",
-                            icon = Icons.Default.ContentCopy,
-                            onClick = {
-                                copy(selText, "已复制选中内容")
-                                showContextMenu = false
-                            }
-                        )
-                    }
-
-                    AppMenuItemRow(
-                        title = if (!selText.isNullOrBlank()) "复制全部文案" else "复制全部回复文案",
-                        icon = Icons.Default.CopyAll,
-                        onClick = {
-                            copy(modelText, "已复制全部回复文案")
-                            showContextMenu = false
+                if (onRegenerateRequested != null || onDeleteRequested != null) {
+                    AppMenu(
+                        expanded = showContextMenu,
+                        onDismissRequest = { showContextMenu = false },
+                        tier = AppMenuTier.COMPACT,
+                        title = "消息操作"
+                    ) {
+                        if (onRegenerateRequested != null) {
+                            AppMenuItemRow(
+                                title = "重新生成回答",
+                                icon = Icons.Default.Refresh,
+                                onClick = {
+                                    showContextMenu = false
+                                    onRegenerateRequested(message)
+                                }
+                            )
                         }
-                    )
 
-                    if (onRegenerateRequested != null) {
-                        AppMenuItemRow(
-                            title = "重新生成回答",
-                            icon = Icons.Default.Refresh,
-                            onClick = {
-                                showContextMenu = false
-                                onRegenerateRequested(message)
+                        if (onDeleteRequested != null) {
+                            if (onRegenerateRequested != null) {
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                             }
-                        )
-                    }
-
-                    if (onDeleteRequested != null) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        AppMenuItemRow(
-                            title = "删除本轮对话",
-                            icon = Icons.Default.DeleteOutline,
-                            iconTint = MaterialTheme.colorScheme.error,
-                            onClick = {
-                                showContextMenu = false
-                                onDeleteRequested(message)
-                            }
-                        )
+                            AppMenuItemRow(
+                                title = "删除本轮对话",
+                                icon = Icons.Default.DeleteOutline,
+                                iconTint = MaterialTheme.colorScheme.error,
+                                onClick = {
+                                    showContextMenu = false
+                                    onDeleteRequested(message)
+                                }
+                            )
+                        }
                     }
                 }
             }

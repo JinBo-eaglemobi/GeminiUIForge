@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
-import org.gemini.ui.forge.extend.getSelectedTextOrNull
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.formatTimestamp
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -68,8 +67,6 @@ fun CommonUserBubble(
     val copy = rememberClipboardAction()
     var showContextMenu by remember { mutableStateOf(false) }
     var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
-    var selectedTextSnapshot by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
 
     val userText = message.effectiveText
 
@@ -100,10 +97,7 @@ fun CommonUserBubble(
                                         with(density) { pos.y.toDp() }
                                     )
                                     event.changes.forEach { it.consume() }
-                                    scope.launch {
-                                        selectedTextSnapshot = getSelectedTextOrNull()
-                                        showContextMenu = true
-                                    }
+                                    showContextMenu = true
                                 }
                             }
                         }
@@ -211,66 +205,49 @@ fun CommonUserBubble(
                 }
 
                 // 右键上下文菜单 (跟随光标偏移)
-                AppMenu(
-                    expanded = showContextMenu,
-                    onDismissRequest = { showContextMenu = false },
-                    tier = AppMenuTier.COMPACT,
-                    title = "消息操作"
-                ) {
-                    val selText = selectedTextSnapshot
-                    if (!selText.isNullOrBlank()) {
-                        AppMenuItemRow(
-                            title = "复制选择文案",
-                            icon = Icons.Default.ContentCopy,
-                            onClick = {
-                                showContextMenu = false
-                                copy(selText, "已复制选中内容")
-                            }
-                        )
-                    }
-
-                    AppMenuItemRow(
-                        title = if (!selText.isNullOrBlank()) "复制全部文案" else "复制提问文本",
-                        icon = Icons.Default.CopyAll,
-                        onClick = {
-                            showContextMenu = false
-                            copy(userText, "已复制提问内容")
+                if (onEditRequested != null || onRegenerateRequested != null || onDeleteRequested != null) {
+                    AppMenu(
+                        expanded = showContextMenu,
+                        onDismissRequest = { showContextMenu = false },
+                        tier = AppMenuTier.COMPACT,
+                        title = "消息操作"
+                    ) {
+                        if (onEditRequested != null) {
+                            AppMenuItemRow(
+                                title = "重新编辑并回填",
+                                icon = Icons.Default.Edit,
+                                onClick = {
+                                    showContextMenu = false
+                                    onEditRequested(userText)
+                                }
+                            )
                         }
-                    )
 
-                    if (onEditRequested != null) {
-                        AppMenuItemRow(
-                            title = "重新编辑并回填",
-                            icon = Icons.Default.Edit,
-                            onClick = {
-                                showContextMenu = false
-                                onEditRequested(userText)
-                            }
-                        )
-                    }
+                        if (onRegenerateRequested != null) {
+                            AppMenuItemRow(
+                                title = "基于本轮重新生成回答",
+                                icon = Icons.Default.Refresh,
+                                onClick = {
+                                    showContextMenu = false
+                                    onRegenerateRequested(message)
+                                }
+                            )
+                        }
 
-                    if (onRegenerateRequested != null) {
-                        AppMenuItemRow(
-                            title = "基于本轮重新生成回答",
-                            icon = Icons.Default.Refresh,
-                            onClick = {
-                                showContextMenu = false
-                                onRegenerateRequested(message)
+                        if (onDeleteRequested != null) {
+                            if (onEditRequested != null || onRegenerateRequested != null) {
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                             }
-                        )
-                    }
-
-                    if (onDeleteRequested != null) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        AppMenuItemRow(
-                            title = "删除本轮对话",
-                            icon = Icons.Default.DeleteOutline,
-                            iconTint = MaterialTheme.colorScheme.error,
-                            onClick = {
-                                showContextMenu = false
-                                onDeleteRequested(message)
-                            }
-                        )
+                            AppMenuItemRow(
+                                title = "删除本轮对话",
+                                icon = Icons.Default.DeleteOutline,
+                                iconTint = MaterialTheme.colorScheme.error,
+                                onClick = {
+                                    showContextMenu = false
+                                    onDeleteRequested(message)
+                                }
+                            )
+                        }
                     }
                 }
             }

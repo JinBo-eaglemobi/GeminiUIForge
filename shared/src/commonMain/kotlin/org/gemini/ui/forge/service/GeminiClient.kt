@@ -380,9 +380,39 @@ class GeminiClient {
         var thought: String? = null
         var signature: String? = null
 
+        // 1. 检查流式 delta 增量 (官方 Interactions SSE 规范:
+        //    明文思考通过 delta.type == "thought_summary" 增量推送,
+        //    密码学签名通过 delta.type == "thought_signature" 下发)
+        val delta = obj["delta"]?.jsonObject
+        if (delta != null) {
+            val deltaType = delta["type"]?.jsonPrimitive?.contentOrNull
+            if (deltaType == "thought_summary") {
+                thought = delta["text"]?.jsonPrimitive?.contentOrNull
+                    ?: delta["summary"]?.jsonPrimitive?.contentOrNull
+                    ?: delta["content"]?.let { c ->
+                        when (c) {
+                            is JsonArray -> c.joinToString("") { 
+                                it.jsonObject["text"]?.jsonPrimitive?.contentOrNull 
+                                    ?: it.jsonObject["summary"]?.jsonPrimitive?.contentOrNull 
+                                    ?: "" 
+                            }
+                            is JsonObject -> c["text"]?.jsonPrimitive?.contentOrNull
+                                ?: c["summary"]?.jsonPrimitive?.contentOrNull
+                            is JsonPrimitive -> c.contentOrNull
+                            else -> null
+                        }
+                    }
+            } else if (deltaType == "thought_signature") {
+                signature = delta["signature"]?.jsonPrimitive?.contentOrNull
+                    ?: delta["thought_signature"]?.jsonPrimitive?.contentOrNull
+            }
+        }
+
+        // 2. 检查 step / steps 节点 (兼容全量步骤与非流式结构)
         val checkStep: (JsonObject) -> Unit = { step ->
             if (step["type"]?.jsonPrimitive?.contentOrNull == "thought") {
                 val t = step["thought"]?.jsonPrimitive?.contentOrNull
+                    ?: step["summary"]?.jsonPrimitive?.contentOrNull
                     ?: step["content"]?.let { c ->
                         when (c) {
                             is JsonArray -> c.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull ?: "" }
@@ -394,6 +424,7 @@ class GeminiClient {
                     thought = t
                 }
                 val sig = step["signature"]?.jsonPrimitive?.contentOrNull
+                    ?: step["thought_signature"]?.jsonPrimitive?.contentOrNull
                 if (!sig.isNullOrBlank()) {
                     signature = sig
                 }

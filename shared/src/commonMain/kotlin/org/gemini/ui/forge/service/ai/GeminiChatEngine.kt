@@ -334,6 +334,8 @@ class GeminiChatEngine(
                     put("thinkingConfig", buildJsonObject {
                         tc.thinkingBudget?.let { put("thinkingBudget", it) }
                         tc.thinkingLevel?.let { put("thinkingLevel", it) }
+                        // 开启明文思考过程输出 (官方规范: includeThoughts = true 才会推送 thought 部分)
+                        put("includeThoughts", true)
                     })
                 }
             }
@@ -550,6 +552,8 @@ class GeminiChatEngine(
                 // 生图模型与非思考模型严格禁止注入 thinking_level，防止 Google API 报 400 挂起
                 if (!isImageGenModel) {
                     genConfig.thinkingConfig?.thinkingLevel?.let { put("thinking_level", it.lowercase()) }
+                    // 开启明文思维链摘要输出 (官方规范: 默认吞掉明文思考, 必须显式 thinking_summaries = "auto")
+                    put("thinking_summaries", "auto")
                 }
             })
 

@@ -44,8 +44,21 @@ class RetryingClipboard(
     }
 
     override suspend fun setClipEntry(clipEntry: ClipEntry?) {
-        // 写入路径不受瞬锁异常影响，直接透传
-        delegate.setClipEntry(clipEntry)
+        // 写入路径同样受 Windows 剪贴板独占瞬锁影响（第三方剪贴板工具/输入法持锁时
+        // AWT 抛 IllegalStateException: cannot open system clipboard）。
+        // 捕获异常并做短间隔重试；重试耗尽后静默降级返回，绝不向上抛出——
+        // 复制属于交互动作，且框架 SelectionContainer 内部协程（划选 Ctrl+C）无 try-catch，
+        // 一旦抛出会被全局 CrashHandler 捕获弹出致命崩溃对话框，严重破坏使用体验。
+        repeat(WRITE_RETRY_COUNT) { attempt ->
+            try {
+                return delegate.setClipEntry(clipEntry)
+            } catch (_: IllegalStateException) {
+                // 最后一次仍失败则放弃（复制静默失败，用户重按即可重试）
+                if (attempt == WRITE_RETRY_COUNT - 1) return
+                // 等待瞬锁释放后重试（总耗时约 75ms，用户几乎无感）
+                delay(WRITE_RETRY_INTERVAL_MS.milliseconds)
+            }
+        }
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
@@ -59,5 +72,11 @@ class RetryingClipboard(
 
         /** 重试间隔（毫秒） */
         const val READ_RETRY_INTERVAL_MS = 25L
+
+        /** 剪贴板写入失败时的最大重试次数 */
+        const val WRITE_RETRY_COUNT = 4
+
+        /** 写入重试间隔（毫秒） */
+        const val WRITE_RETRY_INTERVAL_MS = 25L
     }
 }
