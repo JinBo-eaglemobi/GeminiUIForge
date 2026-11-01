@@ -114,8 +114,7 @@ fun UIStudioTopBar(
                 )
 
                 // 画布当前视图分辨率药丸
-                val currentView = state.project?.pages?.find { it.id == state.currentViewId }
-                    ?: state.project?.pages?.firstOrNull()
+                val currentView = state.currentView
                 val currentW = currentView?.width?.toInt() ?: state.canvasWidth.toInt()
                 val currentH = currentView?.height?.toInt() ?: state.canvasHeight.toInt()
 

@@ -47,7 +47,7 @@ fun UIStudioPageTabBar(
 ) {
     val spacing = LocalAppSpacing.current
     val state = viewModel.state
-    val allPages = state.project?.pages ?: emptyList()
+    val allPages = state.project?.studioPages ?: emptyList()
     val openIds = state.openViewIds
     val currentActiveId = state.currentViewId
     val scrollState = rememberScrollState()

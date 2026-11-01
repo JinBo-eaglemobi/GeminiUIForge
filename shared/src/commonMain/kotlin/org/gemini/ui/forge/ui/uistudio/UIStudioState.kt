@@ -259,7 +259,11 @@ data class UIStudioLayoutConfig(
     val propertySidebarWidthDp: Float = 280f,
     val aiChatSidebarWidthDp: Float = 400f,
     val activeRightTabName: String = "PROPERTY",
-    val isRightSidebarVisible: Boolean = true
+    val isRightSidebarVisible: Boolean = true,
+    /** 上次打开的视图标签页 ID 列表（持久化记忆恢复） */
+    val openViewIds: List<String> = emptyList(),
+    /** 上次处于激活状态的视图 ID */
+    val currentViewId: String? = null
 )
 
 /**

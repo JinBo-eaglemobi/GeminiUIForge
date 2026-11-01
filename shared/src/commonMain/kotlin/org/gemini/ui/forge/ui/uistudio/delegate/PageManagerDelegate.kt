@@ -67,6 +67,7 @@ class PageManagerDelegate(
             leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
         )
         viewport.restoreViewportOrDefault(viewId)
+        viewport.saveWorkspaceLayout()
     }
 
     /**
@@ -80,6 +81,7 @@ class PageManagerDelegate(
             leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
         )
         viewport.restoreViewportOrDefault(viewId)
+        viewport.saveWorkspaceLayout()
     }
 
     /**
@@ -167,6 +169,7 @@ class PageManagerDelegate(
         if (newActiveId != null) {
             viewport.restoreViewportOrDefault(newActiveId)
         }
+        viewport.saveWorkspaceLayout()
     }
 
     /**
@@ -181,6 +184,7 @@ class PageManagerDelegate(
             selectedBlockId = null,
             selectedAssetId = null
         )
+        viewport.saveWorkspaceLayout()
         Toast.show("已关闭所有视图标签", ToastType.INFO)
     }
 
@@ -200,6 +204,7 @@ class PageManagerDelegate(
             selectedBlockId = null,
             leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
         )
+        viewport.saveWorkspaceLayout()
         Toast.show("已关闭其他视图标签", ToastType.INFO)
     }
 
@@ -270,6 +275,7 @@ class PageManagerDelegate(
         scope.launch {
             repo.saveTemplate(updatedProject.projectId, updatedProject)
         }
+        viewport.saveWorkspaceLayout()
         Toast.show("成功创建视图: $viewName", ToastType.SUCCESS)
     }
 
@@ -305,6 +311,7 @@ class PageManagerDelegate(
         scope.launch {
             repo.saveTemplate(updatedProject.projectId, updatedProject)
         }
+        viewport.saveWorkspaceLayout()
         Toast.show("已克隆视图: $newViewName", ToastType.SUCCESS)
     }
 
@@ -318,11 +325,13 @@ class PageManagerDelegate(
             return
         }
         val updatedPages = proj.studioPages.filterNot { it.id == viewId }
+        val updatedOpen = state.openViewIds.filterNot { it == viewId }
         val nextViewId = if (state.currentViewId == viewId) updatedPages.firstOrNull()?.id else state.currentViewId
         val nextPage = updatedPages.find { it.id == nextViewId }
         val updatedProject = proj.copy(studioPages = updatedPages)
         state = state.copy(
             project = updatedProject,
+            openViewIds = updatedOpen,
             currentViewId = nextViewId,
             canvasWidth = nextPage?.width ?: 1920f,
             canvasHeight = nextPage?.height ?: 1080f,
@@ -333,6 +342,7 @@ class PageManagerDelegate(
         scope.launch {
             repo.saveTemplate(updatedProject.projectId, updatedProject)
         }
+        viewport.saveWorkspaceLayout()
         Toast.show("已删除视图", ToastType.INFO)
     }
 

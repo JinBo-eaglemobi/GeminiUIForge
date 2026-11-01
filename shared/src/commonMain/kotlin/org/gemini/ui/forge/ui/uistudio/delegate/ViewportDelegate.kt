@@ -168,6 +168,19 @@ class ViewportDelegate(
                         val propW = layout.propertySidebarWidthDp.dp.coerceAtLeast(180.dp)
                         val aiW = layout.aiChatSidebarWidthDp.dp.coerceAtLeast(280.dp)
                         val activeWidth = if (restoredTab == UIStudioRightTab.PROPERTY) propW else aiW
+
+                        // 仅当上次记录的页面在当前工程 studioPages 中仍然合法存在时，才进行恢复
+                        val allStudioPages = state.project?.studioPages ?: emptyList()
+                        val validOpenIds = layout.openViewIds.filter { openId ->
+                            allStudioPages.any { it.id == openId }
+                        }
+                        val restoredCurrentViewId = if (validOpenIds.contains(layout.currentViewId)) {
+                            layout.currentViewId
+                        } else {
+                            validOpenIds.lastOrNull()
+                        }
+                        val targetPage = allStudioPages.find { it.id == restoredCurrentViewId }
+
                         withContext(Dispatchers.Main) {
                             state = state.copy(
                                 leftPanelWidth = layout.leftPanelWidthDp.dp,
@@ -177,8 +190,15 @@ class ViewportDelegate(
                                 activeRightTab = restoredTab,
                                 isRightSidebarVisible = layout.isRightSidebarVisible,
                                 viewsPanelHeightRatio = layout.viewsPanelHeightRatio.coerceIn(0.05f, 0.95f),
-                                propertyPanelHeightRatio = layout.propertyPanelHeightRatio.coerceIn(0.05f, 0.95f)
+                                propertyPanelHeightRatio = layout.propertyPanelHeightRatio.coerceIn(0.05f, 0.95f),
+                                openViewIds = validOpenIds,
+                                currentViewId = restoredCurrentViewId,
+                                canvasWidth = targetPage?.width ?: state.canvasWidth,
+                                canvasHeight = targetPage?.height ?: state.canvasHeight
                             )
+                            if (restoredCurrentViewId != null) {
+                                restoreViewportOrDefault(restoredCurrentViewId)
+                            }
                         }
                     }
                 }
@@ -205,7 +225,9 @@ class ViewportDelegate(
                     propertySidebarWidthDp = state.propertySidebarWidth.value,
                     aiChatSidebarWidthDp = state.aiChatSidebarWidth.value,
                     activeRightTabName = state.activeRightTab.name,
-                    isRightSidebarVisible = state.isRightSidebarVisible
+                    isRightSidebarVisible = state.isRightSidebarVisible,
+                    openViewIds = state.openViewIds,
+                    currentViewId = state.currentViewId
                 )
                 val tFile = TemplateFile(path)
                 tFile.createParentDirs()
