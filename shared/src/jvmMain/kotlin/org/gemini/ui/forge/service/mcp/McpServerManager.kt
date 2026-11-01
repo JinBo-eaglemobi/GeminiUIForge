@@ -21,6 +21,8 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import org.gemini.ui.forge.ProjectConfig
+import org.gemini.ui.forge.service.tool.ToolContent
+import org.gemini.ui.forge.service.tool.mcp.McpToolRegistry
 import org.gemini.ui.forge.utils.AppLogger
 
 /**
@@ -61,18 +63,21 @@ object McpServerManager {
 
         // 注册 McpToolRegistry 中的全部业务工具
         McpToolRegistry.tools.value.forEach { def ->
+            val toolName = def.name
+            val toolDescription = def.description
             val properties = def.inputSchema["properties"]?.let { it as? JsonObject } ?: JsonObject(emptyMap())
             val requiredList = (def.inputSchema["required"] as? kotlinx.serialization.json.JsonArray)
                 ?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
 
             server.addTool(
-                name = def.name,
-                description = def.description,
+                name = toolName,
+                description = toolDescription,
                 inputSchema = ToolSchema(
                     properties = properties,
                     required = requiredList
                 )
             ) { request ->
+                val effectiveToolName = request.name
                 val args = request.arguments ?: JsonObject(emptyMap())
                 val startTime = org.gemini.ui.forge.getCurrentTimeMillis()
                 val currentSessionId = lastActiveSessionId
@@ -84,20 +89,30 @@ object McpServerManager {
                 }
 
                 McpTrafficInspector.recordInbound(
-                    methodOrTool = def.name,
-                    summary = "客户端调用: ${def.name}",
+                    methodOrTool = effectiveToolName,
+                    summary = "客户端调用: $effectiveToolName",
                     payloadJson = argsJsonStr,
                     sessionId = currentSessionId,
                     clientName = currentClientName,
                     type = McpTrafficType.TOOL_CALL
                 )
 
+                val targetTool = org.gemini.ui.forge.service.tool.ToolHub.findTool(effectiveToolName)
+                if (targetTool == null) {
+                    val errMsg = "未找到已注册的工具定义: $effectiveToolName"
+                    AppLogger.e("McpServer", errMsg)
+                    return@addTool CallToolResult(
+                        content = listOf(TextContent(errMsg)),
+                        isError = true
+                    )
+                }
+
                 try {
                     // 超时保护控制
-                    val toolResult = withTimeout(def.timeoutMs) {
-                        def.execute(args) { progress, message ->
+                    val toolResult = withTimeout(targetTool.timeoutMs) {
+                        targetTool.execute(args) { progress, message ->
                             // 进度上报日志
-                            AppLogger.d("McpServer", "[${def.name}] 进度: ${(progress * 100).toInt()}% - $message")
+                            AppLogger.d("McpServer", "[$effectiveToolName] 进度: ${(progress * 100).toInt()}% - $message")
                         }
                     }
 
@@ -107,11 +122,11 @@ object McpServerManager {
                     val resultJson = buildJsonObject {
                         put("isError", toolResult.isError)
                         put("contentCount", toolResult.content.size)
-                        val textItems = toolResult.content.filterIsInstance<McpContent.Text>()
+                        val textItems = toolResult.content.filterIsInstance<ToolContent.Text>()
                         if (textItems.isNotEmpty()) {
                             put("textPayload", textItems.joinToString("\n") { it.text })
                         }
-                        val imageItems = toolResult.content.filterIsInstance<McpContent.Image>()
+                        val imageItems = toolResult.content.filterIsInstance<ToolContent.Image>()
                         if (imageItems.isNotEmpty()) {
                             put("imageCount", imageItems.size)
                             put("imageFormats", imageItems.joinToString { it.mimeType })
@@ -119,7 +134,7 @@ object McpServerManager {
                     }.toString()
 
                     McpTrafficInspector.recordOutbound(
-                        methodOrTool = def.name,
+                        methodOrTool = effectiveToolName,
                         summary = "响应结果: $resultSummary",
                         payloadJson = resultJson,
                         durationMs = duration,
@@ -132,8 +147,8 @@ object McpServerManager {
                     // 映射纯文本与 ImageContent 图文多模态数据
                     val sdkContents: List<ContentBlock> = toolResult.content.map { item ->
                         when (item) {
-                            is McpContent.Text -> TextContent(text = item.text)
-                            is McpContent.Image -> ImageContent(data = item.base64Data, mimeType = item.mimeType)
+                            is ToolContent.Text -> TextContent(text = item.text)
+                            is ToolContent.Image -> ImageContent(data = item.base64Data, mimeType = item.mimeType)
                         }
                     }
 
@@ -144,7 +159,7 @@ object McpServerManager {
                 } catch (e: Throwable) {
                     val duration = org.gemini.ui.forge.getCurrentTimeMillis() - startTime
                     McpTrafficInspector.recordOutbound(
-                        methodOrTool = def.name,
+                        methodOrTool = effectiveToolName,
                         summary = "执行异常: ${e.message}",
                         payloadJson = """{"error": "${e.message}"}""",
                         durationMs = duration,
@@ -154,9 +169,9 @@ object McpServerManager {
                         type = McpTrafficType.ERROR
                     )
 
-                    AppLogger.e("McpServer", "Tool [${def.name}] 执行异常: ${e.message}", e)
+                    AppLogger.e("McpServer", "Tool [$effectiveToolName] 执行异常: ${e.message}", e)
                     CallToolResult(
-                        content = listOf(TextContent("Error executing tool ${def.name}: ${e.message}")),
+                        content = listOf(TextContent("Error executing tool $effectiveToolName: ${e.message}")),
                         isError = true
                     )
                 }

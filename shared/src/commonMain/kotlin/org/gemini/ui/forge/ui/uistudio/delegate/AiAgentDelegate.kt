@@ -30,7 +30,7 @@ import org.gemini.ui.forge.model.chat.MentionPayload
 import org.gemini.ui.forge.model.chat.TrafficDirection
 import org.gemini.ui.forge.model.chat.TrafficRecord
 import org.gemini.ui.forge.model.chat.VisualChatMessage
-import org.gemini.ui.forge.service.ai.AiToolExecutionDispatcher
+import org.gemini.ui.forge.service.tool.ai.AiToolExecutionDispatcher
 import org.gemini.ui.forge.service.ai.ChatCompressionManager
 import org.gemini.ui.forge.service.ai.ChatPayloadAssembler
 import org.gemini.ui.forge.service.ai.GeminiChatAttachment

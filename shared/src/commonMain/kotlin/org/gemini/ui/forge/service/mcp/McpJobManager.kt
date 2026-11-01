@@ -15,6 +15,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.service.tool.ToolContent
+import org.gemini.ui.forge.service.tool.ToolResult
 import org.gemini.ui.forge.utils.AppLogger
 
 /**
@@ -96,7 +98,7 @@ object McpJobManager {
         @Volatile var state: McpJobState = McpJobState.PENDING,
         @Volatile var progress: Float = 0f,
         @Volatile var stageMessage: String? = "任务已提交...",
-        @Volatile var result: McpToolResult? = null,
+        @Volatile var result: ToolResult? = null,
         @Volatile var error: String? = null,
         val signal: CompletableDeferred<Unit> = CompletableDeferred()
     ) {
@@ -136,7 +138,7 @@ object McpJobManager {
      */
     suspend fun submitJob(
         toolName: String,
-        block: suspend (onProgress: (progress: Float, message: String?) -> Unit) -> McpToolResult
+        block: suspend (onProgress: (progress: Float, message: String?) -> Unit) -> ToolResult
     ): String {
         cleanupExpiredJobs()
 
@@ -173,7 +175,7 @@ object McpJobManager {
                 handle.result = res
                 if (res.isError) {
                     handle.state = McpJobState.FAILED
-                    val errText = res.content.filterIsInstance<McpContent.Text>().firstOrNull()?.text
+                    val errText = res.content.filterIsInstance<ToolContent.Text>().firstOrNull()?.text
                     handle.error = errText ?: "执行失败"
                     handle.stageMessage = "任务执行失败: ${handle.error}"
                 } else {
@@ -206,7 +208,7 @@ object McpJobManager {
     suspend fun awaitJob(
         jobId: String,
         requestedWaitSeconds: Int? = null
-    ): Pair<McpJobStatusSnapshot, McpToolResult?>? {
+    ): Pair<McpJobStatusSnapshot, ToolResult?>? {
         val handle = mutex.withLock { jobs[jobId] } ?: return null
 
         // 落实三级可配置架构解析

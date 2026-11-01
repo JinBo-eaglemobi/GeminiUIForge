@@ -8,7 +8,7 @@ import org.gemini.ui.forge.model.skill.SkillActivationMode
 import org.gemini.ui.forge.model.skill.SkillMarkdownParser
 import org.gemini.ui.forge.model.skill.UiStudioSkill
 import org.gemini.ui.forge.service.ai.GeminiToolConfig
-import org.gemini.ui.forge.service.ai.UniversalAiToolRegistry
+import org.gemini.ui.forge.service.tool.ai.AiToolRegistry
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
 
@@ -213,7 +213,7 @@ object UiStudioSkillManager {
      */
     fun buildToolConfigs(skills: List<UiStudioSkill> = emptyList(), enableGoogleSearch: Boolean = true): List<GeminiToolConfig> {
         val extraExplicitToolNames = skills.flatMap { it.toolNames }.toSet()
-        val coreConfigs = UniversalAiToolRegistry.buildStudioCoreGeminiTools(
+        val coreConfigs = AiToolRegistry.buildStudioCoreGeminiTools(
             enableGoogleSearch = enableGoogleSearch,
             extraExplicitToolNames = extraExplicitToolNames
         )

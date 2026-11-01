@@ -9,7 +9,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lightbulb
@@ -23,7 +22,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import org.gemini.ui.forge.getCurrentTimeMillis
-import org.gemini.ui.forge.extend.rememberClipboardAction
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import kotlin.math.roundToInt
@@ -45,7 +44,6 @@ fun ThinkingProcessCard(
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
-    val copy = rememberClipboardAction()
     var isExpanded by remember { mutableStateOf(false) }
 
     val hasThoughtContent = thought.isNotBlank()
@@ -171,32 +169,10 @@ fun ThinkingProcessCard(
                     )
                     Spacer(Modifier.height(spacing.extraSmall))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(
-                            onClick = {
-                                copy(thought, "思考过程已复制到剪贴板")
-                            },
-                            modifier = Modifier.size(28.dp).tip("复制思维链内容")
-                        ) {
-                            Icon(
-                                Icons.Default.ContentCopy,
-                                contentDescription = "复制",
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
                     SelectionContainer {
-                        Text(
-                            text = thought,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-                            lineHeight = MaterialTheme.typography.bodySmall.lineHeight
+                        AppMarkdown(
+                            content = thought,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }

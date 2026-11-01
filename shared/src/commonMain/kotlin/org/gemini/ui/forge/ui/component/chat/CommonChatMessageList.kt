@@ -120,10 +120,16 @@ fun CommonChatMessageList(
                     shouldStickToBottom = (scrollState.maxValue - targetOffset) <= 80
                 }
             } else {
-                // 初次进入全新会话：默认自然停留在首屏顶部（offset = 0），让用户从上往下阅读！绝不强行拽到底部遮盖内容！
+                // 初次进入会话或软件重启无缓存：
+                // 若已有历史消息，默认滚动至最底部最新消息处并激活吸底锁定；空会话则停留在首屏顶部
                 if (!isUserInteracted) {
-                    scrollState.scrollTo(0)
-                    shouldStickToBottom = false
+                    if (messages.isNotEmpty()) {
+                        scrollState.scrollTo(scrollState.maxValue)
+                        shouldStickToBottom = true
+                    } else {
+                        scrollState.scrollTo(0)
+                        shouldStickToBottom = false
+                    }
                 }
             }
             hasRestoredScrollPosition = true

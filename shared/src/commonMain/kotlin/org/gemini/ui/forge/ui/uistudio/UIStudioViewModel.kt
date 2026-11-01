@@ -17,7 +17,7 @@ import org.gemini.ui.forge.model.assetsheet.AssetImportDraft
 import org.gemini.ui.forge.model.assetsheet.NormalizedAssetItem
 import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.service.LocalMattingService
-import org.gemini.ui.forge.service.ai.AiToolExecutionDispatcher
+import org.gemini.ui.forge.service.tool.ai.AiToolExecutionDispatcher
 import org.gemini.ui.forge.service.ai.GeminiChatEngine
 import org.gemini.ui.forge.service.canvas.CanvasScreenshotService
 import org.gemini.ui.forge.state.ui.ProjectState

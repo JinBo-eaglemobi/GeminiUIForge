@@ -1,0 +1,137 @@
+package org.gemini.ui.forge.service.tool.shared
+
+import org.gemini.ui.forge.service.tool.ToolAnnotations
+import org.gemini.ui.forge.service.tool.ToolContent
+import org.gemini.ui.forge.service.tool.ToolDefinition
+import org.gemini.ui.forge.service.tool.ToolResult
+
+import kotlinx.serialization.json.*
+import org.gemini.ui.forge.manager.ConfigManager
+import org.gemini.ui.forge.service.GeminiClient
+import org.gemini.ui.forge.service.ai.GeminiChatEngine
+import org.gemini.ui.forge.service.ai.GeminiChatRequest
+import org.gemini.ui.forge.service.ai.GeminiGenerationConfig
+
+/**
+ * AI 直调工具：使用应用程序已配置的 Gemini 密钥直接进行纯文本推理调用
+ * 零接触任何工程与模板文件，不改变应用程序状态
+ */
+class InvokeGeminiTextTool(
+    private val configManager: ConfigManager = ConfigManager(),
+    private val chatEngine: GeminiChatEngine = GeminiChatEngine()
+) : ToolDefinition {
+
+    override val name: String = "invoke_gemini_text"
+
+    override val description: String =
+        "使用本程序已配置的 Gemini 密钥直接执行一次纯文本推理调用（翻译、解析、文本润色、方案评估等）。不读写任何工程模板数据，对程序状态零影响。"
+
+    override val annotations: ToolAnnotations = ToolAnnotations(
+        readOnlyHint = false,
+        openWorldHint = true
+    )
+
+    override val timeoutMs: Long = 120_000L
+
+    override val inputSchema: JsonObject = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("prompt", buildJsonObject {
+                put("type", "string")
+                put("description", "要提交给 Gemini 的用户提示词或待处理文本")
+            })
+            put("systemPrompt", buildJsonObject {
+                put("type", "string")
+                put("description", "可选的系统级指令（System Instruction），设定 AI 角色或回答规范")
+            })
+            put("model", buildJsonObject {
+                put("type", "string")
+                put("description", "使用的 Gemini 模型名，默认 gemini-2.5-flash。备选：gemini-2.5-flash-lite, gemini-2.5-pro 等")
+            })
+            put("temperature", buildJsonObject {
+                put("type", "number")
+                put("description", "采样随机度 (0.0 ~ 2.0)，默认 0.7")
+            })
+            put("async", buildJsonObject {
+                put("type", "boolean")
+                put("description", "可选：是否采用异步任务模式执行。默认为 true（立即返回 jobId 并通过 get_job_status 长轮询进度，彻底免疫客户端超时）。传入 false 则保持同步阻塞等待。")
+            })
+        })
+        put("required", buildJsonArray {
+            add("prompt")
+        })
+    }
+
+    override suspend fun execute(
+        arguments: JsonObject,
+        onProgress: ((progress: Float, message: String?) -> Unit)?
+    ): ToolResult {
+        val isAsync = arguments["async"]?.jsonPrimitive?.booleanOrNull ?: true
+        if (isAsync) {
+            val jobId = org.gemini.ui.forge.service.mcp.McpJobManager.submitJob(name) { progressReporter ->
+                executeInternal(arguments, progressReporter)
+            }
+            val initialJson = buildJsonObject {
+                put("success", true)
+                put("jobId", jobId)
+                put("status", "PENDING")
+                put("message", "任务已提交至后台异步执行，请调用 'get_job_status' 配合 waitSeconds 参数进行长轮询获取进度与结果")
+            }.toString()
+            return ToolResult.text(initialJson)
+        }
+        return executeInternal(arguments, onProgress)
+    }
+
+    private suspend fun executeInternal(
+        arguments: JsonObject,
+        onProgress: ((progress: Float, message: String?) -> Unit)?
+    ): ToolResult {
+        val prompt = arguments["prompt"]?.jsonPrimitive?.contentOrNull
+            ?: return ToolResult.error("参数 'prompt' 不能为空")
+        val systemPrompt = arguments["systemPrompt"]?.jsonPrimitive?.contentOrNull
+        val model = arguments["model"]?.jsonPrimitive?.contentOrNull?.ifBlank { null } ?: "gemini-2.5-flash"
+        val temperature = arguments["temperature"]?.jsonPrimitive?.doubleOrNull ?: 0.7
+
+        onProgress?.invoke(0.1f, "正在读取已配置的 Gemini 凭据...")
+        val apiKey = configManager.loadKey("GEMINI_API_KEY")?.ifBlank { null }
+            ?: configManager.loadGlobalGeminiKey()?.ifBlank { null }
+            ?: return ToolResult.error("本地未配置 Gemini API Key，请先在应用设置中填写 GEMINI_API_KEY 或配置环境变量")
+
+        onProgress?.invoke(0.3f, "正在向 Gemini 发起生成推理 ($model)...")
+
+        return try {
+            val resolvedModel = org.gemini.ui.forge.model.GeminiModel.fromModelName(model)
+                ?: org.gemini.ui.forge.model.GeminiModel.GEMINI_2_5_FLASH
+
+            val request = GeminiChatRequest(
+                apiKey = apiKey,
+                model = resolvedModel,
+                prompt = prompt,
+                systemInstruction = systemPrompt,
+                generationConfig = GeminiGenerationConfig(
+                    temperature = temperature
+                )
+            )
+
+            val result = chatEngine.executeChat(
+                request = request,
+                onChunk = { _ ->
+                    onProgress?.invoke(0.6f, "正在流式生成...")
+                }
+            )
+
+            val resultJson = buildJsonObject {
+                put("model", model)
+                put("text", result.text)
+                if (result.thoughtText != null) {
+                    put("thinking", result.thoughtText)
+                }
+                put("length", result.text.length)
+            }
+            ToolResult.success(resultJson.toString())
+        } catch (e: Exception) {
+            ToolResult.error("调用 Gemini 失败: ${e.message}")
+        }
+    }
+}
+

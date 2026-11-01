@@ -174,6 +174,20 @@
     画布图元调整、全屏/局部选区拉伸、8 方向手柄判定与光标绝对坐标锚定计算，**必须 100% 统一复用纯数学几何工具类 `RectTransformHelper`**（位于 `org.gemini.ui.forge.utils.geometry.RectTransformHelper.kt`），其手柄枚举统一使用 `TransformHandle`。严禁在业务 Composable 或 ViewModel 中散落手写 8 方向坐标分支计算，杜绝算法分裂；
   - **高阶业务语义管道化 (resizeBlock Pipeline)**：
     修改图元边界时，UI 层**强制调用 `viewModel.resizeBlock(blockId, newAbsoluteBounds)`（或 `layoutEditor.resizeBlock(...)`）**。该方法内部自动通过 `targetBlock.toLocalBounds(newAbsoluteBounds)` 执行代数守恒的逆向局部映射并自动执行 `bindParents()`，**绝对禁止在 UI 层散落手写 `parentOffset.x/y` 的减法**！
+- **统一工具域架构规范 (Unified Tool Architecture Specification)**: **【架构红线规则】**
+  - **中立契约与单例中枢 (Neutral Contract & ToolHub)**：
+    全项目所有工具必须统一实现中立契约接口 `ToolDefinition` 并返回 `ToolResult`（统一位于 `org.gemini.ui.forge.service.tool.*` 根包）；所有工具的注册与生命周期由 `ToolHub` 单例统一收拢管理，外部通道与调度器的执行查找**强制且仅能通过 `ToolHub.findTool(name)`**，杜绝散落注册与重复实现；
+  - **三层物理分流与单实体单文件铁律 (Three-Tier Physical Structure & Single Entity File)**：
+    工具必须严格按职责分流至三层物理包结构，严禁混杂：
+    1. `service/tool/shared/`：业务共享工具（模板管理、资产生图、离屏渲染、审查导出、运维状态等双通道共用能力）以及全量被动发现元工具 `DiscoverToolsTool`；
+    2. `service/tool/mcp/exclusive/`：MCP 客户端专属交互工具（弹窗问询交互 `AskUser*` 与宿主 UI 自动化 `ClickUiNode`、`SetUiInputText` 等）；
+    3. `service/tool/ai/exclusive/`：AI 对话专属轻量工具（时间、几何、文件读取、技能与资产检索）；
+    全量工具必须严格遵循**单一实体单一物理文件（One Entity Per File）**铁律，严禁将多个工具合并为一个超大源文件；
+  - **双通道零交叉依赖隔离红线 (Zero Cross-Import Isolation Redline)**：
+    MCP 通道层（`service/tool/mcp/*`）与 AI 通道层（`service/tool/ai/*`）必须保持严格的物理隔离：**MCP 域代码绝对禁止反向 import AI 域（`service.tool.ai.*`），AI 域代码也绝对禁止反向 import MCP 域（`service.tool.mcp.*`）**！所有通道仅允许面向中立的 `ToolHub`、`ToolDefinition` 与业务共享层交互；
+  - **两阶段动态发现与防幻觉暴露规范 (Two-Tier Tool Exposure & Progressive Discovery)**：
+    1. **严禁全量静态下发**：绝对禁止在会话启动时将全量 50+ 个工具一股脑注入大模型上下文，避免大模型工具幻觉、参数混淆与严重的上下文 Token 浪费；
+    2. **两阶段被动发现机制**：对 AI 模型默认**仅暴露 `ToolExposurePolicy.CORE_TOOL_NAMES` 定义的 14 个核心高频交互工具**（涵盖图元操作、画布截图与基础读写），并强制挂载 `discover_tools` 元工具；当模型需要特定业务工具时，必须通过 `discover_tools(category, query)` 自主按需检索工具字典与 Schema，按需执行调用。
 - **提示词编辑界面规范与组件复用 (Prompt UI & BilingualPromptEditor)**: **【红线规则】**
   - **严禁重复手搓 Prompt UI**：全项目凡是涉及或创建"AI 生图提示词 / 提交文案 (Prompt)"的输入与编辑界面（涵盖传统 Slots 模板工作区、生图弹窗与微调浮层），**一律强制复用标准公共组件 `BilingualPromptEditor`**（位于 `org.gemini.ui.forge.ui.dialog.ai.component.BilingualPromptEditor` 或公共组件库），严禁在业务代码中再次手搓双语切换 Tab、输入框及优化按钮；
   - **【UI Studio 属性面板豁免】**：UI Studio 独立工作台专职于游戏界面与切片排版，其属性面板纯粹聚焦于组件几何变换、尺寸与不透明度，完全豁免生图提示词组件；

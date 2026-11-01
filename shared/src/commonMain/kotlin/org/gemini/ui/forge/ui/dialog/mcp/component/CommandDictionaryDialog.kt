@@ -29,7 +29,7 @@ import org.gemini.ui.forge.extend.copyOnClick
 import org.gemini.ui.forge.service.mcp.McpCommandCategory
 import org.gemini.ui.forge.service.mcp.McpCommandDictionary
 import org.gemini.ui.forge.service.mcp.McpCommandEntry
-import org.gemini.ui.forge.service.mcp.McpToolRegistry
+import org.gemini.ui.forge.service.tool.mcp.McpToolRegistry
 import org.gemini.ui.forge.ui.component.AppSearchField
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
