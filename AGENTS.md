@@ -243,7 +243,8 @@ rememberUpdatedState 进行安全收拢，拖拽结束/中断时必须通过 onD
   - **唯一入口禁令**：纵向滚动条一律使用 `org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter`，横向滚动条一律使用 `HorizontalScrollbarAdapter`；**严禁**业务代码直接裸调 Compose 官方 `VerticalScrollbar` / `HorizontalScrollbar`，严禁自绘滑块（统一样式与平滑算法收口于适配器内部）；
   - **标准布局范式**：外层 `Box` 包裹，内容侧 `padding(end = 8~16.dp)` 预留呼吸位（横向预留底部），滚动条 `Modifier.align(Alignment.CenterEnd).fillMaxHeight()`（横向 `Alignment.BottomCenter` + `fillMaxWidth()`）；滚动条与内容是兄弟节点；
   - **豁免条款**：仅允许两类豁免——① Android/JS 平台（actual 内已优雅降级为空实现，接入方无需条件判断）；② 高度/宽度必然不溢出的固定内容区（如选项恒定的分段器）；
-  - **样式收口**：滑块颜色（White 30%/60%）与厚度（8.dp）统一定义于 jvm actual 内部，严禁调用方私自覆写 style。
+  - **样式收口**：滑块颜色（White 30%/60%）与厚度（8.dp）统一定义于 jvm actual 内部，严禁调用方私自覆写 style；
+  - **一键直达首尾附带能力 (Scroll to Edge Navigation)**：`VerticalScrollbarAdapter` 支持通过可选参数 `edgeNav: ScrollEdgeNavConfig? = null` 一键开启“回到顶部 / 直达底部”双向微型操作胶囊，彻底杜绝在业务界面中散落编写 `rememberCoroutineScope`、`launch` 与 `animateScrollTo` 样板代码；胶囊在界面上的定位支持 100% 声明式自定义（通过 `edgeNav.alignment` 与 `edgeNav.modifier` 自定义锚点与边距，默认 `Alignment.BottomEnd` 右下角悬浮），内置智能边缘感知（处于顶端/底端时自适应单向隐藏）与平滑滚动动画。
 
 - **剪贴板工具与点击复制 (Clipboard Specification)**: **【红线规则】**
   - **严禁直接散落手写底层剪贴板与协程**：全项目凡是需要将文本、命令、URL 或日志写入系统剪贴板的场景，**一律强制复用项目内建的高阶扩展**（位于 `org.gemini.ui.forge.extend.ClipboardExtend.kt`），严禁在业务 UI 内重复声明 `LocalClipboard.current`、`rememberCoroutineScope()` 与 `scope.launch`。

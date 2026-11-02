@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
 import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
@@ -68,13 +70,6 @@ fun LogViewerDialog(
         }
     }
     
-    // 判断当前是否完全处于列表顶部（第一项且偏移量为 0）
-    val isAtTop by remember {
-        derivedStateOf {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-        }
-    }
-
     // 核心自动滚动触发器：当 logLines 大小发生变化，且用户当前处于底部时，强制滚动到最后一行
     LaunchedEffect(logLines.size) {
         if (isAtBottom && logLines.isNotEmpty()) {
@@ -203,43 +198,15 @@ fun LogViewerDialog(
                                 }
                             }
                             
-                            // 垂直滚动条适配器，关联当前 listState
+                            // 垂直滚动条适配器，关联当前 listState，并开启一键直达首尾胶囊
                             VerticalScrollbarAdapter(
                                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(end = 4.dp, top = 4.dp, bottom = 4.dp),
-                                scrollState = listState
+                                scrollState = listState,
+                                edgeNav = ScrollEdgeNavConfig(
+                                    alignment = Alignment.BottomEnd,
+                                    modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
+                                )
                             )
-                        }
-                    }
-
-                    // 悬浮导航按钮组（位于右下角）
-                    Column(
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 40.dp, bottom = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // 当不在顶部且有日志数据时显示“回到顶部”按钮
-                        AnimatedVisibility(visible = !isAtTop && logLines.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
-                            FloatingActionButton(
-                                onClick = { coroutineScope.launch { listState.scrollToItem(0) } },
-                                modifier = Modifier.size(40.dp),
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                                shape = CircleShape,
-                                elevation = FloatingActionButtonDefaults.elevation(2.dp)
-                            ) {
-                                Icon(Icons.Default.KeyboardArrowUp, "回到顶部")
-                            }
-                        }
-                        
-                        // 当不在底部且有日志数据时显示“回到底部”按钮
-                        AnimatedVisibility(visible = !isAtBottom && logLines.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
-                            FloatingActionButton(
-                                onClick = { coroutineScope.launch { listState.scrollToItem(logLines.size - 1) } },
-                                modifier = Modifier.size(40.dp),
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
-                                shape = CircleShape,
-                                elevation = FloatingActionButtonDefaults.elevation(2.dp)
-                            ) {
-                                Icon(Icons.Default.KeyboardArrowDown, "回到底部")
-                            }
                         }
                     }
                 }

@@ -36,13 +36,13 @@ object ToolCategoryDictionary {
     fun normalizeCategory(raw: String?): String? {
         val lower = raw?.trim()?.lowercase() ?: return null
         if (lower.isBlank()) return null
-        return when {
-            lower in setOf("asset", "assets", "素材", "资源", "图片", "image", "images", "切片", "抠图") -> CATEGORY_ASSET
-            lower in setOf("view", "views", "layout", "layouts", "排版", "界面", "图元", "canvas", "block", "blocks", "画布") -> CATEGORY_VIEW
-            lower in setOf("template", "templates", "project", "projects", "工程", "项目", "模板") -> CATEGORY_TEMPLATE
-            lower in setOf("discovery", "search", "元工具", "探索", "发现", "skill", "skills", "技能", "file", "spec", "tool", "tools") -> CATEGORY_DISCOVERY
-            lower in setOf("runtime", "system", "系统", "状态", "运行态", "视口", "截图", "status") -> CATEGORY_RUNTIME
-            lower in setOf("interaction", "问询", "交互", "通知", "dialog", "choice", "confirm") -> CATEGORY_INTERACTION
+        return when (lower) {
+            in setOf("asset", "assets", "素材", "资源", "图片", "image", "images", "切片", "抠图") -> CATEGORY_ASSET
+            in setOf("view", "views", "layout", "layouts", "排版", "界面", "图元", "canvas", "block", "blocks", "画布") -> CATEGORY_VIEW
+            in setOf("template", "templates", "project", "projects", "工程", "项目", "模板") -> CATEGORY_TEMPLATE
+            in setOf("discovery", "search", "元工具", "探索", "发现", "skill", "skills", "技能", "file", "spec", "tool", "tools") -> CATEGORY_DISCOVERY
+            in setOf("runtime", "system", "系统", "状态", "运行态", "视口", "截图", "status") -> CATEGORY_RUNTIME
+            in setOf("interaction", "问询", "交互", "通知", "dialog", "choice", "confirm") -> CATEGORY_INTERACTION
             else -> lower
         }
     }
@@ -51,44 +51,38 @@ object ToolCategoryDictionary {
      * 判断指定工具归属的业务大类
      */
     fun getToolCategory(toolName: String): String {
-        return when {
-            toolName in setOf(
+        return when (toolName) {
+            in setOf(
                 "list_assets", "generate_image", "generate_block_asset", "generate_all_assets",
                 "crop_image", "remove_background", "remove_image_background",
                 "chat_refine_image", "bake_nine_patch", "set_block_reference_image",
                 "inspect_block_with_reference", "compare_with_reference",
                 "list_matting_presets"
             ) -> CATEGORY_ASSET
-
-            toolName in setOf(
+            in setOf(
                 "apply_view_layout", "calculate_geometry", "add_block",
                 "update_block", "move_block", "delete_block",
                 "render_template_overlay"
             ) -> CATEGORY_VIEW
-
-            toolName in setOf(
+            in setOf(
                 "list_templates", "get_template", "create_template",
                 "import_asset_sheet_pipeline", "analyze_reference_generate_template"
             ) -> CATEGORY_TEMPLATE
-
-            toolName in setOf(
+            in setOf(
                 "discover_tools", "search_tools", "list_tools", "search_skills",
                 "read_skill_spec", "read_project_file", "get_current_time", "web_fetch"
             ) -> CATEGORY_DISCOVERY
-
-            toolName in setOf(
+            in setOf(
                 "get_runtime_status", "check_environment", "get_job_status",
                 "cancel_job", "list_chat_sessions", "get_traffic_record",
                 "invoke_gemini_text", "compose_page_screenshot", "screenshot_window",
                 "execute_ui_action_sequence", "get_ui_roadmap", "get_semantic_tree",
                 "trigger_initial_verification", "set_project_generating_status"
             ) -> CATEGORY_RUNTIME
-
-            toolName in setOf(
+            in setOf(
                 "ask_user_confirmation", "ask_user_choice", "ask_user_question",
                 "notify_user", "click_ui_node", "set_ui_input_text"
             ) -> CATEGORY_INTERACTION
-
             else -> CATEGORY_DISCOVERY
         }
     }

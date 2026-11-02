@@ -8,7 +8,8 @@ import androidx.compose.ui.Modifier
 @Composable
 actual fun VerticalScrollbarAdapter(
     modifier: Modifier,
-    scrollState: ScrollState
+    scrollState: ScrollState,
+    edgeNav: ScrollEdgeNavConfig?
 ) {
     // Android 端不显示桌面样式的滚动条
 }
@@ -16,7 +17,8 @@ actual fun VerticalScrollbarAdapter(
 @Composable
 actual fun VerticalScrollbarAdapter(
     modifier: Modifier,
-    scrollState: LazyListState
+    scrollState: LazyListState,
+    edgeNav: ScrollEdgeNavConfig?
 ) {
     // Android 端不显示桌面样式的滚动条
 }

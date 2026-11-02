@@ -27,6 +27,7 @@ import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
+import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
 import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
@@ -368,10 +369,14 @@ fun BatchAssetGenDialog(
                                 }
                             }
 
-                            // 右侧垂直滚动条
+                            // 右侧垂直滚动条，并开启一键直达首尾胶囊
                             VerticalScrollbarAdapter(
                                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                                scrollState = listState
+                                scrollState = listState,
+                                edgeNav = ScrollEdgeNavConfig(
+                                    alignment = Alignment.BottomEnd,
+                                    modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
+                                )
                             )
                         }
                     }

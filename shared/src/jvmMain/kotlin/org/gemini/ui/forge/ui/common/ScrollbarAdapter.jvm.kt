@@ -10,6 +10,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.v2.ScrollbarAdapter
 import androidx.compose.foundation.v2.maxScrollOffset
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -161,10 +164,17 @@ class SmoothLazyScrollbarAdapter(
     }
 }
 
+/**
+ * JVM 桌面端纵向滚动条实现（针对普通 [ScrollState]）。
+ *
+ * 样式收口：厚度 8.dp，默认白色 30% 透明度，悬停 60% 透明度。
+ * 若 [edgeNav] 开启，则在宿主 Box 全图层中挂载 [ScrollEdgeNavCapsule] 胶囊。
+ */
 @Composable
 actual fun VerticalScrollbarAdapter(
     modifier: Modifier,
-    scrollState: ScrollState
+    scrollState: ScrollState,
+    edgeNav: ScrollEdgeNavConfig?
 ) {
     VerticalScrollbar(
         modifier = modifier,
@@ -175,12 +185,31 @@ actual fun VerticalScrollbarAdapter(
             thickness = 8.dp
         )
     )
+
+    if (edgeNav != null && edgeNav.enabled) {
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            ScrollEdgeNavCapsule(
+                config = edgeNav,
+                scrollState = scrollState,
+                modifier = edgeNav.modifier.align(edgeNav.alignment)
+            )
+        }
+    }
 }
 
+/**
+ * JVM 桌面端纵向滚动条实现（针对长列表 [LazyListState]）。
+ *
+ * 样式收口：厚度 8.dp，基于 [SmoothLazyScrollbarAdapter] 双轨算法渲染平滑滑块。
+ * 若 [edgeNav] 开启，则在宿主 Box 全图层中挂载 [ScrollEdgeNavCapsule] 胶囊。
+ */
 @Composable
 actual fun VerticalScrollbarAdapter(
     modifier: Modifier,
-    scrollState: LazyListState
+    scrollState: LazyListState,
+    edgeNav: ScrollEdgeNavConfig?
 ) {
     val smoothAdapter = remember(scrollState) { SmoothLazyScrollbarAdapter(scrollState) }
     VerticalScrollbar(
@@ -192,4 +221,16 @@ actual fun VerticalScrollbarAdapter(
             thickness = 8.dp
         )
     )
+
+    if (edgeNav != null && edgeNav.enabled) {
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            ScrollEdgeNavCapsule(
+                config = edgeNav,
+                lazyListState = scrollState,
+                modifier = edgeNav.modifier.align(edgeNav.alignment)
+            )
+        }
+    }
 }

@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
 import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
@@ -648,7 +649,11 @@ fun McpTrafficInspectorDialog(
                                     scrollState = logListState,
                                     modifier = Modifier
                                         .align(Alignment.CenterEnd)
-                                        .fillMaxHeight()
+                                        .fillMaxHeight(),
+                                    edgeNav = ScrollEdgeNavConfig(
+                                        alignment = Alignment.BottomEnd,
+                                        modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
+                                    )
                                 )
                             }
                         }

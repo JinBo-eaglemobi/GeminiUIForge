@@ -30,6 +30,7 @@ import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.readBytesInternal
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.getPlatform
+import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -287,7 +288,11 @@ fun DocumentPreviewDialog(
                                     modifier = Modifier
                                         .align(Alignment.CenterEnd)
                                         .fillMaxHeight()
-                                        .padding(vertical = 4.dp, horizontal = 2.dp)
+                                        .padding(vertical = 4.dp, horizontal = 2.dp),
+                                    edgeNav = ScrollEdgeNavConfig(
+                                        alignment = Alignment.BottomEnd,
+                                        modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
+                                    )
                                 )
                             }
                         }

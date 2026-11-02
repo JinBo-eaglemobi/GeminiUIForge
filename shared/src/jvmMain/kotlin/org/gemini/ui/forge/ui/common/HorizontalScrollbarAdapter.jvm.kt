@@ -10,6 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
+/**
+ * JVM 桌面端横向滚动条实现（针对普通 [ScrollState]）。
+ */
 @Composable
 actual fun HorizontalScrollbarAdapter(
     modifier: Modifier,
@@ -26,6 +29,9 @@ actual fun HorizontalScrollbarAdapter(
     )
 }
 
+/**
+ * JVM 桌面端横向滚动条实现（针对长列表 [LazyListState]）。
+ */
 @Composable
 actual fun HorizontalScrollbarAdapter(
     modifier: Modifier,

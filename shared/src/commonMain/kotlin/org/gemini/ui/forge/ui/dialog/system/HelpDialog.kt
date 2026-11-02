@@ -24,6 +24,7 @@ import org.jetbrains.compose.resources.readResourceBytes
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
+import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
 import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.theme.AppShapes
 
@@ -120,7 +121,11 @@ fun HelpDialog(onDismiss: () -> Unit) {
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
                                 .fillMaxHeight()
-                                .padding(vertical = 4.dp)
+                                .padding(vertical = 4.dp),
+                            edgeNav = ScrollEdgeNavConfig(
+                                alignment = Alignment.BottomEnd,
+                                modifier = Modifier.padding(end = 16.dp, bottom = 12.dp)
+                            )
                         )
                     }
                 }

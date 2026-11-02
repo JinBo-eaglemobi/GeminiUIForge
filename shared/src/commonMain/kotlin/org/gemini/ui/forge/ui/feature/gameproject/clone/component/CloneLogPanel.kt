@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -69,7 +70,11 @@ fun CloneLogPanel(
                     scrollState = listState,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
+                        .fillMaxHeight(),
+                    edgeNav = ScrollEdgeNavConfig(
+                        alignment = Alignment.BottomEnd,
+                        modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
+                    )
                 )
             }
         }

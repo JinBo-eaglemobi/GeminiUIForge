@@ -6,13 +6,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,11 +24,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import org.gemini.ui.forge.extend.copyOnClick
-
 import org.gemini.ui.forge.service.mcp.McpCommandCategory
 import org.gemini.ui.forge.service.mcp.McpCommandDictionary
-import org.gemini.ui.forge.service.mcp.McpCommandEntry
 import org.gemini.ui.forge.service.tool.mcp.McpToolRegistry
+import org.gemini.ui.forge.ui.common.HorizontalScrollbarAdapter
+import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.AppSearchField
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -55,6 +55,8 @@ fun CommandDictionaryDialog(
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(McpCommandCategory.ALL) }
+    val listState = rememberLazyListState()
+    val categoryListState = rememberLazyListState()
 
     // 动态派生所有条目
     val allEntries = remember(toolsState) {
@@ -79,15 +81,22 @@ fun CommandDictionaryDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Surface(
-            modifier = Modifier
-                .width(spacing.dialogLargeWidth) // 960.dp 大型视口标准
-                .fillMaxHeight(0.88f)
-                .padding(spacing.medium),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
+            val maxDialogWidth = if (maxWidth * 0.92f < spacing.dialogLargeWidth) maxWidth * 0.92f else spacing.dialogLargeWidth
+            val maxDialogHeight = maxHeight * 0.88f
+
+            Surface(
+                modifier = Modifier
+                    .width(maxDialogWidth)
+                    .height(maxDialogHeight)
+                    .padding(spacing.medium),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -156,57 +165,73 @@ fun CommandDictionaryDialog(
 
                 Spacer(Modifier.height(spacing.extraSmall))
 
-                // 3. 分类切换胶囊栏
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = spacing.extraSmall),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.small)
+                // 3. 分类切换胶囊栏（外层包裹 Box 并接入统一规范横向滚动条）
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = spacing.extraSmall)
                 ) {
-                    items(McpCommandCategory.entries) { category ->
-                        val count = remember(allEntries, category) {
-                            if (category == McpCommandCategory.ALL) allEntries.size
-                            else allEntries.count { it.category == category }
-                        }
-                        val isSelected = selectedCategory == category
+                    LazyRow(
+                        state = categoryListState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp), // 预留横向滚动条呼吸位
+                        horizontalArrangement = Arrangement.spacedBy(spacing.small)
+                    ) {
+                        items(McpCommandCategory.entries) { category ->
+                            val count = remember(allEntries, category) {
+                                if (category == McpCommandCategory.ALL) allEntries.size
+                                else allEntries.count { it.category == category }
+                            }
+                            val isSelected = selectedCategory == category
 
-                        Surface(
-                            shape = CircleShape,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                            ),
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable { selectedCategory = category }
-                                .tip("切换至 ${category.displayName} 分组")
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                ),
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable { selectedCategory = category }
+                                    .tip("切换至 ${category.displayName} 分组")
                             ) {
-                                Text(
-                                    text = category.displayName,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                                 ) {
                                     Text(
-                                        text = "$count",
+                                        text = category.displayName,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                     )
+                                    Spacer(Modifier.width(6.dp))
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant
+                                    ) {
+                                        Text(
+                                            text = "$count",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
+
+                    HorizontalScrollbarAdapter(
+                        scrollState = categoryListState,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                    )
                 }
 
                 Spacer(Modifier.height(spacing.extraSmall))
@@ -225,85 +250,101 @@ fun CommandDictionaryDialog(
                         )
                     }
                 } else {
-                    LazyColumn(
+                    Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .padding(top = spacing.small),
-                        verticalArrangement = Arrangement.spacedBy(spacing.small)
                     ) {
-                        items(filteredEntries, key = { it.name }) { entry ->
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = spacing.medium, vertical = spacing.small)
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = spacing.small, end = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(spacing.small)
+                        ) {
+                            items(filteredEntries, key = { it.name }) { entry ->
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = spacing.medium, vertical = spacing.small)
                                     ) {
                                         Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.weight(1f, fill = false)
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(
-                                                text = entry.name,
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontFamily = FontFamily.Monospace,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                // 点击即复制指令名（复用项目剪贴板规范扩展）
-                                                modifier = Modifier
-                                                    .copyOnClick(entry.name, "已复制指令名: ${entry.name}")
-                                                    .tip("点击复制指令名")
-                                            )
-
-                                            Spacer(Modifier.width(spacing.small))
-
-                                            Surface(
-                                                shape = RoundedCornerShape(4.dp),
-                                                color = if (entry.isTool) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f)
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.weight(1f, fill = false)
                                             ) {
                                                 Text(
-                                                    text = if (entry.isTool) entry.category.displayName else "系统协议",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontSize = 10.sp,
-                                                    color = if (entry.isTool) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onTertiaryContainer,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    text = entry.name,
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    // 点击即复制指令名（复用项目剪贴板规范扩展）
+                                                    modifier = Modifier
+                                                        .copyOnClick(entry.name, "已复制指令名: ${entry.name}")
+                                                        .tip("点击复制指令名")
                                                 )
+
+                                                Spacer(Modifier.width(spacing.small))
+
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = if (entry.isTool) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f)
+                                                ) {
+                                                    Text(
+                                                        text = if (entry.isTool) entry.category.displayName else "系统协议",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontSize = 10.sp,
+                                                        color = if (entry.isTool) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onTertiaryContainer,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
                                             }
+
+                                            Text(
+                                                text = if (entry.isTool) "MCP 工具" else "原生 JSON-RPC",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                fontSize = 11.sp
+                                            )
                                         }
 
+                                        Spacer(Modifier.height(spacing.extraSmall))
+
                                         Text(
-                                            text = if (entry.isTool) "MCP 工具" else "原生 JSON-RPC",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                            fontSize = 11.sp
+                                            text = entry.description,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontSize = 13.sp,
+                                            lineHeight = 18.sp
                                         )
                                     }
-
-                                    Spacer(Modifier.height(spacing.extraSmall))
-
-                                    Text(
-                                        text = entry.description,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 13.sp,
-                                        lineHeight = 18.sp
-                                    )
                                 }
                             }
                         }
+
+                        VerticalScrollbarAdapter(
+                            scrollState = listState,
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                            edgeNav = ScrollEdgeNavConfig(
+                                alignment = Alignment.BottomEnd,
+                                modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
+                            )
+                        )
                     }
                 }
             }
         }
     }
+}
 }

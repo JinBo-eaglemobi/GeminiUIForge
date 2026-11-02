@@ -32,6 +32,7 @@ import org.gemini.ui.forge.service.detection.onnx.OnnxModelService
 import org.gemini.ui.forge.service.*
 import org.gemini.ui.forge.state.app.AppGlobalState
 import org.gemini.ui.forge.state.ui.ProjectState
+import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.tip
@@ -626,7 +627,11 @@ fun TemplateGeneratorScreen(
                         }
                         VerticalScrollbarAdapter(
                             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                            scrollState = listState
+                            scrollState = listState,
+                            edgeNav = ScrollEdgeNavConfig(
+                                alignment = Alignment.BottomEnd,
+                                modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
+                            )
                         )
                     }
                 }

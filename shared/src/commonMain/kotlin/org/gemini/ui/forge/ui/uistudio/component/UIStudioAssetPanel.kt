@@ -62,6 +62,7 @@ import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.extend.contextMenuClickable
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
+import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
 import org.gemini.ui.forge.ui.component.chat.drop.onFileDrop
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.utils.SUPPORTED_IMAGE_EXTENSIONS
@@ -613,7 +614,11 @@ fun UIStudioAssetPanel(
                     scrollState = listState,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
+                        .fillMaxHeight(),
+                    edgeNav = ScrollEdgeNavConfig(
+                        alignment = Alignment.BottomEnd,
+                        modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
+                    )
                 )
             }
         }

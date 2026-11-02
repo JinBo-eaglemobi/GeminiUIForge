@@ -23,6 +23,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import org.gemini.ui.forge.extend.rememberClipboardAction
+import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
@@ -210,7 +211,11 @@ fun TrafficPayloadViewer(
                                 scrollState = textScrollState,
                                 modifier = Modifier
                                     .align(Alignment.CenterEnd)
-                                    .fillMaxHeight()
+                                    .fillMaxHeight(),
+                                edgeNav = ScrollEdgeNavConfig(
+                                    alignment = Alignment.BottomEnd,
+                                    modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
+                                )
                             )
                         }
                     }
