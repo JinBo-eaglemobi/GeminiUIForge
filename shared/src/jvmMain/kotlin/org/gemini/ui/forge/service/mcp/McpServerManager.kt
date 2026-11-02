@@ -62,9 +62,9 @@ object McpServerManager {
             )
         )
 
-        // 注册核心业务工具（严格遵循 ToolExposurePolicy，与 AI 通道保持一致的双通道暴露策略）
-        val exposedTools = McpToolRegistry.tools.value.filter { ToolExposurePolicy.isCoreExposed(it.name) }
-        exposedTools.forEach { def ->
+        // 注册全量业务工具进执行引擎（确保所有工具均可通过 tools/call 正常分发执行）
+        val allTools = McpToolRegistry.tools.value
+        allTools.forEach { def ->
             val toolName = def.name
             val toolDescription = def.description
             val properties = def.inputSchema["properties"]?.let { it as? JsonObject } ?: JsonObject(emptyMap())
@@ -176,6 +176,18 @@ object McpServerManager {
                         content = listOf(TextContent("Error executing tool $effectiveToolName: ${e.message}")),
                         isError = true
                     )
+                }
+            }
+        }
+
+        // 覆盖 tools/list 处理器：向外部客户端主动暴露时，仅列出核心工具（与 AI 通道保持完全一致的两阶段暴露策略）
+        server.onConnect {
+            server.sessions.values.forEach { session ->
+                session.setRequestHandler<ListToolsRequest>(Method.Defined.ToolsList) { _, _ ->
+                    val coreTools = server.tools.values
+                        .filter { ToolExposurePolicy.isCoreExposed(it.tool.name) }
+                        .map { it.tool }
+                    ListToolsResult(tools = coreTools)
                 }
             }
         }

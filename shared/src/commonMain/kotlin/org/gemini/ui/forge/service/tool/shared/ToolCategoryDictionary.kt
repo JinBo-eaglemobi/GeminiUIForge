@@ -54,10 +54,9 @@ object ToolCategoryDictionary {
         return when (toolName) {
             in setOf(
                 "list_assets", "generate_image", "generate_block_asset", "generate_all_assets",
-                "crop_image", "remove_background", "remove_image_background",
-                "chat_refine_image", "bake_nine_patch", "set_block_reference_image",
-                "inspect_block_with_reference", "compare_with_reference",
-                "list_matting_presets"
+                "remove_background", "chat_refine_image", "bake_nine_patch",
+                "set_block_reference_image", "inspect_block_with_reference",
+                "compare_with_reference", "list_matting_presets"
             ) -> CATEGORY_ASSET
             in setOf(
                 "apply_view_layout", "calculate_geometry", "add_block",
@@ -69,7 +68,7 @@ object ToolCategoryDictionary {
                 "import_asset_sheet_pipeline", "analyze_reference_generate_template"
             ) -> CATEGORY_TEMPLATE
             in setOf(
-                "discover_tools", "search_tools", "list_tools", "search_skills",
+                "discover_tools", "search_skills",
                 "read_skill_spec", "read_project_file", "get_current_time", "web_fetch"
             ) -> CATEGORY_DISCOVERY
             in setOf(

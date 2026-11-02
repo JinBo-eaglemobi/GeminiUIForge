@@ -48,6 +48,7 @@ object McpToolRegistry {
             SetBlockReferenceImageTool(),
             AnalyzeReferenceGenerateTemplateTool(),
             ImportAssetSheetPipelineTool(),
+            ManageAssetLibraryTool(),
 
             // 图像生成与资产处理共享工具
             GenerateImageTool(),

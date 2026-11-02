@@ -113,6 +113,27 @@ class UIStudioViewModel {
     }
 
     /**
+     * 重新加载或热更新当前 UI Studio 工程模型。
+     *
+     * 仅更新底层的 project 状态树，保持当前打开的标签、当前视口缩放与平移偏移量不变，
+     * 用于 MCP / AI 工具修改工程后无感刷新 UI 界面与画布图元渲染。
+     *
+     * @param updatedProject 最新的工程状态对象
+     */
+    fun reload(updatedProject: ProjectState) {
+        val currentProj = state.project
+        val newProj = if (currentProj != null && currentProj.projectId == updatedProject.projectId) {
+            updatedProject
+        } else {
+            updatedProject
+        }
+        state = state.copy(
+            project = newProj,
+            isDirty = false
+        )
+    }
+
+    /**
      * 标记当前工程或视口布局发生了变更，设置 isDirty 为 true。
      */
     fun markDirty() {
