@@ -59,6 +59,17 @@ fun UIStudioScreen(
     var containerCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val focusRequester = remember { FocusRequester() }
     var pendingSliceItems by remember { mutableStateOf<List<NormalizedAssetItem>?>(null) }
+    var isSaveLocationDialogOpen by remember { mutableStateOf(false) }
+    var customSliceSubPath by remember { mutableStateOf("") }
+
+    val currentTargetFolderDisplayName = remember(customSliceSubPath, state.selectedFolderId, state.assetLibrary.folders) {
+        if (customSliceSubPath.isNotBlank()) {
+            customSliceSubPath
+        } else {
+            val f = state.assetLibrary.folders.find { it.id == state.selectedFolderId }
+            f?.name ?: "根目录"
+        }
+    }
 
     DisposableEffect(viewModel) {
         org.gemini.ui.forge.service.mcp.McpUiActionPipeline.registerActiveUiStudioViewModel(viewModel)
@@ -362,33 +373,44 @@ fun UIStudioScreen(
                     pendingSliceItems = items
                 },
                 onSaveDraft = { items -> viewModel.saveDraft(items) },
-                mattingSourceImage = viewModel.sliceImport::mattingSourceImage
+                mattingSourceImage = viewModel.sliceImport::mattingSourceImage,
+                targetFolderDisplayName = currentTargetFolderDisplayName,
+                onSelectTargetFolder = { isSaveLocationDialogOpen = true }
             )
         }
 
-        // 挂载确认切片前置保存位置弹窗 (v2)
-        pendingSliceItems?.let { items ->
+        // 挂载确认切片前置保存位置弹窗 (v2：支持顶栏随时点击修改与确认时二次弹窗)
+        if (isSaveLocationDialogOpen || pendingSliceItems != null) {
             SaveChatImageToAssetDialog(
                 isOpen = true,
                 initialFileName = "",
                 folders = state.assetLibrary.folders,
                 showFileNameField = false,
                 titleText = stringResource(Res.string.slice_save_dialog_title),
-                onDismissRequest = { pendingSliceItems = null },
+                onDismissRequest = {
+                    isSaveLocationDialogOpen = false
+                    pendingSliceItems = null
+                },
                 onConfirmSave = { _, subPath ->
+                    customSliceSubPath = subPath
                     val selectedFolderId = if (subPath.isNotBlank()) {
                         state.assetLibrary.folders.find { it.name.equals(subPath, ignoreCase = true) }?.id
                     } else null
-                    viewModel.sliceImport.onConfirmSlice(
-                        items = items,
-                        repo = templateRepository,
-                        onProjectUpdated = { updatedProject ->
-                            appViewModel.loadProject(updatedProject.projectId, updatedProject)
-                        },
-                        targetSubPath = subPath,
-                        targetFolderId = selectedFolderId
-                    )
-                    pendingSliceItems = null
+
+                    val pending = pendingSliceItems
+                    if (pending != null) {
+                        viewModel.sliceImport.onConfirmSlice(
+                            items = pending,
+                            repo = templateRepository,
+                            onProjectUpdated = { updatedProject ->
+                                appViewModel.loadProject(updatedProject.projectId, updatedProject)
+                            },
+                            targetSubPath = subPath,
+                            targetFolderId = selectedFolderId
+                        )
+                        pendingSliceItems = null
+                    }
+                    isSaveLocationDialogOpen = false
                 }
             )
         }

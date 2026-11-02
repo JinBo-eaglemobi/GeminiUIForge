@@ -54,6 +54,8 @@ fun AssetSliceVerifyDialog(
     onConfirmSlice: (List<NormalizedAssetItem>) -> Unit,
     onSaveDraft: ((List<NormalizedAssetItem>) -> Unit)? = null,
     mattingSourceImage: (suspend (ByteArray) -> ByteArray?)? = null,
+    targetFolderDisplayName: String = "根目录",
+    onSelectTargetFolder: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (!visible) return
@@ -71,8 +73,8 @@ fun AssetSliceVerifyDialog(
     var transparentBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var isMattingSource by remember { mutableStateOf(false) }
 
-    val effectiveBytes = if (autoRemoveBg) (transparentBytes ?: imageBytes) else imageBytes
-    val effectiveBitmap = if (autoRemoveBg) (transparentBitmap ?: imageBitmap) else imageBitmap
+    val effectiveBytes = if (autoRemoveBg) (transparentBytes ?: if (isMattingSource) null else imageBytes) else imageBytes
+    val effectiveBitmap = if (autoRemoveBg) (transparentBitmap ?: if (isMattingSource) null else imageBitmap) else imageBitmap
 
     // 2. 可编辑的图元集合与历史快照
     val editableItems = remember(initialItems) {
@@ -207,43 +209,53 @@ fun AssetSliceVerifyDialog(
         Toast.show("已重置回初始解析状态与视口坐标", ToastType.INFO)
     }
 
-    // 异步加载原图
-    LaunchedEffect(imagePath) {
-        isLoadingImage = true
-        if (imagePath.isNotBlank()) {
-            withContext(Dispatchers.Default) {
-                try {
-                    val bytes = org.gemini.ui.forge.utils.readLocalFileBytes(imagePath)
-                    imageBytes = bytes
-                    imageBitmap = bytes?.toImageBitmap()
-                } catch (_: Exception) {
-                    imageBytes = null
-                    imageBitmap = null
-                }
-            }
-        } else {
+    // 异步加载原图与前置整图去背生命周期收敛
+    LaunchedEffect(imagePath, autoRemoveBg) {
+        if (imagePath.isBlank()) {
             imageBytes = null
             imageBitmap = null
+            transparentBytes = null
+            transparentBitmap = null
+            isLoadingImage = false
+            return@LaunchedEffect
         }
-        isLoadingImage = false
-    }
 
-    // 原图前置去背：开启自动去背且具有去背服务时，自动对原始原图执行整图 AI 去背
-    LaunchedEffect(autoRemoveBg, imageBytes) {
+        // 1. 读取原始大图
+        if (imageBytes == null) {
+            isLoadingImage = true
+            val bytes = withContext(Dispatchers.Default) {
+                try {
+                    org.gemini.ui.forge.utils.readLocalFileBytes(imagePath)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            imageBytes = bytes
+            imageBitmap = bytes?.toImageBitmap()
+            isLoadingImage = false
+        }
+
         val original = imageBytes ?: return@LaunchedEffect
-        if (!autoRemoveBg || mattingSourceImage == null) return@LaunchedEffect
-        if (transparentBytes == null && !isMattingSource) {
+
+        // 2. 检查自动去背：若开启且尚未生成透明源，进入等待覆层并执行去背
+        if (autoRemoveBg && mattingSourceImage != null && transparentBytes == null && !isMattingSource) {
             isMattingSource = true
-            val result = mattingSourceImage(original)
+            val result = withContext(Dispatchers.Default) {
+                mattingSourceImage(original)
+            }
             if (result != null) {
                 transparentBytes = result
                 transparentBitmap = result.toImageBitmap()
+            } else {
+                // 去背失败兜底：使用原始图，防止卡死
+                transparentBytes = original
+                transparentBitmap = imageBitmap
             }
             isMattingSource = false
         }
     }
 
-    // 当底图加载完成且去背决策稳定后，首次进入预览全自动调用吸附按钮流程执行一次
+    // 当底图准备就绪（无论透明底图还是原图），且不在加载和去背状态时，触发首次吸附
     LaunchedEffect(effectiveBytes, isLoadingImage, isMattingSource) {
         if (effectiveBytes != null && !isLoadingImage && !isMattingSource && editableItems.isNotEmpty() && !hasAutoTriggeredSnap) {
             hasAutoTriggeredSnap = true
@@ -336,7 +348,9 @@ fun AssetSliceVerifyDialog(
                         onClose = { handleDismissWithDraft() },
                         onConfirm = {
                             onConfirmSlice(editableItems.map { it.toNormalizedItem() })
-                        }
+                        },
+                        targetFolderDisplayName = targetFolderDisplayName,
+                        onSelectTargetFolder = onSelectTargetFolder
                     )
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))

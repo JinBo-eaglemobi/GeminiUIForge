@@ -1,6 +1,8 @@
 package org.gemini.ui.forge.ui.uistudio.verify
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -11,8 +13,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.ui.component.tip
@@ -57,6 +61,8 @@ fun AssetSliceVerifyTopBar(
     onResetAll: () -> Unit,
     onClose: () -> Unit,
     onConfirm: () -> Unit,
+    targetFolderDisplayName: String = "根目录",
+    onSelectTargetFolder: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
@@ -252,11 +258,44 @@ fun AssetSliceVerifyTopBar(
                 }
             }
 
-            // 右侧：自动去背开关、取消与确认切图按钮
+            // 右侧：保存目录选择、自动去背开关、取消与确认切图按钮
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(spacing.small)
             ) {
+                // 目标保存目录选择胶囊 (所见即所得，随时点击更换)
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .height(30.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onSelectTargetFolder?.invoke() }
+                        .tip("点击更改切片资源保存的目标文件夹或自定义子目录")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = if (targetFolderDisplayName.isNotBlank()) targetFolderDisplayName else "根目录",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
                 // 自动去背胶囊式轻量切换器
                 FilterChip(
                     selected = autoRemoveBg,
