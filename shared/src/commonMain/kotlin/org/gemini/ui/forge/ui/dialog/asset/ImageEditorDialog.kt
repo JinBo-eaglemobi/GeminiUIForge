@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.toSize
 import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
 import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
 import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.model.ui.*
 import org.gemini.ui.forge.ui.theme.AppShapes
@@ -475,7 +476,14 @@ fun ImageEditorDialog(
                                 }
                             }
 
-                            Column(Modifier.weight(1f).padding(16.dp).verticalScroll(rememberScrollState())) {
+                            val sidebarScrollState = rememberScrollState()
+                            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(sidebarScrollState)
+                                        .padding(start = 16.dp, top = 16.dp, bottom = 16.dp, end = 24.dp)
+                                ) {
                                 when (selectedTab) {
                                     EditorTab.CROP -> {
                                         Text(
@@ -677,6 +685,13 @@ fun ImageEditorDialog(
                                     }
                                 }
                             }
+                            VerticalScrollbarAdapter(
+                                scrollState = sidebarScrollState,
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .fillMaxHeight()
+                            )
+                        }
 
                             // 底部操作栏
                             Surface(Modifier.fillMaxWidth(), tonalElevation = 8.dp) {

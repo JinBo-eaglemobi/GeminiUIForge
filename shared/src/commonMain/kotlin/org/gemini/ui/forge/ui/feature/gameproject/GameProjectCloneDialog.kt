@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Error
@@ -134,34 +135,45 @@ fun GameProjectCloneDialog(
 
                 Row(modifier = Modifier.weight(1f)) {
                     // 左侧：步骤列表
-                    Column(
-                        modifier = Modifier.width(220.dp).fillMaxHeight()
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        val stepItems = listOf(
-                            CloneStep.CREATE_FOLDER to Res.string.gp_step_create_folder,
-                            CloneStep.CONNECT_FETCH to Res.string.gp_step_connect_fetch,
-                            CloneStep.SELECT_VERSION to Res.string.gp_step_select_version,
-                            CloneStep.SCAN_GAMES to Res.string.gp_step_scan_games,
-                            CloneStep.WAIT_SELECT_GAME to Res.string.gp_step_wait_select,
-                            CloneStep.APPLY_FILTER to Res.string.gp_step_apply_filter,
-                            CloneStep.DOWNLOAD_ASSETS to Res.string.gp_step_download,
-                            CloneStep.CHECK_DEPENDENCIES to Res.string.gp_step_check_deps,
-                            CloneStep.COMPLETE to Res.string.gp_step_complete
-                        )
-                        stepItems.forEach { (stepEnum, labelRes) ->
-                            CloneStepRow(
-                                label = stringResource(labelRes),
-                                state = when {
-                                    step == CloneStep.FAILED && stepEnum.ordinal >= CloneStep.CONNECT_FETCH.ordinal -> CloneStepState.FAILED
-                                    stepEnum.ordinal < step.ordinal -> CloneStepState.DONE
-                                    // 终态 COMPLETE 属于"全部完成"的完结标记，自身直接显示对勾而非转圈
-                                    stepEnum == step -> if (stepEnum == CloneStep.COMPLETE) CloneStepState.DONE else CloneStepState.ACTIVE
-                                    else -> CloneStepState.PENDING
-                                }
+                    val stepScrollState = rememberScrollState()
+                    Box(modifier = Modifier.width(220.dp).fillMaxHeight()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(stepScrollState)
+                                .padding(end = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            val stepItems = listOf(
+                                CloneStep.CREATE_FOLDER to Res.string.gp_step_create_folder,
+                                CloneStep.CONNECT_FETCH to Res.string.gp_step_connect_fetch,
+                                CloneStep.SELECT_VERSION to Res.string.gp_step_select_version,
+                                CloneStep.SCAN_GAMES to Res.string.gp_step_scan_games,
+                                CloneStep.WAIT_SELECT_GAME to Res.string.gp_step_wait_select,
+                                CloneStep.APPLY_FILTER to Res.string.gp_step_apply_filter,
+                                CloneStep.DOWNLOAD_ASSETS to Res.string.gp_step_download,
+                                CloneStep.CHECK_DEPENDENCIES to Res.string.gp_step_check_deps,
+                                CloneStep.COMPLETE to Res.string.gp_step_complete
                             )
+                            stepItems.forEach { (stepEnum, labelRes) ->
+                                CloneStepRow(
+                                    label = stringResource(labelRes),
+                                    state = when {
+                                        step == CloneStep.FAILED && stepEnum.ordinal >= CloneStep.CONNECT_FETCH.ordinal -> CloneStepState.FAILED
+                                        stepEnum.ordinal < step.ordinal -> CloneStepState.DONE
+                                        // 终态 COMPLETE 属于"全部完成"的完结标记，自身直接显示对勾而非转圈
+                                        stepEnum == step -> if (stepEnum == CloneStep.COMPLETE) CloneStepState.DONE else CloneStepState.ACTIVE
+                                        else -> CloneStepState.PENDING
+                                    }
+                                )
+                            }
                         }
+                        VerticalScrollbarAdapter(
+                            scrollState = stepScrollState,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                        )
                     }
 
                     Spacer(Modifier.width(16.dp))

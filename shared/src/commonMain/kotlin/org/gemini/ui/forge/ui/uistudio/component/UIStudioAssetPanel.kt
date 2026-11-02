@@ -61,6 +61,7 @@ import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.extend.contextMenuClickable
 import org.gemini.ui.forge.extend.rememberClipboardAction
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.chat.drop.onFileDrop
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.utils.SUPPORTED_IMAGE_EXTENSIONS
@@ -369,13 +370,18 @@ fun UIStudioAssetPanel(
                     }
                 }
             } else {
-                LazyColumn(
-                    state = listState,
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                        .fillMaxWidth()
                 ) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(end = spacing.small),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
                     // 1. 文件夹树节点渲染
                     library.folders.forEach { folder ->
                         val isExpanded = state.expandedFolderIds.contains(folder.id)
@@ -602,9 +608,17 @@ fun UIStudioAssetPanel(
                         )
                     }
                 }
-            }
 
-            // 外部拖放悬停高亮遮罩（拖入图片或文件夹即可导入提示）
+                VerticalScrollbarAdapter(
+                    scrollState = listState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                )
+            }
+        }
+
+        // 外部拖放悬停高亮遮罩（拖入图片或文件夹即可导入提示）
             if (isExternalDragHovered) {
                 Box(
                     modifier = Modifier

@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -191,14 +193,27 @@ fun AppMenu(
                 headerContent?.invoke(this)
 
                 // 3. 候选条目列表区（带滚动）
-                Column(
+                val menuScrollState = rememberScrollState()
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = effectiveHeight)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    content()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(menuScrollState)
+                            .padding(end = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        content()
+                    }
+                    VerticalScrollbarAdapter(
+                        scrollState = menuScrollState,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                    )
                 }
 
                 // 4. 底部扩展插槽（如新建等常驻操作）

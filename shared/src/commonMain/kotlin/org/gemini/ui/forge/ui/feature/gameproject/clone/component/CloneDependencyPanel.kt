@@ -17,6 +17,7 @@ import org.gemini.ui.forge.model.gameproject.InstallChoice
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.viewmodel.GameProjectViewModel
 import org.jetbrains.compose.resources.stringResource
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 
 /**
  * 依赖检查面板组件。
@@ -43,55 +44,68 @@ fun CloneDependencyPanel(
             }
         }
         Spacer(Modifier.height(6.dp))
+        val depsListState = rememberLazyListState()
         Surface(
             shape = AppShapes.small,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.weight(1f).fillMaxWidth()
         ) {
-            LazyColumn(
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(8.dp)
-            ) {
-                items(viewModel.dependencies) { dep ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = depsListState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 16.dp)
+                ) {
+                    items(viewModel.dependencies) { dep ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = dep.name + if (dep.isDev) " (dev)" else "",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = dep.versionRange,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             Text(
-                                text = dep.name + if (dep.isDev) " (dev)" else "",
-                                style = MaterialTheme.typography.bodySmall
+                                text = if (dep.installed) {
+                                    stringResource(Res.string.gp_deps_installed)
+                                } else {
+                                    stringResource(Res.string.gp_deps_missing)
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (dep.installed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                             )
-                            Text(
-                                text = dep.versionRange,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Text(
-                            text = if (dep.installed) {
-                                stringResource(Res.string.gp_deps_installed)
-                            } else {
-                                stringResource(Res.string.gp_deps_missing)
-                            },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (dep.installed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                        )
-                        if (!dep.installed) {
-                            Spacer(Modifier.width(8.dp))
-                            FilterChip(
-                                selected = dep.installChoice == InstallChoice.SKIP,
-                                onClick = { viewModel.updateDepChoice(dep.name, InstallChoice.SKIP) },
-                                label = { Text(stringResource(Res.string.gp_deps_choice_skip), style = MaterialTheme.typography.labelSmall) }
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            FilterChip(
-                                selected = dep.installChoice == InstallChoice.PNPM,
-                                onClick = { viewModel.updateDepChoice(dep.name, InstallChoice.PNPM) },
-                                label = { Text(stringResource(Res.string.gp_deps_choice_pnpm), style = MaterialTheme.typography.labelSmall) }
-                            )
+                            if (!dep.installed) {
+                                Spacer(Modifier.width(8.dp))
+                                FilterChip(
+                                    selected = dep.installChoice == InstallChoice.SKIP,
+                                    onClick = { viewModel.updateDepChoice(dep.name, InstallChoice.SKIP) },
+                                    label = { Text(stringResource(Res.string.gp_deps_choice_skip), style = MaterialTheme.typography.labelSmall) }
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                FilterChip(
+                                    selected = dep.installChoice == InstallChoice.PNPM,
+                                    onClick = { viewModel.updateDepChoice(dep.name, InstallChoice.PNPM) },
+                                    label = { Text(stringResource(Res.string.gp_deps_choice_pnpm), style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
                         }
                     }
                 }
+                VerticalScrollbarAdapter(
+                    scrollState = depsListState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                )
             }
         }
         if (viewModel.depsInstalling || viewModel.installLogs.isNotEmpty()) {
@@ -110,7 +124,9 @@ fun CloneDependencyPanel(
                     SelectionContainer {
                         LazyColumn(
                             state = installLogState,
-                            modifier = Modifier.fillMaxSize().padding(8.dp)
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 16.dp)
                         ) {
                             items(viewModel.installLogs) { line ->
                                 Text(
@@ -121,6 +137,12 @@ fun CloneDependencyPanel(
                             }
                         }
                     }
+                    VerticalScrollbarAdapter(
+                        scrollState = installLogState,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                    )
                 }
             }
         }

@@ -11,6 +11,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import geminiuiforge.composeapp.generated.resources.Res
@@ -45,20 +47,30 @@ fun CloneLogPanel(
             shape = AppShapes.small,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ) {
-            SelectionContainer {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize().padding(8.dp)
-                ) {
-                    items(viewModel.cloneLogs) { line ->
-                        Text(
-                            text = line,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            Box(modifier = Modifier.fillMaxSize()) {
+                SelectionContainer {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 16.dp)
+                    ) {
+                        items(viewModel.cloneLogs) { line ->
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
+                VerticalScrollbarAdapter(
+                    scrollState = listState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                )
             }
         }
     }

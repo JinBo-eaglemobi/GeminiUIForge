@@ -23,6 +23,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import org.gemini.ui.forge.extend.rememberClipboardAction
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -189,17 +190,27 @@ fun TrafficPayloadViewer(
                         }
                     } else {
                         // 纯文本展示区
-                        SelectionContainer(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                                .padding(spacing.small)
-                        ) {
-                            Text(
-                                text = payloadText,
-                                fontFamily = FontFamily.Monospace,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
+                        val textScrollState = rememberScrollState()
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            SelectionContainer(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(end = spacing.small)
+                                    .verticalScroll(textScrollState)
+                                    .padding(spacing.small)
+                            ) {
+                                Text(
+                                    text = payloadText,
+                                    fontFamily = FontFamily.Monospace,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            VerticalScrollbarAdapter(
+                                scrollState = textScrollState,
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .fillMaxHeight()
                             )
                         }
                     }

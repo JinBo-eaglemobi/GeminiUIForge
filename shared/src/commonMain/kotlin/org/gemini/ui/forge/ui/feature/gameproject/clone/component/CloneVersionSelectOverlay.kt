@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -105,26 +107,40 @@ fun CloneVersionSelectOverlay(
                         }
                     }
                     else -> {
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
-                            items(currentList) { entry ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            manualInput = entry.substringBefore("  ")
-                                        }
-                                        .pointerHoverIcon(PointerIcon.Hand)
-                                        .padding(vertical = 4.dp, horizontal = 8.dp)
-                                ) {
-                                    Text(
-                                        text = entry,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                        val versionListState = rememberLazyListState()
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            LazyColumn(
+                                state = versionListState,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(end = 12.dp)
+                            ) {
+                                items(currentList) { entry ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                manualInput = entry.substringBefore("  ")
+                                            }
+                                            .pointerHoverIcon(PointerIcon.Hand)
+                                            .padding(vertical = 4.dp, horizontal = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = entry,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
                             }
+                            VerticalScrollbarAdapter(
+                                scrollState = versionListState,
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .fillMaxHeight()
+                            )
                         }
                     }
                 }

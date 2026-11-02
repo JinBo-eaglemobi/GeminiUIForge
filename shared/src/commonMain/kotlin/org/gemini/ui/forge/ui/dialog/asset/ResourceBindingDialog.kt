@@ -22,6 +22,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.model.ui.ResourceItem
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.looseJson
@@ -120,13 +121,20 @@ fun ResourceBindingDialog(
             )
         },
         text = {
-            Column(
+            val scrollState = rememberScrollState()
+            Box(
                 modifier = Modifier
                     .widthIn(min = 520.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .heightIn(max = 480.dp)
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 12.dp)
+                        .verticalScroll(scrollState)
+                        .padding(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                 // 显示当前父级的上下文（如果父级已绑定）
                 if (parentHasBinding) {
                     Surface(
@@ -361,7 +369,13 @@ fun ResourceBindingDialog(
                     }
                 }
             }
-        },
+
+            VerticalScrollbarAdapter(
+                scrollState = scrollState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
+        }
+    },
         confirmButton = {
             Button(
                 onClick = {

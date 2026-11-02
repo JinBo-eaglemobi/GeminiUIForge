@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.UIStudioPage
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -53,12 +54,14 @@ fun UIStudioMainViewInspector(
     val scrollState = rememberScrollState()
     val state = viewModel.state
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(spacing.medium)
-    ) {
+    Box(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(end = spacing.small)
+                .verticalScroll(scrollState),
+            verticalArrangement = Arrangement.spacedBy(spacing.medium)
+        ) {
         // 1. 视图名称与快速重命名卡片
         Surface(
             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
@@ -433,4 +436,10 @@ fun UIStudioMainViewInspector(
             }
         }
     }
+
+    VerticalScrollbarAdapter(
+        scrollState = scrollState,
+        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+    )
+}
 }

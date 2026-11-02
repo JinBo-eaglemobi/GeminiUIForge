@@ -20,6 +20,7 @@ import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.viewmodel.GameProjectViewModel
 import org.jetbrains.compose.resources.stringResource
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 
 private const val NODE_WEBSITE = "https://nodejs.org"
 private const val PNPM_WEBSITE = "https://pnpm.io"
@@ -59,13 +60,19 @@ fun EnvironmentCheckPanel(
     if (env.pipInstalled) readyCount++
     if (env.javaInstalled) readyCount++
 
-    Column(
+    val envScrollState = rememberScrollState()
+    Box(
         modifier = modifier
             .width(360.dp)
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(spacing.medium)
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(envScrollState)
+                .padding(end = spacing.small),
+            verticalArrangement = Arrangement.spacedBy(spacing.medium)
+        ) {
         // 顶部标题与健康度统计条
         Card(
             shape = AppShapes.medium,
@@ -291,5 +298,12 @@ fun EnvironmentCheckPanel(
                 EnvironmentItemRow("Gradle (自动化构建)", env.gradleVersion, env.gradleInstalled)
             }
         }
+        }
+        VerticalScrollbarAdapter(
+            scrollState = envScrollState,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+        )
     }
 }

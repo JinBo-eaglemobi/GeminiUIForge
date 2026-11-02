@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
 import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
@@ -356,13 +358,19 @@ fun McpTrafficInspectorDialog(
                                 )
                             }
                         } else {
-                            Column(
+                            val clientScrollState = rememberScrollState()
+                            Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxWidth()
-                                    .verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(end = 8.dp)
+                                        .verticalScroll(clientScrollState),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
                                 nodes.forEach { node ->
                                     val isSelected = selectedNodeId == node.id
                                     val nodeLogCount = remember(logs, node.id) {
@@ -509,6 +517,13 @@ fun McpTrafficInspectorDialog(
                                         }
                                     }
                                 }
+                                }
+                                VerticalScrollbarAdapter(
+                                    scrollState = clientScrollState,
+                                    modifier = Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .fillMaxHeight()
+                                )
                             }
                         }
                     }
@@ -600,27 +615,41 @@ fun McpTrafficInspectorDialog(
                                 }
                             }
                         } else {
-                            LazyColumn(
+                            val logListState = rememberLazyListState()
+                            Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(spacing.small)
+                                    .fillMaxWidth()
                             ) {
-                                items(filteredLogs, key = { it.id }) { record ->
-                                    val isExpanded = expandedRecordIds.contains(record.id)
-                                    TrafficRecordItem(
-                                        record = record,
-                                        isExpanded = isExpanded,
-                                        onToggle = {
-                                            expandedRecordIds = if (isExpanded) {
-                                                expandedRecordIds - record.id
-                                            } else {
-                                                expandedRecordIds + record.id
-                                            }
-                                        },
-                                        onCopy = { copyAction(record.payloadJson, "已复制报文 JSON") }
-                                    )
+                                LazyColumn(
+                                    state = logListState,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(end = spacing.small),
+                                    verticalArrangement = Arrangement.spacedBy(spacing.small)
+                                ) {
+                                    items(filteredLogs, key = { it.id }) { record ->
+                                        val isExpanded = expandedRecordIds.contains(record.id)
+                                        TrafficRecordItem(
+                                            record = record,
+                                            isExpanded = isExpanded,
+                                            onToggle = {
+                                                expandedRecordIds = if (isExpanded) {
+                                                    expandedRecordIds - record.id
+                                                } else {
+                                                    expandedRecordIds + record.id
+                                                }
+                                            },
+                                            onCopy = { copyAction(record.payloadJson, "已复制报文 JSON") }
+                                        )
+                                    }
                                 }
+                                VerticalScrollbarAdapter(
+                                    scrollState = logListState,
+                                    modifier = Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .fillMaxHeight()
+                                )
                             }
                         }
                     }

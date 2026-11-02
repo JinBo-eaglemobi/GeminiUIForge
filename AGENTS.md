@@ -238,6 +238,13 @@ rememberDraggableState 构建，并显式配置 startDragImmediately = true 确�
   - **手势协程保活与防锁死铁律**：严禁将易变闭包作为手势监听的动态 key。拖拽回调必须通过 
 rememberUpdatedState 进行安全收拢，拖拽结束/中断时必须通过 onDragStopped 100% 确保释放 isDragging = false，彻底根除由于宿主重组导致的手势中断与高亮状态死锁缺陷。
 
+- **滚动条统一接入规范 (Unified Scrollbar Specification)**: **【红线规则】**
+  - **全量强制铁律**：凡使用 `verticalScroll` / `horizontalScroll` / `LazyColumn` / `LazyRow` / `LazyVerticalGrid` / `LazyHorizontalGrid` 的可滚动容器，**必须**同步接入滚动条组件，严禁出现无滚动条的“裸奔”滚动区；
+  - **唯一入口禁令**：纵向滚动条一律使用 `org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter`，横向滚动条一律使用 `HorizontalScrollbarAdapter`；**严禁**业务代码直接裸调 Compose 官方 `VerticalScrollbar` / `HorizontalScrollbar`，严禁自绘滑块（统一样式与平滑算法收口于适配器内部）；
+  - **标准布局范式**：外层 `Box` 包裹，内容侧 `padding(end = 8~16.dp)` 预留呼吸位（横向预留底部），滚动条 `Modifier.align(Alignment.CenterEnd).fillMaxHeight()`（横向 `Alignment.BottomCenter` + `fillMaxWidth()`）；滚动条与内容是兄弟节点；
+  - **豁免条款**：仅允许两类豁免——① Android/JS 平台（actual 内已优雅降级为空实现，接入方无需条件判断）；② 高度/宽度必然不溢出的固定内容区（如选项恒定的分段器）；
+  - **样式收口**：滑块颜色（White 30%/60%）与厚度（8.dp）统一定义于 jvm actual 内部，严禁调用方私自覆写 style。
+
 - **剪贴板工具与点击复制 (Clipboard Specification)**: **【红线规则】**
   - **严禁直接散落手写底层剪贴板与协程**：全项目凡是需要将文本、命令、URL 或日志写入系统剪贴板的场景，**一律强制复用项目内建的高阶扩展**（位于 `org.gemini.ui.forge.extend.ClipboardExtend.kt`），严禁在业务 UI 内重复声明 `LocalClipboard.current`、`rememberCoroutineScope()` 与 `scope.launch`。
   - **标准调用范式**：
@@ -269,7 +276,8 @@ rememberUpdatedState 进行安全收拢，拖拽结束/中断时必须通过 onD
     4. **搜索与过滤栏**：`AppSearchField`（统一 34dp 紧凑高度、清除按钮与搜索图标）；
     5. **剪贴板写入与操作**：`Modifier.copyOnClick` + `rememberClipboardAction`（严禁手写协程与 `LocalClipboard`）；
     6. **轻量气泡通知**：`Toast.show(message, type)`（严禁自建浮层）；
-    7. **交互按钮悬停提示**：`Modifier.tip(...)`（已内置视口边界碰撞自动向上翻转防遮挡）。
+    7. **交互按钮悬停提示**：`Modifier.tip(...)`（已内置视口边界碰撞自动向上翻转防遮挡）；
+    8. **滚动条**：`VerticalScrollbarAdapter` + `HorizontalScrollbarAdapter`（严禁裸调 Compose 官方滚动条，严禁自绘滑块）。
   - **平台默认宽度逃逸铁律**：所有自定义 `Dialog` 必须显式声明 `properties = DialogProperties(usePlatformDefaultWidth = false)`，防止 Compose 平台默认窄宽度（约 280~320dp）拦截并破坏 Design Tokens 宽度。
 - **UI Studio 与传统 Slots 模板双轨架构规范 (Dual-Track Project Architecture Specification)**: **【业务铁律】**
   - **自然属性二元解耦判定（referenceImages 零冗余铁律）**：

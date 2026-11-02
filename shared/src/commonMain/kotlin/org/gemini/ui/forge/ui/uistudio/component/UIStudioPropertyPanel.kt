@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.tip
@@ -221,13 +222,18 @@ fun UIStudioPropertyPanel(
 
                 if (selectedBlock != null) {
                     val scrollState = rememberScrollState()
-                    Column(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
-                            .verticalScroll(scrollState),
-                        verticalArrangement = Arrangement.spacedBy(spacing.medium)
                     ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(end = spacing.small)
+                                .verticalScroll(scrollState),
+                            verticalArrangement = Arrangement.spacedBy(spacing.medium)
+                        ) {
                         // 1. 基础信息卡片 (ID & 名称重命名)
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
@@ -607,7 +613,13 @@ fun UIStudioPropertyPanel(
                             Text("删除此组件")
                         }
                     }
+
+                    VerticalScrollbarAdapter(
+                        scrollState = scrollState,
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                    )
                 }
+            }
             }
         }
     }

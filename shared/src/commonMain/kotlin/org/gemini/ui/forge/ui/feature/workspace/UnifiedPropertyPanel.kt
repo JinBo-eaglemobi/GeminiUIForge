@@ -27,6 +27,7 @@ import org.gemini.ui.forge.ui.feature.workspace.property.LayoutPropertyContent
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.viewmodel.ProjectWorkspaceViewModel
 import org.jetbrains.compose.resources.stringResource
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 
 /**
  * 统一属性面板：集成布局坐标、绑定资产管理、物理加工及 AI 视觉工作室主入口。
@@ -45,100 +46,128 @@ fun UnifiedPropertyPanel(
     modifier: Modifier = Modifier
 ) {
     if (state.selectedBlockIds.size > 1) {
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(LocalAppSpacing.current.medium)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.medium)
-        ) {
-            OutlinedCard(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.outlinedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        val multiScrollState = rememberScrollState()
+        Box(modifier = modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(multiScrollState)
+                    .padding(
+                        start = LocalAppSpacing.current.medium,
+                        top = LocalAppSpacing.current.medium,
+                        bottom = LocalAppSpacing.current.medium,
+                        end = LocalAppSpacing.current.medium + 8.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.medium)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                OutlinedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Layers,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = stringResource(Res.string.multiselect_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    Text(
-                        text = stringResource(Res.string.multiselect_desc, state.selectedBlockIds.size),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                    Text(
-                        text = stringResource(Res.string.multiselect_tips_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Layers,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Text(
+                                text = stringResource(Res.string.multiselect_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
                         Text(
-                            text = stringResource(Res.string.multiselect_tip_arrow),
+                            text = stringResource(Res.string.multiselect_desc, state.selectedBlockIds.size),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
                         Text(
-                            text = stringResource(Res.string.multiselect_tip_shift),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = stringResource(Res.string.multiselect_tips_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
                         )
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = stringResource(Res.string.multiselect_tip_arrow),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = stringResource(Res.string.multiselect_tip_shift),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = stringResource(Res.string.multiselect_tip_drag),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
                         Text(
-                            text = stringResource(Res.string.multiselect_tip_drag),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = stringResource(Res.string.multiselect_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            lineHeight = 16.sp
                         )
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                    Text(
-                        text = stringResource(Res.string.multiselect_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        lineHeight = 16.sp
-                    )
                 }
             }
+            VerticalScrollbarAdapter(
+                scrollState = multiScrollState,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+            )
         }
     } else {
         // 单选模块：直接铺开展现属性与 AI 视觉能力
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(LocalAppSpacing.current.medium)
-                .verticalScroll(rememberScrollState())
-        ) {
-            LayoutPropertyContent(
-                state = state,
-                viewModel = viewModel,
-                apiKey = apiKey
+        val singleScrollState = rememberScrollState()
+        Box(modifier = modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(singleScrollState)
+                    .padding(
+                        start = LocalAppSpacing.current.medium,
+                        top = LocalAppSpacing.current.medium,
+                        bottom = LocalAppSpacing.current.medium,
+                        end = LocalAppSpacing.current.medium + 8.dp
+                    )
+            ) {
+                LayoutPropertyContent(
+                    state = state,
+                    viewModel = viewModel,
+                    apiKey = apiKey
+                )
+            }
+            VerticalScrollbarAdapter(
+                scrollState = singleScrollState,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
             )
         }
     }

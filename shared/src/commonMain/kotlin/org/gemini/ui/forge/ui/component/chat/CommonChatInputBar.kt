@@ -48,6 +48,7 @@ import org.gemini.ui.forge.extend.readClipboardImageBytes
 import org.gemini.ui.forge.model.GeminiModel
 import org.gemini.ui.forge.model.app.ApiFlavor
 import org.gemini.ui.forge.model.chat.ThinkingLevel
+import org.gemini.ui.forge.ui.common.HorizontalScrollbarAdapter
 import org.gemini.ui.forge.model.chat.MentionCategory
 import org.gemini.ui.forge.ui.component.AppMenu
 import org.gemini.ui.forge.ui.component.AppMenuItemRow
@@ -687,13 +688,18 @@ fun CommonChatInputBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 左侧工具群（前置插槽 + 附件按钮 + 模型选择 + 协议选择），超出时支持平滑横向微滚
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(if (isUltraNarrow) 4.dp else spacing.small)
+                val toolRowScrollState = rememberScrollState()
+                Box(
+                    modifier = Modifier.weight(1f)
                 ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 2.dp)
+                            .horizontalScroll(toolRowScrollState),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(if (isUltraNarrow) 4.dp else spacing.small)
+                    ) {
                     // 外部自定义前置动作插槽（如系统人设指令入口、生图预设等）
                     leadingActions()
 
@@ -975,6 +981,16 @@ fun CommonChatInputBar(
                         }
                     }
                 }
+
+                if (toolRowScrollState.maxValue > 0) {
+                    HorizontalScrollbarAdapter(
+                        scrollState = toolRowScrollState,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                    )
+                }
+            }
 
                 Spacer(Modifier.width(spacing.small))
 

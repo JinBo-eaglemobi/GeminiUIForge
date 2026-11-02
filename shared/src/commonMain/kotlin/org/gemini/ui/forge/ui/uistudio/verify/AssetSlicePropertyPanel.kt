@@ -22,6 +22,7 @@ import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import kotlin.math.roundToInt
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 
 /**
  * 切片预审校对弹窗右侧固定属性面板 (Inspector)
@@ -124,12 +125,18 @@ fun AssetSlicePropertyPanel(
             }
         } else {
             // 选中图元的属性表单
-            Column(
+            val formScrollState = rememberScrollState()
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(formScrollState)
+                        .padding(end = spacing.small)
+                ) {
                 // 图元 ID 徽章
                 AssistChip(
                     onClick = {},
@@ -250,8 +257,15 @@ fun AssetSlicePropertyPanel(
                     )
                 }
             }
+            VerticalScrollbarAdapter(
+                scrollState = formScrollState,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+            )
+        }
 
-            Spacer(modifier = Modifier.height(spacing.medium))
+        Spacer(modifier = Modifier.height(spacing.medium))
 
             // 删除当前图元按钮
             OutlinedButton(

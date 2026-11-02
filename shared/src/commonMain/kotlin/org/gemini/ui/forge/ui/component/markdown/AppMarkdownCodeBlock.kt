@@ -35,6 +35,7 @@ import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.extend.rememberClipboardAction
+import org.gemini.ui.forge.ui.common.HorizontalScrollbarAdapter
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import kotlin.math.abs
@@ -239,6 +240,15 @@ fun AppMarkdownCodeBlock(
                             .align(Alignment.CenterEnd)
                             .padding(top = 42.dp, bottom = 4.dp, end = 2.dp),
                         scrollState = verticalScrollState
+                    )
+                }
+
+                if (horizontalScrollState.maxValue > 0) {
+                    HorizontalScrollbarAdapter(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(start = 4.dp, end = 12.dp, bottom = 2.dp),
+                        scrollState = horizontalScrollState
                     )
                 }
             }

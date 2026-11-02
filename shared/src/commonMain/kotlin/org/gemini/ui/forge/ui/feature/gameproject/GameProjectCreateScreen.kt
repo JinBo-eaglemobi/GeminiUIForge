@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
@@ -129,9 +131,14 @@ fun GameProjectCreateScreen(
         modifier = Modifier.fillMaxSize().padding(spacing.large)
     ) {
         // 左侧：表单区
-        Column(
-            modifier = Modifier.weight(2f).fillMaxSize().verticalScroll(rememberScrollState())
-        ) {
+        val formScrollState = rememberScrollState()
+        Box(modifier = Modifier.weight(2f).fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(formScrollState)
+                    .padding(end = spacing.medium)
+            ) {
             Text(
                 text = stringResource(Res.string.gp_form_title),
                 style = MaterialTheme.typography.titleLarge,
@@ -335,6 +342,13 @@ fun GameProjectCreateScreen(
                 )
             }
             } // 结束分支 1 (Git 仓库克隆)
+            }
+            VerticalScrollbarAdapter(
+                scrollState = formScrollState,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+            )
         }
 
         Spacer(Modifier.width(spacing.large))

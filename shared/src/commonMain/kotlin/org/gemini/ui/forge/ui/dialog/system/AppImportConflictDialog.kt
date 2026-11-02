@@ -3,9 +3,11 @@ package org.gemini.ui.forge.ui.dialog.system
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -21,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,6 +35,7 @@ import geminiuiforge.composeapp.generated.resources.import_conflict_overwrite
 import geminiuiforge.composeapp.generated.resources.import_conflict_skip
 import geminiuiforge.composeapp.generated.resources.import_conflict_title
 import org.jetbrains.compose.resources.stringResource
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.dialog.AppDialogHeader
 import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -86,7 +90,8 @@ fun AppImportConflictDialog(
                 )
 
                 // 3. 冲突文件滚动列表
-                Column(
+                val conflictScrollState = rememberScrollState()
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = spacing.medium)
@@ -95,20 +100,34 @@ fun AppImportConflictDialog(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                             shape = RoundedCornerShape(8.dp)
                         )
-                        .padding(spacing.small)
-                        .verticalScroll(rememberScrollState())
                 ) {
-                    conflictNames.forEach { name ->
-                        Text(
-                            text = name,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(vertical = spacing.extraSmall)
-                        )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(spacing.small)
+                            .padding(end = spacing.small)
+                            .verticalScroll(conflictScrollState)
+                    ) {
+                        conflictNames.forEach { name ->
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(vertical = spacing.extraSmall)
+                            )
+                        }
                     }
+
+                    VerticalScrollbarAdapter(
+                        scrollState = conflictScrollState,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .padding(vertical = 4.dp, horizontal = 2.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(spacing.medium))

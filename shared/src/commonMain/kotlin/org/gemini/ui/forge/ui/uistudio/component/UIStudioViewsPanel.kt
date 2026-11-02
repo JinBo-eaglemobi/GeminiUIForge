@@ -6,6 +6,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.UIStudioPage
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.system.AppConfirmDialog
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -139,44 +141,57 @@ fun UIStudioViewsPanel(
                 }
             } else {
                 val focusRequester = remember { FocusRequester() }
-                LazyColumn(
+                val listState = rememberLazyListState()
+                Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .focusRequester(focusRequester)
-                        .focusable()
-                        .onPreviewKeyEvent { keyEvent ->
-                            if (keyEvent.type == KeyEventType.KeyDown) {
-                                when (keyEvent.key) {
-                                    Key.F2 -> {
-                                        val currentPage = allPages.find { it.id == state.currentViewId }
-                                        if (currentPage != null) {
-                                            viewModel.canvasEditor.startRenameView(currentPage)
-                                            true
-                                        } else false
-                                    }
-                                    Key.Delete, Key.Backslash -> {
-                                        val currentPage = allPages.find { it.id == state.currentViewId }
-                                        if (currentPage != null && allPages.size > 1) {
-                                            viewModel.pageManager.requestDeleteView(currentPage)
-                                            true
-                                        } else false
-                                    }
-                                    else -> false
-                                }
-                            } else false
-                        },
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    items(filteredPages, key = { it.id }) { page ->
-                        UIStudioViewRowItem(
-                            page = page,
-                            isSelected = page.id == state.currentViewId,
-                            canDelete = allPages.size > 1,
-                            viewModel = viewModel,
-                            templateRepo = templateRepo
-                        )
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(end = 4.dp)
+                            .focusRequester(focusRequester)
+                            .focusable()
+                            .onPreviewKeyEvent { keyEvent ->
+                                if (keyEvent.type == KeyEventType.KeyDown) {
+                                    when (keyEvent.key) {
+                                        Key.F2 -> {
+                                            val currentPage = allPages.find { it.id == state.currentViewId }
+                                            if (currentPage != null) {
+                                                viewModel.canvasEditor.startRenameView(currentPage)
+                                                true
+                                            } else false
+                                        }
+                                        Key.Delete, Key.Backslash -> {
+                                            val currentPage = allPages.find { it.id == state.currentViewId }
+                                            if (currentPage != null && allPages.size > 1) {
+                                                viewModel.pageManager.requestDeleteView(currentPage)
+                                                true
+                                            } else false
+                                        }
+                                        else -> false
+                                    }
+                                } else false
+                            },
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(filteredPages, key = { it.id }) { page ->
+                            UIStudioViewRowItem(
+                                page = page,
+                                isSelected = page.id == state.currentViewId,
+                                canDelete = allPages.size > 1,
+                                viewModel = viewModel,
+                                templateRepo = templateRepo
+                            )
+                        }
                     }
+
+                    VerticalScrollbarAdapter(
+                        scrollState = listState,
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                    )
                 }
             }
         }

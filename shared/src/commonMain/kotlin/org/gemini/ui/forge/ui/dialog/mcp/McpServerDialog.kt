@@ -33,6 +33,7 @@ import androidx.compose.ui.window.Dialog
 import org.gemini.ui.forge.ui.component.dialog.AppDraggableDialog
 import org.gemini.ui.forge.ui.component.dialog.draggableDialogHandle
 import org.gemini.ui.forge.ui.component.dialog.rememberDraggableDialogState
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.ui.window.DialogProperties
 import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.launch
@@ -237,13 +238,19 @@ fun McpServerDialog(
                 }
 
                 // 2. 主体可滚动区（包含 3 大独立可折叠功能块）
-                Column(
+                val contentScrollState = rememberScrollState()
+                Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(spacing.medium)
                 ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(contentScrollState)
+                            .padding(end = spacing.small),
+                        verticalArrangement = Arrangement.spacedBy(spacing.medium)
+                    ) {
                     // ══════════════════════════════════════════════════════════
                     // 功能块 1：核心服务主控台 (可折叠)
                     // ══════════════════════════════════════════════════════════
@@ -619,7 +626,14 @@ fun McpServerDialog(
                         }
                     }
                 }
+                VerticalScrollbarAdapter(
+                    scrollState = contentScrollState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                )
             }
         }
     }
+}
 }

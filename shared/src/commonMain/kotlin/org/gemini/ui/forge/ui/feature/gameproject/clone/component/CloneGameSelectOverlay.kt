@@ -17,6 +17,7 @@ import geminiuiforge.composeapp.generated.resources.gp_clone_confirm
 import geminiuiforge.composeapp.generated.resources.gp_clone_select_hint
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.jetbrains.compose.resources.stringResource
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 
 /**
  * 游戏选择覆盖层组件：单选列表 + 确认按钮。
@@ -44,34 +45,46 @@ fun CloneGameSelectOverlay(
                 fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(8.dp))
-            Column(
-                modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
-            ) {
-                games.forEach { game ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selected = game }
-                            .pointerHoverIcon(PointerIcon.Hand)
-                            .padding(vertical = 4.dp, horizontal = 8.dp)
-                    ) {
-                        RadioButton(
-                            selected = selected == game,
-                            onClick = null
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = game,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (selected == game) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            }
-                        )
+            val scrollState = rememberScrollState()
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .padding(end = 12.dp)
+                ) {
+                    games.forEach { game ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selected = game }
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .padding(vertical = 4.dp, horizontal = 8.dp)
+                        ) {
+                            RadioButton(
+                                selected = selected == game,
+                                onClick = null
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = game,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (selected == game) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
+                            )
+                        }
                     }
                 }
+                VerticalScrollbarAdapter(
+                    scrollState = scrollState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                )
             }
             Spacer(Modifier.height(12.dp))
             Button(

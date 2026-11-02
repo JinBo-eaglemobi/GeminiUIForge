@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.extend.contextMenuClickable
+import org.gemini.ui.forge.ui.common.HorizontalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
@@ -66,13 +67,19 @@ fun UIStudioPageTabBar(
                 .padding(horizontal = spacing.extraSmall)
         ) {
             // 水平滚动的标签容器
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .horizontalScroll(scrollState)
+                    .fillMaxHeight()
             ) {
-                openIds.forEach { viewId ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 4.dp)
+                        .horizontalScroll(scrollState)
+                ) {
+                    openIds.forEach { viewId ->
                     val page = allPages.find { it.id == viewId } ?: return@forEach
                     val isActive = viewId == currentActiveId
                     var showContextMenu by remember { mutableStateOf(false) }
@@ -265,7 +272,15 @@ fun UIStudioPageTabBar(
                 }
             }
 
-            // 右侧一键关闭全部标签入口
+            HorizontalScrollbarAdapter(
+                scrollState = scrollState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+            )
+        }
+
+        // 右侧一键关闭全部标签入口
             if (openIds.isNotEmpty()) {
                 IconButton(
                     onClick = { viewModel.pageManager.closeAllViewTabs() },

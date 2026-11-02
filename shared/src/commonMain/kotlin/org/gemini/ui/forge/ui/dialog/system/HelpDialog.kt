@@ -23,6 +23,7 @@ import org.jetbrains.compose.resources.InternalResourceApi
 import org.jetbrains.compose.resources.readResourceBytes
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.getPlatform
+import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.theme.AppShapes
 
@@ -106,13 +107,21 @@ fun HelpDialog(onDismiss: () -> Unit) {
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(scrollState)
-                                .padding(end = 8.dp)
+                                .padding(end = 12.dp)
                         ) {
                             AppMarkdown(
                                 content = helpContent ?: "",
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
+
+                        VerticalScrollbarAdapter(
+                            scrollState = scrollState,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                                .padding(vertical = 4.dp)
+                        )
                     }
                 }
 
