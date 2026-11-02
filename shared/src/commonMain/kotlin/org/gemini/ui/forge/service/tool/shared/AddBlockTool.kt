@@ -49,7 +49,31 @@ class AddBlockTool(
             })
             put("type", buildJsonObject {
                 put("type", "string")
-                put("description", "可选：图元组件类型（如 BUTTON, IMAGE, TEXT, CONTAINER, REEL, SYMBOL, SPIN_BUTTON 等，默认 IMAGE）")
+                putJsonArray("enum") {
+                    add("CONTAINER")
+                    add("BUTTON")
+                    add("IMAGE")
+                    add("TEXT")
+                    add("VIEW")
+                    add("INPUT")
+                    add("REEL")
+                    add("SPIN_BUTTON")
+                    add("WIN_DISPLAY")
+                    add("BACKGROUND")
+                    add("SYMBOL")
+                    add("HEADER")
+                    add("FOOTER")
+                    add("PROGRESS_BAR")
+                    add("POPUP_MENU")
+                    add("LOADER")
+                    add("SCROLL_BAR")
+                    add("SLIDER")
+                    add("COMBO_BOX")
+                }
+                put(
+                    "description",
+                    "可选：图元组件类型，默认 'IMAGE'。常用推荐：'CONTAINER'（纯容器/组合层，仅用于排版）、'BUTTON'（可交互按键）、'IMAGE'（独立切片/贴图）、'TEXT'（文本框）。亦支持专用类型如 'VIEW', 'INPUT', 'REEL', 'SPIN_BUTTON', 'WIN_DISPLAY', 'BACKGROUND', 'SYMBOL', 'HEADER', 'FOOTER', 'PROGRESS_BAR' 等。"
+                )
             })
             put("bounds", buildJsonObject {
                 put("type", "object")

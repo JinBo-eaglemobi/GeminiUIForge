@@ -53,10 +53,29 @@ class GenerateImageTool(
                 put("type", "string")
                 put("description", "可选：目标项目工程名称。若未指定将自动归入当前活跃工程")
             })
-            put("aspectRatio", buildJsonObject {
+            putJsonObject("aspectRatio") {
                 put("type", "string")
-                put("description", "可选：画面宽高比。支持 '1:1', '16:9', '9:16', '4:3', '3:4'，默认为 '1:1'")
-            })
+                putJsonArray("enum") {
+                    add("1:1")
+                    add("2:3")
+                    add("3:2")
+                    add("3:4")
+                    add("4:3")
+                    add("4:5")
+                    add("5:4")
+                    add("9:16")
+                    add("16:9")
+                    add("21:9")
+                    add("1:8")
+                    add("8:1")
+                    add("1:4")
+                    add("4:1")
+                }
+                put(
+                    "description",
+                    "可选：画面宽高比例，默认为 '1:1'。支持 14 种标准比例：'1:1'（正方形图标/角色头像）、'16:9'/'21:9'（横屏宽幅全景底图）、'9:16'（竖屏全屏底图）、'4:3'/'3:2'/'5:4'（常规横向面板）、'3:4'/'2:3'/'4:5'（竖向卡片/列表项）、'8:1'/'4:1'（横条饰带/标题横幅）、'1:8'/'1:4'（极窄竖条背景/侧边装饰栏）。"
+                )
+            }
             put("isPng", buildJsonObject {
                 put("type", "boolean")
                 put("description", "可选：是否自动通过本地 AI 算法进行透明抠图去背，默认为 false。对图标、独立角色、小动物切片建议设为 true")
@@ -110,10 +129,20 @@ class GenerateImageTool(
             ?: return ToolResult.error("未找到有效的 Gemini API Key，请先在设置中配置密钥")
 
         val (targetWidth, targetHeight) = when (aspectRatio) {
-            "16:9" -> 1280f to 720f
-            "9:16" -> 720f to 1280f
-            "4:3" -> 1024f to 768f
+            "1:1" -> 1024f to 1024f
+            "2:3" -> 832f to 1248f
+            "3:2" -> 1248f to 832f
             "3:4" -> 768f to 1024f
+            "4:3" -> 1024f to 768f
+            "4:5" -> 816f to 1020f
+            "5:4" -> 1020f to 816f
+            "9:16" -> 720f to 1280f
+            "16:9" -> 1280f to 720f
+            "21:9" -> 1536f to 656f
+            "1:8" -> 160f to 1280f
+            "8:1" -> 1280f to 160f
+            "1:4" -> 320f to 1280f
+            "4:1" -> 1280f to 320f
             else -> 1024f to 1024f
         }
 

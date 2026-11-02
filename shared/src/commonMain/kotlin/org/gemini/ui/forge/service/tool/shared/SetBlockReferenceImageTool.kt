@@ -42,7 +42,11 @@ class SetBlockReferenceImageTool(
             })
             put("sourceType", buildJsonObject {
                 put("type", "string")
-                put("description", "图片来源类型：'file' (本地物理文件或网络图片链接) 或 'pageArea' (从页面大图切片)")
+                putJsonArray("enum") {
+                    add("file")
+                    add("pageArea")
+                }
+                put("description", "图片来源类型：'file' (本地物理文件绝对路径或 http/https 网络图片链接) 或 'pageArea' (从当前页面参考大图按 cropBounds 切片)")
             })
             put("filePath", buildJsonObject {
                 put("type", "string")

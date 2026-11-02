@@ -32,22 +32,30 @@ class DiscoverToolsTool : ToolDefinition {
         putJsonObject("properties") {
             putJsonObject("category") {
                 put("type", "string")
+                putJsonArray("enum") {
+                    add("asset")
+                    add("view")
+                    add("template")
+                    add("runtime")
+                    add("interaction")
+                    add("discovery")
+                }
                 put(
                     "description",
-                    "可选：按工具业务大类筛选。支持枚举：'asset'（素材资源与生图）、'view'（界面排版与图元操作）、'template'（工程项目与模板）、'discovery'（探索发现元工具）、'runtime'（运行态与实机视口）、'interaction'（用户交互与问询）。"
+                    "可选：按工具业务大类精准筛选。支持枚举：'asset'（图像生成/重绘、AI抠图去背、图集切片与素材库资产操作）、'view'（图元增删改查、层级调整、坐标与8pt网格计算、界面排版布局与标注图渲染）、'template'（工程与模板创建/查询/删除、图集流水线导入、设计参考图分析逆向）、'runtime'（桌面窗口实时截图、系统运行状态、长任务异步轮询、Compose语义树与离屏渲染）、'interaction'（用户问询抉择弹窗、Toast通知、拟人化UI节点点击与文本输入）、'discovery'（技能规范与文档查阅、网络抓取、系统时间探测）。"
                 )
+            }
+            putJsonObject("query") {
+                put("type", "string")
+                put("description", "可选：主推精准搜索关键词（如 'button', 'screenshot', 'color' 等），支持逗号或空格分隔。留空且无 category 时将列出全部可用工具。")
             }
             putJsonObject("queries") {
                 put("type", "array")
                 put("items", buildJsonObject { put("type", "string") })
                 put(
                     "description",
-                    "可选：同时搜索多个功能关键词或业务意图（如 ['asset', 'template']），系统合并去重一次性返回。"
+                    "可选：高级检索数组，同时搜索多个功能关键词或业务意图（如 ['asset', 'template']），系统合并去重一次性返回。"
                 )
-            }
-            putJsonObject("query") {
-                put("type", "string")
-                put("description", "可选：单个搜索关键词，支持逗号或空格分隔。")
             }
         }
     }

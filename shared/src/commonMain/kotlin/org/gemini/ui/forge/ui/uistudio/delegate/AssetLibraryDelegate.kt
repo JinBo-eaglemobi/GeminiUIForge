@@ -1042,44 +1042,42 @@ class AssetLibraryDelegate(
                 return null
             }
             val savedPath = storage.saveBytesToFile(targetFullPath, imageBytes)
-            if (savedPath != null) {
-                // 1. 同步在内存素材库中构建并登记该新素材，确保无论哈希如何均立即生效并高亮
-                val (w, h) = try {
-                    val skiaImg = Image.makeFromEncoded(imageBytes)
-                    skiaImg.width to skiaImg.height
-                } catch (_: Exception) {
-                    100 to 100
-                }
-                val fileHash = calculateShortFileHash(targetFullPath)
-                val baseName = cleanName.substringBeforeLast('.')
-                val targetFolder = if (cleanSubPath.isNotBlank()) {
-                    state.assetLibrary.folders.find { it.name.equals(cleanSubPath, ignoreCase = true) }
-                } else null
-                val newAssetId = baseName.ifBlank { "ai_img_${getCurrentTimeMillis()}" }
-                val newAsset = UIAssetItem(
-                    id = newAssetId,
-                    relativePath = targetFullPath,
-                    width = w,
-                    height = h,
-                    category = "image",
-                    folderId = targetFolder?.id,
-                    hash = fileHash
-                )
-                val existingList = state.assetLibrary.items.filterNot { it.relativePath == targetFullPath }
-                val updatedItems = existingList + newAsset
-                val updatedFolders = state.expandedFolderIds.let {
-                    if (targetFolder != null) it + targetFolder.id else it
-                }
-                state = state.copy(
-                    assetLibrary = state.assetLibrary.copy(items = updatedItems),
-                    selectedAssetId = newAsset.id,
-                    expandedFolderIds = updatedFolders
-                )
-                saveAssetLibrary()
-                refreshAssetLibrary(focusAssetPath = targetFullPath)
-                Toast.show("已成功存入素材库: $cleanName", ToastType.SUCCESS)
-                AppLogger.i("UIStudioViewModel", "✅ AI 聊天图片已成功存入素材库并即时选中聚焦: $targetFullPath (ID: ${newAsset.id})")
+            // 1. 同步在内存素材库中构建并登记该新素材，确保无论哈希如何均立即生效并高亮
+            val (w, h) = try {
+                val skiaImg = Image.makeFromEncoded(imageBytes)
+                skiaImg.width to skiaImg.height
+            } catch (_: Exception) {
+                100 to 100
             }
+            val fileHash = calculateShortFileHash(targetFullPath)
+            val baseName = cleanName.substringBeforeLast('.')
+            val targetFolder = if (cleanSubPath.isNotBlank()) {
+                state.assetLibrary.folders.find { it.name.equals(cleanSubPath, ignoreCase = true) }
+            } else null
+            val newAssetId = baseName.ifBlank { "ai_img_${getCurrentTimeMillis()}" }
+            val newAsset = UIAssetItem(
+                id = newAssetId,
+                relativePath = targetFullPath,
+                width = w,
+                height = h,
+                category = "image",
+                folderId = targetFolder?.id,
+                hash = fileHash
+            )
+            val existingList = state.assetLibrary.items.filterNot { it.relativePath == targetFullPath }
+            val updatedItems = existingList + newAsset
+            val updatedFolders = state.expandedFolderIds.let {
+                if (targetFolder != null) it + targetFolder.id else it
+            }
+            state = state.copy(
+                assetLibrary = state.assetLibrary.copy(items = updatedItems),
+                selectedAssetId = newAsset.id,
+                expandedFolderIds = updatedFolders
+            )
+            saveAssetLibrary()
+            refreshAssetLibrary(focusAssetPath = targetFullPath)
+            Toast.show("已成功存入素材库: $cleanName", ToastType.SUCCESS)
+            AppLogger.i("UIStudioViewModel", "✅ AI 聊天图片已成功存入素材库并即时选中聚焦: $targetFullPath (ID: ${newAsset.id})")
             savedPath
         } catch (e: Exception) {
             AppLogger.e("UIStudioViewModel", "保存 AI 聊天图片至素材库失败: $targetFullPath", e)

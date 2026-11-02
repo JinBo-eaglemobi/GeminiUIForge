@@ -53,6 +53,12 @@ class ScreenshotWindowTool : ToolDefinition {
             put("region", buildJsonObject {
                 put("type", "object")
                 put("description", "屏幕绝对像素裁剪区域 (可选)：{ left, top, right, bottom }")
+                put("properties", buildJsonObject {
+                    put("left", buildJsonObject { put("type", "number"); put("description", "区域左侧 X 像素坐标") })
+                    put("top", buildJsonObject { put("type", "number"); put("description", "区域顶部 Y 像素坐标") })
+                    put("right", buildJsonObject { put("type", "number"); put("description", "区域右侧 X 像素坐标") })
+                    put("bottom", buildJsonObject { put("type", "number"); put("description", "区域底部 Y 像素坐标") })
+                })
             })
         })
     }

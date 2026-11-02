@@ -16,21 +16,14 @@ object ToolExposurePolicy {
     val CORE_TOOL_NAMES: Set<String> = setOf(
         // 1. 唯一全量被动发现元工具
         "discover_tools",
-        // 2. UI Studio 核心交互与生图工具
-        "apply_view_layout",
-        "list_assets",
-        "generate_image",
-        "generate_block_asset",
-        "crop_image",
-        "remove_image_background",
+        // 2. 运行态感知与实机自审
         "get_runtime_status",
-        // 3. 通用上下文与计算基础工具
-        "get_current_time",
-        "calculate_geometry",
-        "web_fetch",
-        "read_project_file",
-        "search_skills",
-        "read_skill_spec"
+        "screenshot_window",
+        // 3. 项目模板全貌查询
+        "get_template",
+        // 4. 人机协同问询与通知
+        "ask_user_question",
+        "notify_user"
     )
 
     /**

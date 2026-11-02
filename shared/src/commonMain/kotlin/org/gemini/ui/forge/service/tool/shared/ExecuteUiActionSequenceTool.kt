@@ -38,13 +38,54 @@ class ExecuteUiActionSequenceTool : ToolDefinition {
                 putJsonObject("items") {
                     put("type", "object")
                     putJsonObject("properties") {
-                        putJsonObject("type") { put("type", "string") }
-                        putJsonObject("blockId") { put("type", "string") }
-                        putJsonObject("mode") { put("type", "string") }
-                        putJsonObject("opacity") { put("type", "number") }
-                        putJsonObject("delayMs") { put("type", "integer") }
-                        putJsonObject("alsoCropAndBind") { put("type", "boolean") }
-                        putJsonObject("engineMode") { put("type", "string") }
+                        putJsonObject("type") {
+                            put("type", "string")
+                            putJsonArray("enum") {
+                                add("SELECT_BLOCK")
+                                add("ISOLATE_BLOCK")
+                                add("RESTORE_VISIBILITY")
+                                add("SET_REFERENCE_MODE")
+                                add("SET_REFERENCE_OPACITY")
+                                add("FOCUS_BLOCK_ON_CANVAS")
+                                add("TRIGGER_CALIBRATE")
+                                add("TOGGLE_OUTLINES")
+                                add("WAIT_MS")
+                            }
+                            put("description", "指令类型：SELECT_BLOCK (选中图元), ISOLATE_BLOCK (隐藏其他仅保留该图元), RESTORE_VISIBILITY (恢复全显), SET_REFERENCE_MODE (参考图模式), SET_REFERENCE_OPACITY (参考图透明度), FOCUS_BLOCK_ON_CANVAS (画布视口聚焦), TRIGGER_CALIBRATE (微观吸附校对), TOGGLE_OUTLINES (线框显隐), WAIT_MS (等待延时)")
+                        }
+                        putJsonObject("blockId") {
+                            put("type", "string")
+                            put("description", "目标图元 ID（在 SELECT_BLOCK, ISOLATE_BLOCK, FOCUS_BLOCK_ON_CANVAS, TRIGGER_CALIBRATE 等指令下必填）")
+                        }
+                        putJsonObject("mode") {
+                            put("type", "string")
+                            putJsonArray("enum") {
+                                add("SPLIT")
+                                add("OVERLAY")
+                                add("HIDDEN")
+                            }
+                            put("description", "在 SET_REFERENCE_MODE 下生效：'SPLIT' (分栏对比), 'OVERLAY' (半透明重叠), 'HIDDEN' (隐藏)")
+                        }
+                        putJsonObject("opacity") {
+                            put("type", "number")
+                            put("description", "在 SET_REFERENCE_OPACITY 下生效：参考图半透明叠加不透明度 (0.1 ~ 1.0)")
+                        }
+                        putJsonObject("delayMs") {
+                            put("type", "integer")
+                            put("description", "在 WAIT_MS 下生效：等待毫秒数")
+                        }
+                        putJsonObject("alsoCropAndBind") {
+                            put("type", "boolean")
+                            put("description", "在 TRIGGER_CALIBRATE 下生效：校准后是否自动从新坐标物理裁切参考图切片")
+                        }
+                        putJsonObject("engineMode") {
+                            put("type", "string")
+                            putJsonArray("enum") {
+                                add("UI")
+                                add("HEADLESS")
+                            }
+                            put("description", "可选：执行模式，'UI' (前台拟人化交互) 或 'HEADLESS' (离线无感处理)")
+                        }
                     }
                     putJsonArray("required") {
                         add("type")

@@ -35,7 +35,13 @@ class CalculateGeometryTool : ToolDefinition {
             })
             put("parameters", buildJsonObject {
                 put("type", "object")
-                put("description", "运算参数字典")
+                put(
+                    "description",
+                    "运算参数字典。根据 operation 不同传入对应子字段：\n" +
+                    "- '8pt_snap' 期望: { 'value': number }（需对齐的原始浮点数值）\n" +
+                    "- 'concentric_radius' 期望: { 'inner_radius': number, 'padding': number }（基于内圆角与内边距推导外圆角）\n" +
+                    "- 'aspect_ratio_fit' 期望: { 'target_width': number, 'target_height': number, 'max_width': number, 'max_height': number }（在最大外框约束下计算保比缩放尺寸）"
+                )
             })
         })
         put("required", buildJsonArray { add("operation"); add("parameters") })

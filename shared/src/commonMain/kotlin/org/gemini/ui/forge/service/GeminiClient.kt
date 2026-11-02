@@ -399,7 +399,6 @@ class GeminiClient {
                             is JsonObject -> c["text"]?.jsonPrimitive?.contentOrNull
                                 ?: c["summary"]?.jsonPrimitive?.contentOrNull
                             is JsonPrimitive -> c.contentOrNull
-                            else -> null
                         }
                     }
             } else if (deltaType == "thought_signature") {

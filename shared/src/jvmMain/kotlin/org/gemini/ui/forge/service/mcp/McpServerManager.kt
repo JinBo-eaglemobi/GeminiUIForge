@@ -22,6 +22,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import org.gemini.ui.forge.ProjectConfig
 import org.gemini.ui.forge.service.tool.ToolContent
+import org.gemini.ui.forge.service.tool.ToolExposurePolicy
 import org.gemini.ui.forge.service.tool.mcp.McpToolRegistry
 import org.gemini.ui.forge.utils.AppLogger
 
@@ -61,8 +62,9 @@ object McpServerManager {
             )
         )
 
-        // 注册 McpToolRegistry 中的全部业务工具
-        McpToolRegistry.tools.value.forEach { def ->
+        // 注册核心业务工具（严格遵循 ToolExposurePolicy，与 AI 通道保持一致的双通道暴露策略）
+        val exposedTools = McpToolRegistry.tools.value.filter { ToolExposurePolicy.isCoreExposed(it.name) }
+        exposedTools.forEach { def ->
             val toolName = def.name
             val toolDescription = def.description
             val properties = def.inputSchema["properties"]?.let { it as? JsonObject } ?: JsonObject(emptyMap())
