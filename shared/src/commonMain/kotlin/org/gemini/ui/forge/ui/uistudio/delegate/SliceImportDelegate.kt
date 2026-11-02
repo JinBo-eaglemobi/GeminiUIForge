@@ -332,7 +332,31 @@ class SliceImportDelegate(
     /**
      * 关闭可视化预审校对弹窗。
      */
+    /** 整图去背后的透明源（生命周期 = 本次导入会话，不入草稿序列化） */
+    var transparentSourceBytes: ByteArray? = null
+        private set
+
+    /** 对原始大图执行整图去背；成功缓存透明源并返回，失败返回 null（调用方回退原图展示） */
+    suspend fun mattingSourceImage(sourceBytes: ByteArray): ByteArray? {
+        transparentSourceBytes?.let { return it }
+        val result = mattingService.removeBackground(sourceBytes) { log ->
+            AppLogger.d("SliceImport", "[SourceMatting] $log")
+        }
+        if (result == null) {
+            Toast.show("原图去背失败（请检查 Python 环境），已回退展示原图，切片后将按逐张方式去背", ToastType.INFO)
+            return null
+        }
+        transparentSourceBytes = result
+        Toast.show("✅ 原图已整体去背，切片将直接输出透明素材", ToastType.SUCCESS)
+        return result
+    }
+
+    fun clearTransparentSource() {
+        transparentSourceBytes = null
+    }
+
     fun closeVerifySliceDialog() {
+        clearTransparentSource()
         state = state.copy(isVerifySliceDialogVisible = false)
     }
 
@@ -342,7 +366,9 @@ class SliceImportDelegate(
     fun onConfirmSlice(
         items: List<NormalizedAssetItem>,
         repo: TemplateRepository,
-        onProjectUpdated: ((ProjectState) -> Unit)? = null
+        onProjectUpdated: ((ProjectState) -> Unit)? = null,
+        targetSubPath: String? = null,
+        targetFolderId: String? = null
     ) {
         val proj = state.project ?: return
         val imagePath = state.sourceImagePath
@@ -353,9 +379,20 @@ class SliceImportDelegate(
 
         scope.launch(Dispatchers.Default) {
             val sanitizedName = proj.projectId.trim().replace(" ", "_")
-            val targetFolderId = state.selectedFolderId
-            val targetFolder = state.assetLibrary.folders.find { it.id == targetFolderId }
-            val folderSubDir = if (targetFolder != null) "${targetFolder.name.trim().replace(" ", "_")}/" else ""
+            val cleanSubPath = targetSubPath?.trim()?.trim('/', '\\')
+            val effectiveFolderId = if (targetSubPath != null) {
+                targetFolderId ?: if (!cleanSubPath.isNullOrBlank()) {
+                    state.assetLibrary.folders.find { it.name.equals(cleanSubPath, ignoreCase = true) }?.id
+                } else null
+            } else {
+                state.selectedFolderId
+            }
+            val targetFolder = state.assetLibrary.folders.find { it.id == effectiveFolderId }
+            val folderSubDir = if (targetSubPath != null) {
+                if (cleanSubPath.isNullOrBlank()) "" else "$cleanSubPath/"
+            } else {
+                if (targetFolder != null) "${targetFolder.name.trim().replace(" ", "_")}/" else ""
+            }
             val targetDir = "templates/$sanitizedName/assets/image/$folderSubDir".trimEnd('/')
 
             // 1. 计算每个切片图元的文件名（优先使用 name，name 缺失时兜底 id）
@@ -424,8 +461,11 @@ class SliceImportDelegate(
                 val canvasH = state.canvasHeight
 
                 // ★ 关键性能突破：在循环外仅解码一次大图为共享不可变 Bitmap，彻底消除 N 次巨幅大图重复解码开销！
+                // 优先使用内存中的透明原图数据，切片天然带透明通道
+                val mattingSource = transparentSourceBytes
+                val decodeBytes = mattingSource ?: imageBytes
                 val baseImage = try {
-                    Image.makeFromEncoded(imageBytes)
+                    Image.makeFromEncoded(decodeBytes)
                 } catch (e: Exception) {
                     AppLogger.e("UIStudioViewModel", "❌ 解码大图失败", e)
                     null
@@ -439,11 +479,7 @@ class SliceImportDelegate(
                 val imgHeight = baseImage.height
                 val srcBitmap = Bitmap.makeFromImage(baseImage).apply { setImmutable() }
 
-                AppLogger.i("UIStudioViewModel", "=== [SLICE_VERIFY] 确认切图开始: 首个图元[${items.firstOrNull()?.name}] bounds=${items.firstOrNull()?.bounds}, 大图分辨率=${imgWidth}x${imgHeight} ===")
-
-                val targetFolderId = state.selectedFolderId
-                val targetFolder = state.assetLibrary.folders.find { it.id == targetFolderId }
-                val folderSubDir = if (targetFolder != null) "${targetFolder.name.trim().replace(" ", "_")}/" else ""
+                AppLogger.i("UIStudioViewModel", "=== [SLICE_VERIFY] 确认切图开始: 首个图元[${items.firstOrNull()?.name}] bounds=${items.firstOrNull()?.bounds}, 大图分辨率=${imgWidth}x${imgHeight}, 前置去背=${mattingSource != null} ===")
 
                 val total = items.size
                 val shouldRemoveBg = state.autoRemoveBgOnSlice
@@ -513,8 +549,13 @@ class SliceImportDelegate(
                                     slicedCount++
                                     val currentList = state.sliceTaskItems.toMutableList()
                                     if (idx < currentList.size) {
+                                        val itemFinalStatus = if (shouldRemoveBg) {
+                                            if (mattingSource != null) SliceItemStatus.SUCCESS else SliceItemStatus.SLICED
+                                        } else {
+                                            SliceItemStatus.SUCCESS
+                                        }
                                         currentList[idx] = currentList[idx].copy(
-                                            status = if (shouldRemoveBg) SliceItemStatus.SLICED else SliceItemStatus.SUCCESS
+                                            status = itemFinalStatus
                                         )
                                         val slicePartProgress = slicedCount.toFloat() / total.coerceAtLeast(1)
                                         state = state.copy(
@@ -540,8 +581,8 @@ class SliceImportDelegate(
                 // 阶段一收口停留：让切片完成态清晰可见
                 delay(200)
 
-                // ★ 阶段二：若开启自动去背，启动常驻单进程 AI 批量去背景（仅启动 1 次 Python + 模型常驻复用！）
-                if (shouldRemoveBg) {
+                // ★ 阶段二：若开启自动去背且未提前做过整图前置去背，启动常驻单进程 AI 批量去背景（仅启动 1 次 Python + 模型常驻复用！）
+                if (shouldRemoveBg && mattingSource == null) {
                     state = state.copy(
                         sliceCurrentStage = SliceStage.MATTING,
                         sliceProgress = 0f,
@@ -598,7 +639,7 @@ class SliceImportDelegate(
                         width = meta.item.bounds.width.toInt().coerceAtLeast(1),
                         height = meta.item.bounds.height.toInt().coerceAtLeast(1),
                         category = meta.item.type.name.lowercase(),
-                        folderId = targetFolderId,
+                        folderId = effectiveFolderId,
                         hash = calculateShortFileHash(meta.relPath)
                     )
                 }
@@ -607,7 +648,8 @@ class SliceImportDelegate(
                     items = state.assetLibrary.items.filterNot { old -> newAssetItems.any { it.id == old.id } } + newAssetItems
                 )
 
-                // 物理清理切片校对草稿文件
+                // 物理清理切片校对草稿文件与透明源内存缓存
+                clearTransparentSource()
                 try {
                     val draftPath = "templates/$sanitizedName/import_draft.json"
                     TemplateFile(draftPath).delete()

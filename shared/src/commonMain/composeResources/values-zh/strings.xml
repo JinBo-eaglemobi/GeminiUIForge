@@ -747,6 +747,10 @@
     <string name="chat_image_dialog_custom_folder">自定义输入子目录 (例如: icons/shop)</string>
     <string name="chat_image_dialog_preview_path">最终落盘路径：</string>
     <string name="chat_image_dialog_confirm">确认存入</string>
+    <string name="slice_save_dialog_title">确认切片保存位置</string>
+    <string name="slice_save_dialog_preview_pattern">assets/image/%1$s*.png (根据切片图元名称自动命名)</string>
+    <string name="slice_source_matting_progress">正在对原图执行 AI 去背，请稍候…</string>
+    <string name="slice_source_matting_subtext">完成后切片将直接输出透明素材</string>
     <string name="chat_image_toast_asset_success">已成功将图片存入素材库: %1$s</string>
     <string name="chat_image_toast_page_success">已将图片作为图元添加到页面 [%1$s]</string>
 

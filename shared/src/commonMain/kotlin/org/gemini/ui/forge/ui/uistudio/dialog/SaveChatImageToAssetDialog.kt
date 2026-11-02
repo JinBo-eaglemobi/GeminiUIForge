@@ -54,7 +54,9 @@ fun SaveChatImageToAssetDialog(
     initialFileName: String,
     folders: List<UIAssetFolder>,
     onDismissRequest: () -> Unit,
-    onConfirmSave: (fileName: String, subPath: String) -> Unit
+    onConfirmSave: (fileName: String, subPath: String) -> Unit,
+    showFileNameField: Boolean = true,
+    titleText: String? = null
 ) {
     if (!isOpen) return
 
@@ -72,13 +74,17 @@ fun SaveChatImageToAssetDialog(
         }
     }
 
-    val previewPath = remember(fileName, activeSubPath) {
-        val cleanName = fileName.trim()
+    val previewPath = remember(fileName, activeSubPath, showFileNameField) {
         val safeSub = if (activeSubPath.isBlank()) "" else "$activeSubPath/"
-        "assets/image/$safeSub$cleanName"
+        if (showFileNameField) {
+            val cleanName = fileName.trim()
+            "assets/image/$safeSub$cleanName"
+        } else {
+            "assets/image/${safeSub}*.png"
+        }
     }
 
-    val canSave = fileName.isNotBlank()
+    val canSave = if (showFileNameField) fileName.isNotBlank() else true
 
     Dialog(
         onDismissRequest = onDismissRequest,
@@ -128,7 +134,7 @@ fun SaveChatImageToAssetDialog(
                             }
                         }
                         Text(
-                            text = stringResource(Res.string.chat_image_dialog_title),
+                            text = titleText ?: stringResource(Res.string.chat_image_dialog_title),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -148,23 +154,25 @@ fun SaveChatImageToAssetDialog(
 
                 Spacer(modifier = Modifier.height(spacing.medium))
 
-                // 2. 文件名输入
-                Text(
-                    text = stringResource(Res.string.chat_image_dialog_filename),
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(spacing.extraSmall))
-                SelectAllOutlinedTextField(
-                    value = fileName,
-                    onValueChange = { fileName = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
-                )
+                if (showFileNameField) {
+                    // 2. 文件名输入
+                    Text(
+                        text = stringResource(Res.string.chat_image_dialog_filename),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(spacing.extraSmall))
+                    SelectAllOutlinedTextField(
+                        value = fileName,
+                        onValueChange = { fileName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+                    )
 
-                Spacer(modifier = Modifier.height(spacing.medium))
+                    Spacer(modifier = Modifier.height(spacing.medium))
+                }
 
                 // 3. 目标目录选择
                 Text(
@@ -340,7 +348,7 @@ fun SaveChatImageToAssetDialog(
                     Button(
                         onClick = {
                             if (canSave) {
-                                onConfirmSave(fileName.trim(), activeSubPath)
+                                onConfirmSave(if (showFileNameField) fileName.trim() else "", activeSubPath)
                             }
                         },
                         enabled = canSave,

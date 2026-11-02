@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.app.AppScreen
 import org.gemini.ui.forge.model.app.ShortcutAction
+import org.gemini.ui.forge.model.assetsheet.NormalizedAssetItem
 import org.gemini.ui.forge.ui.component.VerticalSplitter
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.chat.UIProjectAiStudioDialog
@@ -28,8 +29,10 @@ import org.gemini.ui.forge.ui.uistudio.component.*
 import org.gemini.ui.forge.ui.uistudio.dialog.*
 import org.gemini.ui.forge.ui.uistudio.verify.AssetSliceVerifyDialog
 import org.gemini.ui.forge.viewmodel.AppViewModel
+import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.skiko.OS
 import org.jetbrains.skiko.hostOs
+import geminiuiforge.composeapp.generated.resources.*
 
 /**
  * 全新独立的 UI Studio 主工作台容器界面。
@@ -55,6 +58,7 @@ fun UIStudioScreen(
     val state = viewModel.state
     var containerCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val focusRequester = remember { FocusRequester() }
+    var pendingSliceItems by remember { mutableStateOf<List<NormalizedAssetItem>?>(null) }
 
     DisposableEffect(viewModel) {
         org.gemini.ui.forge.service.mcp.McpUiActionPipeline.registerActiveUiStudioViewModel(viewModel)
@@ -355,15 +359,37 @@ fun UIStudioScreen(
                 onToggleAutoRemoveBg = { viewModel.assetLibrary.updateAutoRemoveBgOnSlice(it) },
                 onDismiss = { viewModel.sliceImport.closeVerifySliceDialog() },
                 onConfirmSlice = { items ->
+                    pendingSliceItems = items
+                },
+                onSaveDraft = { items -> viewModel.saveDraft(items) },
+                mattingSourceImage = viewModel.sliceImport::mattingSourceImage
+            )
+        }
+
+        // 挂载确认切片前置保存位置弹窗 (v2)
+        pendingSliceItems?.let { items ->
+            SaveChatImageToAssetDialog(
+                isOpen = true,
+                initialFileName = "",
+                folders = state.assetLibrary.folders,
+                showFileNameField = false,
+                titleText = stringResource(Res.string.slice_save_dialog_title),
+                onDismissRequest = { pendingSliceItems = null },
+                onConfirmSave = { _, subPath ->
+                    val selectedFolderId = if (subPath.isNotBlank()) {
+                        state.assetLibrary.folders.find { it.name.equals(subPath, ignoreCase = true) }?.id
+                    } else null
                     viewModel.sliceImport.onConfirmSlice(
                         items = items,
                         repo = templateRepository,
                         onProjectUpdated = { updatedProject ->
                             appViewModel.loadProject(updatedProject.projectId, updatedProject)
-                        }
+                        },
+                        targetSubPath = subPath,
+                        targetFolderId = selectedFolderId
                     )
-                },
-                onSaveDraft = { items -> viewModel.saveDraft(items) }
+                    pendingSliceItems = null
+                }
             )
         }
 

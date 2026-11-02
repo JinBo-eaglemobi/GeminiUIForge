@@ -273,7 +273,10 @@ fun AssetSliceVerifyTopBar(
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                     ),
-                    modifier = Modifier.height(30.dp).tip("切片时自动调用本地 Python rembg 抠图去背，输出带透明 Alpha 通道的 PNG 图片")
+                    modifier = Modifier.height(30.dp).tip(
+                        if (autoRemoveBg) "已开启原图前置去背：校对底图与切片输出均为透明（整图仅去背一次）"
+                        else "已关闭去背：展示原始底图，切片后逐张去背"
+                    )
                 )
 
                 OutlinedButton(

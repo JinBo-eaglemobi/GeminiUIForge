@@ -19,10 +19,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,6 +36,7 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.SmartEdgeSnapper
 import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.utils.toImageBitmap
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * 图集切图前交互式可视化预审与微调弹窗
@@ -50,6 +53,7 @@ fun AssetSliceVerifyDialog(
     onDismiss: () -> Unit,
     onConfirmSlice: (List<NormalizedAssetItem>) -> Unit,
     onSaveDraft: ((List<NormalizedAssetItem>) -> Unit)? = null,
+    mattingSourceImage: (suspend (ByteArray) -> ByteArray?)? = null,
     modifier: Modifier = Modifier
 ) {
     if (!visible) return
@@ -61,6 +65,14 @@ fun AssetSliceVerifyDialog(
     var imageBytes by remember { mutableStateOf<ByteArray?>(null) }
     var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var isLoadingImage by remember { mutableStateOf(true) }
+
+    // 1.1 原图前置去背透明状态与底图三元收敛
+    var transparentBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var transparentBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    var isMattingSource by remember { mutableStateOf(false) }
+
+    val effectiveBytes = if (autoRemoveBg) (transparentBytes ?: imageBytes) else imageBytes
+    val effectiveBitmap = if (autoRemoveBg) (transparentBitmap ?: imageBitmap) else imageBitmap
 
     // 2. 可编辑的图元集合与历史快照
     val editableItems = remember(initialItems) {
@@ -154,9 +166,9 @@ fun AssetSliceVerifyDialog(
     // 触发一键智能吸附校准 (顶栏吸附按钮绑定的标准流程，快捷键: Alt+A 或自动调用)
     fun triggerSmartSnap() {
         if (isSnapping || editableItems.isEmpty()) return
-        val bytes = imageBytes ?: return
-        val imgW = imageBitmap?.width?.toFloat() ?: 1280f
-        val imgH = imageBitmap?.height?.toFloat() ?: 720f
+        val bytes = effectiveBytes ?: return
+        val imgW = effectiveBitmap?.width?.toFloat() ?: 1280f
+        val imgH = effectiveBitmap?.height?.toFloat() ?: 720f
 
         coroutineScope.launch(Dispatchers.Default) {
             recordSnapshot()
@@ -216,9 +228,24 @@ fun AssetSliceVerifyDialog(
         isLoadingImage = false
     }
 
-    // 当原图与图元就绪时，首次进入预览全自动调用吸附按钮流程执行一次
-    LaunchedEffect(imageBytes, isLoadingImage) {
-        if (imageBytes != null && !isLoadingImage && editableItems.isNotEmpty() && !hasAutoTriggeredSnap) {
+    // 原图前置去背：开启自动去背且具有去背服务时，自动对原始原图执行整图 AI 去背
+    LaunchedEffect(autoRemoveBg, imageBytes) {
+        val original = imageBytes ?: return@LaunchedEffect
+        if (!autoRemoveBg || mattingSourceImage == null) return@LaunchedEffect
+        if (transparentBytes == null && !isMattingSource) {
+            isMattingSource = true
+            val result = mattingSourceImage(original)
+            if (result != null) {
+                transparentBytes = result
+                transparentBitmap = result.toImageBitmap()
+            }
+            isMattingSource = false
+        }
+    }
+
+    // 当底图加载完成且去背决策稳定后，首次进入预览全自动调用吸附按钮流程执行一次
+    LaunchedEffect(effectiveBytes, isLoadingImage, isMattingSource) {
+        if (effectiveBytes != null && !isLoadingImage && !isMattingSource && editableItems.isNotEmpty() && !hasAutoTriggeredSnap) {
             hasAutoTriggeredSnap = true
             triggerSmartSnap()
         }
@@ -369,7 +396,7 @@ fun AssetSliceVerifyDialog(
                                 }
                             } else {
                                 AssetSliceCanvas(
-                                    imageBitmap = imageBitmap,
+                                    imageBitmap = effectiveBitmap,
                                     items = editableItems,
                                     selectedItemId = selectedItemId,
                                     toolMode = toolMode,
@@ -402,6 +429,40 @@ fun AssetSliceVerifyDialog(
                                         Toast.show("已补录新图元: ${newItem.name}", ToastType.SUCCESS)
                                     }
                                 )
+                            }
+
+                            if (isMattingSource) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = 0.55f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(spacing.medium)
+                                    ) {
+                                        CircularProgressIndicator(
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(spacing.extraSmall)
+                                        ) {
+                                            Text(
+                                                text = stringResource(Res.string.slice_source_matting_progress),
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                color = Color.White
+                                            )
+                                            Text(
+                                                text = stringResource(Res.string.slice_source_matting_subtext),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.White.copy(alpha = 0.75f)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
 

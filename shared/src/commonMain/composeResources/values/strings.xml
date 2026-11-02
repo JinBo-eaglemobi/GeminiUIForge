@@ -737,6 +737,10 @@
     <string name="chat_image_dialog_custom_folder">Custom Subfolder (e.g. icons/shop)</string>
     <string name="chat_image_dialog_preview_path">Target File Path:</string>
     <string name="chat_image_dialog_confirm">Save to Assets</string>
+    <string name="slice_save_dialog_title">Confirm Slice Save Location</string>
+    <string name="slice_save_dialog_preview_pattern">assets/image/%1$s*.png (Auto-named by layer name)</string>
+    <string name="slice_source_matting_progress">AI is removing background from original image, please wait...</string>
+    <string name="slice_source_matting_subtext">Slices will be directly exported as transparent assets upon completion</string>
     <string name="chat_image_toast_asset_success">Successfully saved image to assets: %1$s</string>
     <string name="chat_image_toast_page_success">Added image block to page [%1$s]</string>
 
