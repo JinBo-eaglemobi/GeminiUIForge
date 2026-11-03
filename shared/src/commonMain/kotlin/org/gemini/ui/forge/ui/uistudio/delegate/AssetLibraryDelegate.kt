@@ -99,117 +99,166 @@ class AssetLibraryDelegate(
      * 当本地已存在切片图片但 asset_library.json 未收录或为空时，
      * 自动从项目图元元数据及物理磁盘 assets 目录扫描补齐，并持久化保存。
      */
+    /**
+     * 自动深度自愈素材库账本（双通道物理扫描与同步修复）：
+     * 1. 哈希自愈：补齐或规整 16 位短内容哈希；
+     * 2. 文件夹与素材树递归物理扫描：递归扫描 templates/$sanitized/assets/image 下的所有物理子目录与切片文件；
+     * 3. 缺失文件夹自动建档：若磁盘存在子目录但在账本中缺失对应 UIAssetFolder，自动补建并维护层级；
+     * 4. 存量素材 folderId 自动纠偏：若切片实际位于某子目录但账本中 folderId 错为 null，自动纠偏归属；
+     * 5. 孤儿切片自动收录：将磁盘已存在但未登记的切片安全入库。
+     */
     private suspend fun healAssetLibrary(sanitized: String, initialLib: UIAssetLibrary): UIAssetLibrary {
-        var hasUpdatedExisting = false
-        val healedExistingItems = initialLib.items.map { item ->
+        var hasChanges = false
+        val foldersList = initialLib.folders.toMutableList()
+
+        // 1. 规整已有 items 的内容哈希
+        val itemsMap = initialLib.items.map { it.id to it }.toMap().toMutableMap()
+        for ((id, item) in itemsMap) {
             val curHash = item.hash
             if (curHash.isNullOrBlank()) {
                 val computed = calculateShortFileHash(item.relativePath)
                 if (computed != null) {
-                    hasUpdatedExisting = true
-                    item.copy(hash = computed)
-                } else item
+                    hasChanges = true
+                    itemsMap[id] = item.copy(hash = computed)
+                }
             } else if (curHash.length > 16) {
-                // 将历史存量 64 位长哈希规整为 16 位短哈希
-                hasUpdatedExisting = true
-                item.copy(hash = curHash.toShortHash())
-            } else item
+                hasChanges = true
+                itemsMap[id] = item.copy(hash = curHash.toShortHash())
+            }
         }
-        val effectiveLib = if (hasUpdatedExisting) initialLib.copy(items = healedExistingItems) else initialLib
 
-        val existingPaths = effectiveLib.items.map { it.relativePath.replace("\\", "/") }.toMutableSet()
-        val existingIds = effectiveLib.items.map { it.id }.toMutableSet()
-        val existingHashes = effectiveLib.items.mapNotNull { it.hash }.toMutableSet()
+        val existingPaths = itemsMap.values.map { it.relativePath.replace("\\", "/") }.toMutableSet()
+        val existingHashes = itemsMap.values.mapNotNull { it.hash }.toMutableSet()
+        val existingIds = itemsMap.keys.toMutableSet()
         val newItems = mutableListOf<UIAssetItem>()
 
-        // 1. 深度扫描本地物理 assets 目录兜底自愈（新模型下素材唯一凭据是内容哈希，扫描时同步计算补齐 16 位短哈希）
-        try {
-            val assetsDirRel = "templates/$sanitized/assets"
-            val directFiles = storage.listFiles(assetsDirRel)
-            for (file in directFiles) {
-                if (file.endsWith(".png", ignoreCase = true) || file.endsWith(".webp", ignoreCase = true)) {
-                    val relPath = "$assetsDirRel/$file"
-                    val tFile = TemplateFile(relPath)
-                    val fileBytes = try { tFile.readBytes() ?: readLocalFileBytes(relPath) } catch (_: Exception) { null }
-                    if (fileBytes == null || fileBytes.isEmpty()) {
-                        AppLogger.w("UIStudioViewModel", "🗑️ 自愈扫描探测到 0 字节损坏坏文件，拒绝收录并自动物理清除: $relPath")
-                        try {
-                            tFile.delete()
-                        } catch (_: Exception) {}
-                        continue
-                    }
-                    if (!existingPaths.contains(relPath)) {
-                        val baseId = file.substringBeforeLast(".")
-                        val fileHash = calculateShortFileHash(relPath)
-                        // 同内容哈希的重复文件跳过入库（哈希是素材唯一凭据）
-                        if (fileHash != null && existingHashes.contains(fileHash)) continue
-                        if (!existingIds.contains(baseId)) {
-                            newItems.add(
-                                UIAssetItem(
-                                    id = baseId,
-                                    relativePath = relPath,
-                                    width = 100,
-                                    height = 100,
-                                    category = "image",
-                                    folderId = null,
-                                    hash = fileHash
-                                )
-                            )
-                            existingPaths.add(relPath)
-                            existingIds.add(baseId)
-                            fileHash?.let { existingHashes.add(it) }
-                        }
-                    }
-                }
-            }
+        // 辅助函数：根据目录名获取或创建 UIAssetFolder
+        fun getOrCreateFolder(folderName: String, parentId: String?): UIAssetFolder {
+            val cleanName = folderName.trim()
+            val existing = foldersList.find { it.name.equals(cleanName, ignoreCase = true) && it.parentFolderId == parentId }
+            if (existing != null) return existing
+            val newFolder = UIAssetFolder(
+                id = "folder_${getCurrentTimeMillis()}_${(cleanName.hashCode() and 0xFFFF)}",
+                name = cleanName,
+                parentFolderId = parentId
+            )
+            foldersList.add(newFolder)
+            hasChanges = true
+            AppLogger.i("UIStudioViewModel", "📁 磁盘自愈探测到新物理目录，自动补建素材库文件夹: ${newFolder.name} (id=${newFolder.id})")
+            return newFolder
+        }
 
-            val subDirs = storage.listDirectories(assetsDirRel)
-            for (sub in subDirs) {
-                val subRel = "$assetsDirRel/$sub"
-                val subFiles = storage.listFiles(subRel)
-                for (file in subFiles) {
-                    if (file.endsWith(".png", ignoreCase = true) || file.endsWith(".webp", ignoreCase = true)) {
-                        val relPath = "$subRel/$file"
+        // 递归扫描目录函数
+        suspend fun scanFolderRecursive(relDir: String, currentFolderId: String?) {
+            try {
+                // A. 扫描当前目录下的所有直接图片文件
+                val files = storage.listFiles(relDir)
+                for (file in files) {
+                    if (file.endsWith(".png", ignoreCase = true) || file.endsWith(".webp", ignoreCase = true) || file.endsWith(".jpg", ignoreCase = true)) {
+                        val relPath = "$relDir/$file"
                         val tFile = TemplateFile(relPath)
                         val fileBytes = try { tFile.readBytes() ?: readLocalFileBytes(relPath) } catch (_: Exception) { null }
                         if (fileBytes == null || fileBytes.isEmpty()) {
                             AppLogger.w("UIStudioViewModel", "🗑️ 自愈扫描探测到 0 字节损坏坏文件，拒绝收录并自动物理清除: $relPath")
-                            try {
-                                tFile.delete()
-                            } catch (_: Exception) {}
+                            try { tFile.delete() } catch (_: Exception) {}
                             continue
                         }
-                        if (!existingPaths.contains(relPath)) {
-                            val baseId = file.substringBeforeLast(".")
-                            val effectiveId = if (existingIds.contains(baseId)) "${sub}_$baseId" else baseId
-                            val fileHash = calculateShortFileHash(relPath)
-                            // 同内容哈希的重复文件跳过入库（哈希是素材唯一凭据）
+
+                        val normalizedRelPath = relPath.replace("\\", "/")
+                        val existingItem = itemsMap.values.find { it.relativePath.replace("\\", "/") == normalizedRelPath }
+                        if (existingItem != null) {
+                            // 纠偏 folderId：若文件实际位于子目录但账本中 folderId 不一致，自动修正
+                            if (existingItem.folderId != currentFolderId) {
+                                hasChanges = true
+                                itemsMap[existingItem.id] = existingItem.copy(folderId = currentFolderId)
+                                AppLogger.i("UIStudioViewModel", "🔄 修正素材归属文件夹: ${existingItem.name} -> folderId=$currentFolderId")
+                            }
+                        } else if (!existingPaths.contains(normalizedRelPath)) {
+                            // 新素材收录
+                            val fileHash = calculateShortFileHash(normalizedRelPath)
                             if (fileHash != null && existingHashes.contains(fileHash)) continue
-                            newItems.add(
-                                UIAssetItem(
-                                    id = effectiveId,
-                                    relativePath = relPath,
-                                    width = 100,
-                                    height = 100,
-                                    category = "image",
-                                    folderId = null,
-                                    hash = fileHash
-                                )
+
+                            val baseId = file.substringBeforeLast(".")
+                            val effectiveId = if (existingIds.contains(baseId)) "${file.hashCode().toString(16)}_$baseId" else baseId
+                            val (w, h) = try {
+                                val skiaImg = Image.makeFromEncoded(fileBytes)
+                                skiaImg.width to skiaImg.height
+                            } catch (_: Exception) {
+                                100 to 100
+                            }
+
+                            val newItem = UIAssetItem(
+                                id = effectiveId,
+                                relativePath = normalizedRelPath,
+                                width = w,
+                                height = h,
+                                category = "image",
+                                folderId = currentFolderId,
+                                hash = fileHash
                             )
-                            existingPaths.add(relPath)
+                            newItems.add(newItem)
+                            existingPaths.add(normalizedRelPath)
                             existingIds.add(effectiveId)
                             fileHash?.let { existingHashes.add(it) }
+                            hasChanges = true
+                            AppLogger.i("UIStudioViewModel", "✨ 磁盘自愈发现并收录新切片: ${newItem.name} (folderId=$currentFolderId)")
+                        }
+                    }
+                }
+
+                // B. 递归扫描当前目录下的所有子文件夹
+                val subDirs = storage.listDirectories(relDir)
+                for (sub in subDirs) {
+                    val subFolder = getOrCreateFolder(sub, currentFolderId)
+                    scanFolderRecursive("$relDir/$sub", subFolder.id)
+                }
+            } catch (e: Exception) {
+                AppLogger.w("UIStudioViewModel", "扫描物理目录异常 ($relDir): ${e.message}")
+            }
+        }
+
+        // 2. 启动扫描：主素材库位于 templates/$sanitized/assets/image
+        try {
+            val imageBaseRel = "templates/$sanitized/assets/image"
+            if (TemplateFile(imageBaseRel).exists()) {
+                scanFolderRecursive(imageBaseRel, null)
+            }
+
+            // 对 assets 根目录下的其它零散文件（如 generated 等）做非递归收录
+            val assetsDirRel = "templates/$sanitized/assets"
+            val directFiles = storage.listFiles(assetsDirRel)
+            for (file in directFiles) {
+                if (file.endsWith(".png", ignoreCase = true) || file.endsWith(".webp", ignoreCase = true)) {
+                    val relPath = "$assetsDirRel/$file".replace("\\", "/")
+                    if (!existingPaths.contains(relPath)) {
+                        val fileHash = calculateShortFileHash(relPath)
+                        val baseId = file.substringBeforeLast(".")
+                        if (fileHash == null || !existingHashes.contains(fileHash)) {
+                            val newItem = UIAssetItem(
+                                id = baseId,
+                                relativePath = relPath,
+                                width = 100,
+                                height = 100,
+                                category = "image",
+                                folderId = null,
+                                hash = fileHash
+                            )
+                            newItems.add(newItem)
+                            existingPaths.add(relPath)
+                            fileHash?.let { existingHashes.add(it) }
+                            hasChanges = true
                         }
                     }
                 }
             }
         } catch (e: Exception) {
-            AppLogger.w("UIStudioViewModel", "物理目录自愈扫描部分跳过: ${e.message}")
+            AppLogger.w("UIStudioViewModel", "物理目录自愈扫描异常: ${e.message}")
         }
 
-        return if (newItems.isNotEmpty() || hasUpdatedExisting) {
-            val updated = effectiveLib.copy(items = effectiveLib.items + newItems)
-            AppLogger.i("UIStudioViewModel", "✨ 自愈补齐素材库完成: 新增 ${newItems.size} 个物理素材，补全哈希 ${if (hasUpdatedExisting) "是" else "否"}！")
+        return if (hasChanges || newItems.isNotEmpty()) {
+            val finalItems = itemsMap.values.toList() + newItems
+            val updated = initialLib.copy(folders = foldersList, items = finalItems)
+            AppLogger.i("UIStudioViewModel", "🎉 素材库物理自愈全流程完成: 现有文件夹 ${foldersList.size} 个, 素材总数 ${finalItems.size} 个")
             updated
         } else {
             initialLib

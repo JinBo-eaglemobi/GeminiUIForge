@@ -26,6 +26,7 @@ import org.gemini.ui.forge.ui.uistudio.SliceItemStatus
 import org.gemini.ui.forge.ui.uistudio.SliceStage
 import org.gemini.ui.forge.ui.uistudio.SliceTaskItemState
 import org.gemini.ui.forge.ui.uistudio.UIStudioState
+import org.gemini.ui.forge.ui.uistudio.model.UIAssetFolder
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.Toast
@@ -380,19 +381,27 @@ class SliceImportDelegate(
         scope.launch(Dispatchers.Default) {
             val sanitizedName = proj.projectId.trim().replace(" ", "_")
             val cleanSubPath = targetSubPath?.trim()?.trim('/', '\\')
-            val effectiveFolderId = if (targetSubPath != null) {
-                targetFolderId ?: if (!cleanSubPath.isNullOrBlank()) {
-                    state.assetLibrary.folders.find { it.name.equals(cleanSubPath, ignoreCase = true) }?.id
-                } else null
-            } else {
-                state.selectedFolderId
-            }
-            val targetFolder = state.assetLibrary.folders.find { it.id == effectiveFolderId }
-            val folderSubDir = if (targetSubPath != null) {
-                if (cleanSubPath.isNullOrBlank()) "" else "$cleanSubPath/"
-            } else {
-                if (targetFolder != null) "${targetFolder.name.trim().replace(" ", "_")}/" else ""
-            }
+            
+            // 自动检索已有文件夹，或在新目录不存在时自动构建新文件夹对象
+            val existingFolder = if (!cleanSubPath.isNullOrBlank()) {
+                state.assetLibrary.folders.find { it.name.equals(cleanSubPath, ignoreCase = true) }
+            } else if (targetFolderId != null) {
+                state.assetLibrary.folders.find { it.id == targetFolderId }
+            } else if (targetSubPath == null) {
+                state.assetLibrary.folders.find { it.id == state.selectedFolderId }
+            } else null
+
+            val autoCreatedFolder = if (existingFolder == null && !cleanSubPath.isNullOrBlank()) {
+                UIAssetFolder(
+                    id = "folder_${getCurrentTimeMillis()}",
+                    name = cleanSubPath,
+                    parentFolderId = null
+                )
+            } else null
+
+            val targetFolder = existingFolder ?: autoCreatedFolder
+            val effectiveFolderId = targetFolder?.id
+            val folderSubDir = if (targetFolder != null) "${targetFolder.name.trim().replace(" ", "_")}/" else ""
             val targetDir = "templates/$sanitizedName/assets/image/$folderSubDir".trimEnd('/')
 
             // 1. 计算每个切片图元的文件名（优先使用 name，name 缺失时兜底 id）
@@ -644,7 +653,19 @@ class SliceImportDelegate(
                     )
                 }
 
+                val finalFolders = if (autoCreatedFolder != null && state.assetLibrary.folders.none { it.id == autoCreatedFolder.id }) {
+                    state.assetLibrary.folders + autoCreatedFolder
+                } else {
+                    state.assetLibrary.folders
+                }
+                val finalExpandedIds = if (autoCreatedFolder != null) {
+                    state.expandedFolderIds + autoCreatedFolder.id
+                } else {
+                    state.expandedFolderIds
+                }
+
                 val updatedLibrary = state.assetLibrary.copy(
+                    folders = finalFolders,
                     items = state.assetLibrary.items.filterNot { old -> newAssetItems.any { it.id == old.id } } + newAssetItems
                 )
 
@@ -657,13 +678,15 @@ class SliceImportDelegate(
 
                 state = state.copy(
                     assetLibrary = updatedLibrary,
+                    expandedFolderIds = finalExpandedIds,
                     sliceProgress = 1.0f,
                     sliceCurrentStage = SliceStage.FINISHED,
                     sliceStatusText = "🎉 全部切片与去背已完成！"
                 )
 
-                // 持久化素材库到 asset_library.json
+                // 持久化素材库到 asset_library.json 并触发全量刷新与高亮聚焦
                 assetLibrary.saveAssetLibrary()
+                assetLibrary.refreshAssetLibrary(focusAssetPath = newAssetItems.firstOrNull()?.relativePath)
 
                 withContext(Dispatchers.Main) {
                     onProjectUpdated?.invoke(proj)
