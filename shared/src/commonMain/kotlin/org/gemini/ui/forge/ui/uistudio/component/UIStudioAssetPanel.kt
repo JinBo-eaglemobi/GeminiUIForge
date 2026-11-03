@@ -107,8 +107,8 @@ fun UIStudioAssetPanel(
     val listState = rememberLazyListState()
 
     // 监听选中的素材变化（如从 AI 聊天存入素材库），自动平滑展开并精准滚动聚焦呈现
-    LaunchedEffect(state.selectedAssetId, library.items) {
-        val selectedId = state.selectedAssetId ?: return@LaunchedEffect
+    LaunchedEffect(state.selectedAssetHash, library.items) {
+        val selectedHash = state.selectedAssetHash ?: return@LaunchedEffect
         var currentIndex = 0
         var targetIndex: Int? = null
 
@@ -118,7 +118,7 @@ fun UIStudioAssetPanel(
             if (state.expandedFolderIds.contains(folder.id)) {
                 val folderItems = library.getItemsInFolder(folder.id)
                 for (fItem in folderItems) {
-                    if (fItem.id == selectedId) {
+                    if (fItem.hash == selectedHash) {
                         targetIndex = currentIndex
                         break
                     }
@@ -130,7 +130,7 @@ fun UIStudioAssetPanel(
         if (targetIndex == null) {
             val rootItems = library.getItemsInFolder(null)
             for (rItem in rootItems) {
-                if (rItem.id == selectedId) {
+                if (rItem.hash == selectedHash) {
                     targetIndex = currentIndex
                     break
                 }
@@ -511,10 +511,10 @@ fun UIStudioAssetPanel(
 
                         // 文件夹内部的素材子项（展开时呈现）
                         if (isExpanded) {
-                            items(folderItems, key = { "item_${it.id}" }) { item ->
+                            items(folderItems, key = { "item_${it.hash}_${it.relativePath}" }) { item ->
                                 UIStudioAssetTreeLeafItem(
                                     item = item,
-                                    isSelected = state.selectedAssetId == item.id,
+                                    isSelected = state.selectedAssetHash == item.hash,
                                     indentPadding = 24.dp,
                                     viewModel = viewModel,
                                     templateRepo = templateRepo,
@@ -547,10 +547,10 @@ fun UIStudioAssetPanel(
                                             viewModel.assetLibrary.addAssetToCanvas(item, logicalX, logicalY, templateRepo)
                                         } else {
                                             val targetFolderId = liveState.hoveredFolderId
-                                            val draggedId = liveState.draggedAssetId ?: item.id
-                                            viewModel.assetLibrary.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
+                                            val draggedHash = liveState.draggedAssetHash ?: item.hash
+                                            viewModel.assetLibrary.moveAssetToFolder(draggedHash, targetFolderId, templateRepo)
                                         }
-                                        viewModel.assetLibrary.setDraggedAssetId(null)
+                                        viewModel.assetLibrary.setDraggedAssetHash(null)
                                         viewModel.assetLibrary.setHoveredFolderId(null)
                                         viewModel.viewport.setCanvasDragHovered(false)
                                         viewModel.viewport.updateLastDragHoverPos(null)
@@ -562,10 +562,10 @@ fun UIStudioAssetPanel(
 
                     // 2. 根目录下直接所属的素材（不设“未分类素材”标签，平铺排列）
                     val rootItems = library.getItemsInFolder(null)
-                    items(rootItems, key = { "root_item_${it.id}" }) { item ->
+                    items(rootItems, key = { "root_item_${it.hash}_${it.relativePath}" }) { item ->
                         UIStudioAssetTreeLeafItem(
                             item = item,
-                            isSelected = state.selectedAssetId == item.id,
+                            isSelected = state.selectedAssetHash == item.hash,
                             indentPadding = 4.dp,
                             viewModel = viewModel,
                             templateRepo = templateRepo,
@@ -598,10 +598,10 @@ fun UIStudioAssetPanel(
                                     viewModel.assetLibrary.addAssetToCanvas(item, logicalX, logicalY, templateRepo)
                                 } else {
                                     val targetFolderId = liveState.hoveredFolderId
-                                    val draggedId = liveState.draggedAssetId ?: item.id
-                                    viewModel.assetLibrary.moveAssetToFolder(draggedId, targetFolderId, templateRepo)
+                                    val draggedHash = liveState.draggedAssetHash ?: item.hash
+                                    viewModel.assetLibrary.moveAssetToFolder(draggedHash, targetFolderId, templateRepo)
                                 }
-                                viewModel.assetLibrary.setDraggedAssetId(null)
+                                viewModel.assetLibrary.setDraggedAssetHash(null)
                                 viewModel.assetLibrary.setHoveredFolderId(null)
                                 viewModel.viewport.setCanvasDragHovered(false)
                                 viewModel.viewport.updateLastDragHoverPos(null)
@@ -679,7 +679,7 @@ fun UIStudioAssetPanel(
             initialName = asset.name,
             onConfirm = { newName ->
                 coroutineScope.launch {
-                    if (viewModel.assetLibrary.commitRenameAsset(asset.id, newName)) {
+                    if (viewModel.assetLibrary.commitRenameAsset(asset.hash, newName)) {
                         renamingAssetTarget = null
                     }
                 }
@@ -716,11 +716,11 @@ fun UIStudioAssetPanel(
     deletingAssetTarget?.let { asset ->
         AppConfirmDialog(
             title = "确认删除素材",
-            message = "是否确认从磁盘彻底删除素材「${asset.name} (${asset.id})」？该操作不可撤销。",
+            message = "是否确认从磁盘彻底删除素材「${asset.name} (${asset.hash.take(8)})」？该操作不可撤销。",
             confirmText = "彻底删除",
             isDestructive = true,
             onConfirm = {
-                viewModel.assetLibrary.deleteAsset(asset.id)
+                viewModel.assetLibrary.deleteAsset(asset.hash)
                 deletingAssetTarget = null
             },
             onDismiss = { deletingAssetTarget = null }

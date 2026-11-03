@@ -45,10 +45,10 @@ class ManageAssetLibraryTool(
         "3. create_folder: 创建新素材文件夹（支持指定父文件夹 parentFolderId）；\n" +
         "4. rename_folder: 重命名文件夹（需传入 folderId 与 newName）；\n" +
         "5. delete_folder: 删除文件夹（破坏性操作，强制要求 confirmDestructive: true，内部素材自动移至根目录防丢失）；\n" +
-        "6. rename_asset: 重命名素材切片（需传入 assetId 或 assetHash 以及 newName）；\n" +
+        "6. rename_asset: 重命名素材切片（需传入 assetHash 与 newName）；\n" +
         "7. move_asset: 移动素材至目标文件夹 targetFolderId（传空或 null 移至根目录）；\n" +
         "8. delete_asset: 删除指定素材（破坏性操作，强制要求 confirmDestructive: true）；\n" +
-        "9. bind_to_block: 快捷将素材库切片绑定至目标图元 blockId（支持传入 assetHash、assetId 或 assetFileName）。"
+        "9. bind_to_block: 快捷将素材库切片绑定至目标图元 blockId（支持传入 assetHash 或 assetFileName）。"
 
     override val annotations: ToolAnnotations = ToolAnnotations(
         readOnlyHint = false,
@@ -93,13 +93,9 @@ class ManageAssetLibraryTool(
                 put("type", "string")
                 put("description", "父文件夹 ID（用于 create_folder）。缺省或传空表示顶层文件夹。")
             })
-            put("assetId", buildJsonObject {
-                put("type", "string")
-                put("description", "素材唯一标识 ID（用于 rename_asset, move_asset, delete_asset, bind_to_block）。")
-            })
             put("assetHash", buildJsonObject {
                 put("type", "string")
-                put("description", "素材内容哈希（16位短哈希或 SHA-256，用于精确定位素材或 bind_to_block）。")
+                put("description", "素材内容哈希（16位短哈希或 SHA-256，用于唯一精确定位素材或 bind_to_block）。")
             })
             put("newName", buildJsonObject {
                 put("type", "string")
@@ -181,13 +177,12 @@ class ManageAssetLibraryTool(
 
                 val assetListJson = filteredItems.map { item ->
                     buildJsonObject {
-                        put("id", item.id)
+                        put("hash", item.hash)
                         put("name", item.name)
                         put("width", item.width)
                         put("height", item.height)
                         put("category", item.category)
                         put("folderId", item.folderId)
-                        put("hash", item.hash)
                         put("updatedAt", item.updatedAt)
                     }
                 }
@@ -213,21 +208,19 @@ class ManageAssetLibraryTool(
 
                 val matched = currentLib.items.filter {
                     it.name.lowercase().contains(kwLower) ||
-                    it.id.lowercase().contains(kwLower) ||
                     it.category.lowercase().contains(kwLower) ||
-                    (it.hash != null && it.hash.lowercase().contains(kwLower))
+                    it.hash.lowercase().contains(kwLower)
                 }
 
                 val matchedJson = matched.map { item ->
                     buildJsonObject {
-                        put("id", item.id)
+                        put("hash", item.hash)
                         put("name", item.name)
                         put("width", item.width)
                         put("height", item.height)
                         put("category", item.category)
                         put("folderId", item.folderId)
                         put("folderName", item.folderId?.let { folderMap[it] })
-                        put("hash", item.hash)
                     }
                 }
 
@@ -369,8 +362,8 @@ class ManageAssetLibraryTool(
             }
 
             "rename_asset" -> {
-                val assetId = arguments["assetId"]?.jsonPrimitive?.contentOrNull?.trim()
                 val assetHash = arguments["assetHash"]?.jsonPrimitive?.contentOrNull?.trim()
+                    ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 'rename_asset' 缺少必填参数 'assetHash'。")))
                 val newName = arguments["newName"]?.jsonPrimitive?.contentOrNull?.trim()
                     ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 'rename_asset' 缺少必填参数 'newName'。")))
 
@@ -379,12 +372,11 @@ class ManageAssetLibraryTool(
                     return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 新素材名称含有全非法字符或为空。")))
                 }
 
-                val targetAsset = currentLib.items.firstOrNull {
-                    (assetId != null && it.id == assetId) || (assetHash != null && it.hash == assetHash)
-                } ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 未找到匹配的素材资产（assetId: $assetId, assetHash: $assetHash）。")))
+                val targetAsset = currentLib.items.firstOrNull { it.hash == assetHash }
+                    ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 未找到匹配的素材资产（assetHash: $assetHash）。")))
 
                 if (activeVm != null) {
-                    val success = activeVm.assetLibrary.commitRenameAsset(targetAsset.id, cleanName)
+                    val success = activeVm.assetLibrary.commitRenameAsset(targetAsset.hash, cleanName)
                     if (!success) {
                         return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 素材重命名失败，当前目录下可能已存在同名文件。")))
                     }
@@ -413,7 +405,7 @@ class ManageAssetLibraryTool(
                     }
 
                     val updatedItems = currentLib.items.map {
-                        if (it.id == targetAsset.id) {
+                        if (it.hash == targetAsset.hash) {
                             it.copy(relativePath = newRelPath, updatedAt = getCurrentTimeMillis())
                         } else it
                     }
@@ -424,31 +416,30 @@ class ManageAssetLibraryTool(
                 val resultObj = buildJsonObject {
                     put("status", "success")
                     put("message", "素材已成功重命名为 '$cleanName'")
-                    put("assetId", targetAsset.id)
+                    put("assetHash", targetAsset.hash)
                     put("newName", cleanName)
                 }
                 ToolResult(content = listOf(ToolContent.Text(text = resultObj.toString())))
             }
 
             "move_asset" -> {
-                val assetId = arguments["assetId"]?.jsonPrimitive?.contentOrNull?.trim()
                 val assetHash = arguments["assetHash"]?.jsonPrimitive?.contentOrNull?.trim()
+                    ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 'move_asset' 缺少必填参数 'assetHash'。")))
                 val targetFolderId = arguments["targetFolderId"]?.jsonPrimitive?.contentOrNull?.trim()?.ifBlank { null }
                     ?.takeIf { !it.equals("root", ignoreCase = true) && !it.equals("null", ignoreCase = true) }
 
-                val targetAsset = currentLib.items.firstOrNull {
-                    (assetId != null && it.id == assetId) || (assetHash != null && it.hash == assetHash)
-                } ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 未找到匹配的素材资产（assetId: $assetId, assetHash: $assetHash）。")))
+                val targetAsset = currentLib.items.firstOrNull { it.hash == assetHash }
+                    ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 未找到匹配的素材资产（assetHash: $assetHash）。")))
 
                 if (targetFolderId != null && currentLib.folders.none { it.id == targetFolderId }) {
                     return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 目标文件夹 ID '$targetFolderId' 不存在。")))
                 }
 
                 if (activeVm != null) {
-                    activeVm.assetLibrary.moveAssetToFolder(targetAsset.id, targetFolderId, repository)
+                    activeVm.assetLibrary.moveAssetToFolder(targetAsset.hash, targetFolderId, repository)
                 } else {
                     val updatedItems = currentLib.items.map {
-                        if (it.id == targetAsset.id) it.copy(folderId = targetFolderId) else it
+                        if (it.hash == targetAsset.hash) it.copy(folderId = targetFolderId) else it
                     }
                     currentLib = currentLib.copy(items = updatedItems)
                     saveLibrary(sanitized, currentLib, null, assetLibPath)
@@ -458,7 +449,7 @@ class ManageAssetLibraryTool(
                 val resultObj = buildJsonObject {
                     put("status", "success")
                     put("message", "素材 '${targetAsset.name}' 已成功移至 '$folderName'")
-                    put("assetId", targetAsset.id)
+                    put("assetHash", targetAsset.hash)
                     put("targetFolderId", targetFolderId)
                 }
                 ToolResult(content = listOf(ToolContent.Text(text = resultObj.toString())))
@@ -473,15 +464,14 @@ class ManageAssetLibraryTool(
                     )
                 }
 
-                val assetId = arguments["assetId"]?.jsonPrimitive?.contentOrNull?.trim()
                 val assetHash = arguments["assetHash"]?.jsonPrimitive?.contentOrNull?.trim()
+                    ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 'delete_asset' 缺少必填参数 'assetHash'。")))
 
-                val targetAsset = currentLib.items.firstOrNull {
-                    (assetId != null && it.id == assetId) || (assetHash != null && it.hash == assetHash)
-                } ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 未找到匹配的素材资产（assetId: $assetId, assetHash: $assetHash）。")))
+                val targetAsset = currentLib.items.firstOrNull { it.hash == assetHash }
+                    ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 未找到匹配的素材资产（assetHash: $assetHash）。")))
 
                 if (activeVm != null) {
-                    activeVm.assetLibrary.deleteAsset(targetAsset.id)
+                    activeVm.assetLibrary.deleteAsset(targetAsset.hash)
                 } else {
                     val tFile = TemplateFile(targetAsset.relativePath)
                     try {
@@ -489,15 +479,15 @@ class ManageAssetLibraryTool(
                     } catch (e: Exception) {
                         AppLogger.w("ManageAssetLibraryTool", "删除本地物理素材失败: ${e.message}")
                     }
-                    val updatedItems = currentLib.items.filter { it.id != targetAsset.id }
+                    val updatedItems = currentLib.items.filter { it.hash != targetAsset.hash }
                     currentLib = currentLib.copy(items = updatedItems)
                     saveLibrary(sanitized, currentLib, null, assetLibPath)
                 }
 
                 val resultObj = buildJsonObject {
                     put("status", "success")
-                    put("message", "素材 '${targetAsset.name}' (ID: ${targetAsset.id}) 已成功物理删除")
-                    put("deletedAssetId", targetAsset.id)
+                    put("message", "素材 '${targetAsset.name}' (Hash: ${targetAsset.hash}) 已成功物理删除")
+                    put("deletedAssetHash", targetAsset.hash)
                 }
                 ToolResult(content = listOf(ToolContent.Text(text = resultObj.toString())))
             }
@@ -507,17 +497,12 @@ class ManageAssetLibraryTool(
                     ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 'bind_to_block' 缺少必填参数 'blockId'。")))
 
                 val assetHash = arguments["assetHash"]?.jsonPrimitive?.contentOrNull?.trim()
-                val assetId = arguments["assetId"]?.jsonPrimitive?.contentOrNull?.trim()
                 val assetFileName = arguments["assetFileName"]?.jsonPrimitive?.contentOrNull?.trim()
                     ?: arguments["newName"]?.jsonPrimitive?.contentOrNull?.trim()
 
                 // 定位目标素材
                 val resolvedHash = when {
                     !assetHash.isNullOrBlank() -> assetHash
-                    !assetId.isNullOrBlank() -> {
-                        val item = currentLib.items.firstOrNull { it.id == assetId }
-                        item?.hash ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 未找到 ID 为 '$assetId' 的素材或该素材尚未生成内容哈希。")))
-                    }
                     !assetFileName.isNullOrBlank() -> {
                         val candidates = currentLib.items.filter { it.name.equals(assetFileName, ignoreCase = true) }
                         when {
@@ -526,22 +511,22 @@ class ManageAssetLibraryTool(
                                 if (fuzzy.isEmpty()) {
                                     return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 素材库中未找到名称为 '$assetFileName' 的素材。")))
                                 } else if (fuzzy.size == 1) {
-                                    fuzzy.first().hash ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 素材 '${fuzzy.first().name}' 缺少内容哈希。")))
+                                    fuzzy.first().hash
                                 } else {
-                                    val candidateNames = fuzzy.map { "${it.name} (id=${it.id}, hash=${it.hash})" }
-                                    return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 存在多个模糊匹配的素材，请传入明确的 assetId 或 assetHash：$candidateNames")))
+                                    val candidateNames = fuzzy.map { "${it.name} (hash=${it.hash})" }
+                                    return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 存在多个模糊匹配的素材，请传入明确的 assetHash：$candidateNames")))
                                 }
                             }
                             candidates.size == 1 -> {
-                                candidates.first().hash ?: return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 素材 '$assetFileName' 缺少内容哈希。")))
+                                candidates.first().hash
                             }
                             else -> {
-                                val candidateNames = candidates.map { "${it.name} (id=${it.id}, hash=${it.hash})" }
-                                return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 存在多个同名素材，请传入明确的 assetId 或 assetHash：$candidateNames")))
+                                val candidateNames = candidates.map { "${it.name} (hash=${it.hash})" }
+                                return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 存在多个同名素材，请传入明确的 assetHash：$candidateNames")))
                             }
                         }
                     }
-                    else -> return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 'bind_to_block' 必须提供 assetHash、assetId 或 assetFileName 之一来定位素材。")))
+                    else -> return@withContext ToolResult(isError = true, content = listOf(ToolContent.Text(text = "❌ 'bind_to_block' 必须提供 assetHash 或 assetFileName 之一来定位素材。")))
                 }
 
                 // 调度 UpdateBlockTool 执行图元绑定

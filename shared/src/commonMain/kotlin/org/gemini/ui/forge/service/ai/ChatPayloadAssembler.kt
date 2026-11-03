@@ -99,7 +99,7 @@ object ChatPayloadAssembler {
                     }
                     is MentionPayload.AssetPayload -> {
                         if (p.fileName != "ALL_ASSETS_MANIFEST") {
-                            userPromptBuilder.append("  <asset id=\"${p.assetId}\" file_name=\"${p.fileName}\" dimensions=\"${p.width}x${p.height}\" path=\"${p.filePath}\"/>\n")
+                            userPromptBuilder.append("  <asset hash=\"${p.assetHash}\" file_name=\"${p.fileName}\" dimensions=\"${p.width}x${p.height}\" path=\"${p.filePath}\"/>\n")
                         }
                     }
                     is MentionPayload.ViewPayload -> {

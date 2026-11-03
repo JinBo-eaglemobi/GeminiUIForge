@@ -58,7 +58,7 @@ enum class UIStudioLeftBottomTab {
  * @property isParsingJson 是否正在执行 JSON 解析运算
  * @property assetLibrary 项目素材库数据（含文件夹体系与素材列表）
  * @property selectedFolderId 素材库当前选中的文件夹 ID（null 表示全部或根目录）
- * @property selectedAssetId 素材库当前选中的素材 ID
+ * @property selectedAssetHash 素材库当前选中的素材 Hash
  * @property isNewFolderDialogVisible 新建素材文件夹弹窗是否可见
  * @property currentViewId 当前活跃选中的视图界面（Page）ID
  * @property viewSearchQuery 视图界面搜索查找关键字
@@ -105,7 +105,7 @@ data class UIStudioState(
     val assetLibrary: UIAssetLibrary = UIAssetLibrary(),
     val isRefreshingAssetLibrary: Boolean = false,
     val selectedFolderId: String? = null,
-    val selectedAssetId: String? = null,
+    val selectedAssetHash: String? = null,
     val isNewFolderDialogVisible: Boolean = false,
     val currentViewId: String? = null,
     val openViewIds: List<String> = emptyList(),
@@ -130,7 +130,7 @@ data class UIStudioState(
     val isViewportInitialized: Boolean = false,
     val density: Float = 1.0f,
     val isMattingAsset: Boolean = false,
-    val mattingAssetId: String? = null,
+    val mattingAssetHash: String? = null,
     val autoRemoveBgOnSlice: Boolean = true,
     val expandedFolderIds: Set<String> = emptySet(),
     val renamingFolder: UIAssetFolder? = null,
@@ -155,7 +155,7 @@ data class UIStudioState(
     val pendingDragRemoveLastChild: DragRemoveLastChildContext? = null,
     val openContainerTabs: List<String> = emptyList(),
     val activeContainerId: String? = null,
-    val draggedAssetId: String? = null,
+    val draggedAssetHash: String? = null,
     val hoveredFolderId: String? = null,
     val viewViewportCache: Map<String, ViewportState> = emptyMap(),
     val dragCursorPosition: androidx.compose.ui.geometry.Offset? = null,
@@ -214,7 +214,7 @@ data class UIStudioState(
      * 获取当前处于选中状态的素材资产 [UIAssetItem]。
      */
     val selectedAsset: UIAssetItem?
-        get() = assetLibrary.items.find { it.id == selectedAssetId }
+        get() = assetLibrary.items.find { it.hash == selectedAssetHash }
 }
 
 /**

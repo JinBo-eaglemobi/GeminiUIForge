@@ -428,8 +428,8 @@ fun UIStudioScreen(
         }
 
         // 顶层全局悬浮拖拽光标跟随镜像 (Drag Ghost Badge)
-        val draggedAsset = remember(state.draggedAssetId, state.assetLibrary.items) {
-            state.assetLibrary.items.find { it.id == state.draggedAssetId }
+        val draggedAsset = remember(state.draggedAssetHash, state.assetLibrary.items) {
+            state.assetLibrary.items.find { it.hash == state.draggedAssetHash }
         }
         UIStudioDragGhostBadge(
             asset = draggedAsset,

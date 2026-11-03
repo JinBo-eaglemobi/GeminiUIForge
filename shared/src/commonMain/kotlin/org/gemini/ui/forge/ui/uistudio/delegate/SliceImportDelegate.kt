@@ -642,14 +642,14 @@ class SliceImportDelegate(
                 )
 
                 val newAssetItems = slicedMetas.map { meta ->
+                    val fileHash = calculateShortFileHash(meta.relPath) ?: meta.relPath.hashCode().toString(16)
                     UIAssetItem(
-                        id = meta.assetId,
+                        hash = fileHash,
                         relativePath = meta.relPath,
                         width = meta.item.bounds.width.toInt().coerceAtLeast(1),
                         height = meta.item.bounds.height.toInt().coerceAtLeast(1),
                         category = meta.item.type.name.lowercase(),
-                        folderId = effectiveFolderId,
-                        hash = calculateShortFileHash(meta.relPath)
+                        folderId = effectiveFolderId
                     )
                 }
 
@@ -666,7 +666,7 @@ class SliceImportDelegate(
 
                 val updatedLibrary = state.assetLibrary.copy(
                     folders = finalFolders,
-                    items = state.assetLibrary.items.filterNot { old -> newAssetItems.any { it.id == old.id } } + newAssetItems
+                    items = state.assetLibrary.items.filterNot { old -> newAssetItems.any { it.hash == old.hash || it.relativePath == old.relativePath } } + newAssetItems
                 )
 
                 // 物理清理切片校对草稿文件与透明源内存缓存

@@ -140,7 +140,7 @@ class CanvasEditorDelegate(
         if (blockId == null) {
             state = state.copy(
                 selectedBlockId = null,
-                selectedAssetId = state.selectedAssetId
+                selectedAssetHash = state.selectedAssetHash
             )
             return
         }
@@ -155,7 +155,7 @@ class CanvasEditorDelegate(
         }
         state = state.copy(
             selectedBlockId = effectiveId,
-            selectedAssetId = null
+            selectedAssetHash = null
         )
     }
 

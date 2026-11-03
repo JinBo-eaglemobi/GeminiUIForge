@@ -63,7 +63,7 @@ class PageManagerDelegate(
             canvasHeight = page.height,
             activeContainerId = null,
             selectedBlockId = null,
-            selectedAssetId = null,
+            selectedAssetHash = null,
             leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
         )
         viewport.restoreViewportOrDefault(viewId)
@@ -182,7 +182,7 @@ class PageManagerDelegate(
             openContainerTabs = emptyList(),
             activeContainerId = null,
             selectedBlockId = null,
-            selectedAssetId = null
+            selectedAssetHash = null
         )
         viewport.saveWorkspaceLayout()
         Toast.show("已关闭所有视图标签", ToastType.INFO)
@@ -238,10 +238,10 @@ class PageManagerDelegate(
      * 清空当前所有选中状态（组件与素材均重置），联动恢复页面主视图属性面板。
      */
     fun clearSelection() {
-        if (state.selectedBlockId != null || state.selectedAssetId != null) {
+        if (state.selectedBlockId != null || state.selectedAssetHash != null) {
             state = state.copy(
                 selectedBlockId = null,
-                selectedAssetId = null
+                selectedAssetHash = null
             )
         }
     }

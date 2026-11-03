@@ -53,7 +53,7 @@ sealed interface MentionPayload {
 
     /** 切片素材上下文 */
     data class AssetPayload(
-        val assetId: String,
+        val assetHash: String,
         val fileName: String,
         val filePath: String,
         val width: Int = 0,

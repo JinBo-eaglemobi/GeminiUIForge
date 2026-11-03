@@ -111,25 +111,25 @@ class AssetLibraryDelegate(
         var hasChanges = false
         val foldersList = initialLib.folders.toMutableList()
 
-        // 1. 规整已有 items 的内容哈希
-        val itemsMap = initialLib.items.map { it.id to it }.toMap().toMutableMap()
-        for ((id, item) in itemsMap) {
+        // 1. 规整已有 items 的内容哈希并建立哈希映射
+        val itemsMap = mutableMapOf<String, UIAssetItem>()
+        for (item in initialLib.items) {
             val curHash = item.hash
-            if (curHash.isNullOrBlank()) {
-                val computed = calculateShortFileHash(item.relativePath)
-                if (computed != null) {
-                    hasChanges = true
-                    itemsMap[id] = item.copy(hash = computed)
-                }
+            val effectiveHash = if (curHash.isBlank()) {
+                val computed = calculateShortFileHash(item.relativePath) ?: item.relativePath.hashCode().toString(16)
+                hasChanges = true
+                computed
             } else if (curHash.length > 16) {
                 hasChanges = true
-                itemsMap[id] = item.copy(hash = curHash.toShortHash())
+                curHash.toShortHash()
+            } else {
+                curHash
             }
+            itemsMap[effectiveHash] = item.copy(hash = effectiveHash)
         }
 
         val existingPaths = itemsMap.values.map { it.relativePath.replace("\\", "/") }.toMutableSet()
-        val existingHashes = itemsMap.values.mapNotNull { it.hash }.toMutableSet()
-        val existingIds = itemsMap.keys.toMutableSet()
+        val existingHashes = itemsMap.keys.toMutableSet()
         val newItems = mutableListOf<UIAssetItem>()
 
         // 辅助函数：根据目录名获取或创建 UIAssetFolder
@@ -170,16 +170,14 @@ class AssetLibraryDelegate(
                             // 纠偏 folderId：若文件实际位于子目录但账本中 folderId 不一致，自动修正
                             if (existingItem.folderId != currentFolderId) {
                                 hasChanges = true
-                                itemsMap[existingItem.id] = existingItem.copy(folderId = currentFolderId)
+                                itemsMap[existingItem.hash] = existingItem.copy(folderId = currentFolderId)
                                 AppLogger.i("UIStudioViewModel", "🔄 修正素材归属文件夹: ${existingItem.name} -> folderId=$currentFolderId")
                             }
                         } else if (!existingPaths.contains(normalizedRelPath)) {
                             // 新素材收录
-                            val fileHash = calculateShortFileHash(normalizedRelPath)
-                            if (fileHash != null && existingHashes.contains(fileHash)) continue
+                            val fileHash = calculateShortFileHash(normalizedRelPath) ?: file.hashCode().toString(16)
+                            if (existingHashes.contains(fileHash)) continue
 
-                            val baseId = file.substringBeforeLast(".")
-                            val effectiveId = if (existingIds.contains(baseId)) "${file.hashCode().toString(16)}_$baseId" else baseId
                             val (w, h) = try {
                                 val skiaImg = Image.makeFromEncoded(fileBytes)
                                 skiaImg.width to skiaImg.height
@@ -188,18 +186,16 @@ class AssetLibraryDelegate(
                             }
 
                             val newItem = UIAssetItem(
-                                id = effectiveId,
+                                hash = fileHash,
                                 relativePath = normalizedRelPath,
                                 width = w,
                                 height = h,
                                 category = "image",
-                                folderId = currentFolderId,
-                                hash = fileHash
+                                folderId = currentFolderId
                             )
                             newItems.add(newItem)
                             existingPaths.add(normalizedRelPath)
-                            existingIds.add(effectiveId)
-                            fileHash?.let { existingHashes.add(it) }
+                            existingHashes.add(fileHash)
                             hasChanges = true
                             AppLogger.i("UIStudioViewModel", "✨ 磁盘自愈发现并收录新切片: ${newItem.name} (folderId=$currentFolderId)")
                         }
@@ -231,21 +227,19 @@ class AssetLibraryDelegate(
                 if (file.endsWith(".png", ignoreCase = true) || file.endsWith(".webp", ignoreCase = true)) {
                     val relPath = "$assetsDirRel/$file".replace("\\", "/")
                     if (!existingPaths.contains(relPath)) {
-                        val fileHash = calculateShortFileHash(relPath)
-                        val baseId = file.substringBeforeLast(".")
-                        if (fileHash == null || !existingHashes.contains(fileHash)) {
+                        val fileHash = calculateShortFileHash(relPath) ?: file.hashCode().toString(16)
+                        if (!existingHashes.contains(fileHash)) {
                             val newItem = UIAssetItem(
-                                id = baseId,
+                                hash = fileHash,
                                 relativePath = relPath,
                                 width = 100,
                                 height = 100,
                                 category = "image",
-                                folderId = null,
-                                hash = fileHash
+                                folderId = null
                             )
                             newItems.add(newItem)
                             existingPaths.add(relPath)
-                            fileHash?.let { existingHashes.add(it) }
+                            existingHashes.add(fileHash)
                             hasChanges = true
                         }
                     }
@@ -268,13 +262,13 @@ class AssetLibraryDelegate(
     /**
      * 对素材库中指定的单个素材执行一键去除背景生成透明 PNG。
      */
-    fun removeAssetBackground(assetId: String) {
-        val asset = state.assetLibrary.items.find { it.id == assetId } ?: return
+    fun removeAssetBackground(assetHash: String) {
+        val asset = state.assetLibrary.items.find { it.hash == assetHash } ?: return
         if (state.isMattingAsset) return
 
         state = state.copy(
             isMattingAsset = true,
-            mattingAssetId = assetId
+            mattingAssetHash = assetHash
         )
 
         scope.launch(Dispatchers.Default) {
@@ -284,7 +278,7 @@ class AssetLibraryDelegate(
                 val rawBytes = tFile.readBytes()
                 if (rawBytes == null || rawBytes.isEmpty()) {
                     Toast.show("无法读取素材文件: ${asset.relativePath}", ToastType.ERROR)
-                    state = state.copy(isMattingAsset = false, mattingAssetId = null)
+                    state = state.copy(isMattingAsset = false, mattingAssetHash = null)
                     return@launch
                 }
 
@@ -305,7 +299,7 @@ class AssetLibraryDelegate(
                     }
                     // 保持 hash 守恒不变，仅更新 updatedAt 与物理宽高以触发 UI 刷新
                     val updatedItems = state.assetLibrary.items.map {
-                        if (it.id == assetId) {
+                        if (it.hash == assetHash) {
                             it.copy(
                                 updatedAt = now,
                                 width = newW,
@@ -316,17 +310,17 @@ class AssetLibraryDelegate(
                     state = state.copy(
                         assetLibrary = state.assetLibrary.copy(items = updatedItems),
                         isMattingAsset = false,
-                        mattingAssetId = null
+                        mattingAssetHash = null
                     )
                     saveAssetLibrary()
                     Toast.show("✨ 成功去除背景并更新为透明图片！", ToastType.SUCCESS)
                 } else {
-                    state = state.copy(isMattingAsset = false, mattingAssetId = null)
+                    state = state.copy(isMattingAsset = false, mattingAssetHash = null)
                     Toast.show("抠图处理失败，请检查本地 Python 环境", ToastType.ERROR)
                 }
             } catch (e: Exception) {
                 AppLogger.e("UIStudioViewModel", "去除背景异常", e)
-                state = state.copy(isMattingAsset = false, mattingAssetId = null)
+                state = state.copy(isMattingAsset = false, mattingAssetHash = null)
                 Toast.show("去背异常: ${e.message}", ToastType.ERROR)
             }
         }
@@ -395,9 +389,9 @@ class AssetLibraryDelegate(
                     }
                 } else null
 
-                val newSelectedAssetId = when {
-                    focusedItem != null -> focusedItem.id
-                    validItems.any { it.id == state.selectedAssetId } -> state.selectedAssetId
+                val newSelectedAssetHash = when {
+                    focusedItem != null -> focusedItem.hash
+                    validItems.any { it.hash == state.selectedAssetHash } -> state.selectedAssetHash
                     else -> null
                 }
                 val newExpandedFolderIds = if (focusedItem?.folderId != null) {
@@ -407,7 +401,7 @@ class AssetLibraryDelegate(
                 // 4. 更新 UI 状态
                 state = state.copy(
                     assetLibrary = healedLib,
-                    selectedAssetId = newSelectedAssetId,
+                    selectedAssetHash = newSelectedAssetHash,
                     expandedFolderIds = newExpandedFolderIds,
                     isRefreshingAssetLibrary = false
                 )
@@ -482,8 +476,8 @@ class AssetLibraryDelegate(
      * 将素材文件移动到指定的文件夹（若 targetFolderId == null 则移动到根目录）。
      * 同步物理移动磁盘文件并更新素材与项目图元引用。
      */
-    fun moveAssetToFolder(assetId: String, targetFolderId: String?, repo: TemplateRepository) {
-        val asset = state.assetLibrary.items.find { it.id == assetId } ?: return
+    fun moveAssetToFolder(assetHash: String, targetFolderId: String?, repo: TemplateRepository) {
+        val asset = state.assetLibrary.items.find { it.hash == assetHash } ?: return
         if (asset.folderId == targetFolderId) return
 
         val sanitizedProject = state.project?.projectId?.replace(" ", "_") ?: "default"
@@ -498,7 +492,7 @@ class AssetLibraryDelegate(
                 var resolvedOldFile = TemplateFile(asset.relativePath)
                 if (!resolvedOldFile.exists()) {
                     val candidate1 = TemplateFile("templates/$sanitizedProject/assets/image/$fileName")
-                    val candidate2 = TemplateFile("templates/$sanitizedProject/assets/$assetId/$fileName")
+                    val candidate2 = TemplateFile("templates/$sanitizedProject/assets/$assetHash/$fileName")
                     if (candidate1.exists()) {
                         resolvedOldFile = candidate1
                     } else if (candidate2.exists()) {
@@ -523,7 +517,7 @@ class AssetLibraryDelegate(
 
         // 更新素材库项
         val updatedItems = state.assetLibrary.items.map {
-            if (it.id == assetId) {
+            if (it.hash == assetHash) {
                 it.copy(folderId = targetFolderId, relativePath = newRelPath)
             } else it
         }
@@ -558,28 +552,28 @@ class AssetLibraryDelegate(
      * 选中素材文件夹。
      */
     fun selectAssetFolder(folderId: String?) {
-        state = state.copy(selectedFolderId = folderId, selectedAssetId = null)
+        state = state.copy(selectedFolderId = folderId, selectedAssetHash = null)
     }
 
     /**
      * 选中单个素材。
      */
-    fun selectAsset(assetId: String?) {
+    fun selectAsset(assetHash: String?) {
         state = state.copy(
-            selectedAssetId = assetId,
-            selectedBlockId = if (assetId != null) null else state.selectedBlockId
+            selectedAssetHash = assetHash,
+            selectedBlockId = if (assetHash != null) null else state.selectedBlockId
         )
     }
 
     /**
      * 删除单个素材并清理磁盘物理文件。
      */
-    fun deleteAsset(assetId: String) {
-        val target = state.assetLibrary.items.find { it.id == assetId } ?: return
-        val updatedItems = state.assetLibrary.items.filterNot { it.id == assetId }
+    fun deleteAsset(assetHash: String) {
+        val target = state.assetLibrary.items.find { it.hash == assetHash } ?: return
+        val updatedItems = state.assetLibrary.items.filterNot { it.hash == assetHash }
         state = state.copy(
             assetLibrary = state.assetLibrary.copy(items = updatedItems),
-            selectedAssetId = null
+            selectedAssetHash = null
         )
         saveAssetLibrary()
         scope.launch(Dispatchers.Default) {
@@ -763,13 +757,12 @@ class AssetLibraryDelegate(
         }
         val (imgWidth, imgHeight) = decodeImageSize(relPath)
         return UIAssetItem(
-            id = "asset_${fileHash.take(8)}_${getCurrentTimeMillis() % 100000}",
+            hash = fileHash,
             relativePath = relPath,
             width = imgWidth,
             height = imgHeight,
             category = "image",
-            folderId = targetFolderId,
-            hash = fileHash
+            folderId = targetFolderId
         )
     }
 
@@ -823,7 +816,7 @@ class AssetLibraryDelegate(
                                     storage.saveBytesToFile(targetItem.relativePath, bytes)
                                     val (w, h) = decodeImageSize(targetItem.relativePath)
                                     currentItems = currentItems.map {
-                                        if (it.id == targetItem.id) {
+                                        if (it.hash == targetItem.hash) {
                                             it.copy(width = w, height = h, updatedAt = getCurrentTimeMillis())
                                         } else it
                                     }
@@ -884,7 +877,7 @@ class AssetLibraryDelegate(
         )
     }
 
-    fun setDraggedAssetId(id: String?) { state = state.copy(draggedAssetId = id) }
+    fun setDraggedAssetHash(hash: String?) { state = state.copy(draggedAssetHash = hash) }
     fun setHoveredFolderId(id: String?) { state = state.copy(hoveredFolderId = id) }
 
     fun startRenameFolder(folder: UIAssetFolder) { state = state.copy(renamingFolder = folder) }
@@ -904,8 +897,8 @@ class AssetLibraryDelegate(
 
     fun startRenameAsset(asset: UIAssetItem) { state = state.copy(renamingAsset = asset) }
     fun cancelRenameAsset() { state = state.copy(renamingAsset = null) }
-    suspend fun commitRenameAsset(assetId: String, newName: String): Boolean {
-        val target = state.assetLibrary.items.find { it.id == assetId } ?: return false
+    suspend fun commitRenameAsset(assetHash: String, newName: String): Boolean {
+        val target = state.assetLibrary.items.find { it.hash == assetHash } ?: return false
         val clean = AssetFileNameGuard.sanitizeFileName(newName)
         if (clean.isBlank()) {
             Toast.show("名称不能为空", ToastType.ERROR)
@@ -940,7 +933,7 @@ class AssetLibraryDelegate(
             }
         }
         val updatedItems = state.assetLibrary.items.map {
-            if (it.id == assetId) it.copy(relativePath = newRelPath, updatedAt = getCurrentTimeMillis()) else it
+            if (it.hash == assetHash) it.copy(relativePath = newRelPath, updatedAt = getCurrentTimeMillis()) else it
         }
         state = state.copy(
             assetLibrary = state.assetLibrary.copy(items = updatedItems),
@@ -962,11 +955,11 @@ class AssetLibraryDelegate(
      */
     suspend fun getOrComputeAssetHash(asset: UIAssetItem): String? {
         val existing = asset.hash
-        if (!existing.isNullOrBlank()) {
+        if (existing.isNotBlank()) {
             if (existing.length > 16) {
                 val shortHash = existing.toShortHash()
                 val updated = asset.copy(hash = shortHash)
-                val updatedItems = state.assetLibrary.items.map { if (it.id == asset.id) updated else it }
+                val updatedItems = state.assetLibrary.items.map { if (it.hash == asset.hash) updated else it }
                 state = state.copy(assetLibrary = state.assetLibrary.copy(items = updatedItems))
                 saveAssetLibrary()
                 return shortHash
@@ -977,7 +970,7 @@ class AssetLibraryDelegate(
         val calculated = calculateShortFileHash(absPath)
         if (!calculated.isNullOrBlank()) {
             val updated = asset.copy(hash = calculated)
-            val updatedItems = state.assetLibrary.items.map { if (it.id == asset.id) updated else it }
+            val updatedItems = state.assetLibrary.items.map { if (it.hash == asset.hash) updated else it }
             state = state.copy(assetLibrary = state.assetLibrary.copy(items = updatedItems))
             saveAssetLibrary()
             return calculated
@@ -1006,10 +999,10 @@ class AssetLibraryDelegate(
         val activeContainer = state.activeContainerBlock
         val targetW = asset.width.coerceAtLeast(32)
         val targetH = asset.height.coerceAtLeast(32)
-        val effectiveHash = asset.hash?.toShortHash() ?: blockingAwait { calculateShortFileHash(asset.relativePath) }
-        if (effectiveHash != null && asset.hash != effectiveHash) {
+        val effectiveHash = asset.hash.toShortHash().ifBlank { blockingAwait { calculateShortFileHash(asset.relativePath) } ?: "" }
+        if (effectiveHash.isNotBlank() && asset.hash != effectiveHash) {
             val updatedLib = state.assetLibrary.copy(
-                items = state.assetLibrary.items.map { if (it.id == asset.id) it.copy(hash = effectiveHash) else it }
+                items = state.assetLibrary.items.map { if (it.hash == asset.hash) it.copy(hash = effectiveHash) else it }
             )
             state = state.copy(assetLibrary = updatedLib)
             saveAssetLibrary()
@@ -1021,7 +1014,7 @@ class AssetLibraryDelegate(
             val posX = if (logicalX != null) logicalX - (targetW / 2f) else ((activeContainer.bounds.width - targetW).coerceAtLeast(0f) / 2f)
             val posY = if (logicalY != null) logicalY - (targetH / 2f) else ((activeContainer.bounds.height - targetH).coerceAtLeast(0f) / 2f)
             val newBlock = UIStudioBlock(
-                id = "block_${asset.id}_${Random.nextInt(1000, 9999)}",
+                id = "block_${asset.name}_${Random.nextInt(1000, 9999)}",
                 type = UIBlockType.IMAGE,
                 bounds = SerialRect(posX, posY, posX + targetW, posY + targetH),
                 assetHash = effectiveHash
@@ -1036,7 +1029,7 @@ class AssetLibraryDelegate(
             val posX = if (logicalX != null) logicalX - (targetW / 2f) else ((view.width - targetW).coerceAtLeast(0f) / 2f)
             val posY = if (logicalY != null) logicalY - (targetH / 2f) else ((view.height - targetH).coerceAtLeast(0f) / 2f)
             val newBlock = UIStudioBlock(
-                id = "block_${asset.id}_${Random.nextInt(1000, 9999)}",
+                id = "block_${asset.name}_${Random.nextInt(1000, 9999)}",
                 type = UIBlockType.IMAGE,
                 bounds = SerialRect(posX, posY, posX + targetW, posY + targetH),
                 assetHash = effectiveHash
@@ -1098,20 +1091,17 @@ class AssetLibraryDelegate(
             } catch (_: Exception) {
                 100 to 100
             }
-            val fileHash = calculateShortFileHash(targetFullPath)
-            val baseName = cleanName.substringBeforeLast('.')
+            val fileHash = calculateShortFileHash(targetFullPath) ?: targetFullPath.hashCode().toString(16)
             val targetFolder = if (cleanSubPath.isNotBlank()) {
                 state.assetLibrary.folders.find { it.name.equals(cleanSubPath, ignoreCase = true) }
             } else null
-            val newAssetId = baseName.ifBlank { "ai_img_${getCurrentTimeMillis()}" }
             val newAsset = UIAssetItem(
-                id = newAssetId,
+                hash = fileHash,
                 relativePath = targetFullPath,
                 width = w,
                 height = h,
                 category = "image",
-                folderId = targetFolder?.id,
-                hash = fileHash
+                folderId = targetFolder?.id
             )
             val existingList = state.assetLibrary.items.filterNot { it.relativePath == targetFullPath }
             val updatedItems = existingList + newAsset
@@ -1120,13 +1110,13 @@ class AssetLibraryDelegate(
             }
             state = state.copy(
                 assetLibrary = state.assetLibrary.copy(items = updatedItems),
-                selectedAssetId = newAsset.id,
+                selectedAssetHash = newAsset.hash,
                 expandedFolderIds = updatedFolders
             )
             saveAssetLibrary()
             refreshAssetLibrary(focusAssetPath = targetFullPath)
             Toast.show("已成功存入素材库: $cleanName", ToastType.SUCCESS)
-            AppLogger.i("UIStudioViewModel", "✅ AI 聊天图片已成功存入素材库并即时选中聚焦: $targetFullPath (ID: ${newAsset.id})")
+            AppLogger.i("UIStudioViewModel", "✅ AI 聊天图片已成功存入素材库并即时选中聚焦: $targetFullPath (Hash: ${newAsset.hash})")
             savedPath
         } catch (e: Exception) {
             AppLogger.e("UIStudioViewModel", "保存 AI 聊天图片至素材库失败: $targetFullPath", e)
@@ -1152,12 +1142,11 @@ class AssetLibraryDelegate(
         return try {
             val item = state.assetLibrary.items.find { it.relativePath == savedRelPath }
                 ?: UIAssetItem(
-                    id = "asset_${getCurrentTimeMillis()}",
+                    hash = calculateShortFileHash(savedRelPath) ?: savedRelPath.hashCode().toString(16),
                     relativePath = savedRelPath,
                     width = width.toInt().coerceAtLeast(1),
                     height = height.toInt().coerceAtLeast(1),
-                    category = "image",
-                    hash = calculateShortFileHash(savedRelPath)
+                    category = "image"
                 )
             addAssetToCanvas(asset = item, repo = repo)
             true

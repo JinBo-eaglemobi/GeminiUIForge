@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.extend.copyOnClick
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
@@ -101,7 +102,7 @@ fun UIStudioPropertyPanel(
             // 属性内容展示区域
             if (selectedAsset != null && selectedId == null) {
                 // 选中素材库素材卡片时的详情面板
-                val isMatting = state.isMattingAsset && state.mattingAssetId == selectedAsset.id
+                val isMatting = state.isMattingAsset && state.mattingAssetHash == selectedAsset.hash
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -128,8 +129,13 @@ fun UIStudioPropertyPanel(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("素材 ID", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
-                                Text(selectedAsset.id, style = MaterialTheme.typography.labelMedium, fontFamily = FontFamily.Monospace)
+                                Text("素材 Hash", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+                                Text(
+                                    selectedAsset.hash,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.copyOnClick(selectedAsset.hash, "已复制素材 Hash")
+                                )
                             }
 
                             Row(
@@ -152,7 +158,7 @@ fun UIStudioPropertyPanel(
 
                     // 核心功能：一键去除背景生成透明图片
                     Button(
-                        onClick = { viewModel.assetLibrary.removeAssetBackground(selectedAsset.id) },
+                        onClick = { viewModel.assetLibrary.removeAssetBackground(selectedAsset.hash) },
                         enabled = !isMatting,
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -292,7 +298,6 @@ fun UIStudioPropertyPanel(
                         // 组件基准切片尺寸与双轴缩放状态计算 (范围 0.0 ~ 1.0)（哈希引用模型：按素材哈希唯一联动）
                         val matchingAsset = remember(selectedBlock.id, selectedBlock.assetHash, viewModel.state.assetLibrary.items) {
                             viewModel.state.assetLibrary.items.find {
-                                it.id == selectedBlock.id ||
                                 it.name == selectedBlock.id ||
                                 (selectedBlock.assetHash != null && it.hash == selectedBlock.assetHash)
                             }

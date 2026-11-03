@@ -294,7 +294,7 @@ class AiConfigDelegate(
                     category = MentionCategory.ASSET,
                     icon = Icons.Default.Inventory2,
                     payload = MentionPayload.AssetPayload(
-                        assetId = "all_assets",
+                        assetHash = "all_assets",
                         fileName = "ALL_ASSETS_MANIFEST",
                         filePath = "ALL",
                         width = state.assetLibrary.items.size,
@@ -308,14 +308,14 @@ class AiConfigDelegate(
             val role = AssetManifestHelper.inferAssetRole(asset.name, asset.relativePath)
             candidates.add(
                 MentionItem(
-                    id = "asset_${asset.id}",
+                    id = "asset_${asset.hash}",
                     title = asset.name,
                     subtitle = "尺寸: ${asset.width}x${asset.height} · 角色: $role",
                     category = MentionCategory.ASSET,
                     icon = Icons.Default.Image,
                     previewImagePath = asset.relativePath,
                     payload = MentionPayload.AssetPayload(
-                        assetId = asset.id,
+                        assetHash = asset.hash,
                         fileName = asset.name,
                         filePath = asset.relativePath,
                         width = asset.width,

@@ -105,7 +105,7 @@ fun UIStudioHierarchyItem(
 
     // 真实图片缩略图异步加载（哈希引用模型：素材库按 assetHash 唯一解析路径）
     val assetItem = remember(block.id, block.assetHash, state.assetLibrary.items) {
-        state.assetLibrary.items.find { it.id == block.id && it.hash == block.assetHash }
+        state.assetLibrary.items.find { (block.assetHash != null && it.hash == block.assetHash) || it.name == block.id }
     }
     val effectivePath = assetPathResolver(block.assetHash) ?: assetItem?.relativePath
 

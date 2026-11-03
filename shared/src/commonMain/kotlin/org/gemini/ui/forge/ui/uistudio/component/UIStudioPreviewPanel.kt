@@ -29,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.extend.copyOnClick
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -60,8 +61,8 @@ fun UIStudioPreviewPanel(
     val currentView = state.currentView
 
     // 优先判定当前选中的目标：素材优先或组件
-    val selectedAsset = remember(state.selectedAssetId, state.assetLibrary.items) {
-        state.selectedAssetId?.let { id -> state.assetLibrary.items.find { it.id == id } }
+    val selectedAsset = remember(state.selectedAssetHash, state.assetLibrary.items) {
+        state.selectedAssetHash?.let { hash -> state.assetLibrary.items.find { it.hash == hash } }
     }
     val selectedBlock = remember(state.selectedBlockId, currentView?.blocks) {
         state.selectedBlockId?.let { id -> currentView?.blocks?.findBlockById(id) as? UIStudioBlock }
@@ -274,11 +275,12 @@ private fun AssetPreviewView(asset: UIAssetItem) {
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "ID: ${asset.id}",
+                        text = "Hash: ${asset.hash}",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = MaterialTheme.colorScheme.outline,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.copyOnClick(asset.hash, "已复制素材 Hash")
                     )
                 }
                 Surface(

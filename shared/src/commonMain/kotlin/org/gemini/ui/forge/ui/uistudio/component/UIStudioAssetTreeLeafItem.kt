@@ -93,7 +93,7 @@ fun UIStudioAssetTreeLeafItem(
     var showContextMenu by remember { mutableStateOf(false) }
     var showMoveFolderDialog by remember { mutableStateOf(false) }
     var rowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val isBeingDragged = state.draggedAssetId == item.id
+    val isBeingDragged = state.draggedAssetHash == item.hash
 
     LaunchedEffect(item.relativePath, item.updatedAt) {
         withContext(Dispatchers.Default) {
@@ -116,6 +116,7 @@ fun UIStudioAssetTreeLeafItem(
         val maxMenuWidth = maxOf(280.dp, maxWidth)
 
         Surface(
+            onClick = { viewModel.assetLibrary.selectAsset(item.hash) },
             shape = RoundedCornerShape(6.dp),
             color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
             border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
@@ -126,7 +127,7 @@ fun UIStudioAssetTreeLeafItem(
                 .alpha(if (isBeingDragged) 0.4f else 1.0f)
                 .onGloballyPositioned { rowCoords = it }
                 // 1. 鼠标右键菜单 (PointerEventPass.Initial 优先快速捕获)
-                .pointerInput(item.id) {
+                .pointerInput(item.hash) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -138,7 +139,7 @@ fun UIStudioAssetTreeLeafItem(
                     }
                 }
                 // 2. 整行整块即刻拖拽与单击融合手势 (无需对准细小手柄或长按，任意位置按下移动 >6px 即拖动)
-                .pointerInput(item.id) {
+                .pointerInput(item.hash) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         if (!down.pressed) return@awaitEachGesture
@@ -152,7 +153,7 @@ fun UIStudioAssetTreeLeafItem(
                             totalDistance += dragAmount.getDistance()
                             if (!isDragging && totalDistance > 6f) {
                                 isDragging = true
-                                viewModel.assetLibrary.setDraggedAssetId(item.id)
+                                viewModel.assetLibrary.setDraggedAssetHash(item.hash)
                             }
                             if (isDragging) {
                                 rowCoords?.localToWindow(change.position)?.let { winPos ->
@@ -167,7 +168,7 @@ fun UIStudioAssetTreeLeafItem(
                             viewModel.viewport.updateDragCursorPosition(null)
                             onDragEnd()
                         } else if (totalDistance <= 6f) {
-                            viewModel.assetLibrary.selectAsset(item.id)
+                            viewModel.assetLibrary.selectAsset(item.hash)
                         }
                     }
                 }
@@ -178,7 +179,7 @@ fun UIStudioAssetTreeLeafItem(
                     .padding(horizontal = 4.dp, vertical = 4.dp)
                     .semantics {
                         onClick {
-                            viewModel.assetLibrary.selectAsset(item.id)
+                            viewModel.assetLibrary.selectAsset(item.hash)
                             true
                         }
                     },
@@ -191,7 +192,7 @@ fun UIStudioAssetTreeLeafItem(
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(4.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    val isMatting = state.isMattingAsset && state.mattingAssetId == item.id
+                    val isMatting = state.isMattingAsset && state.mattingAssetHash == item.hash
                     if (bitmap != null && !isMatting) {
                         Image(
                             bitmap = bitmap!!,
@@ -259,7 +260,7 @@ fun UIStudioAssetTreeLeafItem(
                 leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 onClick = {
                     showContextMenu = false
-                    viewModel.assetLibrary.removeAssetBackground(item.id)
+                    viewModel.assetLibrary.removeAssetBackground(item.hash)
                 }
             )
             DropdownMenuItem(
@@ -368,7 +369,7 @@ fun UIStudioAssetTreeLeafItem(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                viewModel.assetLibrary.moveAssetToFolder(item.id, null, templateRepo)
+                                viewModel.assetLibrary.moveAssetToFolder(item.hash, null, templateRepo)
                                 showMoveFolderDialog = false
                             }
                     ) {
@@ -404,7 +405,7 @@ fun UIStudioAssetTreeLeafItem(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    viewModel.assetLibrary.moveAssetToFolder(item.id, folder.id, templateRepo)
+                                    viewModel.assetLibrary.moveAssetToFolder(item.hash, folder.id, templateRepo)
                                     showMoveFolderDialog = false
                                 }
                         ) {
