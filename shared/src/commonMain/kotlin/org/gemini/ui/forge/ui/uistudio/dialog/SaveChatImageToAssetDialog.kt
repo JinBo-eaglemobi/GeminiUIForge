@@ -1,11 +1,13 @@
 package org.gemini.ui.forge.ui.uistudio.dialog
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Save
@@ -14,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -54,9 +57,12 @@ fun SaveChatImageToAssetDialog(
     initialFileName: String,
     folders: List<UIAssetFolder>,
     onDismissRequest: () -> Unit,
-    onConfirmSave: (fileName: String, subPath: String) -> Unit,
+    onConfirmSave: (fileName: String, subPath: String) -> Unit = { _, _ -> },
+    onConfirmSaveWithOptions: ((fileName: String, subPath: String, removeBgAfterSlice: Boolean) -> Unit)? = null,
     showFileNameField: Boolean = true,
-    titleText: String? = null
+    titleText: String? = null,
+    showRemoveBgOption: Boolean = false,
+    initialRemoveBgChecked: Boolean = true
 ) {
     if (!isOpen) return
 
@@ -65,6 +71,7 @@ fun SaveChatImageToAssetDialog(
     var selectedFolderId by remember { mutableStateOf<String?>(null) }
     var isCustomFolderMode by remember { mutableStateOf(false) }
     var customSubPath by remember { mutableStateOf("") }
+    var removeBgAfterSlice by remember(initialRemoveBgChecked) { mutableStateOf(initialRemoveBgChecked) }
 
     val activeSubPath = remember(isCustomFolderMode, selectedFolderId, customSubPath, folders) {
         if (isCustomFolderMode) {
@@ -333,6 +340,55 @@ fun SaveChatImageToAssetDialog(
                     }
                 }
 
+                if (showRemoveBgOption) {
+                    Spacer(modifier = Modifier.height(spacing.medium))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { removeBgAfterSlice = !removeBgAfterSlice }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = spacing.medium, vertical = spacing.small),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(spacing.small)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "切图后执行去除背景",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "切片生成后自动调用本地 AI 抠图算法批量去除背景",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = removeBgAfterSlice,
+                                onCheckedChange = { removeBgAfterSlice = it },
+                                modifier = Modifier.scale(0.85f)
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(spacing.large))
 
                 // 5. 底部操作按钮
@@ -348,7 +404,12 @@ fun SaveChatImageToAssetDialog(
                     Button(
                         onClick = {
                             if (canSave) {
-                                onConfirmSave(if (showFileNameField) fileName.trim() else "", activeSubPath)
+                                val cleanFileName = if (showFileNameField) fileName.trim() else ""
+                                if (onConfirmSaveWithOptions != null) {
+                                    onConfirmSaveWithOptions(cleanFileName, activeSubPath, removeBgAfterSlice)
+                                } else {
+                                    onConfirmSave(cleanFileName, activeSubPath)
+                                }
                             }
                         },
                         enabled = canSave,

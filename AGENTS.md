@@ -17,27 +17,11 @@
 - 其他平台（Android / JS / iOS）的适配与修复**可延后**，不阻塞任务交付；当多平台实现存在冲突时，以桌面端实现为准，其余平台差异通过 `expect/actual` 机制后续补齐。
 - 若改动涉及其他平台但未在本次验证，必须在交付说明中显式标注"待适配 / 未验证"。
 
-## 常用命令
-
-```shell
-./gradlew :desktopApp:run                          # 运行桌面端 (JVM)
-./gradlew :desktopApp:compileKotlin                # 桌面端最小编译校验
-./gradlew :shared:compileKotlinJvm                 # 共享库 JVM 编译校验
-./gradlew :webApp:jsBrowserDevelopmentRun          # Web 端 (JS) 运行与调试
-./gradlew :androidApp:assembleRelease              # Android APK → androidApp/build/outputs/apk/release/
-./gradlew :desktopApp:createDistributable          # 桌面绿色版 → desktopApp/build/compose/binaries/main/app/
-./gradlew :desktopApp:packageDistributionForCurrentOS  # 桌面安装包 (MSI/EXE/DMG/DEB)
-./gradlew :shared:jvmTest                          # 运行 JVM 测试
-```
-
-构建环境本地锁定 **JDK 25** (`D:\apps\sdks\java\jbr-25.0.2`，锁定于 `gradle.properties` 与 IDEA 配置)；toolchain 缺失时由 foojay resolver 自动下载。
-
 ## 质量与校验（红线规则）
 
 - **IntelliJ IDEA 研发编译与局部增量初筛校验规范**: **【红线规则】**
   - **首选增量构建通道 (IDEA 局部增量构建)**：代码改动后，优先调用 `idea_build_project(filesToRebuild = [...])` 对变动文件毫秒级编译，确认 0 语法与编译错误后再推进；
   - **语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 做毫秒级文件语法速查；
-  - **兜底通道 (命令行 Gradle)**：仅在底层架构变更或无 IDE 构建环境时，回退命令行终端：`./gradlew :desktopApp:compileKotlin`（严格遵循单一终端原则，严禁并列 `:shared`）；
   - 纯文档、注释或非代码修改不触发编译校验。
 
 - **功能说明文档生命周期与先锁后更铁律 (Feature Documentation Lifecycle & Pre-Post Redline)**: **【红线规则】**
@@ -61,9 +45,8 @@
      - **步骤三（现场恢复与清理）**：**【铁律】** 数据核验完毕后，**必须立即调用 `tools.idea.xdebug_remove_breakpoint(owner = "agent")` 彻底清除所有断点**，并调用 `xdebug_control_session(action = "RESUME")` 恢复程序运行，严禁残留红点污染用户环境；
      - **步骤四（热更加载生效）**：根据核验出的真实问题修改代码，遵循项目规范通过局部增量编译（`idea_build_project`）交付 Compose Hot Reload 极速热替换生效。
 - **Gradle 单一终端模块编译调用去重红线 (Single Terminal Task Invocation Redline)**: **【红线规则】**
-  1. **【严厉禁令】严禁并列上游与下游模块任务**：在任何终端命令行执行、脚本调用、文档指引或 AI 自动校验过程中，**绝对严禁**执行形如 `./gradlew :shared:<task> :<appModule>:<task>` 的复合命令（例如严厉禁止 `./gradlew :shared:compileKotlinWasmJs :webApp:compileKotlinWasmJs`，严禁 `./gradlew :shared:compileKotlinJvm :desktopApp:compileKotlin`）；
-  2. **【单一终端原则】只调度最下游终端模块**：凡涉及 Application 工程的编译验证，**一律且仅指定单一终端模块对应的编译任务**（例如桌面端只需指定 `:desktopApp:compileKotlin`，Web 端只需指定 `:webApp:compileKotlinJs`，Android 端只需指定 `:androidApp:compileDebugKotlin`）。必须充分信任并利用 Gradle 官方原生 DAG 依赖机制自动级联构建上游 `:shared`，彻底杜绝重复执行与冗余任务评估；
-  3. **【独立共享库特例】**：仅当单独对 `:shared` 共享模块本身执行独立单元测试（如 `:shared:jvmTest`）或纯共享库语法初筛且完全不涉及任何应用壳工程时，才允许单独执行 `:shared:compileKotlinJvm`。
+  1. **【严厉禁令】严禁并列上游与下游模块任务**：在任何终端命令行执行、脚本调用、文档指引或 AI 自动校验过程中，**绝对严禁**执行形如 `./gradlew :shared:<task> :<appModule>:<task>` 的复合命令；
+  2. **【独立共享库特例】**：仅当单独对 `:shared` 共享模块本身执行独立单元测试（如 `:shared:jvmTest`）或纯共享库语法初筛且完全不涉及任何应用壳工程时，才允许单独执行 `:shared:compileKotlinJvm`。
 - **校验阶段仅校验桌面版（JVM 优先铁律）**: **【红线规则】** 自动化构建与闭环验证阶段**一律且仅执行桌面端 (JVM) 编译校验**。其他平台（Web / Android / iOS）全部交由手动按需校验，严禁在日常迭代后自动触发耗时冗长的多端全量编译，最大化提升开发反馈速度。
 - **物理校验优先 (Physical Check First)**: **【红线规则】** 外部脚本或工具修改文件后，切勿单凭编辑器的视觉表现来判断修改成败。必须始终通过原生 `git diff` 或 `read` / `Get-Content` 物理读取作为落盘的唯一铁证。
 - **校验阶段人工交互流程优先规范 (Human-like Realistic Workflow for Validation)**: **【红线规则】**
@@ -290,7 +273,18 @@ rememberUpdatedState 进行安全收拢，拖拽结束/中断时必须通过 onD
     5. **剪贴板写入与操作**：`Modifier.copyOnClick` + `rememberClipboardAction`（严禁手写协程与 `LocalClipboard`）；
     6. **轻量气泡通知**：`Toast.show(message, type)`（严禁自建浮层）；
     7. **交互按钮悬停提示**：`Modifier.tip(...)`（已内置视口边界碰撞自动向上翻转防遮挡）；
-    8. **滚动条**：`VerticalScrollbarAdapter` + `HorizontalScrollbarAdapter`（严禁裸调 Compose 官方滚动条，严禁自绘滑块）。
+    8. **滚动条**：`VerticalScrollbarAdapter` + `HorizontalScrollbarAdapter`（严禁裸调 Compose 官方滚动条，严禁自绘滑块）；
+    9. **图标按钮**：`AppIconButton` + `AppIconButtonTier` + `AppIconButtonVariant`（位于 `org.gemini.ui.forge.ui.component`，四阶尺寸严格成对守恒，内置 Tooltip 与防重加载态，业务层严禁裸写 `IconButton` 随意指定非标尺寸）。
+  - **图标按钮与图标尺寸四阶守恒规范 (Icon & IconButton Unified Specification)**：**【红线规则】**
+    全项目所有图标按钮必须统一使用 `AppIconButton`，严禁在业务端直接裸写 Compose 原生 `IconButton` 或散落手写随意尺寸：
+    1. **四阶成对守恒铁律 (Four-Tier Paired Invariant)**：
+       - `AppIconButtonTier.MICRO`：容器 `20.dp`，图标 `12.dp`，圆角 `4.dp`（适用于树节点展开箭头、列表行内辅助标记、极紧凑操作）；
+       - `AppIconButtonTier.COMPACT`：容器 `28.dp`，图标 `16.dp`，圆角 `6.dp`（默认值，适用于侧边栏 Header、画布悬浮工具栏、代码块控制栏、紧凑搜索栏）；
+       - `AppIconButtonTier.STANDARD`：容器 `32.dp`，图标 `18.dp`，圆角 `6.dp`（适用于弹窗 Header 关闭键、主要面板顶部工具条、常规功能按钮）；
+       - `AppIconButtonTier.LARGE`：容器 `36.dp`，图标 `20.dp`，圆角 `8.dp`（适用于全局 TopBar 返回键、大厅全局操作、主工作区核心切换操作）；
+    2. **尺寸接管与外部禁用覆盖**：按钮外框尺寸与内部图标尺寸 100% 由 `tier` 自动接管，业务层外部严禁显式添加 `.size()`、`.width()`、`.height()` 修饰符，彻底消除手写错误；
+    3. **Tooltip 强制一等公民**：通过 `tooltip` 入参直接注入提示文案，底层自动挂载 `Modifier.tip(...)`，彻底根除漏加提示的体验缺陷；
+    4. **内置四类视觉变体与加载态**：支持 `AppIconButtonVariant`（`GHOST` 幽灵、`FILLED_TONAL` 微底板、`OUTLINED` 描边、`FILLED` 实体强调），并原生支持 `isLoading` 平滑指示器与防重点击保护。
   - **平台默认宽度逃逸铁律**：所有自定义 `Dialog` 必须显式声明 `properties = DialogProperties(usePlatformDefaultWidth = false)`，防止 Compose 平台默认窄宽度（约 280~320dp）拦截并破坏 Design Tokens 宽度。
 - **UI Studio 与传统 Slots 模板双轨架构规范 (Dual-Track Project Architecture Specification)**: **【业务铁律】**
   - **自然属性二元解耦判定（referenceImages 零冗余铁律）**：

@@ -337,6 +337,9 @@ class SliceImportDelegate(
     var transparentSourceBytes: ByteArray? = null
         private set
 
+    /** 是否已应用整图前置去背 */
+    val isPreMattingApplied: Boolean get() = transparentSourceBytes != null
+
     /** 对原始大图执行整图去背；成功缓存透明源并返回，失败返回 null（调用方回退原图展示） */
     suspend fun mattingSourceImage(
         sourceBytes: ByteArray,
@@ -373,7 +376,8 @@ class SliceImportDelegate(
         repo: TemplateRepository,
         onProjectUpdated: ((ProjectState) -> Unit)? = null,
         targetSubPath: String? = null,
-        targetFolderId: String? = null
+        targetFolderId: String? = null,
+        removeBgAfterSlice: Boolean = true
     ) {
         val proj = state.project ?: return
         val imagePath = state.sourceImagePath
@@ -495,7 +499,7 @@ class SliceImportDelegate(
                 AppLogger.i("UIStudioViewModel", "=== [SLICE_VERIFY] 确认切图开始: 首个图元[${items.firstOrNull()?.name}] bounds=${items.firstOrNull()?.bounds}, 大图分辨率=${imgWidth}x${imgHeight}, 前置去背=${mattingSource != null} ===")
 
                 val total = items.size
-                val shouldRemoveBg = state.autoRemoveBgOnSlice
+                val shouldRemoveBg = if (mattingSource != null) true else removeBgAfterSlice
 
                 // ★ 阶段一：极速物理多核切片（零大图重复解码，切片流水线全量保底落盘）
                 state = state.copy(

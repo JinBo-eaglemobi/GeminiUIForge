@@ -128,11 +128,11 @@ private fun TreeRow(
             Icon(
                 imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(18.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
         } else {
-            Spacer(Modifier.size(16.dp))
+            Spacer(Modifier.size(18.dp))
         }
         Spacer(Modifier.width(2.dp))
         Icon(
@@ -142,7 +142,7 @@ private fun TreeRow(
                 Icons.AutoMirrored.Filled.InsertDriveFile
             },
             contentDescription = null,
-            modifier = Modifier.size(15.dp),
+            modifier = Modifier.size(18.dp),
             tint = if (node.isDirectory) {
                 MaterialTheme.colorScheme.primary
             } else {

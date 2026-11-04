@@ -22,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.gemini.ui.forge.ui.component.AppIconButton
+import org.gemini.ui.forge.ui.component.AppIconButtonTier
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -94,22 +96,16 @@ fun AppDialogHeader(
         ) {
             actions()
 
-            // 5. 最右侧关闭按钮（带关闭 Tooltip）
+            // 5. 最右侧关闭按钮（带关闭 Tooltip，STANDARD 32dp/18dp）
             if (onClose != null) {
                 Spacer(modifier = Modifier.width(spacing.small))
-                IconButton(
+                AppIconButton(
+                    imageVector = Icons.Default.Close,
                     onClick = onClose,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .tip("关闭")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "关闭",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                    tier = AppIconButtonTier.STANDARD,
+                    tooltip = "关闭",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

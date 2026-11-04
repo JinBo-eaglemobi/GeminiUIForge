@@ -387,11 +387,13 @@ fun UIStudioScreen(
                 folders = state.assetLibrary.folders,
                 showFileNameField = false,
                 titleText = stringResource(Res.string.slice_save_dialog_title),
+                showRemoveBgOption = !viewModel.sliceImport.isPreMattingApplied,
+                initialRemoveBgChecked = true,
                 onDismissRequest = {
                     isSaveLocationDialogOpen = false
                     pendingSliceItems = null
                 },
-                onConfirmSave = { _, subPath ->
+                onConfirmSaveWithOptions = { _, subPath, removeBgAfterSlice ->
                     customSliceSubPath = subPath
                     val selectedFolderId = if (subPath.isNotBlank()) {
                         state.assetLibrary.folders.find { it.name.equals(subPath, ignoreCase = true) }?.id
@@ -406,7 +408,8 @@ fun UIStudioScreen(
                                 appViewModel.loadProject(updatedProject.projectId, updatedProject)
                             },
                             targetSubPath = subPath,
-                            targetFolderId = selectedFolderId
+                            targetFolderId = selectedFolderId,
+                            removeBgAfterSlice = removeBgAfterSlice
                         )
                         pendingSliceItems = null
                     }

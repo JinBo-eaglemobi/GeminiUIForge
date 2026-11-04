@@ -644,7 +644,7 @@ fun ImportAssetSheetDialog(
 
                 Spacer(modifier = Modifier.height(spacing.medium))
 
-                // 转换成透明背景（自动去除背景变透明通道 PNG）选项，默认开启
+                // 进入校对前自动执行整图去背景选项，默认关闭
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -667,12 +667,12 @@ fun ImportAssetSheetDialog(
                             )
                             Column {
                                 Text(
-                                    text = "转换成透明背景 (默认去除背景)",
+                                    text = "进入校对前自动执行整图去背景",
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "切图生成时自动调用本地 AI 抠图算法，生成透明通道 PNG 图片",
+                                    text = "开启后进入校对界面将自动调用 AI 抠图去除整图背景，校对底图与入库切片均透明",
                                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                     color = MaterialTheme.colorScheme.outline
                                 )

@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.gemini.ui.forge.ui.component.AppIconButton
+import org.gemini.ui.forge.ui.component.AppIconButtonTier
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -81,9 +83,10 @@ fun AppMarkdownCodeHeader(
                 horizontalArrangement = Arrangement.spacedBy(spacing.extraSmall)
             ) {
                 // 一键复制代码按钮
-                IconButton(
+                AppIconButton(
                     onClick = onCopyClick,
-                    modifier = Modifier.size(28.dp).tip(if (isCopied) "已复制" else "复制代码")
+                    tier = AppIconButtonTier.COMPACT,
+                    tooltip = if (isCopied) "已复制" else "复制代码"
                 ) {
                     Crossfade(targetState = isCopied) { copied ->
                         if (copied) {
@@ -91,23 +94,24 @@ fun AppMarkdownCodeHeader(
                                 Icons.Default.Check,
                                 contentDescription = "已复制",
                                 tint = Color(0xFF98C379),
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(spacing.iconCompactSize)
                             )
                         } else {
                             Icon(
                                 Icons.Default.ContentCopy,
                                 contentDescription = "复制代码",
                                 tint = Color(0xFFABB2BF),
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(spacing.iconCompactSize)
                             )
                         }
                     }
                 }
 
                 // 折叠 / 展开状态切换按钮
-                IconButton(
+                AppIconButton(
                     onClick = onToggleCollapse,
-                    modifier = Modifier.size(28.dp).tip(if (isCollapsed) "展开代码块" else "折叠代码块")
+                    tier = AppIconButtonTier.COMPACT,
+                    tooltip = if (isCollapsed) "展开代码块" else "折叠代码块"
                 ) {
                     Crossfade(targetState = isCollapsed) { collapsed ->
                         if (collapsed) {
@@ -115,14 +119,14 @@ fun AppMarkdownCodeHeader(
                                 Icons.Default.UnfoldMore,
                                 contentDescription = "展开代码块",
                                 tint = Color(0xFFABB2BF),
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(spacing.iconCompactSize)
                             )
                         } else {
                             Icon(
                                 Icons.Default.UnfoldLess,
                                 contentDescription = "折叠代码块",
                                 tint = Color(0xFFABB2BF),
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(spacing.iconCompactSize)
                             )
                         }
                     }

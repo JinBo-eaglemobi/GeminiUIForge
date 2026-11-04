@@ -131,7 +131,7 @@ data class UIStudioState(
     val density: Float = 1.0f,
     val isMattingAsset: Boolean = false,
     val mattingAssetHash: String? = null,
-    val autoRemoveBgOnSlice: Boolean = true,
+    val autoRemoveBgOnSlice: Boolean = false,
     val expandedFolderIds: Set<String> = emptySet(),
     val renamingFolder: UIAssetFolder? = null,
     val renamingAsset: UIAssetItem? = null,

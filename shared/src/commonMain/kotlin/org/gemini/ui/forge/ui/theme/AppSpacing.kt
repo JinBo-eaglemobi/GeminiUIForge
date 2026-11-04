@@ -82,7 +82,28 @@ data class AppSpacing(
     val buttonActionPaddingHorizontal: Dp = if (isCompact) 8.dp else 10.dp,
 
     /** 行内置操作按钮垂直内边距 */
-    val buttonActionPaddingVertical: Dp = 0.dp
+    val buttonActionPaddingVertical: Dp = 0.dp,
+
+    /**
+     * 图标按钮与内部图标四阶标准尺寸阶梯 (Icon & IconButton Tokens)
+     * 遵循 8pt/4pt 空间网格系统与人机工程学比例，容器与内部图标尺寸严格成对守恒：
+     *
+     * 1. Micro 微型阶梯 (20dp 容器 / 12dp 图标)：适用于树节点展开箭头、列表行内微型操作、表格极紧凑标记
+     */
+    val iconButtonMicroSize: Dp = 20.dp,
+    val iconMicroSize: Dp = 12.dp,
+
+    /** 2. Compact 紧凑阶梯 (28dp 容器 / 16dp 图标)：适用于侧边栏 Header、画布悬浮工具栏、代码块控制栏、紧凑搜索栏 */
+    val iconButtonCompactSize: Dp = 28.dp,
+    val iconCompactSize: Dp = 16.dp,
+
+    /** 3. Standard 标准阶梯 (32dp 容器 / 18dp 图标)：适用于弹窗 Header 关闭键、主要面板顶部工具条、常规功能按钮 */
+    val iconButtonStandardSize: Dp = 32.dp,
+    val iconStandardSize: Dp = 18.dp,
+
+    /** 4. Large 显著阶梯 (36dp 容器 / 20dp 图标)：适用于应用全局 TopBar 返回键、大厅全局操作、主工作区核心切换操作 */
+    val iconButtonLargeSize: Dp = 36.dp,
+    val iconLargeSize: Dp = 20.dp
 )
 
 /**

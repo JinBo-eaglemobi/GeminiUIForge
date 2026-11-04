@@ -48,8 +48,6 @@ fun AssetSliceVerifyTopBar(
     zoomScale: Float,
     toolMode: VerifyToolMode,
     isSnapping: Boolean,
-    autoRemoveBg: Boolean = true,
-    onToggleAutoRemoveBg: (Boolean) -> Unit = {},
     canUndo: Boolean = false,
     canRedo: Boolean = false,
     onToolModeChange: (VerifyToolMode) -> Unit,
@@ -295,28 +293,6 @@ fun AssetSliceVerifyTopBar(
                         )
                     }
                 }
-
-                // 自动去背胶囊式轻量切换器
-                FilterChip(
-                    selected = autoRemoveBg,
-                    onClick = { onToggleAutoRemoveBg(!autoRemoveBg) },
-                    label = {
-                        Text(
-                            text = if (autoRemoveBg) "🪄 自动去背" else "保留背景",
-                            fontSize = 11.sp,
-                            fontWeight = if (autoRemoveBg) FontWeight.Bold else FontWeight.Normal
-                        )
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    ),
-                    modifier = Modifier.height(30.dp).tip(
-                        if (autoRemoveBg) "已开启原图前置去背：校对底图与切片输出均为透明（整图仅去背一次）"
-                        else "已关闭去背：展示原始底图，切片后逐张去背"
-                    )
-                )
 
                 OutlinedButton(
                     onClick = onClose,

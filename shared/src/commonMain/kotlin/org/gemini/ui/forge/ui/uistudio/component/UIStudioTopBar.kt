@@ -39,6 +39,8 @@ import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.action_save_layout
 import geminiuiforge.composeapp.generated.resources.back_to_home
 import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.ui.component.AppIconButton
+import org.gemini.ui.forge.ui.component.AppIconButtonTier
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
@@ -78,17 +80,12 @@ fun UIStudioTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(spacing.small)
             ) {
-                IconButton(
+                AppIconButton(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     onClick = onBackToHome,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .tip(stringResource(Res.string.back_to_home))
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(Res.string.back_to_home)
-                    )
-                }
+                    tier = AppIconButtonTier.LARGE,
+                    tooltip = stringResource(Res.string.back_to_home)
+                )
 
                 // UI Studio 标识胶囊
                 Surface(
@@ -137,95 +134,67 @@ fun UIStudioTopBar(
                 horizontalArrangement = Arrangement.spacedBy(spacing.small)
             ) {
                 // 素材库侧栏显隐切换按钮
-                IconButton(
+                AppIconButton(
+                    imageVector = if (state.isAssetPanelVisible) Icons.AutoMirrored.Filled.ViewSidebar else Icons.Default.FolderOpen,
                     onClick = { viewModel.viewport.toggleAssetPanel() },
-                    modifier = Modifier
-                        .size(36.dp)
-                        .tip("切换左侧面板 (Toggle Sidebar)")
-                ) {
-                    Icon(
-                        imageVector = if (state.isAssetPanelVisible) Icons.AutoMirrored.Filled.ViewSidebar else Icons.Default.FolderOpen,
-                        contentDescription = "Toggle Sidebar",
-                        tint = if (state.isAssetPanelVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                    tier = AppIconButtonTier.LARGE,
+                    tooltip = "切换左侧面板 (Toggle Sidebar)",
+                    tint = if (state.isAssetPanelVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 // 右侧面板显隐切换按钮
-                IconButton(
+                AppIconButton(
+                    imageVector = Icons.Default.Tune,
                     onClick = { viewModel.viewport.toggleRightSidebar() },
-                    modifier = Modifier
-                        .size(36.dp)
-                        .tip(if (state.isRightSidebarVisible) "收起右侧面板" else "展开右侧面板")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = "Toggle Right Sidebar",
-                        tint = if (state.isRightSidebarVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                    tier = AppIconButtonTier.LARGE,
+                    tooltip = if (state.isRightSidebarVisible) "收起右侧面板" else "展开右侧面板",
+                    tint = if (state.isRightSidebarVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 // 撤销按钮 (Ctrl+Z)
-                IconButton(
+                AppIconButton(
+                    imageVector = Icons.AutoMirrored.Filled.Undo,
                     onClick = { viewModel.canvasEditor.undo() },
                     enabled = state.canUndo,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .tip("撤销 (Ctrl+Z)")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Undo,
-                        contentDescription = "Undo",
-                        tint = if (state.canUndo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                    )
-                }
+                    tier = AppIconButtonTier.LARGE,
+                    tooltip = "撤销 (Ctrl+Z)",
+                    tint = if (state.canUndo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                )
 
                 // 重做按钮 (Ctrl+Y)
-                IconButton(
+                AppIconButton(
+                    imageVector = Icons.AutoMirrored.Filled.Redo,
                     onClick = { viewModel.canvasEditor.redo() },
                     enabled = state.canRedo,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .tip("重做 (Ctrl+Y)")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Redo,
-                        contentDescription = "Redo",
-                        tint = if (state.canRedo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                    )
-                }
+                    tier = AppIconButtonTier.LARGE,
+                    tooltip = "重做 (Ctrl+Y)",
+                    tint = if (state.canRedo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                )
 
                 // 一键保存工程按钮（带未保存状态小圆点指示）
-                IconButton(
+                AppIconButton(
                     onClick = { viewModel.saveProject(templateRepo) },
                     enabled = !state.isSaving,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .tip(
-                            if (state.isDirty) "${stringResource(Res.string.action_save_layout)} (有未保存修改)"
-                            else stringResource(Res.string.action_save_layout)
-                        )
+                    tier = AppIconButtonTier.LARGE,
+                    isLoading = state.isSaving,
+                    tooltip = if (state.isDirty) "${stringResource(Res.string.action_save_layout)} (有未保存修改)"
+                    else stringResource(Res.string.action_save_layout)
                 ) {
-                    if (state.isSaving) {
-                        CircularProgressIndicator(
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(18.dp)
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Save,
+                            contentDescription = stringResource(Res.string.action_save_layout),
+                            tint = if (state.isDirty) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(LocalAppSpacing.current.iconLargeSize)
                         )
-                    } else {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Save,
-                                contentDescription = stringResource(Res.string.action_save_layout),
-                                tint = if (state.isDirty) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        if (state.isDirty) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 2.dp, y = (-2).dp)
+                                    .background(Color(0xFFFF9100), CircleShape)
                             )
-                            if (state.isDirty) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(7.dp)
-                                        .align(Alignment.TopEnd)
-                                        .offset(x = 2.dp, y = (-2).dp)
-                                        .background(Color(0xFFFF9100), CircleShape)
-                                )
-                            }
                         }
                     }
                 }

@@ -63,6 +63,8 @@ import org.gemini.ui.forge.extend.contextMenuClickable
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
+import org.gemini.ui.forge.ui.component.AppIconButton
+import org.gemini.ui.forge.ui.component.AppIconButtonTier
 import org.gemini.ui.forge.ui.component.chat.drop.onFileDrop
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.utils.SUPPORTED_IMAGE_EXTENSIONS
@@ -143,18 +145,6 @@ fun UIStudioAssetPanel(
         }
     }
 
-    // 刷新动画旋转角度
-    val refreshInfiniteTransition = rememberInfiniteTransition(label = "assetRefreshAnim")
-    val refreshRotation by refreshInfiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 800, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "assetRefreshRotation"
-    )
-
     // 导入菜单展开状态与外部拖放悬停高亮状态
     var showImportMenu by remember { mutableStateOf(false) }
     var isExternalDragHovered by remember { mutableStateOf(false) }
@@ -232,67 +222,38 @@ fun UIStudioAssetPanel(
                     // 一键展开/折叠全部素材文件夹
                     if (library.folders.isNotEmpty()) {
                         val allFoldersExpanded = library.folders.all { state.expandedFolderIds.contains(it.id) }
-                        IconButton(
+                        AppIconButton(
+                            imageVector = if (allFoldersExpanded) Icons.Default.UnfoldLess else Icons.Default.UnfoldMore,
                             onClick = { viewModel.assetLibrary.toggleAllFoldersExpanded() },
-                            modifier = Modifier
-                                .size(28.dp)
-                                .tip(if (allFoldersExpanded) "折叠全部文件夹" else "展开全部文件夹")
-                        ) {
-                            Icon(
-                                imageVector = if (allFoldersExpanded) Icons.Default.UnfoldLess else Icons.Default.UnfoldMore,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
+                            tier = AppIconButtonTier.COMPACT,
+                            tooltip = if (allFoldersExpanded) "折叠全部文件夹" else "展开全部文件夹"
+                        )
                     }
 
                     // 刷新素材库（扫描物理磁盘，校验清理失效项并同步新增）
-                    IconButton(
+                    AppIconButton(
+                        imageVector = Icons.Default.Refresh,
                         onClick = { viewModel.assetLibrary.refreshAssetLibrary() },
                         enabled = !state.isRefreshingAssetLibrary,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .tip("刷新素材库 (扫描物理磁盘，校验清理失效项并同步新增)")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "刷新素材库",
-                            tint = if (state.isRefreshingAssetLibrary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .size(16.dp)
-                                .graphicsLayer {
-                                    if (state.isRefreshingAssetLibrary) {
-                                        rotationZ = refreshRotation
-                                    }
-                                }
-                        )
-                    }
+                        isLoading = state.isRefreshingAssetLibrary,
+                        tier = AppIconButtonTier.COMPACT,
+                        tooltip = "刷新素材库 (扫描物理磁盘，校验清理失效项并同步新增)",
+                        tint = if (state.isRefreshingAssetLibrary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
-                    IconButton(
+                    AppIconButton(
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                         onClick = { viewModel.assetLibrary.revealFolderInExplorer(null) },
-                        modifier = Modifier
-                            .size(28.dp)
-                            .tip("在本地文件管理器中打开素材目录")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                            contentDescription = "Open Folder",
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                        tier = AppIconButtonTier.COMPACT,
+                        tooltip = "在本地文件管理器中打开素材目录"
+                    )
 
-                    IconButton(
+                    AppIconButton(
+                        imageVector = Icons.Default.CreateNewFolder,
                         onClick = { viewModel.assetLibrary.openNewFolderDialog() },
-                        modifier = Modifier
-                            .size(28.dp)
-                            .tip("新建素材分类文件夹")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CreateNewFolder,
-                            contentDescription = "New Folder",
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                        tier = AppIconButtonTier.COMPACT,
+                        tooltip = "新建素材分类文件夹"
+                    )
 
                     // 导入三通道菜单：图集切片 / 多选混合文件 / 目录浏览
                     Box {
@@ -426,17 +387,17 @@ fun UIStudioAssetPanel(
                                         Icon(
                                             imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                             contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
+                                            modifier = Modifier.size(18.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Icon(
                                             imageVector = if (isExpanded) Icons.Default.FolderOpen else Icons.Default.Folder,
                                             contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
+                                            modifier = Modifier.size(20.dp),
                                             tint = MaterialTheme.colorScheme.primary
                                         )
-                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = folder.name,
                                             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
@@ -450,17 +411,12 @@ fun UIStudioAssetPanel(
                                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
-                                        IconButton(
+                                        AppIconButton(
+                                            imageVector = Icons.Default.MoreVert,
                                             onClick = { showFolderMenu = true },
-                                            modifier = Modifier.size(20.dp).tip("更多操作")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.MoreVert,
-                                                contentDescription = "Options",
-                                                modifier = Modifier.size(14.dp),
-                                                tint = MaterialTheme.colorScheme.outline
-                                            )
-                                        }
+                                            tier = AppIconButtonTier.MICRO,
+                                            tooltip = "更多操作"
+                                        )
                                     }
                                 }
 

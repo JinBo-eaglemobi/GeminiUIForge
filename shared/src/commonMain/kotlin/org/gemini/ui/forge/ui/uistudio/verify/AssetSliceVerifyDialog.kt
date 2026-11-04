@@ -430,8 +430,6 @@ fun AssetSliceVerifyDialog(
                         zoomScale = scale,
                         toolMode = toolMode,
                         isSnapping = isSnapping,
-                        autoRemoveBg = autoRemoveBg,
-                        onToggleAutoRemoveBg = { onToggleAutoRemoveBg?.invoke(it) },
                         canUndo = undoStack.isNotEmpty(),
                         canRedo = redoStack.isNotEmpty(),
                         onToolModeChange = { toolMode = it },

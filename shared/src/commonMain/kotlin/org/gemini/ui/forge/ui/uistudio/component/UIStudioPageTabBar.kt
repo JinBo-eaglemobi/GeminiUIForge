@@ -10,7 +10,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewQuilt
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
@@ -27,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.extend.contextMenuClickable
 import org.gemini.ui.forge.ui.common.HorizontalScrollbarAdapter
+import org.gemini.ui.forge.ui.component.AppIconButton
+import org.gemini.ui.forge.ui.component.AppIconButtonTier
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
@@ -281,39 +282,14 @@ fun UIStudioPageTabBar(
         }
 
         // 右侧一键关闭全部标签入口
-            if (openIds.isNotEmpty()) {
-                IconButton(
-                    onClick = { viewModel.pageManager.closeAllViewTabs() },
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .tip("关闭全部标签页")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Clear,
-                        contentDescription = "关闭全部",
-                        tint = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(4.dp))
-            }
-
-            // 右侧轻量新建页面入口
-            IconButton(
-                onClick = { viewModel.pageManager.openNewViewDialog() },
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .tip("新建视图界面")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "新建视图",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+        if (openIds.isNotEmpty()) {
+            AppIconButton(
+                imageVector = Icons.Default.Clear,
+                onClick = { viewModel.pageManager.closeAllViewTabs() },
+                tier = AppIconButtonTier.COMPACT,
+                tooltip = "关闭全部标签页"
+            )
         }
     }
+}
 }
