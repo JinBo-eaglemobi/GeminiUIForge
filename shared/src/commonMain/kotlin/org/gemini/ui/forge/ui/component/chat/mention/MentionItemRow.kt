@@ -112,13 +112,14 @@ fun MentionItemRow(
             if (highlightTokens.isEmpty()) {
                 AnnotatedString(item.title)
             } else {
-                val hitSet = sortedSetOf<Int>()
-                highlightTokens.forEach { token ->
-                    MentionFuzzyMatcher.matchField(token, item.title)?.let { hitSet.addAll(it.hitIndices) }
-                }
+                val hitIndices = highlightTokens
+                    .mapNotNull { token -> MentionFuzzyMatcher.matchField(token, item.title)?.hitIndices }
+                    .flatten()
+                    .toSet()
+                    .sorted()
                 buildAnnotatedString {
                     append(item.title)
-                    hitSet.forEach { idx ->
+                    hitIndices.forEach { idx ->
                         if (idx in item.title.indices) {
                             addStyle(
                                 SpanStyle(
