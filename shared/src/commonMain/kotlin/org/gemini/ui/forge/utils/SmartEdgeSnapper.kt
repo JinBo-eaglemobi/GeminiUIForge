@@ -104,6 +104,16 @@ object SmartEdgeSnapper {
                 searchRadius = searchRadius
             ) ?: break
 
+            // 相对初始原始 bounds 的防滚雪球过度膨胀熔断保护
+            val origW = logicalBounds.width.coerceAtLeast(1f)
+            val origH = logicalBounds.height.coerceAtLeast(1f)
+            val curW = passResult.logicalRect.width
+            val curH = passResult.logicalRect.height
+            if (curW > origW * 1.15f || curH > origH * 1.15f) {
+                AppLogger.w("SmartEdgeSnapper", "⚠️ 触发尺寸过度膨胀熔断保护: 初始=[$origW x $origH] -> 候选=[$curW x $curH]，坚决不采纳并终止迭代")
+                break
+            }
+
             finalResult = passResult
 
             val deltaL = abs(passResult.logicalRect.left - currentBounds.left)
@@ -267,6 +277,14 @@ object SmartEdgeSnapper {
     /**
      * 基于 Alpha 通道的不透明实体紧致外切算法 (针对 SpriteSheet 透明底素材)
      */
+    /**
+     * 基于 Alpha 通道的不透明实体各向独立微观边缘外切与修剪算法 (针对 SpriteSheet 透明底素材)
+     *
+     * 核心优势：
+     * 1. 彻底弃用全局泛洪（Flood Fill），四条边各向独立微观判定，100% 免疫相邻组件渗透与连通搭桥；
+     * 2. 支持双向自适应修剪：粗框画大时向内收缩修剪透明边缘留白；粗框偏小时向外微调至实体外边缘；
+     * 3. 严格受限于微观安全外延半径 (单边最大不超过 16px)，绝不跨图元吞噬。
+     */
     private fun extractAlphaTightHull(
         bitmap: Bitmap,
         roughL: Int,
@@ -280,13 +298,11 @@ object SmartEdgeSnapper {
         val rh = roughB - roughT
         if (rw <= 4 || rh <= 4) return null
 
-        val marginX = maxOf(20, (rw * 0.3f).roundToInt()).coerceAtMost(60)
-        val marginY = maxOf(20, (rh * 0.3f).roundToInt()).coerceAtMost(60)
-
-        val winL = (roughL - marginX).coerceIn(0, imgW - 1)
-        val winT = (roughT - marginY).coerceIn(0, imgH - 1)
-        val winR = (roughR + marginX).coerceIn(winL + 1, imgW)
-        val winB = (roughB + marginY).coerceIn(winT + 1, imgH)
+        val maxExpand = minOf(16, maxOf(6, (rw * 0.08f).roundToInt(), (rh * 0.08f).roundToInt()))
+        val winL = (roughL - maxExpand).coerceIn(0, imgW - 1)
+        val winT = (roughT - maxExpand).coerceIn(0, imgH - 1)
+        val winR = (roughR + maxExpand).coerceIn(winL + 1, imgW)
+        val winB = (roughB + maxExpand).coerceIn(winT + 1, imgH)
 
         val winW = winR - winL
         val winH = winB - winT
@@ -308,84 +324,66 @@ object SmartEdgeSnapper {
                 }
             }
         }
-
         if (!hasTransparentPixel) return null
 
-        val alphaThreshold = 20
-        var minX = Int.MAX_VALUE
-        var minY = Int.MAX_VALUE
-        var maxX = Int.MIN_VALUE
-        var maxY = Int.MIN_VALUE
-        var opaqueCount = 0
+        // Alpha 实体有效阈值 (约 20% 不透明度)
+        val alphaThreshold = 50
+        val minPixelsRow = maxOf(2, (rw * 0.03f).roundToInt())
+        val minPixelsCol = maxOf(2, (rh * 0.03f).roundToInt())
 
-        val visited = BooleanArray(winW * winH)
-        val queue = IntArray(winW * winH)
-        var head = 0
-        var tail = 0
-
-        // 收集种子点：落在粗选框内部中心区域的不透明像素
-        val seedStep = 2
-        for (py in roughT.coerceIn(winT, winB - 1) until roughB.coerceIn(winT, winB) step seedStep) {
-            val ly = py - winT
-            val rOff = ly * winW
-            for (px in roughL.coerceIn(winL, winR - 1) until roughR.coerceIn(winL, winR) step seedStep) {
-                val lx = px - winL
-                val idx = rOff + lx
-                if (!visited[idx]) {
-                    if (Color.getA(bitmap.getColor(px, py)) > alphaThreshold) {
-                        visited[idx] = true
-                        queue[tail++] = (ly shl 16) or lx
-                    }
+        // 1. 垂直投影分析：在 [roughL, roughR] 宽度范围内，检查各行的不透明像素数量
+        var firstValidRow = -1
+        var lastValidRow = -1
+        for (py in winT until winB) {
+            var count = 0
+            for (px in roughL.coerceIn(winL, winR - 1) until roughR.coerceIn(winL, winR)) {
+                if (Color.getA(bitmap.getColor(px, py)) > alphaThreshold) {
+                    count++
+                    if (count >= minPixelsRow) break
                 }
+            }
+            if (count >= minPixelsRow) {
+                if (firstValidRow == -1) firstValidRow = py
+                lastValidRow = py
             }
         }
 
-        if (tail == 0) return null
+        if (firstValidRow == -1 || lastValidRow == -1 || firstValidRow >= lastValidRow) return null
 
-        while (head < tail) {
-            val packed = queue[head++]
-            val cy = packed ushr 16
-            val cx = packed and 0xFFFF
-            val px = winL + cx
-            val py = winT + cy
-
-            if (px < minX) minX = px
-            if (px > maxX) maxX = px
-            if (py < minY) minY = py
-            if (py > maxY) maxY = py
-            opaqueCount++
-
-            for (dy in -1..1) {
-                val ny = cy + dy
-                if (ny in 0 until winH) {
-                    val nOff = ny * winW
-                    for (dx in -1..1) {
-                        val nx = cx + dx
-                        if (nx in 0 until winW) {
-                            val nIdx = nOff + nx
-                            if (!visited[nIdx]) {
-                                visited[nIdx] = true
-                                if (Color.getA(bitmap.getColor(winL + nx, winT + ny)) > alphaThreshold) {
-                                    if (tail < queue.size) {
-                                        queue[tail++] = (ny shl 16) or nx
-                                    }
-                                }
-                            }
-                        }
-                    }
+        // 2. 水平投影分析：在 [roughT, roughB] 高度范围内，检查各列的不透明像素数量
+        var firstValidCol = -1
+        var lastValidCol = -1
+        for (px in winL until winR) {
+            var count = 0
+            for (py in roughT.coerceIn(winT, winB - 1) until roughB.coerceIn(winT, winB)) {
+                if (Color.getA(bitmap.getColor(px, py)) > alphaThreshold) {
+                    count++
+                    if (count >= minPixelsCol) break
                 }
+            }
+            if (count >= minPixelsCol) {
+                if (firstValidCol == -1) firstValidCol = px
+                lastValidCol = px
             }
         }
 
-        if (opaqueCount < 25 || minX >= maxX || minY >= maxY) return null
-        val bw = maxX - minX + 1
-        val bh = maxY - minY + 1
+        if (firstValidCol == -1 || lastValidCol == -1 || firstValidCol >= lastValidCol) return null
 
-        // 尺寸校验：避免连通块过小或过大导致溢出
-        if (bw < rw * 0.35f || bh < rh * 0.35f) return null
-        if (bw > rw * 3.0f || bh > rh * 3.0f) return null
+        // 单边物理向外扩展安全夹具：
+        // 允许向外微调最多 maxExpand，允许向内收缩修剪
+        val clampedL = maxOf(winL, minOf(roughL + (rw * 0.2f).toInt(), firstValidCol))
+        val clampedR = minOf(winR, maxOf(roughR - (rw * 0.2f).toInt(), lastValidCol + 1))
+        val clampedT = maxOf(winT, minOf(roughT + (rh * 0.2f).toInt(), firstValidRow))
+        val clampedB = minOf(winB, maxOf(roughB - (rh * 0.2f).toInt(), lastValidRow + 1))
 
-        return SerialRect(minX.toFloat(), minY.toFloat(), (maxX + 1).toFloat(), (maxY + 1).toFloat())
+        val bw = clampedR - clampedL
+        val bh = clampedB - clampedT
+
+        // 尺寸安全硬防御：宽高相对原框膨胀不得超过 15%，缩水不得低于 40%
+        if (bw < rw * 0.4f || bh < rh * 0.4f) return null
+        if (bw > rw * 1.15f || bh > rh * 1.15f) return null
+
+        return SerialRect(clampedL.toFloat(), clampedT.toFloat(), clampedR.toFloat(), clampedB.toFloat())
     }
 
     /**
@@ -526,12 +524,12 @@ object SmartEdgeSnapper {
                     val bh = maxY - minY + 1
                     val area = bw * bh
 
-                    if (bw >= 18 && bh >= 18 && area >= 450) {
+                    if (bw >= 18 && bh >= 18 && area >= 450 && bw <= rw * 1.15f && bh <= rh * 1.15f) {
                         val boxCx = (minX + maxX).toFloat() / 2f
                         val boxCy = (minY + maxY).toFloat() / 2f
                         val dist = kotlin.math.hypot(boxCx - cxCrop, boxCy - cyCrop)
 
-                        if (dist < maxOf(rw, rh) * 1.2f) {
+                        if (dist < maxOf(rw, rh) * 0.8f) {
                             val score = area.toFloat() / (1f + dist * 0.8f)
                             if (score > bestScore) {
                                 bestScore = score

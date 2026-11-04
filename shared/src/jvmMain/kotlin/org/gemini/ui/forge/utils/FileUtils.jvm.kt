@@ -85,7 +85,7 @@ actual suspend fun executeSystemCommand(
             .redirectErrorStream(true)
             .start()
         
-        process.inputStream.bufferedReader().useLines { lines ->
+        process.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
             lines.forEach { 
                 // 确保在主线程上调用 UI 回调
                 withContext(Dispatchers.Main) { onLog(it) }

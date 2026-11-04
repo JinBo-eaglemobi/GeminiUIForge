@@ -201,7 +201,9 @@ def remove_background_pipeline(img, session=None):
     from rembg import remove, new_session
     if session is None:
         try:
+            print("正在加载 Rembg 深度学习模型权重 (u2net)...", flush=True)
             session = new_session("u2net")
+            print("深度学习模型加载完成，开始分析画面布局与背景...", flush=True)
         except Exception:
             session = None
 
@@ -230,11 +232,12 @@ def remove_background_pipeline(img, session=None):
 
         # 如果检测到 2 个以上相互独立的图元切片，启动多组件解耦切片加速通道
         if len(boxes) >= 2:
-            print(f"✨ 智能识别到雪碧图模式：共检测到 {len(boxes)} 个独立图元实体，启动局部高精度解耦推理...")
+            print(f"识别到雪碧图模式：共检测到 {len(boxes)} 个独立图元实体，开始局部高精度推理...", flush=True)
             full_canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
             
             pad_margin = 12
             for idx, box in enumerate(boxes):
+                print(f"正在高精度去背推理: [{idx + 1}/{len(boxes)}]...", flush=True)
                 bx1 = max(0, box[0] - pad_margin)
                 by1 = max(0, box[1] - pad_margin)
                 bx2 = min(w, box[2] + pad_margin)
@@ -249,7 +252,7 @@ def remove_background_pipeline(img, session=None):
             return full_canvas
 
     # 3. 单图元或复杂背景通道：走整体精修流程
-    print("🎨 单主体/复杂背景模式：执行全局精细抠图与边缘反污染消白边...")
+    print("单主体/复杂背景模式：执行全局精细抠图与边缘反污染消白边...", flush=True)
     if session is not None:
         rembg_out = remove(orig_rgb, session=session)
     else:
@@ -290,12 +293,14 @@ def remove_background_pipeline(img, session=None):
 
 def process_single_image(img_path, out_path, session=None):
     if not os.path.exists(img_path):
-        print(f"Error: Input file not found: {img_path}")
+        print(f"Error: Input file not found: {img_path}", flush=True)
         return False
 
     try:
+        print(f"正在读取并解码待处理原图: {os.path.basename(img_path)}", flush=True)
         with Image.open(img_path) as img:
             original_size = img.size
+            print(f"原图分辨率: {original_size[0]} × {original_size[1]}，准备启动去背流水线...", flush=True)
             result_img = remove_background_pipeline(img, session=session)
 
             if result_img.size != original_size:
@@ -309,10 +314,12 @@ def process_single_image(img_path, out_path, session=None):
             if out_dir and not os.path.exists(out_dir):
                 os.makedirs(out_dir, exist_ok=True)
 
+            print("正在编码保存透明 PNG 图像至磁盘...", flush=True)
             result_img.save(out_path, format="PNG")
+            print("原图去背完成，透明底图已就绪", flush=True)
         return True
     except Exception as e:
-        print(f"Error processing image {img_path}: {str(e)}")
+        print(f"Error processing image {img_path}: {str(e)}", flush=True)
         import traceback
         traceback.print_exc()
         return False

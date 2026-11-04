@@ -76,7 +76,7 @@ class LocalMattingService(
             for (cmd in commands) {
                 success = executeSystemCommand(
                     command = cmd,
-                    args = listOf(scriptPath, inputPath, outputPath),
+                    args = listOf("-u", scriptPath, inputPath, outputPath),
                     onLog = { 
                         syncLog("[LocalRembg] $it", onLog)
                         executionLogs.appendLine(it)
@@ -142,7 +142,7 @@ class LocalMattingService(
             for (cmd in commands) {
                 success = executeSystemCommand(
                     command = cmd,
-                    args = listOf(scriptPath, "--batch", manifestPath),
+                    args = listOf("-u", scriptPath, "--batch", manifestPath),
                     onLog = { line ->
                         syncLog("[BatchRembg] $line", onLog)
                         executionLogs.appendLine(line)

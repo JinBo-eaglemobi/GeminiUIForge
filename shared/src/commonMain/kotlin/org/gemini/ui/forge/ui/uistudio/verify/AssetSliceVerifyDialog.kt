@@ -17,6 +17,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import kotlinx.coroutines.delay
+import org.gemini.ui.forge.getCurrentTimeMillis
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +41,9 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.utils.SmartEdgeSnapper
 import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.utils.toImageBitmap
+import org.gemini.ui.forge.ui.uistudio.verify.model.MattingStepItem
+import org.gemini.ui.forge.ui.uistudio.verify.model.MattingStepStatus
+import org.gemini.ui.forge.ui.uistudio.verify.component.MattingTaskProgressCard
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -53,7 +61,7 @@ fun AssetSliceVerifyDialog(
     onDismiss: () -> Unit,
     onConfirmSlice: (List<NormalizedAssetItem>) -> Unit,
     onSaveDraft: ((List<NormalizedAssetItem>) -> Unit)? = null,
-    mattingSourceImage: (suspend (ByteArray) -> ByteArray?)? = null,
+    mattingSourceImage: (suspend (ByteArray, (String) -> Unit) -> ByteArray?)? = null,
     targetFolderDisplayName: String = "根目录",
     onSelectTargetFolder: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -72,6 +80,18 @@ fun AssetSliceVerifyDialog(
     var transparentBytes by remember { mutableStateOf<ByteArray?>(null) }
     var transparentBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var isMattingSource by remember { mutableStateOf(false) }
+    var mattingElapsedSeconds by remember { mutableStateOf(0f) }
+    var mattingProgressRatio by remember { mutableStateOf<Float?>(null) }
+
+    val initialMattingSteps = remember {
+        listOf(
+            MattingStepItem(stepIndex = 1, title = "读取并解析待处理原图"),
+            MattingStepItem(stepIndex = 2, title = "载入 Rembg 深度学习模型 (u2net)"),
+            MattingStepItem(stepIndex = 3, title = "雪碧图图元独立解耦去背推理"),
+            MattingStepItem(stepIndex = 4, title = "合成与编码保存高品质透明底图")
+        )
+    }
+    val mattingSteps = remember { mutableStateListOf<MattingStepItem>().apply { addAll(initialMattingSteps) } }
 
     val effectiveBytes = if (autoRemoveBg) (transparentBytes ?: if (isMattingSource) null else imageBytes) else imageBytes
     val effectiveBitmap = if (autoRemoveBg) (transparentBitmap ?: if (isMattingSource) null else imageBitmap) else imageBitmap
@@ -240,9 +260,95 @@ fun AssetSliceVerifyDialog(
         // 2. 检查自动去背：若开启且尚未生成透明源，进入等待覆层并执行去背
         if (autoRemoveBg && mattingSourceImage != null && transparentBytes == null && !isMattingSource) {
             isMattingSource = true
-            val result = withContext(Dispatchers.Default) {
-                mattingSourceImage(original)
+            mattingSteps.clear()
+            mattingSteps.addAll(initialMattingSteps)
+            mattingSteps[0] = mattingSteps[0].copy(status = MattingStepStatus.RUNNING)
+            mattingElapsedSeconds = 0f
+            mattingProgressRatio = null
+
+            val startTotalTime = getCurrentTimeMillis()
+            var curStepIndex = 1
+            var curStepStartTime = startTotalTime
+
+            val timerJob = coroutineScope.launch {
+                while (isMattingSource) {
+                    delay(100L)
+                    val now = getCurrentTimeMillis()
+                    mattingElapsedSeconds = (now - startTotalTime) / 1000f
+                    val stepIdx = curStepIndex - 1
+                    if (stepIdx in mattingSteps.indices && mattingSteps[stepIdx].status == MattingStepStatus.RUNNING) {
+                        val stepDuration = (now - curStepStartTime) / 1000f
+                        mattingSteps[stepIdx] = mattingSteps[stepIdx].copy(durationSeconds = stepDuration)
+                    }
+                }
             }
+
+            fun advanceStep(targetIndex: Int, newStepDetail: String = "") {
+                if (targetIndex <= curStepIndex) return
+                val now = getCurrentTimeMillis()
+                val prevIdx = curStepIndex - 1
+                if (prevIdx in mattingSteps.indices) {
+                    val prevDuration = (now - curStepStartTime) / 1000f
+                    mattingSteps[prevIdx] = mattingSteps[prevIdx].copy(
+                        status = MattingStepStatus.COMPLETED,
+                        durationSeconds = prevDuration
+                    )
+                }
+                curStepIndex = targetIndex
+                curStepStartTime = now
+                val newIdx = targetIndex - 1
+                if (newIdx in mattingSteps.indices) {
+                    mattingSteps[newIdx] = mattingSteps[newIdx].copy(
+                        status = MattingStepStatus.RUNNING,
+                        detail = newStepDetail
+                    )
+                }
+            }
+
+            val result = withContext(Dispatchers.Default) {
+                mattingSourceImage(original) { log ->
+                    val clean = log.removePrefix("[LocalRembg]").removePrefix("[BatchRembg]").trim()
+                    if (clean.isNotBlank()) {
+                        when {
+                            clean.contains("正在读取", ignoreCase = true) || clean.contains("原图分辨率", ignoreCase = true) -> {
+                                mattingSteps[0] = mattingSteps[0].copy(detail = clean)
+                            }
+                            clean.contains("正在加载 Rembg", ignoreCase = true) || clean.contains("深度学习模型", ignoreCase = true) -> {
+                                advanceStep(2, clean)
+                            }
+                            clean.contains("识别到雪碧图模式", ignoreCase = true) || clean.contains("正在高精度去背推理", ignoreCase = true) || clean.contains("单主体", ignoreCase = true) -> {
+                                advanceStep(3, clean)
+                                val match = Regex("""\[(\d+)/(\d+)\]""").find(clean)
+                                if (match != null) {
+                                    val cur = match.groupValues[1].toFloatOrNull()
+                                    val total = match.groupValues[2].toFloatOrNull()
+                                    if (cur != null && total != null && total > 0f) {
+                                        val ratio = (cur / total).coerceIn(0f, 1f)
+                                        mattingProgressRatio = ratio
+                                        mattingSteps[2] = mattingSteps[2].copy(
+                                            detail = clean,
+                                            progressRatio = ratio
+                                        )
+                                    }
+                                }
+                            }
+                            clean.contains("正在编码保存", ignoreCase = true) || clean.contains("原图去背完成", ignoreCase = true) || clean.contains("Success", ignoreCase = true) -> {
+                                advanceStep(4, clean)
+                            }
+                        }
+                    }
+                }
+            }
+
+            val finalNow = getCurrentTimeMillis()
+            if (curStepIndex == 4 && mattingSteps.size >= 4) {
+                val step4Duration = (finalNow - curStepStartTime) / 1000f
+                mattingSteps[3] = mattingSteps[3].copy(
+                    status = MattingStepStatus.COMPLETED,
+                    durationSeconds = step4Duration
+                )
+            }
+            timerJob.cancel()
             if (result != null) {
                 transparentBytes = result
                 transparentBitmap = result.toImageBitmap()
@@ -449,33 +555,14 @@ fun AssetSliceVerifyDialog(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(Color.Black.copy(alpha = 0.55f)),
+                                        .background(Color.Black.copy(alpha = 0.65f)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(spacing.medium)
-                                    ) {
-                                        CircularProgressIndicator(
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(36.dp)
-                                        )
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(spacing.extraSmall)
-                                        ) {
-                                            Text(
-                                                text = stringResource(Res.string.slice_source_matting_progress),
-                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                                color = Color.White
-                                            )
-                                            Text(
-                                                text = stringResource(Res.string.slice_source_matting_subtext),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = Color.White.copy(alpha = 0.75f)
-                                            )
-                                        }
-                                    }
+                                    MattingTaskProgressCard(
+                                        steps = mattingSteps,
+                                        totalElapsedSeconds = mattingElapsedSeconds,
+                                        overallProgressRatio = mattingProgressRatio
+                                    )
                                 }
                             }
                         }

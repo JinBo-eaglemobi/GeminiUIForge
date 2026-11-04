@@ -338,9 +338,13 @@ class SliceImportDelegate(
         private set
 
     /** 对原始大图执行整图去背；成功缓存透明源并返回，失败返回 null（调用方回退原图展示） */
-    suspend fun mattingSourceImage(sourceBytes: ByteArray): ByteArray? {
+    suspend fun mattingSourceImage(
+        sourceBytes: ByteArray,
+        onProgress: ((String) -> Unit)? = null
+    ): ByteArray? {
         transparentSourceBytes?.let { return it }
         val result = mattingService.removeBackground(sourceBytes) { log ->
+            onProgress?.invoke(log)
             AppLogger.d("SliceImport", "[SourceMatting] $log")
         }
         if (result == null) {

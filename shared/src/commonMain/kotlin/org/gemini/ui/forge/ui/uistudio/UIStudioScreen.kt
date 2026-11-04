@@ -373,7 +373,7 @@ fun UIStudioScreen(
                     pendingSliceItems = items
                 },
                 onSaveDraft = { items -> viewModel.saveDraft(items) },
-                mattingSourceImage = viewModel.sliceImport::mattingSourceImage,
+                mattingSourceImage = { bytes, onProgress -> viewModel.sliceImport.mattingSourceImage(bytes, onProgress) },
                 targetFolderDisplayName = currentTargetFolderDisplayName,
                 onSelectTargetFolder = { isSaveLocationDialogOpen = true }
             )
