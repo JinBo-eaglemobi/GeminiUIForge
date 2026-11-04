@@ -278,12 +278,7 @@ object SmartEdgeSnapper {
      * 基于 Alpha 通道的不透明实体紧致外切算法 (针对 SpriteSheet 透明底素材)
      */
     /**
-     * 基于 Alpha 通道的不透明实体各向独立微观边缘外切与修剪算法 (针对 SpriteSheet 透明底素材)
-     *
-     * 核心优势：
-     * 1. 彻底弃用全局泛洪（Flood Fill），四条边各向独立微观判定，100% 免疫相邻组件渗透与连通搭桥；
-     * 2. 支持双向自适应修剪：粗框画大时向内收缩修剪透明边缘留白；粗框偏小时向外微调至实体外边缘；
-     * 3. 严格受限于微观安全外延半径 (单边最大不超过 16px)，绝不跨图元吞噬。
+     * 基于 Alpha 通道的不透明实体紧致外切算法 (针对 SpriteSheet 透明底素材)
      */
     private fun extractAlphaTightHull(
         bitmap: Bitmap,
@@ -298,17 +293,18 @@ object SmartEdgeSnapper {
         val rh = roughB - roughT
         if (rw <= 4 || rh <= 4) return null
 
-        val maxExpand = minOf(16, maxOf(6, (rw * 0.08f).roundToInt(), (rh * 0.08f).roundToInt()))
-        val winL = (roughL - maxExpand).coerceIn(0, imgW - 1)
-        val winT = (roughT - maxExpand).coerceIn(0, imgH - 1)
-        val winR = (roughR + maxExpand).coerceIn(winL + 1, imgW)
-        val winB = (roughB + maxExpand).coerceIn(winT + 1, imgH)
+        // 局部搜索视口：四周适度外扩 18px，保证包覆实体边缘但杜绝远距漫延
+        val pad = 18
+        val winL = (roughL - pad).coerceIn(0, imgW - 1)
+        val winT = (roughT - pad).coerceIn(0, imgH - 1)
+        val winR = (roughR + pad).coerceIn(winL + 1, imgW)
+        val winB = (roughB + pad).coerceIn(winT + 1, imgH)
 
         val winW = winR - winL
         val winH = winB - winT
         if (winW <= 8 || winH <= 8) return null
 
-        // 快速抽样四周是否有透明像素 (Alpha < 200)
+        // 1. 快速抽样四周是否有透明像素 (Alpha < 200)，若为全不透明白底/纯色底则交由前景算法处理
         var hasTransparentPixel = false
         for (y in winT until winB step 4) {
             if (Color.getA(bitmap.getColor(winL, y)) < 200 || Color.getA(bitmap.getColor(winR - 1, y)) < 200) {
@@ -326,64 +322,158 @@ object SmartEdgeSnapper {
         }
         if (!hasTransparentPixel) return null
 
-        // Alpha 实体有效阈值 (约 20% 不透明度)
-        val alphaThreshold = 50
-        val minPixelsRow = maxOf(2, (rw * 0.03f).roundToInt())
-        val minPixelsCol = maxOf(2, (rh * 0.03f).roundToInt())
-
-        // 1. 垂直投影分析：在 [roughL, roughR] 宽度范围内，检查各行的不透明像素数量
-        var firstValidRow = -1
-        var lastValidRow = -1
-        for (py in winT until winB) {
-            var count = 0
-            for (px in roughL.coerceIn(winL, winR - 1) until roughR.coerceIn(winL, winR)) {
+        // 2. 局部前景二值掩码 (Alpha > 28)
+        val alphaThreshold = 28
+        val binary = BooleanArray(winW * winH)
+        for (ly in 0 until winH) {
+            val py = winT + ly
+            val rOff = ly * winW
+            for (lx in 0 until winW) {
+                val px = winL + lx
                 if (Color.getA(bitmap.getColor(px, py)) > alphaThreshold) {
-                    count++
-                    if (count >= minPixelsRow) break
+                    binary[rOff + lx] = true
                 }
-            }
-            if (count >= minPixelsRow) {
-                if (firstValidRow == -1) firstValidRow = py
-                lastValidRow = py
             }
         }
 
-        if (firstValidRow == -1 || lastValidRow == -1 || firstValidRow >= lastValidRow) return null
-
-        // 2. 水平投影分析：在 [roughT, roughB] 高度范围内，检查各列的不透明像素数量
-        var firstValidCol = -1
-        var lastValidCol = -1
-        for (px in winL until winR) {
-            var count = 0
-            for (py in roughT.coerceIn(winT, winB - 1) until roughB.coerceIn(winT, winB)) {
-                if (Color.getA(bitmap.getColor(px, py)) > alphaThreshold) {
-                    count++
-                    if (count >= minPixelsCol) break
+        // 3. 3x3 结构元微观膨胀 1 次（连接断裂笔画与镂空点，但不串通不同图元）
+        val dilated = BooleanArray(winW * winH)
+        for (ly in 0 until winH) {
+            val rOff = ly * winW
+            for (lx in 0 until winW) {
+                if (binary[rOff + lx]) {
+                    dilated[rOff + lx] = true
+                    continue
                 }
-            }
-            if (count >= minPixelsCol) {
-                if (firstValidCol == -1) firstValidCol = px
-                lastValidCol = px
+                var hit = false
+                for (dy in -1..1) {
+                    val ny = ly + dy
+                    if (ny in 0 until winH) {
+                        val nOff = ny * winW
+                        for (dx in -1..1) {
+                            val nx = lx + dx
+                            if (nx in 0 until winW) {
+                                if (binary[nOff + nx]) {
+                                    hit = true
+                                    break
+                                }
+                            }
+                        }
+                    }
+                    if (hit) break
+                }
+                if (hit) dilated[rOff + lx] = true
             }
         }
 
-        if (firstValidCol == -1 || lastValidCol == -1 || firstValidCol >= lastValidCol) return null
+        // 4. 局部连通域标记与最佳匹配连通岛提取
+        val visited = BooleanArray(winW * winH)
+        val queue = IntArray(winW * winH)
 
-        // 单边物理向外扩展安全夹具：
-        // 允许向外微调最多 maxExpand，允许向内收缩修剪
-        val clampedL = maxOf(winL, minOf(roughL + (rw * 0.2f).toInt(), firstValidCol))
-        val clampedR = minOf(winR, maxOf(roughR - (rw * 0.2f).toInt(), lastValidCol + 1))
-        val clampedT = maxOf(winT, minOf(roughT + (rh * 0.2f).toInt(), firstValidRow))
-        val clampedB = minOf(winB, maxOf(roughB - (rh * 0.2f).toInt(), lastValidRow + 1))
+        val rx1 = roughL - winL
+        val ry1 = roughT - winT
+        val rx2 = roughR - winL
+        val ry2 = roughB - winT
+        val rcx = (rx1 + rx2) / 2.0f
+        val rcy = (ry1 + ry2) / 2.0f
+        val areaR = (rx2 - rx1) * (ry2 - ry1)
 
-        val bw = clampedR - clampedL
-        val bh = clampedB - clampedT
+        var bestL = -1
+        var bestT = -1
+        var bestR = -1
+        var bestB = -1
+        var bestScore = -1.0f
 
-        // 尺寸安全硬防御：宽高相对原框膨胀不得超过 15%，缩水不得低于 40%
-        if (bw < rw * 0.4f || bh < rh * 0.4f) return null
-        if (bw > rw * 1.15f || bh > rh * 1.15f) return null
+        for (ly in 0 until winH) {
+            val rOff = ly * winW
+            for (lx in 0 until winW) {
+                val idx = rOff + lx
+                if (dilated[idx] && !visited[idx]) {
+                    var head = 0
+                    var tail = 0
+                    visited[idx] = true
+                    queue[tail++] = (ly shl 16) or lx
 
-        return SerialRect(clampedL.toFloat(), clampedT.toFloat(), clampedR.toFloat(), clampedB.toFloat())
+                    var minX = lx
+                    var maxX = lx
+                    var minY = ly
+                    var maxY = ly
+                    var pixelCount = 0
+
+                    while (head < tail) {
+                        val packed = queue[head++]
+                        val cy = packed ushr 16
+                        val cx = packed and 0xFFFF
+                        if (cx < minX) minX = cx
+                        if (cx > maxX) maxX = cx
+                        if (cy < minY) minY = cy
+                        if (cy > maxY) maxY = cy
+                        pixelCount++
+
+                        for (dy in -1..1) {
+                            val ny = cy + dy
+                            if (ny in 0 until winH) {
+                                val nOff = ny * winW
+                                for (dx in -1..1) {
+                                    val nx = cx + dx
+                                    if (nx in 0 until winW) {
+                                        val nIdx = nOff + nx
+                                        if (dilated[nIdx] && !visited[nIdx]) {
+                                            visited[nIdx] = true
+                                            if (tail < queue.size) {
+                                                queue[tail++] = (ny shl 16) or nx
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (pixelCount >= 60) {
+                        val bx1 = minX
+                        val by1 = minY
+                        val bx2 = maxX + 1
+                        val by2 = maxY + 1
+
+                        val interX1 = maxOf(rx1, bx1)
+                        val interY1 = maxOf(ry1, by1)
+                        val interX2 = minOf(rx2, bx2)
+                        val interY2 = minOf(ry2, by2)
+
+                        if (interX2 > interX1 && interY2 > interY1) {
+                            val interArea = (interX2 - interX1) * (interY2 - interY1)
+                            val areaB = (bx2 - bx1) * (by2 - by1)
+                            val unionArea = areaR + areaB - interArea
+                            val iou = if (unionArea > 0) interArea.toFloat() / unionArea.toFloat() else 0f
+
+                            val bcx = (bx1 + bx2) / 2.0f
+                            val bcy = (by1 + by2) / 2.0f
+                            val dist = kotlin.math.hypot(bcx - rcx, bcy - rcy)
+                            val score = iou / (1.0f + dist * 0.05f)
+
+                            if (score > bestScore) {
+                                bestScore = score
+                                bestL = bx1
+                                bestT = by1
+                                bestR = bx2
+                                bestB = by2
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (bestL == -1 || bestScore <= 0f) return null
+
+        val padEdge = 2
+        val finalL = (winL + bestL - padEdge).coerceIn(0, imgW)
+        val finalT = (winT + bestT - padEdge).coerceIn(0, imgH)
+        val finalR = (winL + bestR + padEdge).coerceIn(0, imgW)
+        val finalB = (winT + bestB + padEdge).coerceIn(0, imgH)
+
+        return SerialRect(finalL.toFloat(), finalT.toFloat(), finalR.toFloat(), finalB.toFloat())
     }
 
     /**
