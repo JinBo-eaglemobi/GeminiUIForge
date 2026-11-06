@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,13 +38,15 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 @Composable
 fun TrafficPayloadViewer(
     payloadText: String,
+    isSignature: Boolean = false,
     onDismiss: () -> Unit
 ) {
     val spacing = LocalAppSpacing.current
     val copyAction = rememberClipboardAction()
 
-    // 尝试探测并解码为图片字节流
-    val imageBytes = remember(payloadText) {
+    // 尝试探测并解码为图片字节流（排除思维签名且校验图片魔数）
+    val imageBytes = remember(payloadText, isSignature) {
+        if (isSignature) return@remember null
         try {
             val rawB64 = when {
                 payloadText.startsWith("data:image") && payloadText.contains(",") ->
@@ -51,7 +54,8 @@ fun TrafficPayloadViewer(
                 else -> payloadText.trim()
             }
             @OptIn(ExperimentalEncodingApi::class)
-            Base64.decode(rawB64)
+            val bytes = Base64.decode(rawB64)
+            if (isImageBytes(bytes)) bytes else null
         } catch (_: Throwable) {
             null
         }
@@ -97,15 +101,25 @@ fun TrafficPayloadViewer(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val titleIcon = when {
+                                imageBytes != null -> Icons.Default.Image
+                                isSignature -> Icons.Default.Psychology
+                                else -> Icons.Default.Psychology
+                            }
+                            val titleText = when {
+                                imageBytes != null -> "Base64 图片查看器 (~${sizeKb} KB)"
+                                isSignature -> "思维签名查看器 (~${sizeKb} KB)"
+                                else -> "数据载荷查看器 (~${sizeKb} KB)"
+                            }
                             Icon(
-                                imageVector = Icons.Default.Image,
+                                imageVector = titleIcon,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(Modifier.width(spacing.small))
                             Text(
-                                text = "Base64 数据查看器 (~${sizeKb} KB)",
+                                text = titleText,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -118,7 +132,7 @@ fun TrafficPayloadViewer(
 
                     Spacer(Modifier.height(spacing.small))
 
-                    // 若检测到图片数据，提供 [图片预览 / 原文数据] 切换 Tab
+                    // 若检测到图片数据，提供 [图片预览 / 原文数据] 切换 Tab；若非图片数据，直接提供复制原文按钮
                     if (imageBytes != null) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(bottom = spacing.small),
@@ -165,6 +179,27 @@ fun TrafficPayloadViewer(
                                 Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(spacing.extraSmall))
                                 Text("复制原文", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = spacing.small),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isSignature) "思维链数字签名数据（非图像载荷）" else "非图像二进制载荷",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            )
+                            OutlinedButton(
+                                onClick = { copyAction(payloadText, if (isSignature) "已复制完整思维签名" else "已复制完整数据载荷") },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier.height(36.dp).tip(if (isSignature) "一键复制完整思维签名密文" else "一键复制完整未截断字符串")
+                            ) {
+                                Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(spacing.extraSmall))
+                                Text(if (isSignature) "复制签名" else "复制原文", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -225,3 +260,35 @@ fun TrafficPayloadViewer(
     }
 }
 }
+
+
+/**
+ * 严格校验二进制流是否符合常见图像格式魔数（PNG, JPEG, WEBP, GIF），
+ * 避免误将思维签名或常规二进制 Base64 数据识别为图片
+ */
+private fun isImageBytes(bytes: ByteArray): Boolean {
+    if (bytes.size < 4) return false
+    // PNG: 89 50 4E 47
+    if (bytes.size >= 8 &&
+        bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() &&
+        bytes[2] == 0x4E.toByte() && bytes[3] == 0x47.toByte()
+    ) return true
+    // JPEG: FF D8 FF
+    if (bytes.size >= 3 &&
+        bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
+    ) return true
+    // GIF: 47 49 46
+    if (bytes.size >= 6 &&
+        bytes[0] == 0x47.toByte() && bytes[1] == 0x49.toByte() && bytes[2] == 0x46.toByte()
+    ) return true
+    // WEBP: RIFF....WEBP (52 49 46 46 ... 57 45 42 50)
+    if (bytes.size >= 12 &&
+        bytes[0] == 0x52.toByte() && bytes[1] == 0x49.toByte() &&
+        bytes[2] == 0x46.toByte() && bytes[3] == 0x46.toByte() &&
+        bytes[8] == 0x57.toByte() && bytes[9] == 0x45.toByte() &&
+        bytes[10] == 0x42.toByte() && bytes[11] == 0x50.toByte()
+    ) return true
+    return false
+}
+
+

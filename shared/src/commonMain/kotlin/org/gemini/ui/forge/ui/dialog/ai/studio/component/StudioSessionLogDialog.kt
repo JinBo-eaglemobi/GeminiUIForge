@@ -63,8 +63,8 @@ fun StudioSessionLogDialog(
     // 清空档案二次确认弹窗控制
     var showClearConfirm by remember { mutableStateOf(false) }
 
-    // 存储当前选中的完整未折叠 Base64 字符串以供弹窗查看与解码
-    var viewingBase64Payload by remember { mutableStateOf<String?>(null) }
+    // 存储当前选中的完整未折叠 Base64/思维签名 字符串与是否为签名标志位以供弹窗查看与解码
+    var viewingPayloadInfo by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
 
     fun refreshRecords() {
         scope.launch {
@@ -319,7 +319,7 @@ fun StudioSessionLogDialog(
                                     defaultExpanded = isAllExpanded,
                                     expandToggleVersion = expandToggleVersion,
                                     onCopyRaw = { copyAction(record.body, "已复制第 ${record.seq} 条报文原文") },
-                                    onInspectPayload = { payload -> viewingBase64Payload = payload }
+                                    onInspectPayload = { payload, isSig -> viewingPayloadInfo = payload to isSig }
                                 )
                             }
                         }
@@ -350,11 +350,12 @@ fun StudioSessionLogDialog(
         )
     }
 
-    // 5. 点击折叠 Base64 后弹出的图片解码/长文本查看器
-    if (viewingBase64Payload != null) {
+    // 5. 点击折叠 Base64/思维签名 后弹出的图片解码/长文本查看器
+    if (viewingPayloadInfo != null) {
         TrafficPayloadViewer(
-            payloadText = viewingBase64Payload!!,
-            onDismiss = { viewingBase64Payload = null }
+            payloadText = viewingPayloadInfo!!.first,
+            isSignature = viewingPayloadInfo!!.second,
+            onDismiss = { viewingPayloadInfo = null }
         )
     }
 }

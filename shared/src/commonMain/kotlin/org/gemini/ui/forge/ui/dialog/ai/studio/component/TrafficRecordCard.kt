@@ -52,20 +52,25 @@ private fun formatJsonPretty(raw: String): String {
 }
 
 /**
- * 单遍正则扫描提取 Base64 并替换生成预览折叠文本
+ * 单遍正则扫描提取 Base64 / Signature 并替换生成预览折叠文本
  */
-private fun buildBase64FoldedText(prettyBody: String): Pair<Map<String, String>, String> {
-    val map = mutableMapOf<String, String>()
-    val regex = Regex(""""(data|bytesBase64Encoded)"\s*:\s*"([A-Za-z0-9+/=]{128,})"""")
+private fun buildBase64FoldedText(prettyBody: String): Pair<List<Pair<String, String>>, String> {
+    val list = mutableListOf<Pair<String, String>>()
+    val regex = Regex(""""(data|bytesBase64Encoded|signature|thought_signature)"\s*:\s*"([A-Za-z0-9+/=]{128,})"""")
     val text = regex.replace(prettyBody) { match ->
         val field = match.groupValues[1]
         val b64 = match.groupValues[2]
-        val token = "__BASE64_TOKEN_${map.size}__"
-        map[token] = b64
+        list.add(field to b64)
         val sizeKb = (b64.length * 3 / 4) / 1024
-        """"$field": "<Base64 数据已折叠 (~${sizeKb}KB) —— 点击下方按钮查看/预览图片>""""
+        val isSig = field.equals("signature", ignoreCase = true) || field.equals("thought_signature", ignoreCase = true)
+        val tip = if (isSig) {
+            "<思维签名数据已脱敏折叠 (~${sizeKb}KB) · 可在卡片操作栏或底部点击查看/复制>"
+        } else {
+            "<Base64 图像数据已脱敏折叠 (~${sizeKb}KB) · 可在卡片操作栏或底部点击预览>"
+        }
+        """"$field": "$tip""""
     }
-    return map to text
+    return list to text
 }
 
 /**
@@ -79,7 +84,7 @@ fun TrafficRecordCard(
     defaultExpanded: Boolean = false,
     expandToggleVersion: Int = 0,
     onCopyRaw: () -> Unit,
-    onInspectPayload: (String) -> Unit,
+    onInspectPayload: (payload: String, isSignature: Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
@@ -190,6 +195,68 @@ fun TrafficRecordCard(
                         )
                     }
 
+                    // 图像载荷徽章（若包含图片字段，显式指示多模态图像状态）
+                    val hasImagePayload = remember(record.body) {
+                        record.body.contains("\"data\"") || record.body.contains("\"bytesBase64Encoded\"")
+                    }
+                    if (hasImagePayload) {
+                        Spacer(Modifier.width(spacing.extraSmall))
+                        Surface(
+                            shape = AppShapes.small,
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Image,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(11.dp),
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = "含图像",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
+
+                    // 思维签名徽章（若包含 signature 字段，显式指示思维签名状态）
+                    val hasSignaturePayload = remember(record.body) {
+                        record.body.contains("\"signature\"") || record.body.contains("\"thought_signature\"")
+                    }
+                    if (hasSignaturePayload) {
+                        Spacer(Modifier.width(spacing.extraSmall))
+                        Surface(
+                            shape = AppShapes.small,
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Psychology,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(11.dp),
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = "含签名",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                        }
+                    }
+
                     if (record.model.isNotBlank()) {
                         Spacer(Modifier.width(spacing.small))
                         Text(
@@ -205,7 +272,7 @@ fun TrafficRecordCard(
                     // 复制单条报文完整原文按钮
                     IconButton(
                         onClick = onCopyRaw,
-                        modifier = Modifier.size(28.dp).tip("复制本条报文完整原文（含未截断 Base64）")
+                        modifier = Modifier.size(28.dp).tip("复制本条报文完整原文（含未截断真实 Base64，可直接用于接口调试）")
                     ) {
                         Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp))
                     }
@@ -296,33 +363,48 @@ fun TrafficRecordCard(
             if (isExpanded) {
                 Spacer(Modifier.height(spacing.small))
 
-                // 1. JSON 格式化与 Base64 折叠处理（惰性执行）
-                val (base64PayloadMap, displayBodyText) = remember(record.body) {
+                // 1. JSON 格式化与 Base64/Signature 折叠处理（惰性执行）
+                val (foldedPayloadList, displayBodyText) = remember(record.body) {
                     val pretty = formatJsonPretty(record.body)
                     buildBase64FoldedText(pretty)
                 }
 
-                // 2. 若包含折叠的 Base64 图像，提供快捷点击按钮
-                if (base64PayloadMap.isNotEmpty()) {
+                // 2. 若包含折叠的 Base64 图像或思维签名，提供上下双向快捷点击按钮条
+                val previewButtonsRow: @Composable (isBottomLocation: Boolean) -> Unit = { isBottomLocation ->
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = spacing.small),
+                        modifier = Modifier.fillMaxWidth().padding(
+                            top = if (isBottomLocation) spacing.small else 0.dp,
+                            bottom = if (isBottomLocation) 0.dp else spacing.small
+                        ),
                         horizontalArrangement = Arrangement.spacedBy(spacing.small),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        base64PayloadMap.values.forEachIndexed { idx, payload ->
+                        foldedPayloadList.forEachIndexed { idx, (field, payload) ->
                             val sizeKb = (payload.length * 3 / 4) / 1024
+                            val isSig = field.equals("signature", ignoreCase = true) || field.equals("thought_signature", ignoreCase = true)
+                            val icon = if (isSig) Icons.Default.Psychology else Icons.Default.Image
+                            val label = if (isSig) "查看思维签名 #${idx + 1} (~${sizeKb}KB)" else "预览 Base64 图片 #${idx + 1} (~${sizeKb}KB)"
+                            val tooltip = if (isBottomLocation) {
+                                if (isSig) "底部快捷通道：点击弹出思维签名原文与完整复制" else "底部快捷通道：点击弹出解码大图预览与完整原文复制"
+                            } else {
+                                if (isSig) "点击弹出思维签名原文与完整复制" else "点击弹出解码大图预览与完整原文复制"
+                            }
                             ElevatedButton(
-                                onClick = { onInspectPayload(payload) },
+                                onClick = { onInspectPayload(payload, isSig) },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(28.dp).tip("点击弹出解码大图预览与完整原文复制"),
+                                modifier = Modifier.height(28.dp).tip(tooltip),
                                 shape = AppShapes.small
                             ) {
-                                Icon(Icons.Default.Image, null, modifier = Modifier.size(13.dp))
+                                Icon(icon, null, modifier = Modifier.size(13.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("预览 Base64 图片 #${idx + 1} (~${sizeKb}KB)", style = MaterialTheme.typography.labelSmall)
+                                Text(label, style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
+                }
+
+                if (foldedPayloadList.isNotEmpty()) {
+                    previewButtonsRow(false)
                 }
 
                 // 3. 渐进式超长正文渲染控制（首屏 400 行）
@@ -371,6 +453,15 @@ fun TrafficRecordCard(
                                     style = MaterialTheme.typography.labelMedium
                                 )
                             }
+                        }
+
+                        // 底部快捷预览按钮条（解决长报文向下滚动后顶部按钮脱出视口的体验死角）
+                        if (foldedPayloadList.isNotEmpty()) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(top = spacing.small),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                            )
+                            previewButtonsRow(true)
                         }
                     }
                 }
