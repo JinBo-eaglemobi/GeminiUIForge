@@ -490,18 +490,72 @@ fun CommonChatStudioContent(
                                 val assetItems = mentionCandidates.filter { it.category == MentionCategory.ASSET && it.id != "all_assets_manifest" }
                                 val sb = StringBuilder()
                                 sb.appendLine("# 📦 项目素材库切片全量清单\n")
-                                sb.appendLine("> 共计 **${assetItems.size}** 个已切片资产，可直接拼装到游戏画布各图元。\n")
-                                sb.appendLine("| 序号 | 切片文件名 | 尺寸 (WxH) | 智能推断角色 | 磁盘相对路径 |")
-                                sb.appendLine("|:---:|:---|:---:|:---|:---|")
+                                sb.appendLine("> 共计 **${assetItems.size}** 个已切片资产，AI排版统一通过 `assetHash` 精准装配。\n")
+                                sb.appendLine("| 序号 | 切片文件名 | 资产唯一 Hash | 尺寸 (WxH) | 智能推断角色 |")
+                                sb.appendLine("|:---:|:---|:---|:---:|:---|")
                                 assetItems.forEachIndexed { index, item ->
                                     val p = item.payload as? MentionPayload.AssetPayload
                                     val dims = if (p != null && p.width > 0 && p.height > 0) "${p.width}x${p.height}" else "未知"
-                                    val role = item.subtitle?.substringAfterLast("·")?.trim().orEmpty().ifBlank { "普通切片" }
-                                    val path = p?.filePath.orEmpty().ifBlank { item.subtitle.orEmpty() }
-                                    sb.appendLine("| ${index + 1} | `${item.title.removePrefix("📦").trim()}` | $dims | $role | `$path` |")
+                                    val role = item.subtitle?.let { sub ->
+                                        if (sub.contains("角色: ")) sub.substringAfter("角色: ").trim() else null
+                                    } ?: "未标识 (待AI视觉审阅)"
+                                    val hash = p?.assetHash.orEmpty().ifBlank { "未知" }
+                                    sb.appendLine("| ${index + 1} | `${item.title.removePrefix("📦").trim()}` | `$hash` | $dims | $role |")
                                 }
                                 previewDocumentData = DocumentPreviewData(
                                     title = "项目素材库清单 (共 ${assetItems.size} 项)",
+                                    content = sb.toString()
+                                )
+                                return@CommonChatMessageList
+                            }
+
+                            // 1.2 判断是否是素材库文件夹清单
+                            val matchedFolderCandidate = mentionCandidates.find {
+                                it.payload is MentionPayload.AssetFolderPayload && (
+                                    it.id == rawPath ||
+                                    "asset_folder:${(it.payload as MentionPayload.AssetFolderPayload).folderId}" == rawPath ||
+                                    it.title.equals(rawTitle, ignoreCase = true) ||
+                                    it.title.contains(rawTitle, ignoreCase = true) ||
+                                    rawTitle.contains(it.title, ignoreCase = true)
+                                )
+                            }
+                            val isFolderManifest = matchedFolderCandidate != null ||
+                                    rawPath.startsWith("asset_folder:") ||
+                                    (rawTitle.contains("📁") && !rawTitle.endsWith(".png") && !rawTitle.endsWith(".webp"))
+
+                            if (isFolderManifest) {
+                                val folderPayload = matchedFolderCandidate?.payload as? MentionPayload.AssetFolderPayload
+                                val folderName = folderPayload?.folderName
+                                    ?: rawTitle.removePrefix("📁").substringBefore("(").trim()
+                                val folderPath = folderPayload?.folderPath.orEmpty()
+
+                                val folderItems = mentionCandidates.filter {
+                                    val p = it.payload as? MentionPayload.AssetPayload
+                                    if (p == null || it.id == "all_assets_manifest") return@filter false
+                                    if (folderPath.isNotBlank() && (p.filePath.contains("/$folderPath/") || p.filePath.contains("\\$folderPath\\") || p.filePath.endsWith("/$folderPath") || p.filePath.contains(folderPath))) {
+                                        true
+                                    } else {
+                                        p.filePath.contains("/$folderName/") || p.filePath.contains("\\$folderName\\")
+                                    }
+                                }
+
+                                val sb = StringBuilder()
+                                sb.appendLine("# 📁 素材库文件夹清单: $folderName\n")
+                                sb.appendLine("> 包含当前目录及其全部深度子文件夹，共计 **${folderItems.size}** 个切片资产，AI排版统一通过 `assetHash` 精准装配。\n")
+                                sb.appendLine("| 序号 | 切片文件名 | 资产唯一 Hash | 尺寸 (WxH) | 智能推断角色 |")
+                                sb.appendLine("|:---:|:---|:---|:---:|:---|")
+                                folderItems.forEachIndexed { index, item ->
+                                    val p = item.payload as? MentionPayload.AssetPayload
+                                    val dims = if (p != null && p.width > 0 && p.height > 0) "${p.width}x${p.height}" else "未知"
+                                    val role = item.subtitle?.let { sub ->
+                                        if (sub.contains("角色: ")) sub.substringAfter("角色: ").trim() else null
+                                    } ?: "未标识 (待AI视觉审阅)"
+                                    val hash = p?.assetHash.orEmpty().ifBlank { "未知" }
+                                    sb.appendLine("| ${index + 1} | `${item.title.removePrefix("📁").removePrefix("📦").trim()}` | `$hash` | $dims | $role |")
+                                }
+
+                                previewDocumentData = DocumentPreviewData(
+                                    title = "文件夹素材清单: $folderName (共 ${folderItems.size} 项)",
                                     content = sb.toString()
                                 )
                                 return@CommonChatMessageList

@@ -57,6 +57,8 @@ import org.gemini.ui.forge.service.mcp.McpTrafficInspector
 import org.gemini.ui.forge.ui.dialog.mcp.McpTrafficInspectorDialog
 import org.gemini.ui.forge.ui.dialog.layer.OverlayPreviewDialog
 import org.gemini.ui.forge.ui.component.dialog.AppDraggableAlertDialog
+import org.gemini.ui.forge.ui.component.dialog.AppCrashDialog
+import org.gemini.ui.forge.utils.GlobalCrashState
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
@@ -133,6 +135,11 @@ fun App(typography: Typography? = null) {
             var showExitConfirmDialog by remember { mutableStateOf(false) }
             var showOverlayPreviewDialog by remember { mutableStateOf(false) }
             var settingsInitialCategory by remember { mutableStateOf(SettingCategory.GENERAL) }
+
+            // 启动时自动安装全局 AWT/EDT 安全拦截器，阻止 OS 弹出阻塞式模态框并接入应用自建取证弹窗
+            LaunchedEffect(Unit) {
+                installAwtEventDispatchProtection()
+            }
 
             // 同步当前屏幕与未保存状态到 MCP UI 路线图注册中心
             LaunchedEffect(globalState.currentScreen, appState.projectName, appState.isDirty) {
@@ -479,6 +486,21 @@ fun App(typography: Typography? = null) {
                         OverlayPreviewDialog(
                             projectState = appState.project,
                             onDismiss = { showOverlayPreviewDialog = false }
+                        )
+                    }
+
+                    // 全局应用内未捕获异常崩溃取证弹窗 (In-App Crash Dialog)
+                    val currentCrashPayload by GlobalCrashState.currentCrash.collectAsState()
+                    currentCrashPayload?.let { crashPayload ->
+                        AppCrashDialog(
+                            payload = crashPayload,
+                            onExit = {
+                                // 遵循系统原有处理契约安全退出进程
+                                exitApplicationProcess(1)
+                            },
+                            onDismiss = {
+                                GlobalCrashState.dismiss()
+                            }
                         )
                     }
 

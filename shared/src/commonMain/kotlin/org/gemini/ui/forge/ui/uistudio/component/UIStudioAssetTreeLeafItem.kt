@@ -82,6 +82,7 @@ fun UIStudioAssetTreeLeafItem(
     templateRepo: TemplateRepository,
     onRename: (UIAssetItem) -> Unit,
     onDelete: (UIAssetItem) -> Unit,
+    onSelect: (() -> Unit)? = null,
     onDragHover: (Offset) -> Unit = {},
     onDragEnd: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -116,7 +117,13 @@ fun UIStudioAssetTreeLeafItem(
         val maxMenuWidth = maxOf(280.dp, maxWidth)
 
         Surface(
-            onClick = { viewModel.assetLibrary.selectAsset(item.hash) },
+            onClick = {
+                if (onSelect != null) {
+                    onSelect()
+                } else {
+                    viewModel.assetLibrary.selectAsset(item.hash)
+                }
+            },
             shape = RoundedCornerShape(6.dp),
             color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
             border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,

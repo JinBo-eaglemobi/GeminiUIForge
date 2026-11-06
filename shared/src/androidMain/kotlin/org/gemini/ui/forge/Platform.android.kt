@@ -58,3 +58,9 @@ actual val appDir: String
     get() = androidContext.applicationInfo.dataDir.replace("\\", "/").trimEnd('/')
 
 actual fun captureActiveScreenShot(): ByteArray? = null
+
+actual fun exitApplicationProcess(exitCode: Int) {
+    kotlin.system.exitProcess(exitCode)
+}
+
+actual fun installAwtEventDispatchProtection() {}

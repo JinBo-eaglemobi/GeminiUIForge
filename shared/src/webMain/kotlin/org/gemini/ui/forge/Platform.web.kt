@@ -16,3 +16,7 @@ actual val appDir: String
     get() = userHomePath
 
 actual fun captureActiveScreenShot(): ByteArray? = null
+
+actual fun exitApplicationProcess(exitCode: Int) {}
+
+actual fun installAwtEventDispatchProtection() {}

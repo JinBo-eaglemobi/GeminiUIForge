@@ -107,9 +107,14 @@ fun UIStudioAssetPanel(
     var deletingAssetTarget by remember { mutableStateOf<UIAssetItem?>(null) }
     val folderBoundsMap = remember { mutableStateMapOf<String, Rect>() }
     val listState = rememberLazyListState()
+    var skipNextScrollToSelected by remember { mutableStateOf(false) }
 
     // 监听选中的素材变化（如从 AI 聊天存入素材库），自动平滑展开并精准滚动聚焦呈现
     LaunchedEffect(state.selectedAssetHash, library.items) {
+        if (skipNextScrollToSelected) {
+            skipNextScrollToSelected = false
+            return@LaunchedEffect
+        }
         val selectedHash = state.selectedAssetHash ?: return@LaunchedEffect
         var currentIndex = 0
         var targetIndex: Int? = null
@@ -141,7 +146,11 @@ fun UIStudioAssetPanel(
         }
 
         if (targetIndex != null) {
-            listState.animateScrollToItem(targetIndex)
+            // 严格防跳动守恒：若目标素材已经在当前可视区域内（如用户在列表中直接点选），坚决不滚动，彻底根除视野剧烈跳动缺陷
+            val isAlreadyVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIndex }
+            if (!isAlreadyVisible) {
+                listState.animateScrollToItem(targetIndex)
+            }
         }
     }
 
@@ -476,6 +485,10 @@ fun UIStudioAssetPanel(
                                     templateRepo = templateRepo,
                                     onRename = { renamingAssetTarget = it },
                                     onDelete = { deletingAssetTarget = it },
+                                    onSelect = {
+                                        skipNextScrollToSelected = true
+                                        viewModel.assetLibrary.selectAsset(item.hash)
+                                    },
                                     onDragHover = { rootPos ->
                                         val liveState = viewModel.state
                                         val hitFolderId = folderBoundsMap.entries.firstOrNull { it.value.contains(rootPos) }?.key
@@ -527,6 +540,10 @@ fun UIStudioAssetPanel(
                             templateRepo = templateRepo,
                             onRename = { renamingAssetTarget = it },
                             onDelete = { deletingAssetTarget = it },
+                            onSelect = {
+                                skipNextScrollToSelected = true
+                                viewModel.assetLibrary.selectAsset(item.hash)
+                            },
                             onDragHover = { rootPos ->
                                 val liveState = viewModel.state
                                 val hitFolderId = folderBoundsMap.entries.firstOrNull { it.value.contains(rootPos) }?.key
@@ -656,9 +673,9 @@ fun UIStudioAssetPanel(
     // 删除文件夹确认弹窗
     deletingFolderTarget?.let { folder ->
         AppConfirmDialog(
-            title = "确认删除文件夹",
-            message = "是否确认删除文件夹「${folder.name}」？该文件夹下的素材将自动移至未分类根目录。",
-            confirmText = "删除",
+            title = "确认彻底删除文件夹",
+            message = "是否确认彻底删除文件夹「${folder.name}」及其包含的全部素材切片？该操作将从磁盘永久物理删除，不可撤销。",
+            confirmText = "彻底删除",
             isDestructive = true,
             onConfirm = {
                 viewModel.assetLibrary.deleteAssetFolder(folder.id)

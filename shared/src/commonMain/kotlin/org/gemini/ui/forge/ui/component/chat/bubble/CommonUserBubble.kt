@@ -115,12 +115,13 @@ fun CommonUserBubble(
                                     val iconEmoji = when (mention.categoryName) {
                                         "VIEW" -> "🗖"
                                         "BLOCK" -> "❖"
-                                        "ASSET" -> "📦"
+                                        "ASSET" -> if (mention.title.contains("📁") || mention.path?.startsWith("asset_folder") == true) "📁" else "📦"
                                         else -> "📄"
                                     }
 
-                                    // 彻底剥离原始 title 中可能自带的各类 Emoji，根除 "📦 📦" 重复堆叠缺陷
+                                    // 彻底剥离原始 title 中可能自带的各类 Emoji，根除 "📦 📦" 或 "📦 📁" 重复堆叠缺陷
                                     val cleanTitle = mention.title.trim()
+                                        .removePrefix("📁").trim()
                                         .removePrefix("📦").trim()
                                         .removePrefix("📄").trim()
                                         .removePrefix("❖").trim()

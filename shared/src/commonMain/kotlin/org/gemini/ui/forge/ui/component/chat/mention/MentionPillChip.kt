@@ -78,8 +78,19 @@ fun MentionPillChip(
                     Spacer(Modifier.width(4.dp))
                 }
 
+                val displayTitle = if (item.icon != null) {
+                    item.title.trim()
+                        .removePrefix("📁").trim()
+                        .removePrefix("📦").trim()
+                        .removePrefix("📄").trim()
+                        .removePrefix("❖").trim()
+                        .removePrefix("🗖").trim()
+                } else {
+                    item.title
+                }
+
                 Text(
-                    text = item.title,
+                    text = displayTitle,
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

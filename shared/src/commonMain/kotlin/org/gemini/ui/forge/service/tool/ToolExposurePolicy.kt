@@ -19,8 +19,9 @@ object ToolExposurePolicy {
         // 2. 运行态感知与实机自审
         "get_runtime_status",
         "screenshot_window",
-        // 3. 项目模板全貌查询
+        // 3. 项目模板全貌查询与素材批量提取
         "get_template",
+        "get_assets",
         // 4. 人机协同问询与通知
         "ask_user_question",
         "notify_user"

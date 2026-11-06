@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +42,7 @@ fun MentionHoverAssetPreview(
     modifier: Modifier = Modifier
 ) {
     val payload = item.payload as? MentionPayload.AssetPayload
+    val folderPayload = item.payload as? MentionPayload.AssetFolderPayload
     val rawPath = payload?.filePath ?: item.previewImagePath.orEmpty()
 
     var bitmap by remember(rawPath) { mutableStateOf<ImageBitmap?>(null) }
@@ -82,6 +84,35 @@ fun MentionHoverAssetPreview(
                 modifier = Modifier.fillMaxSize().padding(6.dp)
             ) {
                 when {
+                    folderPayload != null -> {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = Color(0xFFFBBF24), // 温暖琥珀黄文件夹质感
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "素材目录 · 共 ${folderPayload.totalAssetsCount} 项切片",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                                color = Color(0xFFF1F5F9)
+                            )
+                            if (folderPayload.folderPath.isNotBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = folderPayload.folderPath,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    color = Color(0xFF94A3B8),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                     isLoading -> {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),

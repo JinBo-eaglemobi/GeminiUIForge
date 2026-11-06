@@ -9,13 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -122,22 +120,25 @@ fun AppMenu(
         )
         val effectiveMin = maxOf(tier.minWidth, anchorWidth ?: 0.dp).coerceAtMost(effectiveMax)
 
-        // 2. 高度几何算法：按弹出方向计算可用空间并保留安全呼吸边距 (防紧挨边缘)
-        val safetyMargin = 20.dp
+        // 2. 高度几何算法：完全基于当前屏幕/窗口物理高度动态计算，绝不写死任何固定高度
+        val safetyMargin = 16.dp
         val isUpward = isUpwardExplicit ?: (offset.y < 0.dp)
 
         val directionalAvailableHeight = if (isUpward) {
-            // 向上显示：从目标显示开始位置到窗口最上方 (0dp) 的可用距离，减去呼吸间距
+            // 向上显示：从触发按钮到窗口最上方 (0dp) 的真实可用距离，减去安全呼吸间距
             val startY = anchorTopInWindowDp?.let { it + offset.y } ?: (safeViewportHeight - 64.dp)
-            (startY - safetyMargin).coerceAtLeast(160.dp)
+            (startY - safetyMargin).coerceAtLeast(100.dp)
         } else {
-            // 向下显示：从目标显示开始位置到窗口最下方位置的可用距离，减去呼吸间距
+            // 向下显示：从触发按钮到窗口最下方 (safeViewportHeight) 的真实可用距离，减去安全呼吸间距
             val startY = anchorBottomInWindowDp?.let { it + offset.y } ?: 48.dp
-            (safeViewportHeight - startY - safetyMargin).coerceAtLeast(160.dp)
+            (safeViewportHeight - startY - safetyMargin).coerceAtLeast(100.dp)
         }
 
-        val effectiveMaxHeightLimit = maxMenuHeight ?: 520.dp
-        val effectiveHeight = minOf(effectiveMaxHeightLimit, directionalAvailableHeight).coerceIn(180.dp, 680.dp)
+        // 动态最大允许高度：以当前窗口视口 75% 与弹出方向真实剩余空间取小，绝不撑满，仅作为防超屏上限
+        val maxAllowedHeight = minOf(
+            maxMenuHeight ?: (safeViewportHeight * 0.75f),
+            directionalAvailableHeight
+        )
 
         DropdownMenu(
             expanded = expanded,
@@ -192,28 +193,20 @@ fun AppMenu(
                 // 2. 头部扩展插槽（如搜索框、操作按钮行）
                 headerContent?.invoke(this)
 
-                // 3. 候选条目列表区（带滚动）
+                // 3. 候选条目列表区（纯自适应，内容多大就多大，绝不强行撑满；仅在超屏时按最大可用高度滚动）
+                // 彻底移除 Box 与 VerticalScrollbarAdapter：DropdownMenu 内部默认采用 Modifier.width(IntrinsicSize.Max)，
+                // 任何子级挂载的垂直滚动条在固有宽度测量阶段都会向 Skia 索取 Int.MAX_VALUE 导致 Size(7 x 2147483647) 崩溃！
+                // 纯 Column + verticalScroll 具备天然原生鼠标滚轮平滑滚动能力，零渲染负担，零测量崩溃！
                 val menuScrollState = rememberScrollState()
-                Box(
+
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = effectiveHeight)
+                        .heightIn(max = maxAllowedHeight)
+                        .verticalScroll(menuScrollState),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(menuScrollState)
-                            .padding(end = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        content()
-                    }
-                    VerticalScrollbarAdapter(
-                        scrollState = menuScrollState,
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .fillMaxHeight()
-                    )
+                    content()
                 }
 
                 // 4. 底部扩展插槽（如新建等常驻操作）

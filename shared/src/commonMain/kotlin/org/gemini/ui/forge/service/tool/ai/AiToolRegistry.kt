@@ -54,6 +54,7 @@ object AiToolRegistry {
             AnalyzeReferenceGenerateTemplateTool(),
             ImportAssetSheetPipelineTool(),
             ManageAssetLibraryTool(),
+            GetAssetsTool(),
 
             // 图像生成与处理共享工具
             GenerateImageTool(),

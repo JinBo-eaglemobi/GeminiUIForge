@@ -26,6 +26,7 @@ import org.gemini.ui.forge.ui.uistudio.model.ImportConflictStrategy
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.utils.executeConfirmedAction
 import org.gemini.ui.forge.utils.asset.AssetFileNameGuard
 import org.gemini.ui.forge.utils.bindParents
 import org.gemini.ui.forge.utils.blockingAwait
@@ -424,20 +425,28 @@ class AssetLibraryDelegate(
     }
 
     /**
-     * 将当前素材库状态持久化保存至本地磁盘 templates/{proj}/asset_library.json。
+     * 将当前素材库状态持久化保存至本地磁盘 templates/{proj}/asset_library.json（异步非阻塞）。
      */
     fun saveAssetLibrary() {
+        val currentLib = state.assetLibrary
+        scope.launch(Dispatchers.Default) {
+            flushAssetLibraryDiskSync(currentLib)
+        }
+    }
+
+    /**
+     * 同步挂起执行素材库磁盘物理持久化落盘。
+     */
+    suspend fun flushAssetLibraryDiskSync(library: UIAssetLibrary = state.assetLibrary) {
         val proj = state.project ?: return
         val sanitized = proj.projectId.trim().replace(" ", "_")
         val path = "templates/$sanitized/asset_library.json"
-        scope.launch(Dispatchers.Default) {
-            try {
-                val jsonStr = jsonHelper.encodeToString(UIAssetLibrary.serializer(), state.assetLibrary)
-                TemplateFile(path).writeBytes(jsonStr.encodeToByteArray())
-                AppLogger.i("UIStudioViewModel", "素材库保存成功: ${state.assetLibrary.items.size} 个素材")
-            } catch (e: Exception) {
-                AppLogger.e("UIStudioViewModel", "保存素材库失败", e)
-            }
+        try {
+            val jsonStr = jsonHelper.encodeToString(UIAssetLibrary.serializer(), library)
+            TemplateFile(path).writeBytes(jsonStr.encodeToByteArray())
+            AppLogger.i("UIStudioViewModel", "💾 素材库物理落盘成功: ${library.items.size} 个素材, ${library.folders.size} 个文件夹")
+        } catch (e: Exception) {
+            AppLogger.e("UIStudioViewModel", "保存素材库失败", e)
         }
     }
 
@@ -533,19 +542,77 @@ class AssetLibraryDelegate(
     }
 
     /**
-     * 删除指定素材文件夹，并将该文件夹下的素材平移至根目录。
+     * 递归收集指定文件夹及其所有子孙文件夹的 ID 集合。
+     */
+    fun collectAllDescendantFolderIds(folderId: String): Set<String> {
+        return state.assetLibrary.collectAllDescendantFolderIds(folderId)
+    }
+
+    /**
+     * 解析文件夹对应的物理相对路径（例如 "templates/$sanitized/assets/image/new"）。
+     */
+    fun resolveFolderRelativePath(sanitizedProject: String, folderId: String): String {
+        val subPath = state.assetLibrary.getFolderDisplayPath(folderId)
+        if (subPath.isBlank()) return ""
+        return "templates/$sanitizedProject/assets/image/$subPath"
+    }
+
+    /**
+     * 彻底删除指定素材文件夹及其包含的全部素材切片。
+     * 遵循二次确认即时物理落盘通用契约：
+     * 1. 内存中级联移除目标文件夹、所有子文件夹以及内部归属的全部素材；
+     * 2. 磁盘上递归物理删除该文件夹目录（包含全部物理图片与子目录）；
+     * 3. 即时将最新的 asset_library.json 物理刷盘持久化，彻底杜绝冷启动自愈复活。
      */
     fun deleteAssetFolder(folderId: String) {
-        val updatedFolders = state.assetLibrary.folders.filterNot { it.id == folderId || it.parentFolderId == folderId }
-        val updatedItems = state.assetLibrary.items.map {
-            if (it.folderId == folderId) it.copy(folderId = null) else it
-        }
-        state = state.copy(
-            assetLibrary = state.assetLibrary.copy(folders = updatedFolders, items = updatedItems),
-            selectedFolderId = if (state.selectedFolderId == folderId) null else state.selectedFolderId
+        val targetFolder = state.assetLibrary.folders.find { it.id == folderId } ?: return
+        val allFolderIds = collectAllDescendantFolderIds(folderId) + folderId
+        val affectedItems = state.assetLibrary.items.filter { it.folderId in allFolderIds }
+
+        val sanitized = state.project?.projectId?.trim()?.replace(" ", "_") ?: "default"
+        val folderRelPath = resolveFolderRelativePath(sanitized, folderId)
+
+        // 预先计算更新后的素材库状态
+        val updatedFolders = state.assetLibrary.folders.filterNot { it.id in allFolderIds }
+        val updatedItems = state.assetLibrary.items.filterNot { it.folderId in allFolderIds }
+        val newLibrary = state.assetLibrary.copy(folders = updatedFolders, items = updatedItems)
+
+        executeConfirmedAction(
+            actionName = "彻底删除素材文件夹: ${targetFolder.name}",
+            scope = scope,
+            onApplyState = {
+                state = state.copy(
+                    assetLibrary = newLibrary,
+                    selectedFolderId = if (state.selectedFolderId in allFolderIds) null else state.selectedFolderId,
+                    selectedAssetHash = if (affectedItems.any { it.hash == state.selectedAssetHash }) null else state.selectedAssetHash
+                )
+            },
+            onDiskIo = {
+                // 1. 递归物理删除文件夹磁盘目录
+                if (folderRelPath.isNotBlank()) {
+                    try {
+                        val tDir = TemplateFile(folderRelPath)
+                        val deleted = tDir.delete(recursive = true)
+                        AppLogger.i("UIStudioViewModel", "🗑️ 物理递归删除文件夹目录: $folderRelPath (结果=$deleted)")
+                    } catch (e: Exception) {
+                        AppLogger.e("UIStudioViewModel", "物理删除文件夹目录异常: $folderRelPath", e)
+                    }
+                }
+                // 2. 兜底清理受影响素材的物理文件（防止路径散落）
+                for (item in affectedItems) {
+                    try {
+                        val tFile = TemplateFile(item.relativePath)
+                        if (tFile.exists()) {
+                            tFile.delete(recursive = false)
+                        }
+                    } catch (_: Exception) {}
+                }
+            },
+            onFlushPersistence = {
+                flushAssetLibraryDiskSync(newLibrary)
+            },
+            successToast = "已彻底删除文件夹「${targetFolder.name}」及 ${affectedItems.size} 个素材"
         )
-        saveAssetLibrary()
-        Toast.show("已删除文件夹", ToastType.INFO)
     }
 
     /**
@@ -566,30 +633,40 @@ class AssetLibraryDelegate(
     }
 
     /**
-     * 删除单个素材并清理磁盘物理文件。
+     * 彻底删除单个素材并清理磁盘物理文件，遵循二次确认即时物理落盘通用契约。
      */
     fun deleteAsset(assetHash: String) {
         val target = state.assetLibrary.items.find { it.hash == assetHash } ?: return
         val updatedItems = state.assetLibrary.items.filterNot { it.hash == assetHash }
-        state = state.copy(
-            assetLibrary = state.assetLibrary.copy(items = updatedItems),
-            selectedAssetHash = null
-        )
-        saveAssetLibrary()
-        scope.launch(Dispatchers.Default) {
-            try {
-                val tFile = TemplateFile(target.relativePath)
-                val deleted = tFile.delete()
-                if (deleted) {
-                    AppLogger.i("UIStudioViewModel", "🗑️ 物理删除素材文件成功: ${target.relativePath}")
-                } else {
-                    AppLogger.w("UIStudioViewModel", "⚠️ 物理删除素材文件未成功或文件已不存在: ${target.relativePath}")
+        val newLibrary = state.assetLibrary.copy(items = updatedItems)
+
+        executeConfirmedAction(
+            actionName = "彻底删除素材: ${target.name}",
+            scope = scope,
+            onApplyState = {
+                state = state.copy(
+                    assetLibrary = newLibrary,
+                    selectedAssetHash = if (state.selectedAssetHash == assetHash) null else state.selectedAssetHash
+                )
+            },
+            onDiskIo = {
+                try {
+                    val tFile = TemplateFile(target.relativePath)
+                    val deleted = tFile.delete(recursive = false)
+                    if (deleted) {
+                        AppLogger.i("UIStudioViewModel", "🗑️ 物理删除素材文件成功: ${target.relativePath}")
+                    } else {
+                        AppLogger.w("UIStudioViewModel", "⚠️ 物理删除素材文件未成功或文件已不存在: ${target.relativePath}")
+                    }
+                } catch (e: Exception) {
+                    AppLogger.e("UIStudioViewModel", "💥 物理删除素材文件异常: ${target.relativePath}", e)
                 }
-            } catch (e: Exception) {
-                AppLogger.e("UIStudioViewModel", "💥 物理删除素材文件异常: ${target.relativePath}", e)
-            }
-        }
-        Toast.show("已删除素材: ${target.name}", ToastType.INFO)
+            },
+            onFlushPersistence = {
+                flushAssetLibraryDiskSync(newLibrary)
+            },
+            successToast = "已彻底删除素材: ${target.name}"
+        )
     }
 
     // ====== 素材库哈希引用体系与统一导入管道 ======

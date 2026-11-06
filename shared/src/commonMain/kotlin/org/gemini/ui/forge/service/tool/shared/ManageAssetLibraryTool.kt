@@ -71,6 +71,7 @@ class ManageAssetLibraryTool(
                 put("description", "要执行的素材库管理动作。")
                 put("enum", buildJsonArray {
                     add("list_assets")
+                    add("get_assets")
                     add("search_assets")
                     add("create_folder")
                     add("rename_folder")
@@ -96,6 +97,11 @@ class ManageAssetLibraryTool(
             put("assetHash", buildJsonObject {
                 put("type", "string")
                 put("description", "素材内容哈希（16位短哈希或 SHA-256，用于唯一精确定位素材或 bind_to_block）。")
+            })
+            put("assetHashes", buildJsonObject {
+                put("type", "array")
+                put("description", "用于 get_assets 批量获取的素材哈希数组。")
+                put("items", buildJsonObject { put("type", "string") })
             })
             put("newName", buildJsonObject {
                 put("type", "string")
@@ -197,6 +203,31 @@ class ManageAssetLibraryTool(
                 }
 
                 ToolResult(content = listOf(ToolContent.Text(text = resultObj.toString())))
+            }
+
+            "get_assets" -> {
+                val hashesArray = arguments["assetHashes"]?.jsonArray
+                val singleHash = arguments["assetHash"]?.jsonPrimitive?.contentOrNull?.trim()
+                val targetHashes = when {
+                    hashesArray != null -> hashesArray.mapNotNull { it.jsonPrimitive.contentOrNull?.trim()?.ifBlank { null } }
+                    !singleHash.isNullOrBlank() -> listOf(singleHash)
+                    else -> emptyList()
+                }
+
+                if (targetHashes.isEmpty()) {
+                    return@withContext ToolResult(
+                        isError = true,
+                        content = listOf(ToolContent.Text(text = "❌ 'get_assets' 动作缺少必填参数 'assetHashes' 或 'assetHash'。"))
+                    )
+                }
+
+                val delegateArgs = buildJsonObject {
+                    put("projectName", sanitized)
+                    put("assetHashes", buildJsonArray { targetHashes.forEach { add(it) } })
+                    arguments["includeImageData"]?.let { put("includeImageData", it) }
+                }
+
+                GetAssetsTool(fileStorage).execute(delegateArgs, onProgress)
             }
 
             "search_assets" -> {

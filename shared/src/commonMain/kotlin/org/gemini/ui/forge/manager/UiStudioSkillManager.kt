@@ -4,6 +4,7 @@ import kotlinx.serialization.json.*
 import org.gemini.ui.forge.manager.resource.ExternalResourceLoader
 import org.gemini.ui.forge.model.chat.MentionCategory
 import org.gemini.ui.forge.model.chat.MentionItem
+import org.gemini.ui.forge.model.chat.MentionPayload
 import org.gemini.ui.forge.model.skill.SkillActivationMode
 import org.gemini.ui.forge.model.skill.SkillMarkdownParser
 import org.gemini.ui.forge.model.skill.UiStudioSkill
@@ -192,10 +193,11 @@ object UiStudioSkillManager {
 
         val hasDocMention = attachedMentions.any { it.category == MentionCategory.DOC }
         val hasAllAssetsMention = attachedMentions.any { it.id == "all_assets_manifest" }
+        val hasFolderMention = attachedMentions.any { it.payload is MentionPayload.AssetFolderPayload }
 
         for (skill in skills) {
             val matchesKeywords = skill.effectiveTriggers.any { lowerPrompt.contains(it.lowercase()) }
-            if (hasDocMention || hasAllAssetsMention || matchesKeywords) {
+            if (hasDocMention || hasAllAssetsMention || hasFolderMention || matchesKeywords) {
                 active.add(skill)
             }
         }
@@ -274,6 +276,7 @@ object UiStudioSkillManager {
                                 put("width", buildJsonObject { put("type", "NUMBER"); put("description", "物理宽度") })
                                 put("height", buildJsonObject { put("type", "NUMBER"); put("description", "物理高度") })
                                 put("isPureContainer", buildJsonObject { put("type", "BOOLEAN"); put("description", "是否为纯布局排版占位容器（不生成独立图片）") })
+                                put("assetHash", buildJsonObject { put("type", "STRING"); put("description", "绑定的素材库切片唯一Hash（最高优先级精确装配主键）") })
                                 put("assetFileName", buildJsonObject { put("type", "STRING"); put("description", "绑定的素材库切片文件名，如 'Back_Button.png'") })
                                 put("slotRole", buildJsonObject { put("type", "STRING"); put("description", "插槽语义角色(用于全自动装配): BACKGROUND, SPIN_BUTTON, REEL_SYMBOL, BUTTON, HUD_FRAME, TITLE_LOGO, BET_CONTROL") })
                                 put("children", buildJsonObject {

@@ -74,6 +74,44 @@ data class UIAssetLibrary(
     fun getSubFolders(parentFolderId: String? = null): List<UIAssetFolder> {
         return folders.filter { it.parentFolderId == parentFolderId }
     }
+
+    /**
+     * 递归收集指定文件夹及其所有子孙文件夹的 ID 集合。
+     */
+    fun collectAllDescendantFolderIds(folderId: String): Set<String> {
+        val result = mutableSetOf<String>()
+        val directChildren = folders.filter { it.parentFolderId == folderId }
+        for (child in directChildren) {
+            result.add(child.id)
+            result.addAll(collectAllDescendantFolderIds(child.id))
+        }
+        return result
+    }
+
+    /**
+     * 递归获取指定文件夹（包含其所有深度子文件夹）内的全部素材列表。
+     */
+    fun getItemsInFolderRecursive(folderId: String): List<UIAssetItem> {
+        val allFolderIds = collectAllDescendantFolderIds(folderId) + folderId
+        return items.filter { it.folderId in allFolderIds }
+    }
+
+    /**
+     * 计算文件夹的层级展示路径（如 "UI/Icons/Buttons"）。
+     */
+    fun getFolderDisplayPath(folderId: String): String {
+        val folder = folders.find { it.id == folderId } ?: return ""
+        val segments = mutableListOf<String>()
+        var current: UIAssetFolder? = folder
+        while (current != null) {
+            segments.add(0, current.name.trim())
+            val parentId = current.parentFolderId
+            current = if (parentId != null) {
+                folders.find { it.id == parentId }
+            } else null
+        }
+        return segments.joinToString("/")
+    }
 }
 
 /**

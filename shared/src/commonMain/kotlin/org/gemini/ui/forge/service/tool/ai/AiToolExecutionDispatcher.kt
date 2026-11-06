@@ -76,49 +76,6 @@ class AiToolExecutionDispatcher {
                     AppLogger.w(TAG, "解析原始流 JSON 工具调用异常: ${e.message}")
                 }
             }
-
-            // 若原始 JSON 未匹配到工具调用，则尝试从响应正文 Markdown 代码块或伪 JSON 中提取
-            if (calls.isEmpty() && responseText.isNotBlank()) {
-                val toolPatterns = listOf(
-                    """```json\s*(\{[\s\S]*?"(?:tool|name|function)"[\s\S]*?\})\s*```""".toRegex(RegexOption.IGNORE_CASE),
-                    """(\{\s*"(?:tool|name|function)"\s*:\s*"[^"]+"\s*,\s*"(?:parameters|arguments|args)"\s*:\s*\{[\s\S]*?\}\s*\})""".toRegex(RegexOption.IGNORE_CASE)
-                )
-
-                for (pattern in toolPatterns) {
-                    val matches = pattern.findAll(responseText)
-                    for (match in matches) {
-                        try {
-                            val snippet = match.groupValues[1]
-                            val parsed = looseJson.parseToJsonElement(snippet).jsonObject
-                            val name = parsed["name"]?.jsonPrimitive?.contentOrNull
-                                ?: parsed["tool"]?.jsonPrimitive?.contentOrNull
-                                ?: parsed["function"]?.jsonPrimitive?.contentOrNull
-                            val args = parsed["parameters"]
-                                ?: parsed["arguments"]
-                                ?: parsed["args"]
-                            val argsJsonStr = serializeArgsElement(args)
-                            val callId = parsed["id"]?.jsonPrimitive?.contentOrNull
-                                ?: parsed["call_id"]?.jsonPrimitive?.contentOrNull
-
-                            if (!name.isNullOrBlank() && calls.none { it.name == name && it.argsJson == argsJsonStr }) {
-                                calls.add(GeminiFunctionCallRecord(name, argsJsonStr, callId))
-                            }
-                        } catch (_: Exception) {}
-                    }
-                    if (calls.isNotEmpty()) break
-                }
-
-                // 兜底正则提取 name 与 arguments
-                if (calls.isEmpty()) {
-                    val fallbackRegex = """"(?:name|tool|function)"\s*:\s*"([^"]+)"""".toRegex()
-                    val match = fallbackRegex.find(responseText)
-                    if (match != null) {
-                        val name = match.groupValues[1]
-                        calls.add(GeminiFunctionCallRecord(name, "{}", null))
-                    }
-                }
-            }
-
             return calls
         }
 

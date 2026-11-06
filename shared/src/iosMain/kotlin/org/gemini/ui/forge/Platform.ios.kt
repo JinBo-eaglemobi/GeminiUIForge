@@ -52,3 +52,7 @@ actual val appDir: String
     get() = platform.Foundation.NSBundle.mainBundle.bundlePath
 
 actual fun captureActiveScreenShot(): ByteArray? = null
+
+actual fun exitApplicationProcess(exitCode: Int) {}
+
+actual fun installAwtEventDispatchProtection() {}

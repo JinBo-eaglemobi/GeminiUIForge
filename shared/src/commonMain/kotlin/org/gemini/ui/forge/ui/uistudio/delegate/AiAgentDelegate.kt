@@ -380,6 +380,7 @@ class AiAgentDelegate(
                 is MentionPayload.AssetPayload -> if (it.id == "all_assets_manifest") "all_assets_manifest" else p.filePath
                 is MentionPayload.ViewPayload -> p.viewId
                 is MentionPayload.BlockPayload -> p.blockId
+                is MentionPayload.AssetFolderPayload -> "asset_folder:${p.folderId}"
             }
             ChatMentionTag(
                 title = it.title,
@@ -549,15 +550,31 @@ class AiAgentDelegate(
                     enabledSkillIds = aiConfig.enabledSkillIds
                 )
 
-                // 严格遵循不自动注入铁律：彻底删除基于关键词或意图的私自注入；仅当用户显式附带全部素材药丸时才装配清单
+                // 严格遵循不自动注入铁律：彻底删除基于关键词或意图的私自注入；仅当用户显式附带全部素材药丸或指定素材文件夹药丸时才装配清单
                 var autoAssetManifestXml: String? = null
+                val manifestSb = StringBuilder()
                 val hasAllAssetsMention = attachedMentionsList.any {
                     val p = it.payload
                     p is MentionPayload.AssetPayload && p.fileName == "ALL_ASSETS_MANIFEST"
                 }
                 if (hasAllAssetsMention) {
                     val manifest = AssetManifestHelper.buildCompactManifest(state.assetLibrary.items)
-                    autoAssetManifestXml = "  <asset_library_manifest total=\"${state.assetLibrary.items.size}\">\n$manifest\n  </asset_library_manifest>"
+                    manifestSb.appendLine("  <asset_library_manifest total=\"${state.assetLibrary.items.size}\">")
+                    manifestSb.appendLine(manifest)
+                    manifestSb.appendLine("  </asset_library_manifest>")
+                }
+
+                val folderMentions = attachedMentionsList.mapNotNull { it.payload as? MentionPayload.AssetFolderPayload }
+                for (folderMention in folderMentions) {
+                    val folderItems = state.assetLibrary.getItemsInFolderRecursive(folderMention.folderId)
+                    val manifest = AssetManifestHelper.buildCompactManifest(folderItems)
+                    manifestSb.appendLine("  <asset_folder_manifest folder=\"${folderMention.folderName}\" total=\"${folderItems.size}\">")
+                    manifestSb.appendLine(manifest)
+                    manifestSb.appendLine("  </asset_folder_manifest>")
+                }
+
+                if (manifestSb.isNotBlank()) {
+                    autoAssetManifestXml = manifestSb.toString().trimEnd()
                 }
 
                 val skillPromptAddition = triggeredSkills.joinToString("\n\n") { it.effectiveInstructions }

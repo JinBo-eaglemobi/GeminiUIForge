@@ -235,7 +235,7 @@ object UiStudioLayoutService {
         collectBound(blocks)
 
         // 语义分类池
-        val classified = assetLibrary.items.groupBy { AssetManifestHelper.categorizeAsset(it.name, it.relativePath) }
+        val classified = assetLibrary.items.groupBy { AssetManifestHelper.categorizeAsset(it.name) }
         val backgrounds = classified[AssetSemanticCategory.BACKGROUND].orEmpty().sortedByDescending { it.width * it.height }
         val spinButtons = classified[AssetSemanticCategory.SPIN_BUTTON].orEmpty()
         val reelSymbols = classified[AssetSemanticCategory.REEL_SYMBOL].orEmpty()

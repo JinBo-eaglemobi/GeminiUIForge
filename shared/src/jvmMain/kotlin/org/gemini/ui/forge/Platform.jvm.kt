@@ -198,3 +198,21 @@ actual fun captureActiveScreenShot(): ByteArray? {
         null
     }
 }
+
+actual fun exitApplicationProcess(exitCode: Int) {
+    kotlin.system.exitProcess(exitCode)
+}
+
+actual fun installAwtEventDispatchProtection() {
+    try {
+        java.awt.Toolkit.getDefaultToolkit().systemEventQueue.push(object : java.awt.EventQueue() {
+            override fun dispatchEvent(event: java.awt.AWTEvent) {
+                try {
+                    super.dispatchEvent(event)
+                } catch (throwable: Throwable) {
+                    org.gemini.ui.forge.utils.GlobalCrashState.capture(throwable, "AWT-EventQueue-0")
+                }
+            }
+        })
+    } catch (_: Throwable) {}
+}

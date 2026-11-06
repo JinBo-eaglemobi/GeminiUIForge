@@ -3,6 +3,7 @@ package org.gemini.ui.forge.ui.uistudio.delegate
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Layers
@@ -302,15 +303,39 @@ class AiConfigDelegate(
                     )
                 )
             )
+
+            // 2.2 素材库文件夹 (含所有深度子文件夹与内部切片统计)
+            state.assetLibrary.folders.forEach { folder ->
+                val recursiveItems = state.assetLibrary.getItemsInFolderRecursive(folder.id)
+                val displayPath = state.assetLibrary.getFolderDisplayPath(folder.id)
+                val subFolders = state.assetLibrary.getSubFolders(folder.id)
+                val extraDesc = if (subFolders.isNotEmpty()) "含 ${subFolders.size} 个子文件夹 · " else ""
+                candidates.add(
+                    MentionItem(
+                        id = "asset_folder_${folder.id}",
+                        title = "📁 ${folder.name} (共 ${recursiveItems.size} 项)",
+                        subtitle = "${extraDesc}路径: $displayPath · 包含该目录及全部深度子目录素材",
+                        category = MentionCategory.ASSET,
+                        icon = Icons.Default.Folder,
+                        payload = MentionPayload.AssetFolderPayload(
+                            folderId = folder.id,
+                            folderName = folder.name,
+                            folderPath = displayPath,
+                            totalAssetsCount = recursiveItems.size
+                        )
+                    )
+                )
+            }
         }
 
         state.assetLibrary.items.forEach { asset ->
-            val role = AssetManifestHelper.inferAssetRole(asset.name, asset.relativePath)
+            val role = AssetManifestHelper.inferAssetRole(asset.name)
+            val roleSuffix = if (role != null) " · 角色: $role" else ""
             candidates.add(
                 MentionItem(
                     id = "asset_${asset.hash}",
                     title = asset.name,
-                    subtitle = "尺寸: ${asset.width}x${asset.height} · 角色: $role",
+                    subtitle = "尺寸: ${asset.width}x${asset.height}$roleSuffix",
                     category = MentionCategory.ASSET,
                     icon = Icons.Default.Image,
                     previewImagePath = asset.relativePath,

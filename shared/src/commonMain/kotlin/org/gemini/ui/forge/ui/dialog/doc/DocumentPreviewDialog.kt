@@ -18,6 +18,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +34,7 @@ import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -59,6 +62,18 @@ fun DocumentPreviewDialog(
     var isLoading by remember(filePath, content) { mutableStateOf(content == null && !filePath.isNullTransBlank()) }
     var errorMessage by remember(filePath, content) { mutableStateOf<String?>(null) }
     var isMaximized by remember { mutableStateOf(false) }
+
+    val windowInfo = LocalWindowInfo.current
+    val density = LocalDensity.current
+    val screenWidthDp = with(density) { windowInfo.containerSize.width.toDp() }
+    val screenHeightDp = with(density) { windowInfo.containerSize.height.toDp() }
+
+    val responsiveWidth = remember(screenWidthDp, spacing.dialogHugeWidth, spacing.dialogLargeWidth) {
+        (screenWidthDp * 0.85f).coerceIn(spacing.dialogLargeWidth, spacing.dialogHugeWidth)
+    }
+    val responsiveMaxHeight = remember(screenHeightDp) {
+        (screenHeightDp * 0.88f).coerceIn(600.dp, 960.dp)
+    }
 
     LaunchedEffect(filePath, content) {
         if (content != null) {
@@ -135,8 +150,8 @@ fun DocumentPreviewDialog(
                     .padding(16.dp)
             } else {
                 Modifier
-                    .width(spacing.dialogLargeWidth)
-                    .heightIn(min = 520.dp, max = 800.dp)
+                    .width(responsiveWidth)
+                    .heightIn(min = 580.dp, max = responsiveMaxHeight)
                     .padding(spacing.medium)
             }
         ) {
@@ -272,14 +287,9 @@ fun DocumentPreviewDialog(
                                             .verticalScroll(scrollState)
                                             .padding(spacing.small)
                                     ) {
-                                        Text(
-                                            text = displayContent.orEmpty(),
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontFamily = FontFamily.Monospace,
-                                                fontSize = 12.sp,
-                                                lineHeight = 20.sp
-                                            ),
-                                            color = MaterialTheme.colorScheme.onSurface
+                                        AppMarkdown(
+                                            content = displayContent.orEmpty(),
+                                            modifier = Modifier.fillMaxWidth()
                                         )
                                     }
                                 }

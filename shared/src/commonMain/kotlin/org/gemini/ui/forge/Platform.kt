@@ -176,3 +176,13 @@ expect val appDir: String
  * 跨平台捕获当前活动窗口或屏幕画面的 PNG 字节数组（桌面端支持，移动/Web返回 null）
  */
 expect fun captureActiveScreenShot(): ByteArray?
+
+/**
+ * 跨平台退出当前应用程序进程
+ */
+expect fun exitApplicationProcess(exitCode: Int = 0)
+
+/**
+ * 安装桌面端 AWT 事件队列安全拦截器（阻止 OS 弹出阻塞式原生错误弹窗并路由至应用内全局崩溃弹窗）
+ */
+expect fun installAwtEventDispatchProtection()

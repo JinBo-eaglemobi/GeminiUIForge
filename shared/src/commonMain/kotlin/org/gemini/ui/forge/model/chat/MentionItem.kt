@@ -60,6 +60,14 @@ sealed interface MentionPayload {
         val height: Int = 0
     ) : MentionPayload
 
+    /** 素材库文件夹上下文（包含其所有深度子文件夹与内部切片） */
+    data class AssetFolderPayload(
+        val folderId: String,
+        val folderName: String,
+        val folderPath: String,
+        val totalAssetsCount: Int
+    ) : MentionPayload
+
     /** 本地参考文档上下文 */
     data class DocPayload(
         val fileName: String,
