@@ -57,10 +57,8 @@ jobs:
                   Write-Host "`n-----------------   ERROR LOG: $($_.FullName)   -----------------" -ForegroundColor Red
                   Get-Content $_.FullName
               }
-          }
-            }
           } else {
-            Write-Host "Log directory 'composeApp/build/compose/logs' does not exist."
+            Write-Host "Log directory 'desktopApp/build/compose/logs' does not exist."
           }
       
       - name: 上传错误日志 (仅在失败时)
@@ -68,15 +66,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-build-logs
-          path: composeApp/build/compose/logs
+          path: desktopApp/build/compose/logs
       
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            composeApp/build/compose/binaries/main/msi/*.msi
-            composeApp/build/compose/binaries/main/exe/*.exe
-            composeApp/build/compose/jars/*.jar
+            desktopApp/build/compose/binaries/main/msi/*.msi
+            desktopApp/build/compose/binaries/main/exe/*.exe
+            desktopApp/build/compose/jars/*.jar
             GeminiUIForge-Windows-Portable.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
