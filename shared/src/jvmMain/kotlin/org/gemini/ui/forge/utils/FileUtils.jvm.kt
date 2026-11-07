@@ -78,7 +78,12 @@ actual suspend fun executeSystemCommand(
     args: List<String>,
     onLog: (String) -> Unit
 ): Boolean = withContext(Dispatchers.IO) {
-    val fullCmd = listOf(command) + args
+    val resolvedCmd = if (command == "python" || command == "python3") {
+        PythonEnvResolver.resolvePythonExecutable() ?: command
+    } else {
+        command
+    }
+    val fullCmd = listOf(resolvedCmd) + args
     AppLogger.i("SystemCommand", "[RAW COMMAND EXEC] ${fullCmd.joinToString(" ")}")
     return@withContext try {
         val process = ProcessBuilder(fullCmd)

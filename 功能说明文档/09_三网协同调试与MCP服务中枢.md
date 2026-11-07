@@ -62,6 +62,9 @@
     - 自动感知系统安装环境，支持一键无损热注入 5 大主流 AI 研发客户端配置文件：`OpenCode`、`Claude Code`、`Claude Desktop`、`Gemini CLI` 与 `Cursor`；
     - 每个客户端提供专属卡片与独立 Toggle 开关，一键开启即自动将端口与协议注入对应配置 JSON，杜绝人工修改语法的踩坑风险；
   - **手动高级配置代码区块**：提供标准 `mcpServers` JSON 片段一键拷贝，供自研客户端或定制代理快速接入。
+- **运行态工作区实时感知 (`get_runtime_status`)**：
+  - 除返回软件版本与 API 凭证脱敏状态外，实时通过 `McpUiActionPipeline` 暴露 `activeWorkspace` 对象；
+  - 涵盖当前活跃工作区模式（`UI_STUDIO` / `PROJECT_WORKSPACE`）、工程名（`projectName`）、当前活动视图与分辨率、当前页面被选中的元素组件（`selectedBlock` 及其内部子组件 `children` 的 ID/类型/宽高摘要）以及当前激活容器视口（`activeContainer`），供 AI 自主调用工具查询，零上下文注入污染；
 - **Compose 动态语义感知与拟人化交互**：
   - 调用 `get_semantic_tree` 实时获取运行中 UI 的原生无障碍语义树；
   - 杜绝硬编码易失性数字 Node ID，动态检索文本与特征后调用 `click_ui_node` / `set_ui_input_text` 进行真实事件分发；

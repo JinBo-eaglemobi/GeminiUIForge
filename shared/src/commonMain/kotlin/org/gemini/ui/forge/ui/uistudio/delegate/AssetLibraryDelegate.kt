@@ -112,7 +112,8 @@ class AssetLibraryDelegate(
         var hasChanges = false
         val foldersList = initialLib.folders.toMutableList()
 
-        // 1. 规整已有 items 的内容哈希并建立哈希映射
+        // 1. 规整已有 items 的内容哈希并建立哈希映射（天然去重历史重复数据）
+        val rawItemCount = initialLib.items.size
         val itemsMap = mutableMapOf<String, UIAssetItem>()
         for (item in initialLib.items) {
             val curHash = item.hash
@@ -126,7 +127,15 @@ class AssetLibraryDelegate(
             } else {
                 curHash
             }
-            itemsMap[effectiveHash] = item.copy(hash = effectiveHash)
+            if (itemsMap.containsKey(effectiveHash)) {
+                hasChanges = true
+                AppLogger.w("UIStudioViewModel", "🧹 自愈扫描发现同 Hash 重复资产 [${item.name}] (hash=$effectiveHash)，自动去重清洗，保留首个项 [${itemsMap[effectiveHash]?.name}]")
+            } else {
+                itemsMap[effectiveHash] = item.copy(hash = effectiveHash)
+            }
+        }
+        if (itemsMap.size < rawItemCount) {
+            hasChanges = true
         }
 
         val existingPaths = itemsMap.values.map { it.relativePath.replace("\\", "/") }.toMutableSet()
@@ -864,6 +873,11 @@ class AssetLibraryDelegate(
                     when (strategy) {
                         ImportConflictStrategy.SKIP -> Unit
                         ImportConflictStrategy.KEEP_BOTH -> {
+                            val existingByHash = currentItems.find { it.hash == c.fileHash }
+                            if (existingByHash != null) {
+                                AppLogger.i("UIStudioViewModel", "♻️ 导入文件内容与已有素材 [${existingByHash.name}] 完全一致 (hash=${c.fileHash})，保留既有项，跳过冗余别名导入")
+                                continue
+                            }
                             val base = c.desiredFileName.substringBeforeLast('.')
                             val ext = c.desiredFileName.substringAfterLast('.', "")
                             var n = 1
@@ -1169,6 +1183,13 @@ class AssetLibraryDelegate(
                 100 to 100
             }
             val fileHash = calculateShortFileHash(targetFullPath) ?: targetFullPath.hashCode().toString(16)
+            val existingSameHash = state.assetLibrary.items.find { it.hash == fileHash }
+            if (existingSameHash != null) {
+                AppLogger.i("UIStudioViewModel", "♻️ 保存聊天图片发现已有相同内容资产: ${existingSameHash.name} (hash=$fileHash)，自动聚焦复用")
+                Toast.show("素材库已存在相同内容资产，已为您自动定位", ToastType.INFO)
+                refreshAssetLibrary(focusAssetPath = existingSameHash.relativePath)
+                return existingSameHash.relativePath
+            }
             val targetFolder = if (cleanSubPath.isNotBlank()) {
                 state.assetLibrary.folders.find { it.name.equals(cleanSubPath, ignoreCase = true) }
             } else null

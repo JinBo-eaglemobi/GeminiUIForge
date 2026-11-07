@@ -1,10 +1,13 @@
 package org.gemini.ui.forge.ui.dialog.system.settings
 
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.text.selection.SelectionContainer
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.gemini.ui.forge.ui.component.AppIconButton
+import org.gemini.ui.forge.ui.component.AppIconButtonTier
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -21,13 +24,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
+import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.model.app.*
+import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.HorizontalDivider
+import org.gemini.ui.forge.ui.dialog.system.settings.component.EnvironmentItemLogPanel
 
 
 /**
@@ -54,6 +62,8 @@ fun EnvironmentSettings(
     val marketPage by envViewModel.marketPage.collectAsState()
 
     var envTab by remember { mutableStateOf(0) }
+    // 记录各依赖项下方命令输出窗口的折叠状态（仅针对存在命令输出的项生效）
+    val collapsedLogItems = remember { mutableStateMapOf<String, Boolean>() }
     val spacing = LocalAppSpacing.current
 
     // Segmented Button 风格的 Tab
@@ -91,25 +101,63 @@ fun EnvironmentSettings(
     Spacer(Modifier.height(LocalAppSpacing.current.medium))
 
     if (envTab == 0) {
+        val itemsWithOutput = status.items.filter {
+            it.isInstalling || it.installLogs.isNotEmpty() || it.lastError != null
+        }
+        val allOutputCollapsed = itemsWithOutput.isNotEmpty() && itemsWithOutput.all {
+            collapsedLogItems[it.name] == true
+        }
+
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             SettingSectionTitle(stringResource(Res.string.env_python_check_title))
-            TextButton(onClick = { envViewModel.checkEnvironment() }, enabled = !status.isChecking) {
-                if (status.isChecking) CircularProgressIndicator(
-                    Modifier.size(LocalAppSpacing.current.medium),
-                    strokeWidth = 2.dp
-                )
-                else Icon(Icons.Default.Refresh, null, Modifier.size(LocalAppSpacing.current.medium))
-                Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
-                Text(stringResource(Res.string.env_action_check))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (itemsWithOutput.size >= 2) {
+                    AppIconButton(
+                        imageVector = if (allOutputCollapsed) Icons.Default.UnfoldMore else Icons.Default.UnfoldLess,
+                        tooltip = stringResource(
+                            if (allOutputCollapsed) Res.string.env_log_expand_all_tip else Res.string.env_log_collapse_all_tip
+                        ),
+                        tier = AppIconButtonTier.COMPACT,
+                        onClick = {
+                            val targetCollapsed = !allOutputCollapsed
+                            itemsWithOutput.forEach { item ->
+                                collapsedLogItems[item.name] = targetCollapsed
+                            }
+                        }
+                    )
+                    Spacer(Modifier.width(spacing.extraSmall))
+                }
+                TextButton(onClick = { envViewModel.checkEnvironment() }, enabled = !status.isChecking) {
+                    if (status.isChecking) CircularProgressIndicator(
+                        Modifier.size(LocalAppSpacing.current.medium),
+                        strokeWidth = 2.dp
+                    )
+                    else Icon(Icons.Default.Refresh, null, Modifier.size(LocalAppSpacing.current.medium))
+                    Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
+                    Text(stringResource(Res.string.env_action_check))
+                }
             }
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(LocalAppSpacing.current.small)) {
             status.items.forEach { item ->
+                val hasOutputPanel = item.isInstalling || item.installLogs.isNotEmpty() || item.lastError != null
+                val isLogCollapsed = collapsedLogItems[item.name] == true
+                val isUninstallFlow = item.isUninstallAction || item.installLogs.firstOrNull()?.startsWith("开始卸载") == true
+
+                // 当触发新一轮安装/卸载时自动展开；当命令输出被清空（如卸载完成）时自动移除折叠状态
+                LaunchedEffect(hasOutputPanel, item.isInstalling) {
+                    if (!hasOutputPanel) {
+                        collapsedLogItems.remove(item.name)
+                    } else if (item.isInstalling) {
+                        collapsedLogItems[item.name] = false
+                    }
+                }
+
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     shape = AppShapes.small,
@@ -119,7 +167,24 @@ fun EnvironmentSettings(
                         )
                     )
                 ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val headerRowModifier = if (hasOutputPanel) {
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(AppShapes.small)
+                            .tip(
+                                stringResource(
+                                    if (isLogCollapsed) Res.string.env_log_expand_tip else Res.string.env_log_collapse_tip
+                                )
+                            )
+                            .clickable { collapsedLogItems[item.name] = !isLogCollapsed }
+                            .padding(12.dp)
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp)
+                    }
+
+                    Row(modifier = headerRowModifier, verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = if (item.isInstalled) Icons.Default.CheckCircle else Icons.Default.Error,
                             contentDescription = null,
@@ -145,6 +210,38 @@ fun EnvironmentSettings(
                                                 vertical = 2.dp
                                             ),
                                             color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                                // 仅当存在命令输出窗口时，在标题侧展示折叠箭头与折叠态状态标识；未执行任何命令输出的项无折叠标识
+                                if (hasOutputPanel) {
+                                    Spacer(Modifier.width(spacing.small))
+                                    Icon(
+                                        imageVector = if (isLogCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (isLogCollapsed) {
+                                        Spacer(Modifier.width(spacing.extraSmall))
+                                        val statusText = when {
+                                            item.isInstalling && isUninstallFlow -> stringResource(Res.string.env_status_uninstalling)
+                                            item.isInstalling -> stringResource(Res.string.env_status_installing)
+                                            item.isSuccess == true -> stringResource(Res.string.env_status_install_success)
+                                            item.isSuccess == false && isUninstallFlow -> stringResource(Res.string.env_status_uninstall_failed)
+                                            item.isSuccess == false -> stringResource(Res.string.env_status_install_failed)
+                                            else -> stringResource(Res.string.env_log_title)
+                                        }
+                                        val statusColor = when {
+                                            item.isInstalling -> MaterialTheme.colorScheme.primary
+                                            item.isSuccess == true -> Color(0xFF4CAF50)
+                                            item.isSuccess == false -> MaterialTheme.colorScheme.error
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                        Text(
+                                            text = "($statusText)",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = statusColor
                                         )
                                     }
                                 }
@@ -236,19 +333,16 @@ fun EnvironmentSettings(
                         }
                     }
 
-                    if (item.isInstalling && item.installLogs.isNotEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp)
-                                .background(Color.Black).padding(LocalAppSpacing.current.small)
-                        ) {
-                            val logScroll = rememberScrollState()
-                            Text(
-                                text = item.installLogs.joinToString("\n"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF00FF00),
-                                modifier = Modifier.verticalScroll(logScroll)
+                    // 只要处于正在安装、或有历史日志、或有失败错误记录，均持久化展示日志面板供用户查阅与复制；支持点击上方依赖项行平滑折叠/展开
+                    AnimatedVisibility(visible = hasOutputPanel && !isLogCollapsed) {
+                        Box(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
+                            EnvironmentItemLogPanel(
+                                item = item,
+                                onClearLogs = {
+                                    collapsedLogItems.remove(item.name)
+                                    envViewModel.clearEnvironmentLogs(item.name)
+                                }
                             )
-                            LaunchedEffect(item.installLogs.size) { logScroll.animateScrollTo(logScroll.maxValue) }
                         }
                     }
                 }

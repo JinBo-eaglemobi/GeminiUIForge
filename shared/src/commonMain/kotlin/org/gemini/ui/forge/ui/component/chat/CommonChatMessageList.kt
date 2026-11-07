@@ -277,6 +277,7 @@ fun CommonChatMessageList(
                                     message = msg,
                                     maxBubbleWidth = maxBubbleWidth,
                                     isGenerating = isCurrentModelGenerating,
+                                    streamingText = if (isCurrentModelGenerating) streamingText else "",
                                     onImageClick = onImageClick,
                                     onVariantIndexChanged = { newIdx ->
                                         onVariantIndexChanged?.invoke(msg, newIdx)

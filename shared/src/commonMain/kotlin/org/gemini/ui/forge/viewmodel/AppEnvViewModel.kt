@@ -59,8 +59,23 @@ class AppEnvViewModel(
     fun checkEnvironment() {
         viewModelScope.launch {
             _status.update { it.copy(isChecking = true) }
+            val currentItems = _status.value.items
             val result = envService.checkAll()
-            _status.update { result }
+            // 守恒合并：保留当前已存在的安装/卸载留痕日志与结果状态，防止全量刷新导致错误信息闪烁消失
+            val mergedItems = result.items.map { newItem ->
+                val existing = currentItems.find { it.name == newItem.name }
+                if (existing != null) {
+                    newItem.copy(
+                        installLogs = existing.installLogs,
+                        lastError = existing.lastError,
+                        isSuccess = existing.isSuccess,
+                        isUninstallAction = existing.isUninstallAction
+                    )
+                } else {
+                    newItem
+                }
+            }
+            _status.update { result.copy(items = mergedItems, isChecking = false) }
             
             // 顺便加载 pip 列表
             loadPipPackages()
@@ -272,53 +287,176 @@ class AppEnvViewModel(
         }
     }
 
-    /** 安装特定的环境依赖项并记录实时日志 */
+    /** 安装特定的环境依赖项并记录实时日志与结果 */
     fun installEnvironmentItem(name: String) {
         viewModelScope.launch {
             // 标记正在安装
             _status.update { s ->
                 val newItems = s.items.map { 
-                    if (it.name == name) it.copy(isInstalling = true, installLogs = emptyList()) else it 
+                    if (it.name == name) it.copy(
+                        isInstalling = true,
+                        installLogs = emptyList(),
+                        lastError = null,
+                        isSuccess = null,
+                        isUninstallAction = false
+                    ) else it 
                 }
                 s.copy(items = newItems)
             }
 
-            envService.installItem(name).collect { log ->
+            var hasError = false
+            var finalErrorMessage: String? = null
+
+            try {
+                envService.installItem(name).collect { log ->
+                    val trimmed = log.trimStart()
+                    if (trimmed.startsWith("❌")) {
+                        hasError = true
+                        finalErrorMessage = log
+                    } else if (trimmed.startsWith("✅") && trimmed.contains(name, ignoreCase = true)) {
+                        hasError = false
+                        finalErrorMessage = null
+                    }
+                    _status.update { s ->
+                        val newItems = s.items.map { item ->
+                            if (item.name == name) {
+                                val isProgressLine = log.startsWith("⬇️ 下载进度:") || log.startsWith("⬇️ 已下载:")
+                                val updatedLogs = if (isProgressLine && item.installLogs.lastOrNull()?.startsWith("⬇️ ") == true) {
+                                    item.installLogs.dropLast(1) + log
+                                } else {
+                                    item.installLogs + log
+                                }
+                                item.copy(installLogs = updatedLogs)
+                            } else item
+                        }
+                        s.copy(items = newItems)
+                    }
+                }
+            } catch (e: Exception) {
+                hasError = true
+                finalErrorMessage = e.message ?: "未知异常"
                 _status.update { s ->
                     val newItems = s.items.map { 
-                        if (it.name == name) it.copy(installLogs = it.installLogs + log) else it 
+                        if (it.name == name) it.copy(installLogs = it.installLogs + "❌ 执行抛出异常: ${e.message}") else it 
+                    }
+                    s.copy(items = newItems)
+                }
+            } finally {
+                // 标记安装结束，留痕安装结果与错误
+                _status.update { s ->
+                    val newItems = s.items.map { 
+                        if (it.name == name) {
+                            val isFinalSuccess = !hasError && (it.installLogs.any { line -> line.contains("✅") } || it.isInstalled)
+                            it.copy(
+                                isInstalling = false,
+                                isSuccess = isFinalSuccess,
+                                lastError = if (!isFinalSuccess) (finalErrorMessage ?: "安装未成功完成") else null
+                            )
+                        } else it 
                     }
                     s.copy(items = newItems)
                 }
             }
 
-            // 安装完成后重新扫描状态
+            // 安装完成后重新扫描状态（保留日志）
             checkEnvironment()
         }
     }
 
-    /** 卸载特定的环境依赖项并记录实时日志 */
+    /** 卸载特定的环境依赖项并记录实时日志与结果 */
     fun uninstallEnvironmentItem(name: String) {
         viewModelScope.launch {
-            // 标记正在卸载 (复用 isInstalling 字段以显示日志对话框)
+            // 标记正在卸载
             _status.update { s ->
                 val newItems = s.items.map {
-                    if (it.name == name) it.copy(isInstalling = true, installLogs = listOf("开始卸载...")) else it
+                    if (it.name == name) it.copy(
+                        isInstalling = true,
+                        installLogs = listOf("开始卸载..."),
+                        lastError = null,
+                        isSuccess = null,
+                        isUninstallAction = true
+                    ) else it
                 }
                 s.copy(items = newItems)
             }
 
-            envService.uninstallItem(name).collect { log ->
+            var hasError = false
+            var finalErrorMessage: String? = null
+
+            try {
+                envService.uninstallItem(name).collect { log ->
+                    val trimmed = log.trimStart()
+                    if (trimmed.startsWith("❌")) {
+                        hasError = true
+                        finalErrorMessage = log
+                    } else if (trimmed.startsWith("✅") && trimmed.contains(name, ignoreCase = true)) {
+                        hasError = false
+                        finalErrorMessage = null
+                    }
+                    _status.update { s ->
+                        val newItems = s.items.map { item ->
+                            if (item.name == name) {
+                                val isProgressLine = log.startsWith("⬇️ 下载进度:") || log.startsWith("⬇️ 已下载:")
+                                val updatedLogs = if (isProgressLine && item.installLogs.lastOrNull()?.startsWith("⬇️ ") == true) {
+                                    item.installLogs.dropLast(1) + log
+                                } else {
+                                    item.installLogs + log
+                                }
+                                item.copy(installLogs = updatedLogs)
+                            } else item
+                        }
+                        s.copy(items = newItems)
+                    }
+                }
+            } catch (e: Exception) {
+                hasError = true
+                finalErrorMessage = e.message ?: "未知异常"
                 _status.update { s ->
                     val newItems = s.items.map {
-                        if (it.name == name) it.copy(installLogs = it.installLogs + log) else it
+                        if (it.name == name) it.copy(installLogs = it.installLogs + "❌ 执行抛出异常: ${e.message}") else it
+                    }
+                    s.copy(items = newItems)
+                }
+            } finally {
+                _status.update { s ->
+                    val newItems = s.items.map {
+                        if (it.name == name) {
+                            val isFinalSuccess = !hasError && (it.installLogs.any { line -> line.contains("✅") && line.contains(name, ignoreCase = true) })
+                            if (isFinalSuccess) {
+                                // 卸载成功后直接清除命令输出框，同步取消折叠状态
+                                it.copy(
+                                    isInstalling = false,
+                                    installLogs = emptyList(),
+                                    isSuccess = null,
+                                    lastError = null,
+                                    isUninstallAction = false
+                                )
+                            } else {
+                                it.copy(
+                                    isInstalling = false,
+                                    isSuccess = false,
+                                    lastError = finalErrorMessage ?: "卸载未成功完成",
+                                    isUninstallAction = true
+                                )
+                            }
+                        } else it
                     }
                     s.copy(items = newItems)
                 }
             }
 
-            // 卸载完成后重新扫描状态
+            // 卸载完成后重新扫描状态（保留日志）
             checkEnvironment()
+        }
+    }
+
+    /** 清除/收起特定依赖项的安装日志与错误提示 */
+    fun clearEnvironmentLogs(name: String) {
+        _status.update { s ->
+            val newItems = s.items.map {
+                if (it.name == name) it.copy(installLogs = emptyList(), lastError = null, isSuccess = null) else it
+            }
+            s.copy(items = newItems)
         }
     }
 }

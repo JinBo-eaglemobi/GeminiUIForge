@@ -197,6 +197,16 @@
     <string name="env_error_missing_python">Python not found. Please install Python and add it to PATH.</string>
     <string name="env_dialog_title">Environment Not Ready</string>
     <string name="env_dialog_message">Local background removal requires Python and dependencies. Go to settings to install?</string>
+    <string name="env_log_title">Execution Logs</string>
+    <string name="env_log_copy">Copy Logs</string>
+    <string name="env_log_copied">Logs copied to clipboard</string>
+    <string name="env_log_clear">Collapse</string>
+    <string name="env_status_installing">Installing...</string>
+    <string name="env_status_uninstalling">Uninstalling...</string>
+    <string name="env_status_install_success">Installed successfully</string>
+    <string name="env_status_install_failed">Installation failed</string>
+    <string name="env_status_uninstall_success">Uninstalled successfully</string>
+    <string name="env_status_uninstall_failed">Uninstallation failed</string>
     <string name="settings_category_about">About</string>
     <string name="about_title">About Gemini UI Forge</string>
     <string name="about_version">Version v%1$s</string>
@@ -757,4 +767,11 @@
     <string name="import_conflict_resolved_overwrite">Conflict resolved: replaced %1$d file(s)</string>
     <string name="import_conflict_resolved_keep_both">Conflict resolved: imported %1$d file(s) with new names</string>
     <string name="import_conflict_resolved_skip">Conflict resolved: skipped</string>
+    <string name="env_official_download_label">Official Download: %1$s</string>
+    <string name="env_official_download_open_tip">Click to open official download page in default browser: %1$s</string>
+    <string name="env_official_download_btn">Official Site</string>
+    <string name="env_log_collapse_tip">Click to collapse command output window</string>
+    <string name="env_log_expand_tip">Click to expand command output window</string>
+    <string name="env_log_collapse_all_tip">Collapse all command output windows</string>
+    <string name="env_log_expand_all_tip">Expand all command output windows</string>
 </resources>

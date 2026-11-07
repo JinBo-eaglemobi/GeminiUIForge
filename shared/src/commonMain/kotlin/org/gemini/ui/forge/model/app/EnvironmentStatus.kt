@@ -10,10 +10,17 @@ data class EnvironmentItemStatus(
     val version: String? = null,
     val isInstalling: Boolean = false,
     val installLogs: List<String> = emptyList(),
-    val latestVersion: String? = null
+    val latestVersion: String? = null,
+    val lastError: String? = null,
+    val isSuccess: Boolean? = null,
+    val isUninstallAction: Boolean = false,
+    val officialUrl: String = ""
 ) {
     val isOutdated: Boolean
         get() = isInstalled && latestVersion != null && version != latestVersion && latestVersion.isNotBlank()
+
+    val hasLogs: Boolean
+        get() = installLogs.isNotEmpty()
 }
 
 /**

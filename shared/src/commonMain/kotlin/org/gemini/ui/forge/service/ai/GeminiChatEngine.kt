@@ -765,17 +765,38 @@ class GeminiChatEngine(
     }
 
     /**
-     * 深度提取响应 JSON 中的 inlineData / inline_data 图像载荷
+     * 深度提取响应 JSON 中的图像载荷
+     * 兼容:
+     * 1. 传统 generateContent 协议: inlineData / inline_data 包装对象
+     * 2. Interactions API 官方协议: delta / step / item 直接包含 data 与 mime_type / mimeType (如 mime_type: "image/jpeg")
+     * 3. 嵌套 image 对象: { "image": { "data": "...", "mime_type": "..." } }
      */
     private fun extractInlineImageData(element: JsonElement): Pair<String, String>? {
         if (element !is JsonObject) return null
         fun findInline(obj: JsonObject): Pair<String, String>? {
+            // 1. 传统 generateContent: inlineData / inline_data 包装层
             val inline = obj["inlineData"]?.jsonObject ?: obj["inline_data"]?.jsonObject
             if (inline != null) {
                 val data = inline["data"]?.jsonPrimitive?.contentOrNull
                 val mime = (inline["mimeType"] ?: inline["mime_type"])?.jsonPrimitive?.contentOrNull ?: "image/png"
                 if (!data.isNullOrBlank()) return data to mime
             }
+
+            // 2. Interactions API 官方协议: delta / step / content 项直接包含 data 与 mime_type
+            val directData = obj["data"]?.jsonPrimitive?.contentOrNull
+            val directMime = (obj["mime_type"] ?: obj["mimeType"])?.jsonPrimitive?.contentOrNull
+            if (!directData.isNullOrBlank() && directMime?.startsWith("image/") == true) {
+                return directData to directMime
+            }
+
+            // 3. 嵌套 image 对象: { "image": { "data": "...", ... } }
+            val imageObj = obj["image"]?.jsonObject
+            if (imageObj != null) {
+                val data = imageObj["data"]?.jsonPrimitive?.contentOrNull
+                val mime = (imageObj["mime_type"] ?: imageObj["mimeType"])?.jsonPrimitive?.contentOrNull ?: "image/png"
+                if (!data.isNullOrBlank()) return data to mime
+            }
+
             for ((_, v) in obj) {
                 if (v is JsonObject) {
                     val found = findInline(v)

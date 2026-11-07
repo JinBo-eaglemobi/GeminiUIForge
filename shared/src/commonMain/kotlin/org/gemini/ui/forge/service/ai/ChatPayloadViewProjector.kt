@@ -63,22 +63,24 @@ object ChatPayloadViewProjector {
         }
 
         // 优先拦截排版布局数据报文：提取纯净排版数据并使用标准 Markdown ```json 代码框包裹呈现
-        if (rawPayload.contains("apply_view_layout") || (rawPayload.contains("assetFileName") && rawPayload.contains("viewName"))) {
-            val argsObj = extractLayoutToolArgs(rawPayload)
-            val viewNameMatch = argsObj?.get("viewName")?.jsonPrimitive?.contentOrNull
-                ?: Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
-                ?: "FootballSlotMain"
-            val descMatch = argsObj?.get("description")?.jsonPrimitive?.contentOrNull
-                ?: Regex("""(?:\\?"|")description(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
-                ?: "已根据参考规范与素材库完成界面结构规划与图元排版。"
+        // 门禁铁律：必须严格验证确实包含有效的 blocks 数组图元数据，严禁仅凭 apply_view_layout 字符串匹配误伤普通自然语言对话
+        val layoutArgsObj = if (rawPayload.contains("apply_view_layout") || (rawPayload.contains("assetFileName") && rawPayload.contains("viewName"))) {
+            extractLayoutToolArgs(rawPayload)
+        } else {
+            null
+        }
 
-            val cleanJson = if (argsObj != null) {
-                try {
-                    jsonPrettyParser.encodeToString(argsObj)
-                } catch (_: Exception) {
-                    extractCleanJsonString(rawPayload, viewNameMatch, descMatch)
-                }
-            } else {
+        if (layoutArgsObj != null && layoutArgsObj["blocks"]?.jsonArray?.isNotEmpty() == true) {
+            val viewNameMatch = layoutArgsObj["viewName"]?.jsonPrimitive?.contentOrNull
+                ?: Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
+                ?: "Main"
+            val descMatch = layoutArgsObj["description"]?.jsonPrimitive?.contentOrNull
+                ?: Regex("""(?:\\?"|")description(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
+                ?: "已完成界面结构规划与图元排版。"
+
+            val cleanJson = try {
+                jsonPrettyParser.encodeToString(layoutArgsObj)
+            } catch (_: Exception) {
                 extractCleanJsonString(rawPayload, viewNameMatch, descMatch)
             }
 
@@ -238,54 +240,51 @@ object ChatPayloadViewProjector {
      * 智能识别并解析排版方案工坊卡片数据 (用于对标 Claude Artifacts 的主流呈现方式)
      */
     fun parseLayoutArtifact(rawPayload: String): LayoutArtifactData? {
-        if (!rawPayload.contains("apply_view_layout") && !(rawPayload.contains("assetFileName") && rawPayload.contains("viewName"))) {
+        if (!rawPayload.contains("apply_view_layout") && !rawPayload.contains("blocks")) {
             return null
         }
 
         val argsObj = extractLayoutToolArgs(rawPayload)
+        // 门禁铁律：必须包含非空的 blocks 数组才认定为合法的工坊卡片数据
+        val blocksArr = argsObj?.get("blocks")?.jsonArray
+        if (blocksArr.isNullOrEmpty()) {
+            return null
+        }
 
-        val viewName = argsObj?.get("viewName")?.jsonPrimitive?.contentOrNull
+        val viewName = argsObj["viewName"]?.jsonPrimitive?.contentOrNull
             ?: Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
-            ?: "FootballSlotMain"
-        val desc = argsObj?.get("description")?.jsonPrimitive?.contentOrNull
+            ?: "Main"
+        val desc = argsObj["description"]?.jsonPrimitive?.contentOrNull
             ?: Regex("""(?:\\?"|")description(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
-            ?: "已根据传入的 UX 规范文档与素材清单完成足球老虎机高精度界面排版装配。"
+            ?: "已完成界面结构规划与图元排版。"
 
-        val width = argsObj?.get("width")?.jsonPrimitive?.contentOrNull
+        val width = argsObj["width"]?.jsonPrimitive?.contentOrNull
             ?: Regex("""(?:\\?"|")width(?:\\?"|")\s*:\s*(\d+)""").find(rawPayload)?.groupValues?.get(1)
             ?: "1920"
-        val height = argsObj?.get("height")?.jsonPrimitive?.contentOrNull
+        val height = argsObj["height"]?.jsonPrimitive?.contentOrNull
             ?: Regex("""(?:\\?"|")height(?:\\?"|")\s*:\s*(\d+)""").find(rawPayload)?.groupValues?.get(1)
             ?: "1080"
 
         val modules = mutableListOf<LayoutModuleSummary>()
-        val blockIdRegex = Regex("""(?:\\?"|")id(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)(?:\\?"|")[^}]*?(?:\\?"|")type(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""")
-        val matches = blockIdRegex.findAll(rawPayload)
-        for (m in matches.take(10)) {
-            val id = m.groupValues[1]
-            val type = m.groupValues[2]
-            if (id != "reel_col_2" && id != "reel_col_3" && id != "reel_col_4" && id != "reel_col_5") {
-                modules.add(
-                    LayoutModuleSummary(
-                        title = id,
-                        typeName = type,
-                        detailCount = if (type == "CONTAINER") "组合容器" else null
-                    )
+        for (item in blocksArr.take(15)) {
+            val obj = item.jsonObject
+            val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: continue
+            val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: "BLOCK"
+            val assetName = obj["assetFileName"]?.jsonPrimitive?.contentOrNull
+            modules.add(
+                LayoutModuleSummary(
+                    title = id,
+                    typeName = type,
+                    detailCount = assetName ?: (if (type == "CONTAINER") "组合容器" else null)
                 )
-            }
+            )
         }
 
         return LayoutArtifactData(
             viewName = viewName,
             resolution = "$width × $height",
             description = desc,
-            modules = if (modules.isNotEmpty()) modules else listOf(
-                LayoutModuleSummary("bg_stadium", "BACKGROUND", "bg_football_stadium.png"),
-                LayoutModuleSummary("top_navigation_bar", "CONTAINER", detailCount = "5 项"),
-                LayoutModuleSummary("main_slot_machine_window", "SLOTS_WINDOW", detailCount = "5x3 矩阵"),
-                LayoutModuleSummary("side_right_jackpot_panel", "CONTAINER", detailCount = "大奖彩池"),
-                LayoutModuleSummary("bottom_control_deck", "CONTAINER", detailCount = "旋转控制台")
-            ),
+            modules = modules,
             rawJsonSnippet = rawPayload.take(3000)
         )
     }
@@ -451,6 +450,6 @@ object ChatPayloadViewProjector {
             }
         } catch (_: Exception) {}
 
-        return "{\n  \"viewName\": \"$fallbackViewName\",\n  \"description\": \"$desc\"\n}"
+        return ""
     }
 }

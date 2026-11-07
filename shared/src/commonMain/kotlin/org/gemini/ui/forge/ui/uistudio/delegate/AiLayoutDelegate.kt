@@ -48,8 +48,10 @@ class AiLayoutDelegate(
 
     /**
      * 检查并自动执行大模型返回的 apply_view_layout 本地装配任务
+     *
+     * @param autoPromptDialog 是否在解析完成后主动弹出应用决策弹窗（默认 false，防止生图或会话收口时强行弹窗打断用户；当用户主动点击气泡按钮时传 true）
      */
-    fun checkAndExecuteLayoutTool(rawResponseJson: String, responseText: String) {
+    fun checkAndExecuteLayoutTool(rawResponseJson: String, responseText: String, autoPromptDialog: Boolean = false) {
         val extractedArgs = extractApplyViewLayoutArgs(rawResponseJson, responseText) ?: return
         val projId = state.project?.projectId ?: "default"
         val applyResult = UiStudioLayoutService.assembleViewPage(
@@ -58,16 +60,18 @@ class AiLayoutDelegate(
             args = extractedArgs
         )
         if (applyResult.isSuccess && applyResult.createdPage != null) {
-            // 将待应用的排版结果交由人机交互决策弹窗进行确认，由用户选择替换当前视图还是新建独立视图
-            state = state.copy(pendingLayoutResult = applyResult)
+            if (autoPromptDialog) {
+                // 用户显式触发时才弹出确认对话框，杜绝会话结束自动弹窗打断工作流
+                state = state.copy(pendingLayoutResult = applyResult)
+            }
         }
     }
 
     /**
-     * 从给定的消息或文本中重新提取排版方案并弹出应用决策弹窗
+     * 从给定的消息或文本中重新提取排版方案并弹出应用决策弹窗（用户主动点击气泡按钮时触发）
      */
     fun reapplyLayoutFromText(rawText: String) {
-        checkAndExecuteLayoutTool(rawText, rawText)
+        checkAndExecuteLayoutTool(rawText, rawText, autoPromptDialog = true)
     }
 
     /**

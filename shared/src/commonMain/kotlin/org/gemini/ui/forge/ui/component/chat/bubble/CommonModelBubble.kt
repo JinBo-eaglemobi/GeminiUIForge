@@ -51,6 +51,7 @@ fun CommonModelBubble(
     message: VisualChatMessage,
     maxBubbleWidth: Dp,
     isGenerating: Boolean = false,
+    streamingText: String = "",
     onImageClick: ((String) -> Unit)? = null,
     onVariantIndexChanged: ((newIndex: Int) -> Unit)? = null,
     onRegenerateRequested: ((VisualChatMessage) -> Unit)? = null,
@@ -69,6 +70,7 @@ fun CommonModelBubble(
     var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
 
     val modelText = message.effectiveText
+    val effectiveDisplayText = if (modelText.isNotBlank()) modelText else if (isGenerating) streamingText else ""
     val variants = message.variants
     val hasVariants = variants.size > 1
     val currentVariantIdx = message.activeVariantIndex.coerceIn(0, (variants.size - 1).coerceAtLeast(0))
@@ -136,21 +138,21 @@ fun CommonModelBubble(
                         // ② 若模型未输出明文思维链，绝不凭空拼凑伪造凭据卡片；
                         // ③ 若当前正处于生成中且正文尚未输出，呈现微光呼吸脉冲动画与秒表计时，绝不展现空 Surface
                         val hasRealThought = !message.thought.isNullOrBlank()
-                        val isThinkingNow = isGenerating && modelText.isBlank() && !message.isError
+                        val isThinkingNow = isGenerating && effectiveDisplayText.isBlank() && !message.isError
                         val shouldShowThinking = hasRealThought || (isThinkingNow && message.toolCalls.isEmpty())
                         if (shouldShowThinking) {
                             ThinkingProcessCard(
                                 thought = message.thought ?: "",
                                 isThinking = isThinkingNow,
                                 durationMs = message.durationMs,
-                                modifier = Modifier.padding(bottom = if (modelText.isNotBlank() || message.toolCalls.isNotEmpty()) spacing.small else 0.dp)
+                                modifier = Modifier.padding(bottom = if (effectiveDisplayText.isNotBlank() || message.toolCalls.isNotEmpty()) spacing.small else 0.dp)
                             )
                         }
 
                         // 1.5 工具调用状态与结果卡片
                         if (message.toolCalls.isNotEmpty()) {
                             Column(
-                                modifier = Modifier.padding(bottom = spacing.small),
+                                modifier = Modifier.padding(bottom = if (effectiveDisplayText.isNotBlank() || isGenerating) spacing.small else 0.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 message.toolCalls.forEach { record ->
@@ -183,18 +185,18 @@ fun CommonModelBubble(
                                 onFallbackFlashModel = onFallbackFlashModelRequested?.let { cb -> { cb(message) } },
                                 onSwitchProtocol = onSwitchProtocolRequested?.let { cb -> { cb(message) } }
                             )
-                        } else if (modelText.isNotBlank()) {
+                        } else if (effectiveDisplayText.isNotBlank()) {
                             SelectionContainer {
                                 AppMarkdown(
-                                    content = modelText
+                                    content = effectiveDisplayText
                                 )
                             }
 
-                            // 若该消息包含界面排版方案，紧跟在 Markdown (含 ```json 代码框) 下方提供画布快捷入口
-                            if (modelText.contains("已完成界面排版规划方案") || modelText.contains("apply_view_layout")) {
-                                val viewName = Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(message.prompt)?.groupValues?.get(1)
-                                    ?: Regex("""\[([^\]]+)\]""").find(modelText)?.groupValues?.get(1)
-                                    ?: "View_1"
+                            // 门禁铁律：若该消息包含界面排版方案，必须同时包含排版标记与标准 json 代码块，绝不因普通对话中包含工具名就误挂按钮
+                            if (effectiveDisplayText.contains("已完成界面排版规划方案") && effectiveDisplayText.contains("```json")) {
+                                val viewName = Regex("""🛠️ \*\*已完成界面排版规划方案: \[([^\]]+)\]\*\*""").find(effectiveDisplayText)?.groupValues?.get(1)
+                                    ?: Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(message.prompt)?.groupValues?.get(1)
+                                    ?: "Main"
 
                                 Spacer(Modifier.height(8.dp))
                                 Button(
@@ -211,6 +213,24 @@ fun CommonModelBubble(
                                     Spacer(Modifier.width(6.dp))
                                     Text("应用排版方案到画布 [$viewName]", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                                 }
+                            }
+                        } else if (isGenerating && message.toolCalls.isNotEmpty()) {
+                            // 多轮工具调用执行后，正在等待模型生成最终文本答复时的微光加载态
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(top = spacing.extraSmall)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.width(spacing.small))
+                                Text(
+                                    text = "正在分析整理最终答复...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
 

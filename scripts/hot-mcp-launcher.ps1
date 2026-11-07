@@ -100,7 +100,42 @@ function Clear-StaleInstance {
     }
 }
 
+<#
+.SYNOPSIS
+    防线零：自动巡检并清理卡死在 actual: LastSession 的陈旧僵尸 KotlinCompileDaemon 及其 .run 文件，
+    防止新启动的 Kotlin 守护进程在 initiate elections 时触发 Assuming other daemons have higher prio 选举自杀循环。
+#>
+function Clear-ZombieKotlinDaemons {
+    try {
+        $daemonRunDir = Join-Path $env:LOCALAPPDATA 'kotlin\daemon'
+        if (-not (Test-Path $daemonRunDir)) { return }
+        $zombieLogs = Get-ChildItem (Join-Path $env:TEMP 'kotlin-daemon.*.log') -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-5) }
+        foreach ($log in $zombieLogs) {
+            $tail = Get-Content $log.FullName -Tail 15 -ErrorAction SilentlyContinue | Out-String
+            if ($tail -match 'requested state: Alive > actual: LastSession') {
+                $head = Get-Content $log.FullName -TotalCount 30 -ErrorAction SilentlyContinue | Out-String
+                if ($head -match 'runFile:\s*(.+\.run)') {
+                    $runFilePath = $Matches[1].Trim()
+                    Remove-Item $runFilePath -Force -ErrorAction SilentlyContinue
+                }
+                if ($head -match 'daemon is listening on port:\s*(\d+)') {
+                    $zombiePort = $Matches[1]
+                    Get-ChildItem (Join-Path $daemonRunDir "*.$zombiePort.run") -ErrorAction SilentlyContinue |
+                        Remove-Item -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+    }
+    catch {
+        # 巡检异常静默忽略，绝不阻塞 MCP 正常启动
+    }
+}
+
 # ============================ 主流程 ============================
+
+# 防线零：清理卡死在 LastSession 的僵尸 KotlinCompileDaemon 注册文件
+Clear-ZombieKotlinDaemons
 
 # 防线一：清场旧实例，保证单例
 Clear-StaleInstance

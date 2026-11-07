@@ -649,9 +649,38 @@ class SliceImportDelegate(
                     sliceStatusText = "正在登记素材库并持久化..."
                 )
 
-                val newAssetItems = slicedMetas.map { meta ->
+                val newAssetItems = mutableListOf<UIAssetItem>()
+                val existingHashes = state.assetLibrary.items.map { it.hash }.toMutableSet()
+                val batchProcessed = mutableMapOf<String, UIAssetItem>()
+                var reusedCount = 0
+
+                for (meta in slicedMetas) {
                     val fileHash = calculateShortFileHash(meta.relPath) ?: meta.relPath.hashCode().toString(16)
-                    UIAssetItem(
+
+                    // 1. 检查既有素材库中是否已存在该内容 Hash 的素材
+                    val existingAsset = state.assetLibrary.items.find { it.hash == fileHash }
+                    if (existingAsset != null) {
+                        reusedCount++
+                        try {
+                            TemplateFile(meta.relPath).delete()
+                        } catch (_: Exception) {}
+                        AppLogger.i("UIStudioViewModel", "♻️ 切片 [${meta.item.name}] 内容哈希 ($fileHash) 与既有素材 [${existingAsset.name}] 完全相同，自动复用并清理冗余切片")
+                        continue
+                    }
+
+                    // 2. 检查本次切片批内是否已登记过相同内容 Hash 的素材
+                    val batchDuplicate = batchProcessed[fileHash]
+                    if (batchDuplicate != null) {
+                        reusedCount++
+                        try {
+                            TemplateFile(meta.relPath).delete()
+                        } catch (_: Exception) {}
+                        AppLogger.i("UIStudioViewModel", "♻️ 切片 [${meta.item.name}] 内容哈希 ($fileHash) 与批内切片 [${batchDuplicate.name}] 完全相同，自动复用首个切片并清理冗余切片")
+                        continue
+                    }
+
+                    // 3. 全新独立资产
+                    val newItem = UIAssetItem(
                         hash = fileHash,
                         relativePath = meta.relPath,
                         width = meta.item.bounds.width.toInt().coerceAtLeast(1),
@@ -659,6 +688,9 @@ class SliceImportDelegate(
                         category = meta.item.type.name.lowercase(),
                         folderId = effectiveFolderId
                     )
+                    newAssetItems.add(newItem)
+                    batchProcessed[fileHash] = newItem
+                    existingHashes.add(fileHash)
                 }
 
                 val finalFolders = if (autoCreatedFolder != null && state.assetLibrary.folders.none { it.id == autoCreatedFolder.id }) {
@@ -684,12 +716,18 @@ class SliceImportDelegate(
                     TemplateFile(draftPath).delete()
                 } catch (_: Exception) {}
 
+                val finishStatusText = if (reusedCount > 0) {
+                    "🎉 切片与去背已完成（已自动复用 $reusedCount 个相同内容切片）"
+                } else {
+                    "🎉 全部切片与去背已完成！"
+                }
+
                 state = state.copy(
                     assetLibrary = updatedLibrary,
                     expandedFolderIds = finalExpandedIds,
                     sliceProgress = 1.0f,
                     sliceCurrentStage = SliceStage.FINISHED,
-                    sliceStatusText = "🎉 全部切片与去背已完成！"
+                    sliceStatusText = finishStatusText
                 )
 
                 // 持久化素材库到 asset_library.json 并触发全量刷新与高亮聚焦
@@ -708,8 +746,13 @@ class SliceImportDelegate(
                     sliceStatusText = ""
                 )
 
-                Toast.show("🎉 成功切片并入库 ${newAssetItems.size} 个素材到素材库中！", ToastType.SUCCESS)
-                AppLogger.i("UIStudioViewModel", "✅ 物理切片与素材库持久化完成: 共 ${newAssetItems.size} 个素材入库")
+                val toastMessage = if (reusedCount > 0) {
+                    "🎉 成功切片并入库 ${newAssetItems.size} 个新素材（自动复用/跳过 $reusedCount 个相同内容切片）"
+                } else {
+                    "🎉 成功切片并入库 ${newAssetItems.size} 个素材到素材库中！"
+                }
+                Toast.show(toastMessage, ToastType.SUCCESS)
+                AppLogger.i("UIStudioViewModel", "✅ 物理切片与素材库持久化完成: 共 ${newAssetItems.size} 个新素材入库，复用/跳过 $reusedCount 个相同切片")
 
             } catch (e: Exception) {
                 AppLogger.e("UIStudioViewModel", "❌ 切图入库失败", e)

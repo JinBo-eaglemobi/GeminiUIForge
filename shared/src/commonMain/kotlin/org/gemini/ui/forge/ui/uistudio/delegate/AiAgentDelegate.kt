@@ -215,7 +215,8 @@ class AiAgentDelegate(
             }
 
             if (name == "apply_view_layout") {
-                aiLayout.checkAndExecuteLayoutTool(rawResponseJson, responseText)
+                // 静默解析排版数据并缓存，绝不主动在画布中央弹窗打断（保留气泡按钮由用户显式点击）
+                aiLayout.checkAndExecuteLayoutTool(rawResponseJson, responseText, autoPromptDialog = false)
                 continue
             }
             state = state.copy(streamingAiText = "🛠️ 正在执行系统工具 [$name] 并保存到素材库...")
@@ -891,6 +892,8 @@ class AiAgentDelegate(
                     finalResult.text
                 } else if (allExecutedToolRecords.isNotEmpty()) {
                     "" // 工具调用由结构化工具卡片纯净呈现，绝不擅自拼接机械文本污染界面
+                } else if (generatedImgPath != null) {
+                    "" // 图像已成功生成并挂载卡片，无需拼接机械的“未收到有效内容”提示
                 } else if (!finalResult.isSuccess) {
                     finalResult.errorMessage ?: "服务端未返回错误详情"
                 } else {
@@ -933,9 +936,9 @@ class AiAgentDelegate(
                     isAiChatSending = false
                 )
 
-                // 自动检查大模型是否发起了 apply_view_layout 工具调用并自动装配
+                // 自动检查大模型是否发起了 apply_view_layout 工具调用并自动装配（静默缓存，用户点击气泡才弹窗）
                 if (finalResult.isSuccess) {
-                    aiLayout.checkAndExecuteLayoutTool(finalResult.rawResponseJson, finalResult.text)
+                    aiLayout.checkAndExecuteLayoutTool(finalResult.rawResponseJson, finalResult.text, autoPromptDialog = false)
                 }
             } catch (e: Exception) {
                 AppLogger.e("AiAgentDelegate", "AI Chat 处理异常", e)
@@ -1087,6 +1090,8 @@ class AiAgentDelegate(
                     result.text
                 } else if (executedToolRecords.isNotEmpty()) {
                     "" // 工具执行状态由卡片呈现，不拼接机械废话
+                } else if (generatedImgPath != null) {
+                    "" // 图像已成功生成并挂载卡片，保持界面纯净
                 } else if (!result.isSuccess) {
                     result.errorMessage ?: "服务端未返回错误详情"
                 } else {

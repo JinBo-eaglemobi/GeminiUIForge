@@ -19,16 +19,20 @@
 
 ## 质量与校验（红线规则）
 
-- **IntelliJ IDEA 研发编译与局部增量初筛校验规范**: **【红线规则】**
-  - **首选增量构建通道 (IDEA 局部增量构建)**：代码改动后，优先调用 `idea_build_project(filesToRebuild = [...])` 对变动文件毫秒级编译，确认 0 语法与编译错误后再推进；
-  - **语法初筛 (辅助通道)**：按需调用 `idea_get_file_problems` 做毫秒级文件语法速查；
+- **IntelliJ IDEA 研发编译与热重载单通道分流校验规范**: **【红线规则】**
+  - **语法初筛 (第一道毫秒级静态防线)**：代码改动后，**强制首先调用 `idea_get_file_problems`** 对所有修改文件做毫秒级 PSI 静态语法速查（不触发后台 Gradle 构建）；
+  - **编译与热替换二元分流铁律（严禁双构建撞车抢锁）**：
+    1. **当 `compose-hot-reload` 在线连接时（`connected == true`）**：确认 `idea_get_file_problems` 0 错误后，**直接调用 `tools["compose-hot-reload"].reload()` 作为唯一增量编译与热替换通道**（其内部自带 Gradle `:desktopApp:reload` 增量重编）。**此时绝对禁止在 `reload()` 前后或 `reloadState == "reloading"` 期间调用 `idea_build_project`**，严防 IDEA 构建器与 Hot Reload Recompiler 同时争抢 `build/` 目录锁、污染增量快照并额外拉起第 2 个 4GB Gradle Daemon 导致数分钟慢编译！
+    2. **当 `compose-hot-reload` 离线或未启动热重载应用时**：使用 `idea_build_project(filesToRebuild = [...])` 对变动文件执行局部增量编译初筛；
   - 纯文档、注释或非代码修改不触发编译校验。
 
-- **Kotlin 增量守护进程守恒与禁止静默降级红线 (Kotlin Daemon Enforcement & Anti-Fallback Redline)**: **【红线规则】**
-  全项目日常开发与热重载必须 100% 运行于健康的 Kotlin Daemon 守护进程增量模式下。
+- **Kotlin 增量守护进程守恒与僵尸选举自杀防治红线 (Kotlin Daemon Enforcement & Zombie Election Guard)**: **【红线规则】**
+  全项目日常开发与热重载必须 100% 运行于健康的常驻 Kotlin Daemon 守护进程增量模式下。
   1. **【强制锁定 Daemon 策略】**：`gradle.properties` 强制锁定 `kotlin.compiler.execution.strategy=daemon`，坚决拒绝并禁止任何无守护进程的 in-process / out-of-process 回退；
   2. **【绝对禁止静默降级冷编】**：严禁在编译中检测到 Daemon 通信异常时任由编译器静默降级为 Fallback 全量冷编译（导致单文件改动引发耗时长达数分钟的全量重编）；
-  3. **【快速失败阻断与清理自愈】**：一旦遇到 Daemon 通信超时或死锁，编译器与构建工具必须立即快速失败报错（Fast-Fail）并阻断执行，严禁无谓死等 fallback，由开发者或智能体立即调度 `./gradlew --stop` 彻底清理僵死进程，重新唤起纯净 Daemon 恢复秒级增量热更！
+  3. **【僵尸 Daemon `LastSession` 选举自杀循环巡检与手术刀清理】**：
+     - **底层病理警示**：若宿主机残留了卡死在 `actual: LastSession` 状态的陈旧 `KotlinCompileDaemon` 及其 `%LOCALAPPDATA%\kotlin\daemon\*.run` 注册文件，新启动的同版本 `KotlinCompileDaemon` 在 `initiate elections`（守护进程选举）时会误判旧僵尸优先级更高并打印 `Assuming other daemons have higher prio... Graceful shutdown signalled`，导致每次编译完立即自杀退出、每次热更被迫冷启动 JVM；
+     - **外科手术式精准清理（严禁误杀应用）**：一旦发现热重载耗时异常（> 20s）或 `%TEMP%\kotlin-daemon*.log` 出现 `requested state: Alive > actual: LastSession` / `Assuming other daemons have higher prio`，必须立即**仅针对该僵尸 `KotlinCompileDaemon` 的 PID 及陈旧 `.run` 文件执行定点清除**（绝不触碰运行中的桌面端主进程与活跃的热重载守护进程），确保健康的新 `KotlinCompileDaemon` 赢得选举并常驻内存保持 3~4 秒极速增量热更！
 
 - **功能说明文档生命周期与先锁后更铁律 (Feature Documentation Lifecycle & Pre-Post Redline)**: **【红线规则】**
   全项目功能基线与架构规范统一以根目录 `功能说明文档/` 目录下的系列文档为权威单一事实源。

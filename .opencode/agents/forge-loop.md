@@ -18,11 +18,13 @@ mode: all
 
 在被调用执行任何开发、调试与重构任务时，你必须首先进行多通道活体探测与状态调度：
 
-1. **第一梯队（最高优先级）：IntelliJ IDEA 研发宿主级 MCP (`idea_*`) —— 核心代码与构建中枢**：
-   - **职能定位**：专职于代码语义树速查、文件精准定位、语法错误速查（`idea_get_file_problems`）、**指定修改文件的精准毫秒级局部增量编译（`idea_build_project(filesToRebuild = [...])`）**，以及项目运行配置的原生托管调度（`idea_execute_run_configuration`）；
-   - **【局部增量编译铁律】**：代码修改后，**必须且仅能通过 `idea_build_project(filesToRebuild = [...])` 对实际修改的单/多文件执行毫秒级局部增量编译初筛**，确保 0 语法与编译错误后再推进；
+1. **第一梯队（最高优先级）：IntelliJ IDEA 研发宿主级 MCP (`idea_*`) —— 核心代码与静态检查中枢**：
+   - **职能定位**：专职于代码语义树速查、文件精准定位、**毫秒级静态语法错误速查（`idea_get_file_problems`）**、离线态局部增量编译（`idea_build_project(filesToRebuild = [...])`），以及项目运行配置的原生托管调度（`idea_execute_run_configuration`）；
+   - **【编译与热更单通道分流铁律（严禁双构建撞车抢锁）】**：
+     1. **当 `compose-hot-reload` 在线连接时（`connected == true`）**：代码修改后，**强制仅调用 `idea_get_file_problems` 进行毫秒级 PSI 静态语法速查**（不触发后台 Gradle 构建），确认 0 语法错误后，**直接调用 `tools["compose-hot-reload"].reload()` 作为唯一增量编译与字节码热替换通道**！**绝对禁止在 `reload()` 前后或 `reloadState == "reloading"` 期间调用 `idea_build_project`**，严防 IDEA 构建器与 Hot Reload Recompiler 同时争抢 `build/` 目录锁、污染增量快照并额外拉起第 2 个 4GB Gradle Daemon 导致数分钟全量慢编译！
+     2. **当 `compose-hot-reload` 离线或未启动热重载应用时**：通过 `idea_build_project(filesToRebuild = [...])` 对实际修改的单/多文件执行局部增量编译初筛；
    - **【全量 Gradle 绝对禁令】**：**严禁发起全量 Gradle 编译（如 `compileDesktop` 或 `:shared:compileKotlinJvm`）**，杜绝冗长等待与守护进程死锁；
-   - 触发阶段：需求调研、方案设计、编码修改、局部增量编译初筛全流程；
+   - 触发阶段：需求调研、方案设计、编码修改、静态语法初筛全流程；
 
 2. **第二梯队：Compose 官方专属热重载体系 (`compose-hot-reload_*`) —— 纯 UI 极速热替换与保活中枢**：
    - **职能定位**：专职于运行时纯 UI / Composable 组件视图与排版代码的秒级热重载替换（`tools["compose-hot-reload"].reload()`）、状态重置（`tools["compose-hot-reload"].reset_ui()`）与官方原生重启（`tools["compose-hot-reload"].restart()`）；
@@ -106,10 +108,11 @@ mode: all
    - 施工第一刻，必须将 `scratch/<task-name>.md` 顶部的 `status` 物理更新为 `AGREE_AND_EXECUTE`；
 2. **代码精准修改 (Edit/Write)**：
    - 遵循“一文件一 Composable”与设计系统 Tokens（`LocalAppSpacing`）规范，杜绝硬编码尺寸与多组件堆砌；
-3. **【核心生效通道】增量初筛与官方全生命周期热重载闭环规范 (Incremental Build & Hot Reload Lifecycle)**：
-   - **第一步：毫秒级局部增量编译初筛**：
-     - 代码编辑完成后，优先调用 `idea_get_file_problems` 进行语法速查；
-     - 接着调用 `idea_build_project(filesToRebuild = listOf(...))` 对修改的单个或几个文件执行精准局部增量编译，确认 `isSuccess = true, problems = []`；
+3. **【核心生效通道】静态初筛与官方全生命周期热重载单通道规范 (Static Check & Single-Channel Hot Reload Lifecycle)**：
+   - **第一步：毫秒级静态语法初筛与单通道编译分流**：
+     - 代码编辑完成后，**强制首先调用 `idea_get_file_problems` 进行毫秒级 PSI 静态语法速查**；
+     - **当 `compose-hot-reload` 在线连接时（`connected == true`）**：确认 `idea_get_file_problems` 为 0 错误后，**直接进入第二步调用 `tools["compose-hot-reload"].reload()`**（由 Hot Reload 内置 Recompiler 独占执行增量编译与字节码热替换），**此时绝对禁止在 `reload()` 前后或 `reloadState == "reloading"` 期间调用 `idea_build_project`**，彻底根除双构建器争抢 `build/` 锁与并发拉起多个 Gradle Daemon！
+     - **仅当 `compose-hot-reload` 离线未连接时**：才调用 `idea_build_project(filesToRebuild = listOf(...))` 对修改文件执行局部增量编译初筛；
      - **【红线铁律】绝对禁止执行全量 Gradle 任务（如 `compileDesktop`）！全量构建严禁出现在日常迭代流程中**；
    - **第二步：官方全生命周期三级生效标准（彻底杜绝强杀进程与无效冷启）**：
      - **第一级（状态级零杀重置，首选通道）**：
@@ -117,8 +120,8 @@ mode: all
      - **第二级（字节码热替换与状态闭环验证通道，日常代码开发）**：
        日常 UI 组件、排版、ViewModel 与业务逻辑修改后，必须遵循完整的双向闭环流水线：
        1. 发起热更：调用 `tools["compose-hot-reload"].reload({ timeout_seconds: 30 })`；
-       2. 状态闭环等待：若结果返回 `status == "reloading"`，必须轮询调用 `tools["compose-hot-reload"].status()`，直至 `reloadState` 从 `"reloading"` 稳定变为 `"ok"`（热更成功生效）或 `"failed"`（热更编译报错）；
-       3. 错误归因：若为 `"failed"`，必须调用 `status({ max_error_detail_lines: 50 })` 读取 `lastErrorDetails` 进行语法诊断，严禁未查明报错盲目尝试重启；
+       2. 状态闭环等待：若结果返回 `status == "reloading"`，必须轮询调用 `tools["compose-hot-reload"].status()`，直至 `reloadState` 从 `"reloading"` 稳定变为 `"ok"`（热更成功生效）或 `"failed"`（热更编译报错），**等待期间严禁并发调用 `idea_build_project`**；
+       3. 错误归因与僵尸 Daemon 巡检：若为 `"failed"`，必须调用 `status({ max_error_detail_lines: 50 })` 读取 `lastErrorDetails` 进行语法诊断；若发现热更耗时异常（> 20s），巡检 `%TEMP%\kotlin-daemon*.log` 是否存在卡死在 `actual: LastSession` 引发 `Assuming other daemons have higher prio` 选举自杀的陈旧僵尸 `KotlinCompileDaemon` 及 `%LOCALAPPDATA%\kotlin\daemon\*.run` 文件并执行定点清理；
      - **第三级（官方原生极速重启通道，不可热更结构变更时唯一通道）**：
        仅当修改了核心数据契约、依赖配置导致 Hot Reload 底层明确报错且无法热替换时，方允许触发进程重启。**此时必须且仅能调用官方原生重启工具**：
        ```typescript
@@ -145,8 +148,8 @@ mode: all
    - 定位具体承载业务逻辑的文件与组件（落实到底层具体实现体内，严禁就地乱堆代码）；
    - 直接编写并实现新功能逻辑本身，保持高内聚、低耦合与代码可维护性；
 2. **纯粹热重载极速生效流程**：
-   - 执行 `idea_build_project(filesToRebuild = [...])` 局部增量编译（确认 0 错误）；
-   - 调用官方 Compose 热重载（`compose-hot-reload.reload()`）秒级热替换；
+   - 执行 `idea_get_file_problems` 毫秒级静态语法初筛（确认 0 错误）；
+   - 当 `compose-hot-reload` 在线时直接调用 `compose-hot-reload.reload()` 单通道秒级热替换（严禁与 `idea_build_project` 并发双编）；仅当离线时使用 `idea_build_project(filesToRebuild = [...])`；
    - 若遇到无法热替换的底层变更，调用官方原生 `tools["compose-hot-reload"].restart()` 极速重启；
    - 严禁执行任何全量 Gradle 构建任务，严禁擅自使用 Shell 强杀冷启；
 3. **继续推进实机闭环测试 (Continuous Closed-Loop Testing)**：
