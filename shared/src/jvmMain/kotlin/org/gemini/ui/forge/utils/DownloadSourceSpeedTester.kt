@@ -6,6 +6,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.gemini.ui.forge.model.app.RemoteSourceMetadata
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URI
 import java.util.Locale
@@ -45,6 +47,39 @@ object DownloadSourceSpeedTester {
         "[国际/海外] 微软官方全球直链 (Microsoft aka.ms CDN)" to "https://aka.ms/getwinget",
         "[国际/海外] GitHub 官方全球主源 (GitHub Releases CDN)" to "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
     )
+
+    /**
+     * WinGet 官方完整前置运行库依赖包 (DesktopAppInstaller_Dependencies.zip) 候选下载源矩阵
+     * 内部包含 WinGet 运行所必需的 Microsoft.VCLibs.140.00、Microsoft.VCLibs.140.00.UWPDesktop、Microsoft.WindowsAppRuntime.1.8
+     */
+    val WINGET_DEPENDENCIES_SOURCES: List<Pair<String, String>> = listOf(
+        "[国内] GitHub 代理镜像 (GHProxy Mirror)" to "https://gh-proxy.com/https://github.com/microsoft/winget-cli/releases/latest/download/DesktopAppInstaller_Dependencies.zip",
+        "[国内] GitHub 高速镜像 (GHFast Mirror)" to "https://ghfast.top/https://github.com/microsoft/winget-cli/releases/latest/download/DesktopAppInstaller_Dependencies.zip",
+        "[国际/海外] GitHub 官方全球主源 (GitHub Releases CDN)" to "https://github.com/microsoft/winget-cli/releases/latest/download/DesktopAppInstaller_Dependencies.zip"
+    )
+
+    /**
+     * 本地环境安装包持久化下载与缓存目录：~/.geminiuiforge/downloads
+     */
+    val ENV_DOWNLOADS_DIR: File by lazy {
+        File(System.getProperty("user.home"), ".geminiuiforge/downloads").apply {
+            if (!exists()) {
+                mkdirs()
+            }
+        }
+    }
+
+    /**
+     * 探测本地下载目录中是否已存在有效的缓存安装包（对标 pip "Using cached ..."）
+     */
+    fun getCachedDownloadFile(fileName: String, expectedMinSizeBytes: Long = 1024L): File? {
+        val file = File(ENV_DOWNLOADS_DIR, fileName)
+        return if (file.exists() && file.isFile && file.length() >= expectedMinSizeBytes) {
+            file
+        } else {
+            null
+        }
+    }
 
     /**
      * Python 3.12.8 Windows 64位安装包候选下载源矩阵（涵盖国内高速镜像与国际/海外镜像）
@@ -175,6 +210,75 @@ object DownloadSourceSpeedTester {
             onLog(fallbackMsg)
             sources
         }
+    }
+
+    /**
+     * 对指定候选源发起快速探测，获取远程目标文件的权威物理大小（字节数）与断点续传支持状态
+     */
+    suspend fun probeRemoteMetadata(
+        sources: List<Pair<String, String>>,
+        timeoutMs: Int = 5_000
+    ): RemoteSourceMetadata? = withContext(Dispatchers.IO) {
+        for ((label, urlStr) in sources) {
+            var conn: HttpURLConnection? = null
+            try {
+                conn = (URI(urlStr).toURL().openConnection() as HttpURLConnection).apply {
+                    requestMethod = "HEAD"
+                    connectTimeout = timeoutMs
+                    readTimeout = timeoutMs
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GeminiUIForge/1.0")
+                    setRequestProperty("Accept", "*/*")
+                }
+                conn.connect()
+                var code = conn.responseCode
+                var length = conn.contentLengthLong
+                val acceptRanges = conn.getHeaderField("Accept-Ranges")
+                var supportsRange = acceptRanges?.contains("bytes", ignoreCase = true) == true
+
+                if (code == HttpURLConnection.HTTP_BAD_METHOD || code == HttpURLConnection.HTTP_FORBIDDEN || length <= 0L) {
+                    conn.disconnect()
+                    // 降级为 GET Range 探测真实 Content-Range
+                    conn = (URI(urlStr).toURL().openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = timeoutMs
+                        readTimeout = timeoutMs
+                        instanceFollowRedirects = true
+                        setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GeminiUIForge/1.0")
+                        setRequestProperty("Range", "bytes=0-0")
+                    }
+                    conn.connect()
+                    code = conn.responseCode
+                    if (code == 206) {
+                        supportsRange = true
+                        val contentRange = conn.getHeaderField("Content-Range")
+                        if (!contentRange.isNullOrBlank() && contentRange.contains("/")) {
+                            val totalStr = contentRange.substringAfterLast("/").trim()
+                            length = totalStr.toLongOrNull() ?: -1L
+                        }
+                    } else if (code in 200..299) {
+                        length = conn.contentLengthLong
+                    }
+                }
+
+                if (code in 200..399 && length > 0L) {
+                    AppLogger.i(TAG, "[$label] 成功探测到远程文件权威元数据: 大小 $length 字节, 支持Range: $supportsRange")
+                    return@withContext RemoteSourceMetadata(
+                        sourceLabel = label,
+                        sourceUrl = urlStr,
+                        contentLength = length,
+                        supportsRange = supportsRange
+                    )
+                }
+            } catch (e: Exception) {
+                AppLogger.d(TAG, "[$label] 探测元数据跳过: ${e.message}")
+            } finally {
+                try {
+                    conn?.disconnect()
+                } catch (_: Exception) {}
+            }
+        }
+        null
     }
 
     /**

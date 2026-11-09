@@ -13,6 +13,15 @@ expect class LocalFileStorage() {
     suspend fun saveToFile(fileName: String, content: String): String
 
     /**
+     * 将字符串文本以原子方式 (Temporary Swap + fsync + Atomic Move) 保存到指定文件中
+     * 具备断电与崩溃保护，保证文件不会产生零字节或损坏半写
+     * @param fileName 目标文件名（可包含相对路径）
+     * @param content 待写入的完整文本
+     * @return 文件的本地绝对路径
+     */
+    suspend fun saveToFileAtomic(fileName: String, content: String): String
+
+    /**
      * 将二进制字节数据保存到指定文件中
      * @param fileName 目标文件名（可包含相对路径）
      * @param bytes 待保存的字节数组

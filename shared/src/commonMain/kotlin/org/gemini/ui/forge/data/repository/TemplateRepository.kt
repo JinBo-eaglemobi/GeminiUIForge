@@ -12,6 +12,9 @@ import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.model.app.UIModule
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIStudioPage
+import org.gemini.ui.forge.model.ui.UIStudioProjectConfig
+import org.gemini.ui.forge.model.ui.UIStudioPageIndexItem
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -144,15 +147,82 @@ class TemplateRepository(
 
     /**
      * 保存项目模板到本地。
+     * 遵循工业级分包复合文档规范（Figma/VSCode 模式）：
+     * - UI Studio 工程：彻底将 template.json 重构为纯粹的「项目级公用配置文件 (UIStudioProjectConfig)」，
+     *   仅保存工程元信息及轻量页面文件索引清单（pageIndex: id, name, fileRelPath），彻底剥离界面专属私有信息；
+     *   各平级视图界面的独立宽高、背景色及完整图元树 100% 单独保存至 pages/{page.id}.json（原子刷盘）。
+     * - 传统 Slots 模板工程：保持原有 ProjectState 结构兼容。
      */
     suspend fun saveTemplate(templateName: String, projectState: ProjectState) {
-        val sanitizedName = templateName.replace(" ", "_")
-        AppLogger.i("TemplateRepository", "💾 开始保存模板 JSON: $templateName")
+        val sanitizedName = sanitizeName(templateName)
+        AppLogger.i("TemplateRepository", "💾 开始保存模板配置: $templateName")
 
-        val jsonRelPath = "$PROJECTS_DIR/$sanitizedName/template.json"
-        val content = looseJson.encodeToString(projectState)
-        fileStorage.saveToFile(jsonRelPath, content)
-        AppLogger.i("TemplateRepository", "✅ 模板 JSON 已更新")
+        if (projectState.isUiStudioProject) {
+            val pagesDir = "$PROJECTS_DIR/$sanitizedName/pages"
+            // 1. 各平级页面完整数据独立写入 pages/{page.id}.json（原子刷盘）
+            projectState.studioPages.forEach { page ->
+                try {
+                    val pageJson = looseJson.encodeToString(page)
+                    fileStorage.saveToFileAtomic("$pagesDir/${page.id}.json", pageJson)
+                } catch (e: Exception) {
+                    AppLogger.e("TemplateRepository", "❌ 保存独立页面失败: ${page.id}", e)
+                }
+            }
+
+            // 2. 主 template.json 写入纯净的项目级公用配置（仅含元数据与页面轻量文件索引，无任何页面私有信息）
+            val projectConfig = UIStudioProjectConfig(
+                projectId = projectState.projectId,
+                projectName = sanitizedName,
+                formatVersion = "2.0",
+                createdAt = projectState.createdAt,
+                updatedAt = org.gemini.ui.forge.getCurrentTimeMillis(),
+                defaultCanvasWidth = projectState.studioPages.firstOrNull()?.width ?: 1080f,
+                defaultCanvasHeight = projectState.studioPages.firstOrNull()?.height ?: 1920f,
+                activeViewId = projectState.studioPages.firstOrNull()?.id,
+                pageIndex = projectState.studioPages.map { page ->
+                    UIStudioPageIndexItem(
+                        id = page.id,
+                        nameStr = page.nameStr,
+                        fileRelPath = "pages/${page.id}.json"
+                    )
+                }
+            )
+            val jsonRelPath = "$PROJECTS_DIR/$sanitizedName/template.json"
+            val configJson = looseJson.encodeToString(projectConfig)
+            fileStorage.saveToFileAtomic(jsonRelPath, configJson)
+            AppLogger.i("TemplateRepository", "✅ 项目公用配置 (template.json) 与独立页面已全部原子更新: $templateName")
+        } else {
+            // 传统 Slots 模板工程保持原有结构兼容
+            val jsonRelPath = "$PROJECTS_DIR/$sanitizedName/template.json"
+            val content = looseJson.encodeToString(projectState)
+            fileStorage.saveToFileAtomic(jsonRelPath, content)
+            AppLogger.i("TemplateRepository", "✅ Slots 模板 JSON 已原子更新: $templateName")
+        }
+    }
+
+    /**
+     * 单独保存指定页面到 pages/{page.id}.json（极速单页面原子落盘，无需重写主清单和其他页面）。
+     */
+    suspend fun saveStudioPage(templateName: String, page: UIStudioPage) {
+        val sanitizedName = sanitizeName(templateName)
+        val pageRelPath = "$PROJECTS_DIR/$sanitizedName/pages/${page.id}.json"
+        val pageJson = looseJson.encodeToString(page)
+        fileStorage.saveToFileAtomic(pageRelPath, pageJson)
+        AppLogger.d("TemplateRepository", "📄 独立页面已原子更新: ${page.id}")
+    }
+
+    /**
+     * 删除指定的独立页面文件。
+     */
+    suspend fun deleteStudioPage(templateName: String, pageId: String) {
+        val sanitizedName = sanitizeName(templateName)
+        val pageRelPath = "$PROJECTS_DIR/$sanitizedName/pages/$pageId.json"
+        try {
+            deleteLocalFile(fileStorage.getFilePath(pageRelPath))
+            AppLogger.d("TemplateRepository", "🗑️ 独立页面文件已删除: $pageId")
+        } catch (e: Exception) {
+            AppLogger.w("TemplateRepository", "⚠️ 删除页面文件失败: $pageId: ${e.message}")
+        }
     }
 
     /**
@@ -231,6 +301,152 @@ class TemplateRepository(
     fun sanitizeName(name: String): String = name.trim().replace(" ", "_")
 
     /**
+     * 组装完整的 UIStudioPage 列表：
+     * 1. 若 pages/ 目录存在独立页面 JSON，按主清单顺序（及目录增量文件）组装完整 blocks；
+     * 2. 若 pages/ 不存在（老工程），直接使用 template.json 中自带的 studioPages，并自动自愈拆分存盘至 pages/ 目录。
+     */
+    private suspend fun assembleStudioPages(sanitizedName: String, projectState: ProjectState): ProjectState {
+        val pagesDir = "$PROJECTS_DIR/$sanitizedName/pages"
+        val pageFiles = try {
+            if (fileStorage.exists(pagesDir)) fileStorage.listFiles(pagesDir).filter { it.endsWith(".json") } else emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        if (pageFiles.isNotEmpty()) {
+            val loadedPagesMap = mutableMapOf<String, UIStudioPage>()
+            for (fileName in pageFiles) {
+                try {
+                    val content = fileStorage.readFromFile("$pagesDir/$fileName")
+                    if (!content.isNullOrBlank()) {
+                        val page = looseJson.decodeFromString<UIStudioPage>(content)
+                        loadedPagesMap[page.id] = page
+                    }
+                } catch (e: Exception) {
+                    AppLogger.e("TemplateRepository", "❌ 读取独立页面失败: $fileName", e)
+                }
+            }
+
+            // 优先按照主清单的顺序重组，并补齐目录中存在但清单遗漏的页面
+            val assembledPages = mutableListOf<UIStudioPage>()
+            val visitedIds = mutableSetOf<String>()
+            for (summary in projectState.studioPages) {
+                val fullPage = loadedPagesMap[summary.id] ?: summary
+                assembledPages.add(fullPage)
+                visitedIds.add(summary.id)
+            }
+            for ((id, page) in loadedPagesMap) {
+                if (!visitedIds.contains(id)) {
+                    assembledPages.add(page)
+                }
+            }
+            return projectState.copy(studioPages = assembledPages)
+        } else if (projectState.studioPages.isNotEmpty()) {
+            // 老工程自愈升级：老 template.json 中已带有完整 blocks，自动无感拆分写入 pages/ 目录
+            AppLogger.i("TemplateRepository", "🔄 检测到存量工程，正在自动拆分为独立页面存储: $sanitizedName")
+            for (page in projectState.studioPages) {
+                try {
+                    val pageJson = looseJson.encodeToString(page)
+                    fileStorage.saveToFileAtomic("$pagesDir/${page.id}.json", pageJson)
+                } catch (e: Exception) {
+                    AppLogger.w("TemplateRepository", "⚠️ 老工程拆分保存失败: ${page.id}: ${e.message}")
+                }
+            }
+        }
+        return projectState
+    }
+
+    /**
+     * 单点统一解析 template.json 内容：优先按照 UIStudioProjectConfig 纯净公用配置解码并组装独立页面；
+     * 优雅向后兼容存量旧版 ProjectState 并在读取时无感拆分。
+     */
+    private suspend fun parseTemplateJsonContent(dirName: String, content: String): ProjectState? {
+        val sanitizedName = sanitizeName(dirName)
+        // 1. 优先尝试解析为全新的纯净项目级公用配置 (UIStudioProjectConfig)
+        if (content.contains("\"formatVersion\"") && content.contains("\"pageIndex\"")) {
+            try {
+                val config = looseJson.decodeFromString<UIStudioProjectConfig>(content)
+                val assembledPages = assembleStudioPagesFromConfig(sanitizedName, config)
+                val activeId = config.activeViewId ?: assembledPages.firstOrNull()?.id ?: "MainPage"
+                val runtimeState = ProjectState(
+                    projectId = config.projectId,
+                    pages = emptyList(),
+                    studioPages = assembledPages,
+                    createdAt = config.createdAt
+                )
+                return validateAndCleanMissingReferencesInMemory(runtimeState)
+            } catch (e: Exception) {
+                AppLogger.w("TemplateRepository", "⚠️ 尝试按 UIStudioProjectConfig 解析失败，将降级尝试传统格式: $dirName: ${e.message}")
+            }
+        }
+
+        // 2. 存量老工程兼容：解码旧版 ProjectState 并自动组装/无感拆分
+        return try {
+            val state = looseJson.decodeFromString<ProjectState>(content)
+            val assembled = assembleStudioPages(sanitizedName, state)
+            validateAndCleanMissingReferencesInMemory(assembled)
+        } catch (e: Exception) {
+            AppLogger.e("TemplateRepository", "❌ 解析模板 JSON 失败: $dirName", e)
+            null
+        }
+    }
+
+    /**
+     * 从 UIStudioProjectConfig 的页面索引清单中读取 pages/ 目录下的独立页面 JSON 组装完整 studioPages
+     */
+    private suspend fun assembleStudioPagesFromConfig(sanitizedName: String, config: UIStudioProjectConfig): List<UIStudioPage> {
+        val pagesDir = "$PROJECTS_DIR/$sanitizedName/pages"
+        val loadedPagesMap = mutableMapOf<String, UIStudioPage>()
+
+        val pageFiles = try {
+            if (fileStorage.exists(pagesDir)) fileStorage.listFiles(pagesDir).filter { it.endsWith(".json") } else emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        for (fileName in pageFiles) {
+            try {
+                val content = fileStorage.readFromFile("$pagesDir/$fileName")
+                if (!content.isNullOrBlank()) {
+                    val page = looseJson.decodeFromString<UIStudioPage>(content)
+                    loadedPagesMap[page.id] = page
+                }
+            } catch (e: Exception) {
+                AppLogger.e("TemplateRepository", "❌ 读取独立页面失败: $fileName", e)
+            }
+        }
+
+        val result = mutableListOf<UIStudioPage>()
+        val visitedIds = mutableSetOf<String>()
+
+        // 按照配置中的 pageIndex 顺序加载
+        for (indexItem in config.pageIndex) {
+            val fullPage = loadedPagesMap[indexItem.id]
+            if (fullPage != null) {
+                result.add(fullPage)
+                visitedIds.add(indexItem.id)
+            } else {
+                val fallback = UIStudioPage(id = indexItem.id, nameStr = indexItem.nameStr)
+                result.add(fallback)
+                visitedIds.add(indexItem.id)
+            }
+        }
+
+        // 自动收录 pages/ 目录下存在但清单未记录的孤儿页面文件（磁盘物理双向同步与自愈）
+        for ((id, page) in loadedPagesMap) {
+            if (!visitedIds.contains(id)) {
+                result.add(page)
+            }
+        }
+
+        if (result.isEmpty()) {
+            result.add(UIStudioPage(id = "MainPage", nameStr = "MainPage", width = config.defaultCanvasWidth, height = config.defaultCanvasHeight))
+        }
+
+        return result
+    }
+
+    /**
      * 根据名称直接精确定位读取单个模板（支持原始下划线名与带空格名称，无需扫描全部目录）
      */
     suspend fun getTemplateByName(name: String): ProjectState? {
@@ -238,12 +454,8 @@ class TemplateRepository(
         val directPath = "$PROJECTS_DIR/$sanitizedName/template.json"
         val directContent = fileStorage.readFromFile(directPath)
         if (directContent != null) {
-            try {
-                val state = looseJson.decodeFromString<ProjectState>(directContent)
-                return validateAndCleanMissingReferencesInMemory(state)
-            } catch (e: Exception) {
-                AppLogger.e("TemplateRepository", "❌ 解析直接模板 JSON 失败: $sanitizedName", e)
-            }
+            val state = parseTemplateJsonContent(sanitizedName, directContent)
+            if (state != null) return state
         }
 
         // 兜底扫描：若直接定位未命中，在已有工程列表中做不区分大小写与下划线/空格的宽容匹配
@@ -285,17 +497,12 @@ class TemplateRepository(
             val relativePath = "$PROJECTS_DIR/$dirName"
             val content = fileStorage.readFromFile("$relativePath/template.json")
             if (content != null) {
-                try {
-                    val state = looseJson.decodeFromString<ProjectState>(content)
-                    // ★ 内存安全物理校验：检查所有模块的 referenceImage 物理文件是否存在，若丢失则仅在内存中置空，绝不主动落盘写磁盘
-                    val validatedState = validateAndCleanMissingReferencesInMemory(state)
+                val state = parseTemplateJsonContent(dirName, content)
+                if (state != null) {
                     val title = dirName.replace("_", " ")
                     AppLogger.d("TemplateRepository", "📖 已加载模板并完成内存参考图校验: $title")
-                    title to validatedState
-                } catch (e: Exception) {
-                    AppLogger.e("TemplateRepository", "❌ 解析模板 JSON 失败: $dirName", e)
-                    null
-                }
+                    title to state
+                } else null
             } else null
         }
     }

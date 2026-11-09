@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddBox
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -19,6 +20,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.extend.contextMenuClickable
 import org.gemini.ui.forge.model.ui.UIStudioPage
@@ -76,20 +78,25 @@ fun UIStudioViewRowItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = page.nameStr,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "${page.width.toInt()} × ${page.height.toInt()} · ${page.blocks.size} 个图元",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = page.nameStr,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${page.width.toInt()} × ${page.height.toInt()} · ${page.blocks.size} 个图元",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -162,6 +169,14 @@ fun UIStudioViewRowItem(
                 onClick = {
                     showContextMenu = false
                     viewModel.pageManager.duplicateView(page, templateRepo)
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("作为组件实例插入当前视图", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
+                leadingIcon = { Icon(Icons.Default.AddBox, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                onClick = {
+                    showContextMenu = false
+                    viewModel.canvasEditor.insertPageInstance(page.id, templateRepo)
                 }
             )
             if (canDelete) {

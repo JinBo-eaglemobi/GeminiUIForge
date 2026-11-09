@@ -108,6 +108,69 @@ fun GeneralSettings(
         }
     }
 
+    // --- Windows Run As Administrator Setting ---
+    if (getPlatform().isRunAsAdminSupported) {
+        var runAsAdmin by remember { mutableStateOf(getPlatform().isRunAsAdminEnabled()) }
+        var showAdminRestartDialog by remember { mutableStateOf(false) }
+
+        if (showAdminRestartDialog) {
+            AlertDialog(
+                onDismissRequest = { showAdminRestartDialog = false },
+                title = { Text(stringResource(Res.string.dialog_run_as_admin_restart_title)) },
+                text = { Text(stringResource(Res.string.dialog_run_as_admin_restart_desc)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        coroutineScope.launch {
+                            getPlatform().applyUpdateAndRestart("")
+                        }
+                    }) {
+                        Text(stringResource(Res.string.action_restart_now))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAdminRestartDialog = false }) {
+                        Text(stringResource(Res.string.action_restart_later))
+                    }
+                }
+            )
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            shape = AppShapes.medium,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ) {
+            androidx.compose.foundation.layout.Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+            ) {
+                androidx.compose.foundation.layout.Column(
+                    modifier = Modifier.weight(1f).padding(end = 16.dp)
+                ) {
+                    Text(
+                        text = stringResource(Res.string.settings_run_as_admin_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = stringResource(Res.string.settings_run_as_admin_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+                }
+                Switch(
+                    checked = runAsAdmin,
+                    onCheckedChange = { checked ->
+                        runAsAdmin = checked
+                        getPlatform().setRunAsAdminEnabled(checked)
+                        showAdminRestartDialog = true
+                    }
+                )
+            }
+        }
+    }
+
     // Theme Dropdown
     var themeExpanded by remember { mutableStateOf(false) }
     val themeOptions = listOf(

@@ -46,6 +46,7 @@ data class UIStudioBlock(
     override val scaleX: Float = 1.0f,
     override val scaleY: Float = 1.0f,
     override val opacity: Float = 1.0f,
+    val targetPageId: String? = null, // ★ 绑定的独立子页面 ID（若该图元为复合组件/界面实例，对应其在 studioPages 中的独立页面）
     // ★ 运行时持有直接父级引用，主构造函数声明 + @Transient 阻断 JSON 序列化，copy() 自动继承，永不断裂！
     @Transient
     override val parent: UIStudioBlock? = null

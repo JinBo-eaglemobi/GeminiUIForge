@@ -18,8 +18,10 @@ import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.uistudio.LayoutUndoSnapshot
 import org.gemini.ui.forge.ui.uistudio.UIStudioLeftBottomTab
 import org.gemini.ui.forge.ui.uistudio.UIStudioState
+import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.Toast
+import org.gemini.ui.forge.utils.bindParents
 
 /**
  * UI Studio 布局应用领域委托 (aiLayout)
@@ -200,6 +202,74 @@ class AiLayoutDelegate(
      */
     fun cancelApplyLayout() {
         state = state.copy(pendingLayoutResult = null)
+    }
+
+    /**
+     * 执行大模型派发的局部图元补丁 (patch_view_elements)。
+     * 具备 All-or-Nothing 事务性、单页面独立原子保存，并自动联动所有引用该页面的图元实例。
+     */
+    fun executePatchViewElements(args: JsonObject): UiStudioLayoutService.PatchElementsResult {
+        val proj = state.project ?: return UiStudioLayoutService.PatchElementsResult(false, errorMessage = "当前未加载工程项目")
+        val viewName = args["viewName"]?.jsonPrimitive?.contentOrNull
+        val targetPage = if (!viewName.isNullOrBlank()) {
+            proj.studioPages.find { it.nameStr.equals(viewName, ignoreCase = true) || it.id == viewName }
+                ?: return UiStudioLayoutService.PatchElementsResult(false, errorMessage = "未找到目标视图页面: $viewName")
+        } else {
+            state.currentView ?: proj.studioPages.firstOrNull()
+                ?: return UiStudioLayoutService.PatchElementsResult(false, errorMessage = "当前工作区无可用视图页面")
+        }
+
+        val patchResult = UiStudioLayoutService.patchViewElements(targetPage, state.assetLibrary, args)
+        if (!patchResult.isSuccess || patchResult.updatedPage == null) {
+            return patchResult
+        }
+
+        val updatedPage = patchResult.updatedPage
+        val repo = TemplateRepository(storage)
+
+        // 1. 更新 studioPages
+        var updatedPages = proj.studioPages.map { if (it.id == updatedPage.id) updatedPage else it }
+
+        // 2. 跨页面多重引用镜像同步：将更新后的 blocks 递归同步到所有引用该平级页面的图元内部
+        updatedPages = updatedPages.map { p ->
+            if (p.id != updatedPage.id) {
+                val syncedBlocks = syncReferencedChildren(p.blocks, updatedPage.id, updatedPage.blocks)
+                if (syncedBlocks != p.blocks) p.copy(blocks = syncedBlocks) else p
+            } else p
+        }
+
+        val updatedProj = proj.copy(studioPages = updatedPages)
+        state = state.copy(project = updatedProj, isDirty = true)
+
+        // 3. 独立单页面原子刷盘
+        scope.launch {
+            repo.saveStudioPage(proj.projectId, updatedPage)
+        }
+
+        scope.launch(Dispatchers.Main) {
+            Toast.show(patchResult.summary, ToastType.SUCCESS)
+        }
+
+        return patchResult
+    }
+
+    private fun syncReferencedChildren(
+        blocks: List<UIStudioBlock>,
+        targetPageId: String,
+        syncedChildren: List<UIStudioBlock>
+    ): List<UIStudioBlock> {
+        return blocks.map { block ->
+            val updatedBlock = if (block.targetPageId == targetPageId) {
+                block.copy(children = syncedChildren)
+            } else {
+                block
+            }
+            if (updatedBlock.children.isNotEmpty() && updatedBlock.targetPageId != targetPageId) {
+                updatedBlock.copy(children = syncReferencedChildren(updatedBlock.children, targetPageId, syncedChildren))
+            } else {
+                updatedBlock
+            }
+        }.bindParents()
     }
 
     /**

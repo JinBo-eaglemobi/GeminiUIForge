@@ -500,8 +500,10 @@ private fun BlockPreviewView(
                     shape = RoundedCornerShape(4.dp),
                     color = MaterialTheme.colorScheme.secondaryContainer
                 ) {
+                    val origW = bitmap?.width ?: blockW
+                    val origH = bitmap?.height ?: blockH
                     Text(
-                        text = "$blockW × $blockH px",
+                        text = "$origW × $origH px",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)

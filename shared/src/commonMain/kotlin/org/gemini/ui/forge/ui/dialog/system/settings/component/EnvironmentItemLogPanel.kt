@@ -11,9 +11,12 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +38,7 @@ import org.gemini.ui.forge.ui.component.AppIconButton
 import org.gemini.ui.forge.ui.component.AppIconButtonTier
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
+import org.gemini.ui.forge.utils.EnvCliPromptCoordinator
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -52,6 +56,9 @@ fun EnvironmentItemLogPanel(
     val copyAction = rememberClipboardAction()
     val copySuccessTip = stringResource(Res.string.env_log_copied)
     val isUninstallFlow = item.isUninstallAction || item.installLogs.firstOrNull()?.startsWith("开始卸载") == true
+
+    val activePrompts by EnvCliPromptCoordinator.activePrompts.collectAsState()
+    val activePromptMsg = activePrompts[item.name.lowercase()] ?: activePrompts[item.name]
 
     Surface(
         modifier = modifier.fillMaxWidth().padding(vertical = spacing.extraSmall),
@@ -225,10 +232,13 @@ fun EnvironmentItemLogPanel(
                     }
                 }
 
+                val minLogPanelHeight = spacing.dialogListMaxHeight * 0.6f
+                val maxLogPanelHeight = spacing.dialogListMaxHeight * 1.4f
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 60.dp, max = 150.dp)
+                        .heightIn(min = minLogPanelHeight, max = maxLogPanelHeight)
                         .background(Color.Black, AppShapes.small)
                         .padding(spacing.small)
                 ) {
@@ -250,6 +260,78 @@ fun EnvironmentItemLogPanel(
 
                     LaunchedEffect(item.installLogs.size) {
                         logScroll.animateScrollTo(logScroll.maxValue)
+                    }
+                }
+            }
+
+            // 4. CLI 风格交互式请示卡片（对标传统终端交互 [Y/n] 按钮）
+            if (activePromptMsg != null) {
+                Spacer(Modifier.height(spacing.extraSmall))
+                Surface(
+                    shape = AppShapes.small,
+                    color = Color(0xFF282A36),
+                    border = BorderStroke(1.dp, Color(0xFFFFB86C)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = spacing.small, vertical = spacing.extraSmall),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f).padding(end = spacing.small)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.HelpOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = Color(0xFFFFB86C)
+                            )
+                            Spacer(Modifier.width(spacing.small))
+                            Text(
+                                text = activePromptMsg.orEmpty(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFFB86C)
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Button(
+                                onClick = { EnvCliPromptCoordinator.respond(item.name, true) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF50FA7B),
+                                    contentColor = Color.Black
+                                ),
+                                contentPadding = PaddingValues(horizontal = spacing.small, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp),
+                                shape = AppShapes.small
+                            ) {
+                                Text(
+                                    text = stringResource(Res.string.env_cli_prompt_yes),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(Modifier.width(spacing.extraSmall))
+                            OutlinedButton(
+                                onClick = { EnvCliPromptCoordinator.respond(item.name, false) },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color(0xFFFF5555)
+                                ),
+                                border = BorderStroke(1.dp, Color(0xFFFF5555)),
+                                contentPadding = PaddingValues(horizontal = spacing.small, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp),
+                                shape = AppShapes.small
+                            ) {
+                                Text(
+                                    text = stringResource(Res.string.env_cli_prompt_no),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }

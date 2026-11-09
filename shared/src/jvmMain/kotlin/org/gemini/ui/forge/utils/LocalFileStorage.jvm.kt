@@ -111,6 +111,47 @@ actual class LocalFileStorage {
         return@withContext target.absolutePath
     }
 
+    actual suspend fun saveToFileAtomic(fileName: String, content: String): String = withContext(Dispatchers.IO) {
+        val target = resolveEntryPath(fileName)
+        val parent = target.parentFile
+        parent.mkdirs()
+
+        val tempFile = java.io.File(parent, "${target.name}.${java.util.UUID.randomUUID().toString().take(8)}.tmp")
+        try {
+            java.io.FileOutputStream(tempFile).use { fos ->
+                fos.write(content.toByteArray(Charsets.UTF_8))
+                fos.flush()
+                try {
+                    fos.fd.sync()
+                } catch (ignored: Exception) {
+                    // 部分虚拟文件系统不支持底层 fsync，忽略警告
+                }
+            }
+
+            val targetPath = target.toPath()
+            val tempPath = tempFile.toPath()
+            try {
+                java.nio.file.Files.move(
+                    tempPath,
+                    targetPath,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                )
+            } catch (e: java.nio.file.AtomicMoveNotSupportedException) {
+                java.nio.file.Files.move(
+                    tempPath,
+                    targetPath,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                )
+            }
+            AppLogger.d("LocalFileStorage", "⚡ [Atomic] 文本已安全落盘: $fileName (${content.length} chars)")
+            return@withContext target.absolutePath
+        } catch (e: Exception) {
+            if (tempFile.exists()) tempFile.delete()
+            throw e
+        }
+    }
+
     actual suspend fun saveBytesToFile(fileName: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
         val target = resolveEntryPath(fileName)
         target.parentFile.mkdirs()

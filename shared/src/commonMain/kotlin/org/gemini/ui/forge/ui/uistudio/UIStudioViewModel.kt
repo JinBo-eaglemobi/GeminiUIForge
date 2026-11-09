@@ -76,7 +76,8 @@ class UIStudioViewModel {
      * @param project 传入的工程对象，若为 null 则自动创建默认空白工程
      */
     fun loadProject(project: ProjectState?) {
-        val effectiveProject = project ?: createDefaultBlankProject("NewUIStudioProject", 1920f, 1080f)
+        val rawProject = project ?: createDefaultBlankProject("NewUIStudioProject", 1920f, 1080f)
+        val effectiveProject = pageManager.healStudioPagesAndComponents(rawProject)
         val firstPage = effectiveProject.studioPages.firstOrNull()
         val initialWidth = firstPage?.width?.takeIf { it > 0 } ?: 1920f
         val initialHeight = firstPage?.height?.takeIf { it > 0 } ?: 1080f

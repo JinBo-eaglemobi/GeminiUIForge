@@ -162,14 +162,14 @@ fun UIStudioBlockItem(
                 } else Modifier
             )
     ) {
-        // 渲染切片图片本体（纯容器不渲染底图，保持透明；使用 Fit 保持原始纵横比，绝不拉伸变形）
+        // 渲染切片图片本体（纯容器不渲染底图，保持透明；使用 FillBounds 严格贴合组件边界）
         val bmp = imageBitmap
         if (bmp != null && !isPureContainer) {
             Image(
                 bitmap = bmp,
                 contentDescription = displayName,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit
+                contentScale = ContentScale.FillBounds
             )
         } else if (isAssetMissing && !isPureContainer) {
             // 「资源丢失」专属占位框：红调警示 + 破图图标 + 双行文案

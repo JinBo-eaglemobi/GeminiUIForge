@@ -127,6 +127,22 @@ class JVMPlatform : Platform {
             e.printStackTrace()
         }
     }
+
+    override val isRunAsAdminSupported: Boolean
+        get() = hostOs.isWindows
+
+    override fun isRunAsAdminEnabled(): Boolean =
+        org.gemini.ui.forge.utils.SystemElevationHelper.isRunAsAdminEnabled()
+
+    override fun setRunAsAdminEnabled(enabled: Boolean) {
+        org.gemini.ui.forge.utils.SystemElevationHelper.setRunAsAdminEnabled(enabled)
+    }
+
+    override fun isAdministrator(): Boolean =
+        org.gemini.ui.forge.utils.SystemElevationHelper.isAdministrator()
+
+    override fun requestAdminElevationAndRestart(): Boolean =
+        org.gemini.ui.forge.utils.SystemElevationHelper.tryElevateSelfOnWindows(emptyArray())
 }
 
 actual fun getPlatform(): Platform = JVMPlatform()

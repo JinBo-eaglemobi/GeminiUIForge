@@ -426,8 +426,12 @@ fun EnvironmentSettings(
 
         if (isPipActionInProgress && pipLogs.isNotEmpty()) {
             Box(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp)
-                    .background(Color.Black).padding(LocalAppSpacing.current.small)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = spacing.extraSmall)
+                    .heightIn(min = spacing.dialogListMaxHeight * 0.6f, max = spacing.dialogListMaxHeight * 1.4f)
+                    .background(Color.Black, AppShapes.small)
+                    .padding(spacing.small)
             ) {
                 val logScroll = rememberScrollState()
                 Text(
@@ -663,8 +667,12 @@ fun EnvironmentSettings(
 
         if (isPipActionInProgress && pipLogs.isNotEmpty()) {
             Box(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(max = 120.dp)
-                    .background(Color.Black).padding(LocalAppSpacing.current.small)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = spacing.extraSmall)
+                    .heightIn(min = spacing.dialogListMaxHeight * 0.6f, max = spacing.dialogListMaxHeight * 1.4f)
+                    .background(Color.Black, AppShapes.small)
+                    .padding(spacing.small)
             ) {
                 val logScroll = rememberScrollState()
                 Text(

@@ -333,13 +333,84 @@ class CanvasEditorDelegate(
 
     fun updateBlockBounds(blockId: String, left: Float, top: Float, width: Float, height: Float, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
-        val updatedBlocks = view.blocks.map {
-            if (it.id == blockId) it.copy(bounds = SerialRect(left, top, left + width, top + height)) else it
-        }
-        val updatedPages = state.project?.studioPages?.map {
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
+            it.copy(bounds = SerialRect(left, top, left + width, top + height))
+        }.bindParents()
+
+        val proj = state.project ?: return
+        var updatedPages = proj.studioPages.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
-        } ?: return
-        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
+        }
+
+        // 自动将当前视图变动后的 blocks 镜像同步到所有引用了当前页面的图元实例 (targetPageId == view.id) 中
+        updatedPages = updatedPages.map { p ->
+            if (p.id != view.id) {
+                val synced = syncReferencedPageChildren(p.blocks, view.id, updatedBlocks)
+                if (synced != p.blocks) p.copy(blocks = synced) else p
+            } else p
+        }
+
+        // 若当前修改的 block 本身绑定了平级页面，同步更新该目标平级页面的画布宽高
+        val targetBlock = view.blocks.findBlockById(blockId) as? UIStudioBlock
+        val targetPageId = targetBlock?.targetPageId
+        if (targetPageId != null) {
+            updatedPages = updatedPages.map { p ->
+                if (p.id == targetPageId) p.copy(width = width, height = height) else p
+            }
+        }
+
+        state = state.copy(project = proj.copy(studioPages = updatedPages), isDirty = true)
+    }
+
+    /**
+     * 将指定组件的宽高复位为其绑定图片的原本真实物理尺寸（或引用平级页面的原本尺寸）。
+     * 保持左上角 (left, top) 坐标不变。
+     * 返回复位后的 (width, height)；若无法解析出原始尺寸则返回 null。
+     */
+    fun resetBlockBoundsToOriginalSize(blockId: String, repo: TemplateRepository = TemplateRepository()): Pair<Int, Int>? {
+        val view = state.currentView ?: return null
+        val targetBlock = (view.blocks.findBlockById(blockId) as? UIStudioBlock) ?: return null
+
+        // 1. 优先从素材库根据 assetHash 解析图片真实物理尺寸
+        val assetItem = targetBlock.assetHash?.let { hash ->
+            state.assetLibrary.items.find { it.hash == hash }
+        }
+
+        // 2. 其次若绑定了引用平级页面，读取该页面的尺寸
+        val targetPage = targetBlock.targetPageId?.let { pageId ->
+            state.project?.studioPages?.find { it.id == pageId }
+        }
+
+        val origW = when {
+            assetItem != null && assetItem.width > 0 -> assetItem.width
+            targetPage != null && targetPage.width > 0 -> targetPage.width.toInt()
+            else -> null
+        }
+
+        val origH = when {
+            assetItem != null && assetItem.height > 0 -> assetItem.height
+            targetPage != null && targetPage.height > 0 -> targetPage.height.toInt()
+            else -> null
+        }
+
+        if (origW == null || origH == null) {
+            Toast.show("未找到该组件绑定的原图物理尺寸", ToastType.INFO)
+            return null
+        }
+
+        val currentLeft = targetBlock.bounds.left
+        val currentTop = targetBlock.bounds.top
+        updateBlockBounds(
+            blockId = blockId,
+            left = currentLeft,
+            top = currentTop,
+            width = origW.toFloat(),
+            height = origH.toFloat(),
+            repo = repo
+        )
+
+        Toast.show("已将宽高复位为原图尺寸: $origW × $origH px", ToastType.SUCCESS)
+        return Pair(origW, origH)
     }
 
     /**
@@ -364,10 +435,20 @@ class CanvasEditorDelegate(
             val newTop = b.top + dy
             block.copy(bounds = SerialRect(newLeft, newTop, newLeft + w, newTop + h))
         }.bindParents()
-        val updatedPages = state.project?.studioPages?.map {
+        val proj = state.project ?: return
+        var updatedPages = proj.studioPages.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
-        } ?: return
-        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
+        }
+
+        // 自动将当前视图变动后的 blocks 镜像同步到所有引用了当前页面的图元实例 (targetPageId == view.id) 中
+        updatedPages = updatedPages.map { p ->
+            if (p.id != view.id) {
+                val synced = syncReferencedPageChildren(p.blocks, view.id, updatedBlocks)
+                if (synced != p.blocks) p.copy(blocks = synced) else p
+            } else p
+        }
+
+        state = state.copy(project = proj.copy(studioPages = updatedPages), isDirty = true)
     }
 
     /**
@@ -647,12 +728,22 @@ class CanvasEditorDelegate(
         val localB = blockB.copy(bounds = SerialRect(boundsB.left - unionLeft, boundsB.top - unionTop, boundsB.right - unionLeft, boundsB.bottom - unionTop))
 
         val containerId = "Container_${getCurrentTimeMillis() % 10000}"
+        val newPageId = "page_$containerId"
+        val newPage = UIStudioPage(
+            id = newPageId,
+            nameStr = containerId,
+            width = unionRect.width.coerceAtLeast(100f),
+            height = unionRect.height.coerceAtLeast(100f),
+            blocks = listOf(localB, localA)
+        )
+
         val container = UIStudioBlock(
             id = containerId,
             type = UIBlockType.CONTAINER,
             isPureContainer = true,
             bounds = unionRect,
-            children = listOf(localB, localA)
+            children = listOf(localB, localA),
+            targetPageId = newPageId
         )
 
         val remaining = removeBlockFromTree(removeBlockFromTree(view.blocks, draggedId), targetId)
@@ -662,9 +753,25 @@ class CanvasEditorDelegate(
         mutable.add(insertIdx, container)
         val resultBlocks = mutable.bindParents()
 
-        updateViewBlocksAndSave(view.id, resultBlocks, repo)
-        state = state.copy(pendingCreateContainer = null, selectedBlockId = containerId)
-        Toast.show("成功创建父约束容器: $containerId", ToastType.SUCCESS)
+        val proj = state.project
+        if (proj != null) {
+            val updatedParent = view.copy(blocks = resultBlocks)
+            val updatedPages = proj.studioPages.map { if (it.id == view.id) updatedParent else it } + newPage
+            val updatedProject = proj.copy(studioPages = updatedPages)
+            state = state.copy(
+                project = updatedProject,
+                pendingCreateContainer = null,
+                selectedBlockId = containerId,
+                isDirty = true
+            )
+            scope.launch {
+                repo.saveTemplate(updatedProject.projectId, updatedProject)
+            }
+        } else {
+            updateViewBlocksAndSave(view.id, resultBlocks, repo)
+            state = state.copy(pendingCreateContainer = null, selectedBlockId = containerId)
+        }
+        Toast.show("成功创建组件并绑定独立界面: $containerId", ToastType.SUCCESS)
     }
 
     fun cancelCreateContainer() {
@@ -772,13 +879,97 @@ class CanvasEditorDelegate(
         Toast.show("已解散父容器: ${container.id}", ToastType.SUCCESS)
     }
 
+    /**
+     * 将指定平级页面作为组件实例插入到当前视图中（支持任意页面被多重随意引用）。
+     */
+    fun insertPageInstance(targetPageId: String, repo: TemplateRepository = TemplateRepository()) {
+        val currentView = state.currentView ?: return
+        val proj = state.project ?: return
+        val targetPage = proj.studioPages.find { it.id == targetPageId } ?: return
+
+        // 居中放置在当前视图中
+        val posX = ((currentView.width - targetPage.width) / 2f).coerceAtLeast(20f)
+        val posY = ((currentView.height - targetPage.height) / 2f).coerceAtLeast(20f)
+        val instanceId = "${targetPage.nameStr}_instance_${(getCurrentTimeMillis() % 10000)}"
+
+        val instanceBlock = UIStudioBlock(
+            id = instanceId,
+            type = UIBlockType.CONTAINER,
+            isPureContainer = true,
+            bounds = SerialRect(posX, posY, posX + targetPage.width, posY + targetPage.height),
+            targetPageId = targetPage.id,
+            children = targetPage.blocks
+        )
+
+        val updatedBlocks = (currentView.blocks + instanceBlock).bindParents()
+        updateViewBlocksAndSave(currentView.id, updatedBlocks, repo)
+        state = state.copy(selectedBlockId = instanceId)
+        Toast.show("已将页面 [${targetPage.nameStr}] 作为组件实例插入当前视图", ToastType.SUCCESS)
+    }
+
+    /**
+     * 为指定图元设置引用的目标页面（传入 null 则解除引用）。
+     */
+    fun setBlockTargetPage(blockId: String, targetPageId: String?, repo: TemplateRepository = TemplateRepository()) {
+        val currentView = state.currentView ?: return
+        val proj = state.project ?: return
+        val targetPage = if (targetPageId != null) proj.studioPages.find { it.id == targetPageId } else null
+
+        val updatedBlocks = updateBlockInTreeRecursively(currentView.blocks, blockId) { block ->
+            if (targetPage != null) {
+                block.copy(
+                    targetPageId = targetPage.id,
+                    children = targetPage.blocks
+                )
+            } else {
+                block.copy(targetPageId = null)
+            }
+        }.bindParents()
+
+        updateViewBlocksAndSave(currentView.id, updatedBlocks, repo)
+        val msg = if (targetPage != null) "已绑定引用页面: ${targetPage.nameStr}" else "已解除页面引用"
+        Toast.show(msg, ToastType.INFO)
+    }
+
+    /**
+     * 递归同步所有引用了 targetPageId 的图元内部的 children 列表。
+     */
+    private fun syncReferencedPageChildren(
+        blocks: List<UIStudioBlock>,
+        targetPageId: String,
+        syncedChildren: List<UIStudioBlock>
+    ): List<UIStudioBlock> {
+        return blocks.map { block ->
+            val updatedBlock = if (block.targetPageId == targetPageId) {
+                block.copy(children = syncedChildren)
+            } else {
+                block
+            }
+            if (updatedBlock.children.isNotEmpty() && updatedBlock.targetPageId != targetPageId) {
+                updatedBlock.copy(children = syncReferencedPageChildren(updatedBlock.children, targetPageId, syncedChildren))
+            } else {
+                updatedBlock
+            }
+        }.bindParents()
+    }
+
     /** 将指定视图的图元树整体替换并标记脏状态（internal 供宿主素材挂载等跨域流程复用） */
     internal fun updateViewBlocksAndSave(viewId: String, newBlocks: List<UIStudioBlock>, repo: TemplateRepository = TemplateRepository()) {
-        val updatedPages = state.project?.studioPages?.map {
+        val proj = state.project ?: return
+        var updatedPages = proj.studioPages.map {
             if (it.id == viewId) it.copy(blocks = newBlocks) else it
-        } ?: return
+        }
+
+        // 自动将当前视图变动后的 blocks 镜像同步到所有引用了当前页面的图元实例 (targetPageId == viewId) 中
+        updatedPages = updatedPages.map { p ->
+            if (p.id != viewId) {
+                val synced = syncReferencedPageChildren(p.blocks, viewId, newBlocks)
+                if (synced != p.blocks) p.copy(blocks = synced) else p
+            } else p
+        }
+
         state = state.copy(
-            project = state.project?.copy(studioPages = updatedPages),
+            project = proj.copy(studioPages = updatedPages),
             isDirty = true
         )
     }

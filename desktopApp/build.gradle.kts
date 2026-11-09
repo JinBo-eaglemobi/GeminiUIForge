@@ -85,3 +85,34 @@ tasks.withType<JavaExec>().configureEach {
         "sun.stderr.encoding" to "utf-8"
     )
 }
+
+// 自动为打包产物注入管理员 Manifest 清单（Windows 原生 UAC 小蓝黄盾牌）
+val injectAdminManifest = tasks.register<Exec>("injectAdminManifest") {
+    group = "distribution"
+    description = "将 requireAdministrator Manifest 注入到生成的 Windows EXE 中，以呈现管理员小盾牌图标"
+    onlyIf {
+        System.getProperty("os.name").lowercase().contains("windows")
+    }
+    workingDir = rootDir
+    commandLine(
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "scripts/inject-admin-manifest.ps1"
+    )
+}
+
+tasks.matching {
+    it.name in listOf(
+        "createDistributable",
+        "createReleaseDistributable",
+        "packageDistributionForCurrentOS",
+        "packageMsi",
+        "packageExe"
+    )
+}.configureEach {
+    finalizedBy(injectAdminManifest)
+}
+

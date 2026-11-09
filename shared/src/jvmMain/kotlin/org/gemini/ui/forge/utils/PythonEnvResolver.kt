@@ -290,23 +290,40 @@ object PythonEnvResolver {
     }
 
     /**
-     * 快速执行探测命令并返回标准输出文本（带 5 秒超时防阻塞）
+     * 快速执行探测命令并返回标准输出文本（带 5 秒超时防阻塞，支持自动绑定可执行文件同级目录为工作目录与注入同级 PATH）
      */
     fun runQuickCommand(command: List<String>, timeoutSeconds: Long = 5L): String? {
+        if (command.isEmpty()) return null
         return try {
-            val process = ProcessBuilder(command)
-                .redirectErrorStream(true)
-                .start()
+            val builder = ProcessBuilder(command).redirectErrorStream(true)
+            val firstCmd = command.first()
+            val exeFile = File(firstCmd)
+            if (exeFile.isAbsolute && exeFile.exists() && exeFile.parentFile != null) {
+                // 绑定 exe 所在目录为工作目录，确保同级伴生 DLL 能够被 Windows 加载器顺利发现
+                builder.directory(exeFile.parentFile)
+                val env = builder.environment()
+                val curPath = env["PATH"] ?: System.getenv("PATH") ?: ""
+                env["PATH"] = "${exeFile.parentFile.absolutePath}${File.pathSeparator}$curPath"
+            }
+
+            val process = builder.start()
             val output = BufferedReader(InputStreamReader(process.inputStream, Charsets.UTF_8)).use {
                 it.readText().trim()
             }
             val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
             if (!finished) {
                 process.destroyForcibly()
+                AppLogger.d(TAG, "⏱️ 命令执行超时 (>${timeoutSeconds}s): ${command.joinToString(" ")}")
                 return null
             }
-            if (process.exitValue() == 0 && output.isNotEmpty()) output else null
+            if (process.exitValue() == 0 && output.isNotEmpty()) {
+                output
+            } else {
+                AppLogger.d(TAG, "⚠️ 命令返回非0或空输出 (exitCode=${process.exitValue()}): ${command.joinToString(" ")} -> $output")
+                null
+            }
         } catch (e: Exception) {
+            AppLogger.d(TAG, "❌ 执行命令异常 (${command.joinToString(" ")}): ${e.message}")
             null
         }
     }

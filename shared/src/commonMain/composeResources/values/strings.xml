@@ -774,4 +774,14 @@
     <string name="env_log_expand_tip">Click to expand command output window</string>
     <string name="env_log_collapse_all_tip">Collapse all command output windows</string>
     <string name="env_log_expand_all_tip">Expand all command output windows</string>
+    <string name="env_cli_prompt_title">CLI Interactive Decision: %1$s</string>
+    <string name="env_cli_prompt_yes">Y (Agree &amp; Proceed)</string>
+    <string name="env_cli_prompt_no">N (Cancel)</string>
+    <string name="env_cli_prompt_waiting">Waiting for user input [Y/n]...</string>
+    <string name="settings_run_as_admin_title">Run as Administrator on Startup</string>
+    <string name="settings_run_as_admin_desc">Enabled by default. Starts with administrator privileges to ensure system runtime libraries and Python environments can be installed seamlessly. When disabled, the application runs with standard user privileges, and will prompt for elevation only when sensitive install/uninstall tasks are performed.</string>
+    <string name="dialog_run_as_admin_restart_title">Restart Required to Apply Privilege Mode</string>
+    <string name="dialog_run_as_admin_restart_desc">The startup administrator privilege setting has been changed. Would you like to restart the application now to apply the new privilege mode?</string>
+    <string name="env_elevation_required_prompt">The current operation [%1$s] requires Windows administrator privileges, but the application is currently running in standard user mode. Would you like to elevate privileges and restart the application to continue? [Y/n]</string>
+    <string name="env_elevation_cancelled_msg">Administrator elevation cancelled. Operation aborted. You can re-enable administrator startup in Settings or run the application as administrator manually.</string>
 </resources>

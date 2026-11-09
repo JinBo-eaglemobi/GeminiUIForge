@@ -44,6 +44,7 @@ import org.gemini.ui.forge.service.ai.GeminiGenerationConfig
 import org.gemini.ui.forge.service.ai.ImageGenIntentDetector
 import org.gemini.ui.forge.service.canvas.CanvasScreenshotService
 import org.gemini.ui.forge.service.canvas.CanvasSnapshotMode
+import org.gemini.ui.forge.service.tool.ToolResult
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.component.chat.CommonChatAttachment
 import org.gemini.ui.forge.ui.uistudio.UIStudioState
@@ -217,6 +218,26 @@ class AiAgentDelegate(
             if (name == "apply_view_layout") {
                 // 静默解析排版数据并缓存，绝不主动在画布中央弹窗打断（保留气泡按钮由用户显式点击）
                 aiLayout.checkAndExecuteLayoutTool(rawResponseJson, responseText, autoPromptDialog = false)
+                continue
+            }
+
+            if (name == "patch_view_elements") {
+                val t0 = getCurrentTimeMillis()
+                val patchResult = aiLayout.executePatchViewElements(enrichedArgs)
+                val dur = getCurrentTimeMillis() - t0
+                val record = toolDispatcher.buildToolCallRecord(
+                    id = "tool_${getCurrentTimeMillis()}_$name",
+                    toolName = name,
+                    arguments = enrichedArgs,
+                    result = if (patchResult.isSuccess) {
+                        ToolResult.success(patchResult.summary)
+                    } else {
+                        ToolResult.error(patchResult.errorMessage ?: "局部补丁执行失败")
+                    },
+                    durationMs = dur,
+                    callId = fc.callId
+                )
+                records.add(record)
                 continue
             }
             state = state.copy(streamingAiText = "🛠️ 正在执行系统工具 [$name] 并保存到素材库...")

@@ -21,6 +21,16 @@ interface Platform {
     fun openCredentialStore()
     /** 执行软件更新替换并自动重启：传入下载好的临时文件路径 */
     fun applyUpdateAndRestart(tempFilePath: String)
+    /** 是否支持以管理员身份运行配置（仅 Windows 桌面端） */
+    val isRunAsAdminSupported: Boolean get() = false
+    /** 当前是否开启了以管理员身份运行（默认开启） */
+    fun isRunAsAdminEnabled(): Boolean = false
+    /** 设置是否开启以管理员身份运行 */
+    fun setRunAsAdminEnabled(enabled: Boolean) {}
+    /** 当前进程是否已经具备系统最高管理员特权 */
+    fun isAdministrator(): Boolean = true
+    /** 请求通过系统原生 UAC 提权并重新拉起自身（若成功提权拉起，调用方可退出） */
+    fun requestAdminElevationAndRestart(): Boolean = false
 }
 
 /**

@@ -378,6 +378,195 @@ object UiStudioLayoutService {
     }
 
     /**
+     * 局部补丁操作返回结果
+     */
+    data class PatchElementsResult(
+        val isSuccess: Boolean,
+        val updatedPage: UIStudioPage? = null,
+        val patchedCount: Int = 0,
+        val summary: String = "",
+        val errorMessage: String? = null
+    )
+
+    /**
+     * 响应大模型发起的 [patch_view_elements] 声明式局部微调工具调用。
+     * 遵循 RFC 6902 工业级规范与 All-or-Nothing 事务性保证：
+     * - 支持 UPDATE（覆盖修改指定字段，不影响其它属性与同级组件）
+     * - 支持 ADD（向指定父容器或页面追加图元）
+     * - 支持 REMOVE（安全移除指定图元）
+     * 彻底避免大模型为了修改一两个属性而全量重生成整页数十个图元的严重浪费与丢数据隐患。
+     */
+    fun patchViewElements(
+        targetPage: UIStudioPage,
+        assetLibrary: UIAssetLibrary,
+        args: JsonObject
+    ): PatchElementsResult {
+        return try {
+            // 建立素材索引表
+            val assetMap = mutableMapOf<String, UIAssetItem>()
+            assetLibrary.items.forEach { asset ->
+                assetMap[asset.name.lowercase()] = asset
+                val cleanName = asset.name.substringBeforeLast('.').lowercase()
+                assetMap[cleanName] = asset
+                val realFileName = asset.relativePath.substringAfterLast('/').substringAfterLast('\\').lowercase()
+                if (realFileName.isNotBlank()) {
+                    assetMap[realFileName] = asset
+                    assetMap[realFileName.substringBeforeLast('.')] = asset
+                }
+                asset.hash?.lowercase()?.takeIf { it.isNotBlank() }?.let { hash ->
+                    assetMap[hash] = asset
+                }
+            }
+
+            // 规范化 patches 列表：支持数组入参与单对象扁平入参自适应
+            val rawPatches = args["patches"]?.jsonArray
+            val patchList: List<JsonObject> = if (rawPatches != null && rawPatches.isNotEmpty()) {
+                rawPatches.mapNotNull { it as? JsonObject }
+            } else {
+                val directBlockId = args["blockId"]?.jsonPrimitive?.contentOrNull
+                if (directBlockId != null) {
+                    val directProps = args["properties"]?.jsonObject ?: args
+                    listOf(buildJsonObject {
+                        put("op", "UPDATE")
+                        put("blockId", directBlockId)
+                        put("properties", directProps)
+                    })
+                } else emptyList()
+            }
+
+            if (patchList.isEmpty()) {
+                return PatchElementsResult(
+                    isSuccess = false,
+                    errorMessage = "未在入参中检测到有效的 patches 补丁操作列表或 blockId"
+                )
+            }
+
+            var currentBlocks = targetPage.blocks
+            var appliedCount = 0
+
+            for (patch in patchList) {
+                val op = patch["op"]?.jsonPrimitive?.contentOrNull?.uppercase() ?: "UPDATE"
+                val blockId = patch["blockId"]?.jsonPrimitive?.contentOrNull
+
+                when (op) {
+                    "UPDATE" -> {
+                        if (blockId.isNullOrBlank()) continue
+                        val props = patch["properties"]?.jsonObject ?: patch
+                        currentBlocks = updateBlockRecursively(currentBlocks, blockId) { existing ->
+                            var b = existing.bounds
+                            var x = b.left
+                            var y = b.top
+                            var w = b.width
+                            var h = b.height
+
+                            props["x"]?.jsonPrimitive?.floatOrNull?.let { x = it }
+                            props["y"]?.jsonPrimitive?.floatOrNull?.let { y = it }
+                            props["width"]?.jsonPrimitive?.floatOrNull?.let { w = it }
+                            props["height"]?.jsonPrimitive?.floatOrNull?.let { h = it }
+
+                            // 素材重新映射
+                            var assetHash = existing.assetHash
+                            val fileName = props["assetFileName"]?.jsonPrimitive?.contentOrNull
+                            if (!fileName.isNullOrBlank()) {
+                                val matched = assetMap[fileName.lowercase()]
+                                if (matched?.hash != null) {
+                                    assetHash = matched.hash
+                                    if (props["width"] == null && matched.width > 0) w = matched.width.toFloat()
+                                    if (props["height"] == null && matched.height > 0) h = matched.height.toFloat()
+                                }
+                            }
+                            props["assetHash"]?.jsonPrimitive?.contentOrNull?.let { assetHash = it }
+
+                            var type = existing.type
+                            props["type"]?.jsonPrimitive?.contentOrNull?.let {
+                                try { type = UIBlockType.valueOf(it.uppercase()) } catch (_: Exception) {}
+                            }
+
+                            var isPureContainer = existing.isPureContainer
+                            props["isPureContainer"]?.jsonPrimitive?.booleanOrNull?.let { isPureContainer = it }
+
+                            existing.copy(
+                                type = type,
+                                bounds = SerialRect(x, y, x + w, y + h),
+                                isPureContainer = isPureContainer,
+                                assetHash = assetHash
+                            )
+                        }
+                        appliedCount++
+                    }
+                    "REMOVE" -> {
+                        if (blockId.isNullOrBlank()) continue
+                        currentBlocks = removeBlockRecursively(currentBlocks, blockId)
+                        appliedCount++
+                    }
+                    "ADD" -> {
+                        val newBlockObj = patch["block"]?.jsonObject ?: patch["properties"]?.jsonObject
+                        if (newBlockObj != null) {
+                            val tempOut = mutableListOf<UIStudioBlock>()
+                            parseBlockRecursive(newBlockObj, assetMap, mutableMapOf(), tempOut)
+                            val created = tempOut.firstOrNull()
+                            if (created != null) {
+                                val parentBlockId = patch["parentBlockId"]?.jsonPrimitive?.contentOrNull
+                                currentBlocks = if (!parentBlockId.isNullOrBlank()) {
+                                    updateBlockRecursively(currentBlocks, parentBlockId) { parent ->
+                                        parent.copy(children = parent.children + created)
+                                    }
+                                } else {
+                                    currentBlocks + created
+                                }
+                                appliedCount++
+                            }
+                        }
+                    }
+                }
+            }
+
+            val updatedPage = targetPage.copy(blocks = currentBlocks.bindParents())
+            PatchElementsResult(
+                isSuccess = true,
+                updatedPage = updatedPage,
+                patchedCount = appliedCount,
+                summary = "成功在页面 [${targetPage.nameStr}] 执行 $appliedCount 项局部属性补丁更新"
+            )
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "执行 patchViewElements 异常", e)
+            PatchElementsResult(
+                isSuccess = false,
+                errorMessage = "局部补丁装配失败: ${e.message}"
+            )
+        }
+    }
+
+    private fun updateBlockRecursively(
+        blocks: List<UIStudioBlock>,
+        targetId: String,
+        transform: (UIStudioBlock) -> UIStudioBlock
+    ): List<UIStudioBlock> {
+        return blocks.map { b ->
+            if (b.id == targetId) {
+                transform(b)
+            } else if (b.children.isNotEmpty()) {
+                b.copy(children = updateBlockRecursively(b.children, targetId, transform))
+            } else {
+                b
+            }
+        }
+    }
+
+    private fun removeBlockRecursively(
+        blocks: List<UIStudioBlock>,
+        targetId: String
+    ): List<UIStudioBlock> {
+        return blocks.filter { it.id != targetId }.map { b ->
+            if (b.children.isNotEmpty()) {
+                b.copy(children = removeBlockRecursively(b.children, targetId))
+            } else {
+                b
+            }
+        }
+    }
+
+    /**
      * 递归统计整棵树的图元总数
      */
     fun countAllBlocks(blocks: List<UIStudioBlock>): Int {

@@ -36,6 +36,20 @@ fun main(args: Array<String>) {
         )
     }
 
+    // 0.1 Windows 平台管理员特权自检与自提权拦截 (Self-Elevation Gate)
+    // 业务铁律：
+    // 1. 若当前已具备管理员权限，直接放行；
+    // 2. 若用户在设置中关闭了管理员权限（isRunAsAdminEnabled == false），以普通受限权限正常运行；
+    // 3. 生产打包环境 (Native Exe) 下若未具备特权，启动即自提权；
+    // 4. 开发调试环境保持当前进程常驻保活，遇到底层环境操作时自适应触发方案 2 的按需提权交互门禁
+    val isNativeExe = System.getProperty("jpackage.app-path")?.endsWith(".exe", ignoreCase = true) == true
+    if (hostOs.isWindows && isNativeExe && org.gemini.ui.forge.utils.SystemElevationHelper.isRunAsAdminEnabled() && !org.gemini.ui.forge.utils.SystemElevationHelper.isAdministrator()) {
+        val elevated = org.gemini.ui.forge.utils.SystemElevationHelper.tryElevateSelfOnWindows(args)
+        if (elevated) {
+            kotlin.system.exitProcess(0)
+        }
+    }
+
     // 1. 尝试实现内存自举拦截 (Trampoline)
     // 检查是否存在用户的 .vmoptions 文件，如果是生产打包环境，并且内存不符合预期，则注入环境变量重启
     val vmOptionsFile = File(userHomePath, ".geminiuiforge/app.vmoptions")

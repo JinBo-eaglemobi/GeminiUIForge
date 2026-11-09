@@ -8,11 +8,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewQuilt
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
@@ -344,40 +346,81 @@ fun UIStudioPropertyPanel(
                                         softWrap = false
                                     )
 
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                                        shape = RoundedCornerShape(4.dp),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .clickable {
-                                                scaleXText = "1"
-                                                scaleYText = "1"
-                                                opacityText = "1"
-                                                viewModel.viewport.resetBlockTransform(
-                                                    selectedBlock.id,
-                                                    templateRepo
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        // 宽高复位按钮（变回图片原本物理尺寸）
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                                            shape = RoundedCornerShape(4.dp),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .clickable {
+                                                    viewModel.canvasEditor.resetBlockBoundsToOriginalSize(
+                                                        selectedBlock.id,
+                                                        templateRepo
+                                                    )
+                                                }
+                                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                                                .tip("一键将宽 W 和高 H 复位为图片原本的真实物理像素尺寸")
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.AspectRatio,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(12.dp),
+                                                    tint = MaterialTheme.colorScheme.secondary
+                                                )
+                                                Text(
+                                                    text = "原图尺寸",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                                    color = MaterialTheme.colorScheme.secondary,
+                                                    maxLines = 1,
+                                                    softWrap = false
                                                 )
                                             }
-                                            .padding(horizontal = 6.dp, vertical = 3.dp)
-                                            .tip("一键重置双轴缩放因数与透明度为 1.0 原寸 (不影响组件宽高 bounds)")
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        }
+
+                                        // 缩放还原 1.0
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                                            shape = RoundedCornerShape(4.dp),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .clickable {
+                                                    scaleXText = "1"
+                                                    scaleYText = "1"
+                                                    opacityText = "1"
+                                                    viewModel.viewport.resetBlockTransform(
+                                                        selectedBlock.id,
+                                                        templateRepo
+                                                    )
+                                                }
+                                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                                                .tip("一键重置双轴缩放因数与透明度为 1.0 原寸 (不影响组件宽高 bounds)")
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.RestartAlt,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(12.dp),
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                            Text(
-                                                text = "还原 1.0",
-                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                                color = MaterialTheme.colorScheme.primary,
-                                                maxLines = 1,
-                                                softWrap = false
-                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.RestartAlt,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(12.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                                Text(
+                                                    text = "还原 1.0",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -590,7 +633,7 @@ fun UIStudioPropertyPanel(
                                 expanded = typeExpanded,
                                 onDismissRequest = { typeExpanded = false }
                             ) {
-                                UIBlockType.entries.forEach { blockType ->
+                                UIBlockType.entries.filter { it != UIBlockType.CONTAINER }.forEach { blockType ->
                                     DropdownMenuItem(
                                         text = { Text(blockType.name) },
                                         onClick = {
@@ -599,6 +642,23 @@ fun UIStudioPropertyPanel(
                                         }
                                     )
                                 }
+                            }
+                        }
+
+                        // 若该组件引用了平级视图页面，提供一键直达编辑入口
+                        val boundPage = remember(selectedBlock.id, selectedBlock.targetPageId, state.project?.studioPages) {
+                            state.project?.studioPages?.find { it.id == selectedBlock.targetPageId }
+                        }
+                        if (boundPage != null) {
+                            Spacer(modifier = Modifier.height(spacing.extraSmall))
+                            OutlinedButton(
+                                onClick = { viewModel.pageManager.openViewTab(boundPage.id) },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().tip("打开该组件引用的独立视图进行精细排版")
+                            ) {
+                                Icon(Icons.Default.Layers, contentDescription = "Open Bound Page", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(spacing.extraSmall))
+                                Text("进入引用视图 (${boundPage.nameStr})")
                             }
                         }
 

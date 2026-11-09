@@ -784,4 +784,14 @@
     <string name="env_log_expand_tip">点击展开下方命令输出窗口</string>
     <string name="env_log_collapse_all_tip">一键折叠全部命令输出窗口</string>
     <string name="env_log_expand_all_tip">一键展开全部命令输出窗口</string>
+    <string name="env_cli_prompt_title">命令行交互请示: %1$s</string>
+    <string name="env_cli_prompt_yes">Y (同意并继续)</string>
+    <string name="env_cli_prompt_no">N (取消操作)</string>
+    <string name="env_cli_prompt_waiting">等待用户交互确认 [Y/n]...</string>
+    <string name="settings_run_as_admin_title">以管理员身份启动应用</string>
+    <string name="settings_run_as_admin_desc">默认开启。以系统最高管理员特权运行，确保 WinGet、Python 与底层运行库无障碍部署；关闭后日常以普通受限权限运行，遇到环境安装/卸载等系统敏感操作时将主动提示按需提权。</string>
+    <string name="dialog_run_as_admin_restart_title">应用权限模式变更</string>
+    <string name="dialog_run_as_admin_restart_desc">以管理员身份运行的配置已修改，是否立即重启应用以应用新的权限模式？</string>
+    <string name="env_elevation_required_prompt">当前操作 [%1$s] 需要 Windows 管理员特权，但当前程序运行于普通受限权限模式。是否立即提升权限重新拉起应用并继续？ [Y/n]</string>
+    <string name="env_elevation_cancelled_msg">已取消管理员提权，操作已中止。您可以随时在设置中重新开启默认管理员模式或手动以管理员身份运行。</string>
 </resources>

@@ -67,6 +67,16 @@ actual class LocalFileStorage {
         return@withContext target.absolutePath
     }
 
+    actual suspend fun saveToFileAtomic(fileName: String, content: String): String = withContext(Dispatchers.IO) {
+        val target = File(currentDir, fileName)
+        val parent = target.parentFile
+        parent?.mkdirs()
+        val temp = File(parent, "${target.name}.tmp")
+        temp.writeText(content)
+        temp.renameTo(target)
+        return@withContext target.absolutePath
+    }
+
     actual suspend fun saveBytesToFile(fileName: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
         val target = File(currentDir, fileName)
         target.parentFile?.mkdirs()

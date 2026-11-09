@@ -47,6 +47,10 @@ actual class LocalFileStorage {
         return targetPath
     }
 
+    actual suspend fun saveToFileAtomic(fileName: String, content: String): String {
+        return saveToFile(fileName, content)
+    }
+
     actual suspend fun saveBytesToFile(fileName: String, bytes: ByteArray): String {
         val targetPath = "$dataDir/$fileName"
         

@@ -223,6 +223,8 @@ object UiStudioSkillManager {
 
         // 注入 apply_view_layout 专有视图排版工具
         declarations.add(buildApplyViewLayoutDeclaration())
+        // 注入 patch_view_elements 专有视图局部精确补丁工具
+        declarations.add(buildPatchViewElementsDeclaration())
 
         // 注入精炼核心工作区工具与 4 个探索元工具
         coreConfigs.forEach { config ->
@@ -301,6 +303,56 @@ object UiStudioSkillManager {
                     add("width")
                     add("height")
                     add("blocks")
+                })
+            })
+        }
+    }
+
+    /**
+     * 构建 patch_view_elements 函数声明的官方标准 JSON Schema (符合 RFC 6902 局部补丁规范)
+     */
+    private fun buildPatchViewElementsDeclaration(): JsonObject {
+        return buildJsonObject {
+            put("name", "patch_view_elements")
+            put("description", "对 UI Studio 当前或指定视图页面中的个别图元进行精确的局部增删改 (Patch)，无需全量重新输出整张页面的全部 blocks。修改仅局限在参与的指定字段上，响应极速且零丢数据隐患。")
+            put("parameters", buildJsonObject {
+                put("type", "OBJECT")
+                put("properties", buildJsonObject {
+                    put("viewName", buildJsonObject {
+                        put("type", "STRING")
+                        put("description", "目标视图页面名称（可选，缺省时默认为当前画布正在编辑的活动视图）")
+                    })
+                    put("patches", buildJsonObject {
+                        put("type", "ARRAY")
+                        put("description", "局部微调操作列表 (声明式补丁)")
+                        put("items", buildJsonObject {
+                            put("type", "OBJECT")
+                            put("properties", buildJsonObject {
+                                put("op", buildJsonObject {
+                                    put("type", "STRING")
+                                    put("description", "操作原语动词: UPDATE (局部修改指定字段), ADD (追加新图元), REMOVE (删除图元)")
+                                })
+                                put("blockId", buildJsonObject {
+                                    put("type", "STRING")
+                                    put("description", "被修改或被删除的目标图元唯一 ID (UPDATE 或 REMOVE 时必填)")
+                                })
+                                put("parentBlockId", buildJsonObject {
+                                    put("type", "STRING")
+                                    put("description", "ADD 追加图元时的目标父容器 ID（可空，缺省时追加到页面顶层）")
+                                })
+                                put("properties", buildJsonObject {
+                                    put("type", "OBJECT")
+                                    put("description", "需要修改或添加的图元属性字典 (仅需传入发生变化的字段: x, y, width, height, assetFileName, assetHash, isPureContainer, type)")
+                                })
+                            })
+                            put("required", buildJsonArray {
+                                add("op")
+                            })
+                        })
+                    })
+                })
+                put("required", buildJsonArray {
+                    add("patches")
                 })
             })
         }

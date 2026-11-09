@@ -62,6 +62,10 @@ actual class LocalFileStorage {
         }
     }
 
+    actual suspend fun saveToFileAtomic(fileName: String, content: String): String {
+        return saveToFile(fileName, content)
+    }
+
     actual suspend fun saveBytesToFile(fileName: String, bytes: ByteArray): String {
         try {
             val (dirPath, name) = getParentPathAndName(fileName)
