@@ -16,7 +16,7 @@ import kotlin.math.abs
  * 编译导出后的独立图元节点实体
  *
  * @property id 节点唯一标识
- * @property type 图元类型（如 BUTTON, CONTAINER, IMAGE 等）
+ * @property type 图元类型（如 BUTTON, VIEW, IMAGE 等）
  * @property name 节点可读显示名称
  * @property x 导出绝对 X 坐标（像素）
  * @property y 导出绝对 Y 坐标（像素）

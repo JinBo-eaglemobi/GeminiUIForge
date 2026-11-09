@@ -12,6 +12,7 @@ import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.model.app.UIModule
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.model.ui.UIStudioProjectConfig
@@ -280,7 +281,12 @@ class TemplateRepository(
             } else {
                 block.children.map { cleanBlock(it) }
             }
-            return block.copy(children = cleanedChildren)
+            val safeType = if (block.type.name == "CONTAINER" || block.targetPageId != null) {
+                UIBlockType.VIEW
+            } else {
+                block.type
+            }
+            return block.copy(type = safeType, children = cleanedChildren)
         }
         return page.copy(blocks = page.blocks.map { cleanBlock(it) })
     }
@@ -293,24 +299,29 @@ class TemplateRepository(
         val pageMap = pages.associateBy { it.id }
 
         fun hydrateBlock(block: UIStudioBlock, visitingPageIds: Set<String>): UIStudioBlock {
+            val safeType = if (block.type.name == "CONTAINER" || block.targetPageId != null) {
+                UIBlockType.VIEW
+            } else {
+                block.type
+            }
             val targetId = block.targetPageId
             if (targetId != null) {
                 if (visitingPageIds.contains(targetId)) {
                     AppLogger.w("TemplateRepository", "⚠️ 检测到页面循环引用: $targetId，中断向下递归注水")
-                    return block.copy(children = emptyList())
+                    return block.copy(type = safeType, children = emptyList())
                 }
                 val targetPage = pageMap[targetId]
                 return if (targetPage != null) {
                     val nextVisiting = visitingPageIds + targetId
                     val hydratedChildren = targetPage.blocks.map { hydrateBlock(it, nextVisiting) }
-                    block.copy(children = hydratedChildren.bindParents(block))
+                    block.copy(type = safeType, children = hydratedChildren.bindParents(block))
                 } else {
                     AppLogger.w("TemplateRepository", "⚠️ 未找到图元引用目标页面: $targetId")
-                    block.copy(children = emptyList())
+                    block.copy(type = safeType, children = emptyList())
                 }
             } else {
                 val hydratedChildren = block.children.map { hydrateBlock(it, visitingPageIds) }
-                return block.copy(children = hydratedChildren.bindParents(block))
+                return block.copy(type = safeType, children = hydratedChildren.bindParents(block))
             }
         }
 

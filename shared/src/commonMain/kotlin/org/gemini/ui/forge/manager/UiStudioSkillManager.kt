@@ -272,7 +272,7 @@ object UiStudioSkillManager {
                             put("type", "OBJECT")
                             put("properties", buildJsonObject {
                                 put("id", buildJsonObject { put("type", "STRING"); put("description", "图元唯一ID") })
-                                put("type", buildJsonObject { put("type", "STRING"); put("description", "模块类型: BACKGROUND, BUTTON, CONTAINER, TEXT, IMAGE, SLOTS_WINDOW 等") })
+                                put("type", buildJsonObject { put("type", "STRING"); put("description", "模块类型: BACKGROUND, BUTTON, VIEW, TEXT, IMAGE, SLOTS_WINDOW 等") })
                                 put("x", buildJsonObject { put("type", "NUMBER"); put("description", "相对直接父容器左上角的局部 X 坐标") })
                                 put("y", buildJsonObject { put("type", "NUMBER"); put("description", "相对直接父容器左上角的局部 Y 坐标") })
                                 put("width", buildJsonObject { put("type", "NUMBER"); put("description", "物理宽度") })

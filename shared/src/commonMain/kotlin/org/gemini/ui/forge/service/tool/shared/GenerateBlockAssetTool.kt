@@ -237,7 +237,7 @@ class GenerateBlockAssetTool(
                 ?: return Pair(currentState, BlockAssetGenerationResult(false, blockId, errorMessage = "未找到图元 '$blockId'"))
 
             // 1. 过滤纯容器与占位层
-            if (block.type == UIBlockType.CONTAINER || block.isPureContainer) {
+            if (block.isPureContainer) {
                 return Pair(currentState, BlockAssetGenerationResult(false, blockId, errorMessage = "图元 [$blockId] 为纯容器/占位层，禁止参与 AI 生图"))
             }
 

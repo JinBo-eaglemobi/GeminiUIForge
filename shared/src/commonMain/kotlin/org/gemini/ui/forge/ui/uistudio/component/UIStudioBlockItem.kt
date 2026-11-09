@@ -101,7 +101,6 @@ fun UIStudioBlockItem(
     val typeColor = when (block.type) {
         UIBlockType.BUTTON, UIBlockType.SPIN_BUTTON -> Color(0xFFF59E0B) // 琥珀金橙
         UIBlockType.BACKGROUND -> Color(0xFF3B82F6) // 沉稳星空蓝
-        UIBlockType.CONTAINER -> Color(0xFF8B5CF6) // 优雅紫罗兰
         UIBlockType.TEXT -> Color(0xFF10B981) // 清爽薄荷绿
         else -> Color(0xFF06B6D4) // 科技青蓝
     }

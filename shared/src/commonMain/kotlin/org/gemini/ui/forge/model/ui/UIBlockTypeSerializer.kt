@@ -21,7 +21,7 @@ object UIBlockTypeSerializer : KSerializer<UIBlockType> {
         return when (name) {
             "TEXT_AREA" -> UIBlockType.TEXT
             "ICON" -> UIBlockType.IMAGE
-            "PANEL", "GROUP", "DECORATION" -> UIBlockType.VIEW
+            "PANEL", "GROUP", "DECORATION", "CONTAINER" -> UIBlockType.VIEW
             else -> try {
                 UIBlockType.valueOf(name)
             } catch (e: Exception) {

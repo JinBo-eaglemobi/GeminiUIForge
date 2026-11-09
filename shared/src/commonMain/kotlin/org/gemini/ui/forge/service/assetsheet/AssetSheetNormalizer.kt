@@ -176,7 +176,8 @@ object AssetSheetNormalizer {
 
             val bounds = parseBounds(itemObj, warnings, id)
             val type = inferUIBlockType(name, category, desc)
-            val isPure = (type == UIBlockType.CONTAINER) || (itemObj.findBoolean("isPureContainer", "isPure") ?: false)
+            val isPure = (itemObj.findBoolean("isPureContainer", "isPure") ?: false) ||
+                (type == UIBlockType.VIEW && (name.contains("container", ignoreCase = true) || category.contains("container", ignoreCase = true)))
 
             normalizedItems.add(
                 NormalizedAssetItem(
@@ -367,9 +368,9 @@ object AssetSheetNormalizer {
             combined.contains("text") || combined.contains("label") ||
                 combined.contains("title") || combined.contains("amount") -> UIBlockType.TEXT
 
-            // 8. 纯容器占位
+            // 8. 视图/纯容器占位
             combined.contains("container") || combined.contains("layout") ||
-                combined.contains("group") || combined.contains("wrapper") -> UIBlockType.CONTAINER
+                combined.contains("group") || combined.contains("wrapper") -> UIBlockType.VIEW
 
             // 9. 转轴
             combined.contains("reel") || combined.contains("slot_matrix") -> UIBlockType.REEL

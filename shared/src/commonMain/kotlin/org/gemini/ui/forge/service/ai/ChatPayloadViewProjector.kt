@@ -275,7 +275,7 @@ object ChatPayloadViewProjector {
                 LayoutModuleSummary(
                     title = id,
                     typeName = type,
-                    detailCount = assetName ?: (if (type == "CONTAINER") "组合容器" else null)
+                    detailCount = assetName ?: (if (type == "VIEW" || type == "CONTAINER") "组合容器" else null)
                 )
             )
         }

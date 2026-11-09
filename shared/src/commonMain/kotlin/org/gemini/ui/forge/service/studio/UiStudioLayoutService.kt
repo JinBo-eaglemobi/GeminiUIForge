@@ -139,7 +139,7 @@ object UiStudioLayoutService {
         outList: MutableList<UIStudioBlock>
     ) {
         val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: "block_${outList.size + 1}"
-        val typeStr = obj["type"]?.jsonPrimitive?.contentOrNull ?: "CONTAINER"
+        val typeStr = obj["type"]?.jsonPrimitive?.contentOrNull ?: "VIEW"
         val type = parseBlockType(typeStr)
 
         val x = obj["x"]?.jsonPrimitive?.floatOrNull ?: 0f
@@ -168,7 +168,7 @@ object UiStudioLayoutService {
         val isPureContainer = if (matchedAsset != null) {
             false
         } else {
-            obj["isPureContainer"]?.jsonPrimitive?.booleanOrNull ?: (type == UIBlockType.CONTAINER)
+            obj["isPureContainer"]?.jsonPrimitive?.booleanOrNull ?: false
         }
 
         // 若绑定了切片素材，保证宽高严格守恒真实切片的纵横比（Aspect Ratio），彻底杜绝拉伸变形
@@ -382,7 +382,7 @@ object UiStudioLayoutService {
                 upper.contains("TEXT") || upper.contains("LABEL") -> UIBlockType.TEXT
                 upper.contains("SLOT") || upper.contains("REEL") -> UIBlockType.REEL
                 upper.contains("SPIN") -> UIBlockType.SPIN_BUTTON
-                else -> UIBlockType.CONTAINER
+                else -> UIBlockType.VIEW
             }
         }
     }

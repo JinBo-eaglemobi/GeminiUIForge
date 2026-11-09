@@ -133,7 +133,7 @@ object TemplateOverlayRenderer {
             for (b in blocks) {
                 if (b.type == UIBlockType.BACKGROUND && b.parent == null) {
                     // 全屏背景底图单独处理或跳过厚重遮罩
-                } else if (b.isPureContainer || b.type == UIBlockType.CONTAINER) {
+                } else if (b.isPureContainer) {
                     containerBlocks.add(b)
                 } else {
                     businessBlocks.add(b)

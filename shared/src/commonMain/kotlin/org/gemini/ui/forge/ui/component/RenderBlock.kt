@@ -203,7 +203,7 @@ fun RenderBlock(
     val absHeight = absBounds.height
 
     // 5. 是否有可用参考图切片（第三级：仅在无成品图且无专属参考图且未开启全局切片隐藏时，由合规类型从底图按全局绝对坐标现场截取呈现）
-    val isPureContainer = block.type == UIBlockType.CONTAINER || block.isPureContainer
+    val isPureContainer = block.isPureContainer
     val hasRefSlice = !isPureContainer &&
             !state.isHideReferenceSlices &&
             block.type.supportsReferenceSlice &&

@@ -108,7 +108,7 @@ class GenerateAllAssetsTool(
 
         // 严格过滤纯容器与占位层
         val eligibleBlocks = allBlocks.filter { block ->
-            !block.isPureContainer && block.type != UIBlockType.CONTAINER
+            !block.isPureContainer
         }
 
         val targetBlocks = if (onlyMissing) {

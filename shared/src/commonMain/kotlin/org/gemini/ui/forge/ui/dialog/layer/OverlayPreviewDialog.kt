@@ -372,8 +372,8 @@ fun OverlayPreviewDialog(
                             ) {
                                 items(flatBlocks, key = { it.id }) { block ->
                                     val isHidden = block.id in hiddenBlockIds
-                                    val isBusiness = !block.isPureContainer && block.type != UIBlockType.CONTAINER && block.type != UIBlockType.BACKGROUND
-                                    val isContainer = block.isPureContainer || block.type == UIBlockType.CONTAINER
+                                    val isBusiness = !block.isPureContainer && block.type != UIBlockType.BACKGROUND
+                                    val isContainer = block.isPureContainer
                                     val indicatorColor = when {
                                         block.type == UIBlockType.BACKGROUND -> Color(0xFF9C27B0)
                                         isContainer -> Color(0xFFFF7A00)

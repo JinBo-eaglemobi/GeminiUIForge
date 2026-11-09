@@ -87,7 +87,7 @@ class GetRuntimeStatusTool(
             if (block is UIStudioBlock && !block.assetHash.isNullOrBlank()) {
                 put("assetHash", block.assetHash)
             }
-            val isContainer = block.isPureContainer || block.type == UIBlockType.CONTAINER || block.children.isNotEmpty()
+            val isContainer = block.isPureContainer || block.children.isNotEmpty()
             put("isContainer", isContainer)
             put("childrenCount", block.children.size)
             if (block.children.isNotEmpty()) {

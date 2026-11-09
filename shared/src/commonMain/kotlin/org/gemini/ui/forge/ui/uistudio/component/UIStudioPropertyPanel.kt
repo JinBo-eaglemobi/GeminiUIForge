@@ -633,7 +633,7 @@ fun UIStudioPropertyPanel(
                                 expanded = typeExpanded,
                                 onDismissRequest = { typeExpanded = false }
                             ) {
-                                UIBlockType.entries.filter { it != UIBlockType.CONTAINER }.forEach { blockType ->
+                                UIBlockType.entries.forEach { blockType ->
                                     DropdownMenuItem(
                                         text = { Text(blockType.name) },
                                         onClick = {

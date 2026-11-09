@@ -34,7 +34,7 @@ object UIBlockLayoutNormalizer {
     fun shouldBePureContainer(block: UIBlock): Boolean {
         return block.children.isNotEmpty() &&
                 block.currentImageUri == null &&
-                (block.type == UIBlockType.VIEW || block.type == UIBlockType.CONTAINER)
+                (block.type == UIBlockType.VIEW || block.isPureContainer)
     }
 
     /**

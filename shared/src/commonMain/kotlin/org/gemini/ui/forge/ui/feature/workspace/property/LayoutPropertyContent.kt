@@ -528,12 +528,12 @@ fun LayoutPropertyContent(
                 }
 
                 // 纯容器/占位层标记开关
-                val isPureContainer = selectedBlock.type == UIBlockType.CONTAINER || selectedBlock.isPureContainer
+                val isPureContainer = selectedBlock.isPureContainer
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(AppShapes.medium)
-                        .clickable(enabled = selectedBlock.type != UIBlockType.CONTAINER) {
+                        .clickable {
                             viewModel.assetManager.updateBlock(selectedBlock.copy(isPureContainer = !selectedBlock.isPureContainer))
                         }
                         .padding(vertical = 4.dp),
@@ -556,8 +556,7 @@ fun LayoutPropertyContent(
                         checked = isPureContainer,
                         onCheckedChange = { checked ->
                             viewModel.assetManager.updateBlock(selectedBlock.copy(isPureContainer = checked))
-                        },
-                        enabled = selectedBlock.type != UIBlockType.CONTAINER
+                        }
                     )
                 }
 
@@ -597,7 +596,7 @@ fun LayoutPropertyContent(
             }
 
             // 独立图片资产展示与操作板块（纯容器模式下自适应隐藏）
-            val isPureContainer = selectedBlock.type == UIBlockType.CONTAINER || selectedBlock.isPureContainer
+            val isPureContainer = selectedBlock.isPureContainer
             val currentBoundFile = selectedBlock.currentImageUri
             if (!isPureContainer) {
                 CollapsibleSection(
