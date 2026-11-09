@@ -251,7 +251,7 @@ object UiStudioSkillManager {
                 put("properties", buildJsonObject {
                     put("viewName", buildJsonObject {
                         put("type", "STRING")
-                        put("description", "创建或更新的视图界面英文/数字唯一名称，如 'FootballSlotMain' 或 'MainPage'")
+                        put("description", "创建或更新的视图界面唯一名称。必须且仅能使用纯英文标识符（如 'FootballSlotMain'、'GameHUD' 或 'Settings_Dialog'，仅允许英文、数字和下划线），严禁包含任何中文字符！")
                     })
                     put("width", buildJsonObject {
                         put("type", "INTEGER")

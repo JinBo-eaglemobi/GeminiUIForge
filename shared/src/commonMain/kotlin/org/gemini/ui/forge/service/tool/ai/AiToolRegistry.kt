@@ -46,6 +46,7 @@ object AiToolRegistry {
             CreateTemplateTool(),
             GetTemplateTool(),
             ListTemplatesTool(),
+            SaveProjectTool(),
             AddBlockTool(),
             UpdateBlockTool(),
             MoveBlockTool(),
@@ -58,6 +59,7 @@ object AiToolRegistry {
 
             // 图像生成与处理共享工具
             GenerateImageTool(),
+            QueryImageJobTool(),
             GenerateBlockAssetTool(),
             GenerateAllAssetsTool(),
             ChatRefineImageTool(),

@@ -106,6 +106,7 @@ data class UIStudioState(
     val isRefreshingAssetLibrary: Boolean = false,
     val selectedFolderId: String? = null,
     val selectedAssetHash: String? = null,
+    val selectedAssetHashes: Set<String> = emptySet(),
     val isNewFolderDialogVisible: Boolean = false,
     val currentViewId: String? = null,
     val openViewIds: List<String> = emptyList(),
@@ -215,6 +216,16 @@ data class UIStudioState(
      */
     val selectedAsset: UIAssetItem?
         get() = assetLibrary.items.find { it.hash == selectedAssetHash }
+
+    /**
+     * 获取当前处于多选集合中的所有素材资产 [UIAssetItem] 列表。
+     */
+    val selectedAssetItems: List<UIAssetItem>
+        get() = if (selectedAssetHashes.isEmpty()) {
+            selectedAsset?.let { listOf(it) } ?: emptyList()
+        } else {
+            assetLibrary.items.filter { it.hash in selectedAssetHashes }
+        }
 }
 
 /**

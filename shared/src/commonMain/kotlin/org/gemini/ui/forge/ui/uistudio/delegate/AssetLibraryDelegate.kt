@@ -551,6 +551,72 @@ class AssetLibraryDelegate(
     }
 
     /**
+     * 批量将多个素材移动至指定文件夹（targetFolderId 为 null 时移至根目录）。
+     */
+    fun moveAssetsToFolder(assetHashes: Set<String>, targetFolderId: String?, repo: TemplateRepository) {
+        if (assetHashes.isEmpty()) return
+        val targetFolder = state.assetLibrary.folders.find { it.id == targetFolderId }
+        val targetAssets = state.assetLibrary.items.filter { assetHashes.contains(it.hash) && it.folderId != targetFolderId }
+        if (targetAssets.isEmpty()) return
+
+        val sanitizedProject = state.project?.projectId?.replace(" ", "_") ?: "default"
+        val targetSubDir = if (targetFolder != null) "${targetFolder.name}/" else ""
+
+        val updatedMap = mutableMapOf<String, String>() // hash -> newRelPath
+        for (asset in targetAssets) {
+            val fileName = asset.relativePath.substringAfterLast("/")
+            val newRelPath = "templates/$sanitizedProject/assets/image/${targetSubDir}$fileName"
+            updatedMap[asset.hash] = newRelPath
+        }
+
+        scope.launch(Dispatchers.Default) {
+            for (asset in targetAssets) {
+                val newRelPath = updatedMap[asset.hash] ?: continue
+                try {
+                    val fileName = asset.relativePath.substringAfterLast("/")
+                    var resolvedOldFile = TemplateFile(asset.relativePath)
+                    if (!resolvedOldFile.exists()) {
+                        val candidate1 = TemplateFile("templates/$sanitizedProject/assets/image/$fileName")
+                        val candidate2 = TemplateFile("templates/$sanitizedProject/assets/${asset.hash}/$fileName")
+                        if (candidate1.exists()) {
+                            resolvedOldFile = candidate1
+                        } else if (candidate2.exists()) {
+                            resolvedOldFile = candidate2
+                        }
+                    }
+                    if (resolvedOldFile.exists()) {
+                        val bytes = resolvedOldFile.readBytes()
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            val newFile = TemplateFile(newRelPath)
+                            newFile.createParentDirs()
+                            newFile.writeBytes(bytes)
+                            if (resolvedOldFile.getAbsolutePath() != newFile.getAbsolutePath()) {
+                                resolvedOldFile.delete()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    AppLogger.w("UIStudioViewModel", "批量物理移动素材文件失败: ${e.message}")
+                }
+            }
+        }
+
+        val updatedItems = state.assetLibrary.items.map { item ->
+            val newPath = updatedMap[item.hash]
+            if (newPath != null) {
+                item.copy(folderId = targetFolderId, relativePath = newPath)
+            } else item
+        }
+
+        state = state.copy(
+            assetLibrary = state.assetLibrary.copy(items = updatedItems)
+        )
+        saveAssetLibrary()
+        val destDesc = targetFolder?.name ?: "根目录"
+        Toast.show("已将 ${targetAssets.size} 个素材移动至: $destDesc", ToastType.SUCCESS)
+    }
+
+    /**
      * 递归收集指定文件夹及其所有子孙文件夹的 ID 集合。
      */
     fun collectAllDescendantFolderIds(folderId: String): Set<String> {
@@ -632,12 +698,81 @@ class AssetLibraryDelegate(
     }
 
     /**
-     * 选中单个素材。
+     * 上一次点击的素材哈希锚点，用于支持 Shift 范围多选。
      */
-    fun selectAsset(assetHash: String?) {
+    private var lastClickedAssetHash: String? = null
+
+    /**
+     * 选中单个或批量素材，支持 PC 端常规修饰键 (Ctrl/Cmd 追加/反选, Shift 区间连选)。
+     */
+    fun selectAsset(
+        assetHash: String?,
+        isCtrlOrCmd: Boolean = false,
+        isShift: Boolean = false,
+        visibleAssetHashes: List<String> = emptyList()
+    ) {
+        if (assetHash == null) {
+            clearAssetSelection()
+            return
+        }
+
+        val currentSelected = state.selectedAssetHashes
+        val newSelected = when {
+            isCtrlOrCmd -> {
+                // Ctrl / Cmd: 追加或反选
+                lastClickedAssetHash = assetHash
+                if (currentSelected.contains(assetHash)) {
+                    currentSelected - assetHash
+                } else {
+                    currentSelected + assetHash
+                }
+            }
+            isShift && lastClickedAssetHash != null && visibleAssetHashes.isNotEmpty() -> {
+                // Shift: 区间连选
+                val startIndex = visibleAssetHashes.indexOf(lastClickedAssetHash)
+                val endIndex = visibleAssetHashes.indexOf(assetHash)
+                if (startIndex != -1 && endIndex != -1) {
+                    val range = if (startIndex <= endIndex) startIndex..endIndex else endIndex..startIndex
+                    val rangeHashes = range.mapNotNull { visibleAssetHashes.getOrNull(it) }.toSet()
+                    currentSelected + rangeHashes
+                } else {
+                    lastClickedAssetHash = assetHash
+                    setOf(assetHash)
+                }
+            }
+            else -> {
+                // 常规单选
+                lastClickedAssetHash = assetHash
+                setOf(assetHash)
+            }
+        }
+
         state = state.copy(
             selectedAssetHash = assetHash,
-            selectedBlockId = if (assetHash != null) null else state.selectedBlockId
+            selectedAssetHashes = newSelected,
+            selectedBlockId = if (newSelected.isNotEmpty()) null else state.selectedBlockId
+        )
+    }
+
+    /**
+     * 全选所有可见的素材。
+     */
+    fun selectAllAssets(visibleAssetHashes: List<String>) {
+        if (visibleAssetHashes.isEmpty()) return
+        state = state.copy(
+            selectedAssetHash = visibleAssetHashes.firstOrNull(),
+            selectedAssetHashes = visibleAssetHashes.toSet()
+        )
+    }
+
+    /**
+     * 清空素材选中集合。
+     */
+    fun clearAssetSelection() {
+        lastClickedAssetHash = null
+        state = state.copy(
+            selectedAssetHash = null,
+            selectedAssetHashes = emptySet()
         )
     }
 
@@ -645,36 +780,49 @@ class AssetLibraryDelegate(
      * 彻底删除单个素材并清理磁盘物理文件，遵循二次确认即时物理落盘通用契约。
      */
     fun deleteAsset(assetHash: String) {
-        val target = state.assetLibrary.items.find { it.hash == assetHash } ?: return
-        val updatedItems = state.assetLibrary.items.filterNot { it.hash == assetHash }
+        deleteAssets(setOf(assetHash))
+    }
+
+    /**
+     * 批量彻底删除选中的多个素材并清理磁盘物理文件，遵循二次确认即时物理落盘通用契约。
+     */
+    fun deleteAssets(targetHashes: Set<String>) {
+        if (targetHashes.isEmpty()) return
+        val targets = state.assetLibrary.items.filter { it.hash in targetHashes }
+        if (targets.isEmpty()) return
+
+        val updatedItems = state.assetLibrary.items.filterNot { it.hash in targetHashes }
         val newLibrary = state.assetLibrary.copy(items = updatedItems)
 
         executeConfirmedAction(
-            actionName = "彻底删除素材: ${target.name}",
+            actionName = if (targets.size == 1) "彻底删除素材: ${targets.first().name}" else "批量彻底删除 ${targets.size} 个素材切片",
             scope = scope,
             onApplyState = {
                 state = state.copy(
                     assetLibrary = newLibrary,
-                    selectedAssetHash = if (state.selectedAssetHash == assetHash) null else state.selectedAssetHash
+                    selectedAssetHash = null,
+                    selectedAssetHashes = emptySet()
                 )
             },
             onDiskIo = {
-                try {
-                    val tFile = TemplateFile(target.relativePath)
-                    val deleted = tFile.delete(recursive = false)
-                    if (deleted) {
-                        AppLogger.i("UIStudioViewModel", "🗑️ 物理删除素材文件成功: ${target.relativePath}")
-                    } else {
-                        AppLogger.w("UIStudioViewModel", "⚠️ 物理删除素材文件未成功或文件已不存在: ${target.relativePath}")
+                targets.forEach { target ->
+                    try {
+                        val tFile = TemplateFile(target.relativePath)
+                        val deleted = tFile.delete(recursive = false)
+                        if (deleted) {
+                            AppLogger.i("UIStudioViewModel", "🗑️ 物理删除素材文件成功: ${target.relativePath}")
+                        } else {
+                            AppLogger.w("UIStudioViewModel", "⚠️ 物理删除素材文件未成功或文件已不存在: ${target.relativePath}")
+                        }
+                    } catch (e: Exception) {
+                        AppLogger.e("UIStudioViewModel", "💥 物理删除素材文件异常: ${target.relativePath}", e)
                     }
-                } catch (e: Exception) {
-                    AppLogger.e("UIStudioViewModel", "💥 物理删除素材文件异常: ${target.relativePath}", e)
                 }
             },
             onFlushPersistence = {
                 flushAssetLibraryDiskSync(newLibrary)
             },
-            successToast = "已彻底删除素材: ${target.name}"
+            successToast = if (targets.size == 1) "已彻底删除素材: ${targets.first().name}" else "已彻底删除 ${targets.size} 个素材切片"
         )
     }
 

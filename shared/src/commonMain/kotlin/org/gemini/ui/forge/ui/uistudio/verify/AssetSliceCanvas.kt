@@ -23,6 +23,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.model.ui.SerialRect
@@ -296,11 +298,16 @@ fun AssetSliceCanvas(
 
             // 1. 绘制底层原图
             if (imageBitmap != null) {
-                drawImage(
-                    image = imageBitmap,
-                    topLeft = pan,
-                    alpha = 1.0f
-                )
+                val targetW = (imageBitmap.width * s).roundToInt()
+                val targetH = (imageBitmap.height * s).roundToInt()
+                if (targetW > 0 && targetH > 0) {
+                    drawImage(
+                        image = imageBitmap,
+                        dstOffset = IntOffset(pan.x.roundToInt(), pan.y.roundToInt()),
+                        dstSize = IntSize(targetW, targetH),
+                        alpha = 1.0f
+                    )
+                }
             }
 
             // 逻辑坐标转屏幕坐标

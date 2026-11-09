@@ -97,7 +97,7 @@ fun UIStudioHierarchyItem(
     val isSelected = state.selectedBlockId == block.id
     var showContextMenu by remember { mutableStateOf(false) }
     val hasChildren = block.children.isNotEmpty()
-    val isContainer = block.isPureContainer || hasChildren || block.type == UIBlockType.CONTAINER
+    val isContainer = block.isPureContainer || hasChildren || block.targetPageId != null
     val isEffectiveHidden = isAncestorHidden || !block.isVisible
     val isDragged = draggedBlockId == block.id
     val isHovered = hoveredBlockId == block.id
@@ -203,7 +203,7 @@ fun UIStudioHierarchyItem(
                             } else if (totalDistance <= 6f) {
                                 val currentTime = getCurrentTimeMillis()
                                 if (currentTime - lastClickTime < 300L) {
-                                    if (block.isPureContainer || hasChildren || block.type == UIBlockType.CONTAINER) {
+                                    if (block.isPureContainer || hasChildren || block.targetPageId != null) {
                                         viewModel.pageManager.openContainerTab(block.id)
                                     }
                                     lastClickTime = 0L

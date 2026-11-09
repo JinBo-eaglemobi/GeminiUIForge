@@ -31,7 +31,14 @@ interface Platform {
     fun isAdministrator(): Boolean = true
     /** 请求通过系统原生 UAC 提权并重新拉起自身（若成功提权拉起，调用方可退出） */
     fun requestAdminElevationAndRestart(): Boolean = false
+    /** 当前运行环境是否为开发/调试模式 (Development Mode) */
+    val isDevMode: Boolean get() = false
 }
+
+/**
+ * 快速判断当前运行环境是否为开发/调试模式 (Development Mode)
+ */
+val isDevMode: Boolean get() = getPlatform().isDevMode
 
 /**
  * 获取当前运行平台的实例

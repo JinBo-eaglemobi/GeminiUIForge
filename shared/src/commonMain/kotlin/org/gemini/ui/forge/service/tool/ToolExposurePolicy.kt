@@ -24,7 +24,12 @@ object ToolExposurePolicy {
         "get_assets",
         // 4. 人机协同问询与通知
         "ask_user_question",
-        "notify_user"
+        "notify_user",
+        // 5. 图像生成与异步查询
+        "generate_image",
+        "query_image_job",
+        // 6. 工程原子持久化落盘
+        "save_project"
     )
 
     /**

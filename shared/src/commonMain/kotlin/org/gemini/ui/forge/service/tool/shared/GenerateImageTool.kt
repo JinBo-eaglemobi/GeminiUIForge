@@ -1,29 +1,21 @@
 package org.gemini.ui.forge.service.tool.shared
 
+import org.gemini.ui.forge.service.job.ImageJobManager
 import org.gemini.ui.forge.service.tool.ToolAnnotations
-import org.gemini.ui.forge.service.tool.ToolContent
 import org.gemini.ui.forge.service.tool.ToolDefinition
 import org.gemini.ui.forge.service.tool.ToolResult
 
 import kotlinx.serialization.json.*
-import org.gemini.ui.forge.getCurrentTimeMillis
-import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.GeminiModel
-import org.gemini.ui.forge.service.AIGenerationService
-import org.gemini.ui.forge.service.LocalMattingService
 import org.gemini.ui.forge.service.mcp.McpUiActionPipeline
-import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
-import org.gemini.ui.forge.utils.readLocalFileBytes
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * 通用独立文生图工具 (Text-to-Image Tool)
  *
  * 允许大模型（如文本模型 Gemini 3.8 Flash 或生图模型）在识别出用户的生图意图时，
- * 自主通过 Function Calling 调起本工具执行独立文本生图并保存落盘。
+ * 自主通过 Function Calling 调起本工具提交异步文生图作业并获取任务 jobId。
  */
 class GenerateImageTool(
     private val storage: LocalFileStorage = LocalFileStorage()
@@ -32,7 +24,7 @@ class GenerateImageTool(
     override val name: String = "generate_image"
 
     override val description: String =
-        "执行通用独立文生图（Text-to-Image）任务。根据用户的自然语言视觉描述生成高品质图片，支持画面宽高比（1:1、16:9 等）与透明背景去背，纯内存生成与 Data URI 返回；支持可选直接保存至素材库或添加到当前页面。"
+        "提交通用独立文生图（Text-to-Image）异步任务。根据用户的自然语言视觉描述生成高品质图片，秒级返回任务 jobId，后续必须使用 query_image_job 工具轮询生成结果。"
 
     override val annotations: ToolAnnotations = ToolAnnotations(
         readOnlyHint = false,
@@ -40,7 +32,7 @@ class GenerateImageTool(
         openWorldHint = true
     )
 
-    override val timeoutMs: Long = 120_000L
+    override val timeoutMs: Long = 10_000L
 
     override val inputSchema: JsonObject = buildJsonObject {
         put("type", "object")
@@ -90,7 +82,7 @@ class GenerateImageTool(
             })
             put("customFileName", buildJsonObject {
                 put("type", "string")
-                put("description", "可选：指定存入素材库的文件名（无需后缀）。若提供该参数将直接持久化落盘至素材库，否则仅保留在内存与日志中")
+                put("description", "可选：指定存入素材库的文件名（无需后缀）。若提供该参数将直接持久化落盘至素材库，否则仅保留在会话日志与内存中")
             })
             put("addToView", buildJsonObject {
                 put("type", "boolean")
@@ -146,136 +138,37 @@ class GenerateImageTool(
             else -> 1024f to 1024f
         }
 
-        onProgress?.invoke(0.1f, "正在初始化文生图请求，使用模型: ${targetModel.displayName}...")
-        val cloudAssetManager = CloudAssetManager(configManager)
-        val aiService = AIGenerationService(storage, cloudAssetManager, configManager)
-        val mattingService = LocalMattingService(storage)
-
-        var rawResultUri: String? = null
-        try {
-            onProgress?.invoke(0.3f, "正在通过 AI 模型生成图像...")
-            aiService.generateImages(
-                model = targetModel,
-                blockType = "IMAGE",
-                userPrompt = prompt,
-                apiKey = apiKey,
-                targetWidth = targetWidth,
-                targetHeight = targetHeight,
-                isPng = isPng,
-                generationCount = 1,
-                onLog = { logMsg -> onProgress?.invoke(0.5f, logMsg) },
-                onImageGenerated = { rawResultUri = it }
-            )
-        } catch (e: Exception) {
-            AppLogger.e("GenerateImageTool", "文生图执行失败", e)
-            return ToolResult.error("文生图执行失败: ${e.message}")
-        }
-
-        val finalRaw = rawResultUri ?: return ToolResult.error("AI 生图服务未返回有效图像数据")
-
-        @OptIn(ExperimentalEncodingApi::class)
-        val initialBytes = if (finalRaw.startsWith("data:image")) {
-            val pureB64 = if (finalRaw.contains(",")) finalRaw.substringAfter(",") else finalRaw
-            Base64.decode(pureB64)
-        } else {
-            readLocalFileBytes(finalRaw)
-        } ?: return ToolResult.error("无法解析生成的图像字节数据")
-
-        val processedBytes = if (isPng) {
-            onProgress?.invoke(0.75f, "正在执行本地 AI 透明抠图去背...")
-            try {
-                mattingService.removeBackground(initialBytes) ?: initialBytes
-            } catch (e: Throwable) {
-                AppLogger.w("GenerateImageTool", "透明抠图去背失败，保留原始图片", e)
-                initialBytes
-            }
-        } else {
-            initialBytes
-        }
-
         val customSubPath = arguments["customSubPath"]?.jsonPrimitive?.contentOrNull?.trim()?.trim('/', '\\') ?: ""
         val customFileName = arguments["customFileName"]?.jsonPrimitive?.contentOrNull?.trim()
         val addToView = arguments["addToView"]?.jsonPrimitive?.booleanOrNull ?: false
 
-        val ext = if (isPng) "png" else "jpg"
-        var savedRelativePath: String? = null
-
-        // 仅当用户或 AI 显式指定了 customFileName 时，才直接将图片物理落盘存入 assets/image/
-        if (!customFileName.isNullOrBlank()) {
-            onProgress?.invoke(0.9f, "正在保存图片至项目素材库...")
-            val cleanFileName = if (customFileName.endsWith(".$ext", ignoreCase = true)) customFileName else "$customFileName.$ext"
-            val targetRelDir = if (customSubPath.isBlank()) {
-                "templates/$projectName/assets/image"
-            } else {
-                "templates/$projectName/assets/image/$customSubPath"
-            }
-            val targetFullPath = "$targetRelDir/$cleanFileName"
-
-            savedRelativePath = try {
-                storage.saveBytesToFile(targetFullPath, processedBytes)
-            } catch (e: Exception) {
-                AppLogger.e("GenerateImageTool", "保存资产至素材库失败: $targetFullPath", e)
-                null
-            }
-
-            // 若有活跃 UIStudioViewModel，触发素材库自动自愈刷新
-            if (savedRelativePath != null) {
-                try {
-                    McpUiActionPipeline.getActiveUiStudioViewModel()?.assetLibrary?.refreshAssetLibrary()
-                } catch (e: Throwable) {
-                    AppLogger.w("GenerateImageTool", "刷新素材库失败", e)
-                }
-            }
-        }
-
-        // 若要求直接添加到页面
-        if (addToView && savedRelativePath != null) {
-            try {
-                val studioVm = McpUiActionPipeline.getActiveUiStudioViewModel()
-                if (studioVm != null) {
-                    val blockName = customFileName?.ifBlank { "ai_img_${getCurrentTimeMillis()}" } ?: "ai_img_${getCurrentTimeMillis()}"
-                    studioVm.assetLibrary.addChatImageToCurrentView(
-                        imageBytes = processedBytes,
-                        fileName = blockName,
-                        width = targetWidth,
-                        height = targetHeight,
-                        subPath = customSubPath,
-                        isPng = isPng
-                    )
-                }
-            } catch (e: Throwable) {
-                AppLogger.w("GenerateImageTool", "添加图元到当前页面失败", e)
-            }
-        }
-
-        @OptIn(ExperimentalEncodingApi::class)
-        val returnBase64 = Base64.encode(processedBytes)
-        val mimeType = if (isPng) "image/png" else "image/jpeg"
-
-        val resultMessage = buildString {
-            append("🎉 AI 独立文生图生成成功！\n")
-            append("🎨 提示词: $prompt\n")
-            append("🤖 采用模型: ${targetModel.displayName} ($effectiveModelName)\n")
-            append("📐 画面规格: $aspectRatio (${targetWidth.toInt()}x${targetHeight.toInt()})\n")
-            if (isPng) {
-                append("✂️ 透明背景: 已完成本地 AI 自动去背 (PNG)\n")
-            }
-            if (savedRelativePath != null) {
-                append("📁 素材库归档: `$savedRelativePath`\n")
-                if (addToView) {
-                    append("🖼️ 页面挂载: 已作为图元挂载至当前视图中心")
-                }
-            } else {
-                append("💾 内存模式: 图片数据已完整持久化于会话日志中，可通过操作栏按需存入素材库。")
-            }
-        }
-
-        onProgress?.invoke(1.0f, "文生图任务完成")
-        return ToolResult.image(
-            base64Data = returnBase64,
-            mimeType = mimeType,
-            message = resultMessage
+        val jobId = ImageJobManager.submitJob(
+            prompt = prompt,
+            projectName = projectName,
+            aspectRatio = aspectRatio,
+            targetWidth = targetWidth,
+            targetHeight = targetHeight,
+            isPng = isPng,
+            targetModel = targetModel,
+            effectiveModelName = effectiveModelName,
+            apiKey = apiKey,
+            customSubPath = customSubPath,
+            customFileName = customFileName,
+            addToView = addToView,
+            storage = storage
         )
+
+        val responseJson = buildJsonObject {
+            put("status", "RUNNING")
+            put("jobId", jobId)
+            put("prompt", prompt)
+            put("aspectRatio", aspectRatio)
+            put("message", "AI 生图任务已成功提交并在后台异步执行中。请立即调用 query_image_job(jobId = '$jobId') 轮询查询结果，在生图未完成前严禁执行后续依赖任务。")
+        }
+
+        onProgress?.invoke(1.0f, "生图任务已提交后台异步生成，JobId: $jobId")
+        return ToolResult.text(responseJson.toString())
     }
 }
+
 

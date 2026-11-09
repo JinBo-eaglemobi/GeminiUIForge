@@ -97,12 +97,12 @@ fun NumberOutlinedTextField(
                 if (input.isEmpty()) {
                     localText = input
                     onValueChange(if (effectiveMinVal != null && effectiveMinVal > 0f) effectiveMinVal.toString() else "0")
-                } else if (input == "-" || input == "." || input == "-.") {
+                } else if (input == "-" || (isFloat && (input == "." || input == "-."))) {
                     localText = input
                     onValueChange(if (effectiveMinVal != null && effectiveMinVal > 0f) effectiveMinVal.toString() else "0")
                 } else {
                     val isValid = if (isFloat) input.toFloatOrNull() != null else input.toIntOrNull() != null
-                    if (isValid || (input.endsWith(".") && input.count { it == '.' } == 1)) {
+                    if (isValid || (isFloat && input.endsWith(".") && input.count { it == '.' } == 1)) {
                         localText = input
                         if (isValid) {
                             onValueChange(input)

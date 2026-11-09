@@ -67,7 +67,8 @@ object SmartEdgeSnapper {
         canvasHeight: Float,
         searchRadius: Int = 45,
         maxIterations: Int? = null,
-        convergenceThreshold: Float? = null
+        convergenceThreshold: Float? = null,
+        maxExpansionRatio: Float? = null
     ): SnappingResult? {
         val skiaImage = try {
             Image.makeFromEncoded(imageBytes)
@@ -88,6 +89,7 @@ object SmartEdgeSnapper {
             .coerceIn(1, 10)
         val resolvedConvergence = (convergenceThreshold ?: CalibrationOptionsManager.snapConvergenceThreshold)
             .coerceIn(0.1f, 5.0f)
+        val resolvedMaxExpansion = (maxExpansionRatio ?: 1.65f).coerceIn(1.1f, 3.0f)
 
         // 多轮自适应迭代收敛机制 (单次点击一步到位)
         var currentBounds = logicalBounds
@@ -101,7 +103,8 @@ object SmartEdgeSnapper {
                 logicalBounds = currentBounds,
                 canvasWidth = canvasWidth,
                 canvasHeight = canvasHeight,
-                searchRadius = searchRadius
+                searchRadius = searchRadius,
+                maxExpansion = resolvedMaxExpansion
             ) ?: break
 
             // 相对初始原始 bounds 的防滚雪球过度膨胀熔断保护
@@ -109,8 +112,8 @@ object SmartEdgeSnapper {
             val origH = logicalBounds.height.coerceAtLeast(1f)
             val curW = passResult.logicalRect.width
             val curH = passResult.logicalRect.height
-            if (curW > origW * 1.15f || curH > origH * 1.15f) {
-                AppLogger.w("SmartEdgeSnapper", "⚠️ 触发尺寸过度膨胀熔断保护: 初始=[$origW x $origH] -> 候选=[$curW x $curH]，坚决不采纳并终止迭代")
+            if (curW > origW * resolvedMaxExpansion || curH > origH * resolvedMaxExpansion) {
+                AppLogger.w("SmartEdgeSnapper", "⚠️ 触发尺寸过度膨胀熔断保护: 初始=[$origW x $origH] -> 候选=[$curW x $curH]，超过 ${resolvedMaxExpansion} 倍上限，终止迭代")
                 break
             }
 
@@ -144,7 +147,8 @@ object SmartEdgeSnapper {
         logicalBounds: SerialRect,
         canvasWidth: Float,
         canvasHeight: Float,
-        searchRadius: Int
+        searchRadius: Int,
+        maxExpansion: Float
     ): SnappingResult? {
         val sx = if (canvasWidth > 0f) imgW.toFloat() / canvasWidth else 1.0f
         val sy = if (canvasHeight > 0f) imgH.toFloat() / canvasHeight else 1.0f
@@ -170,7 +174,8 @@ object SmartEdgeSnapper {
             roughR = roughPhysRight.roundToInt(),
             roughB = roughPhysBottom.roundToInt(),
             imgW = imgW,
-            imgH = imgH
+            imgH = imgH,
+            maxExpansion = maxExpansion
         )
 
         // 3. 次选基于自适应背景差分的前景连通域包围盒提取 (Salient Foreground Hull)
@@ -181,7 +186,8 @@ object SmartEdgeSnapper {
             roughR = roughPhysRight.roundToInt(),
             roughB = roughPhysBottom.roundToInt(),
             imgW = imgW,
-            imgH = imgH
+            imgH = imgH,
+            maxExpansion = maxExpansion
         )
 
         val (rawL, rawT, rawR, rawB) = if (hullRect != null) {
@@ -287,14 +293,15 @@ object SmartEdgeSnapper {
         roughR: Int,
         roughB: Int,
         imgW: Int,
-        imgH: Int
+        imgH: Int,
+        maxExpansion: Float
     ): SerialRect? {
         val rw = roughR - roughL
         val rh = roughB - roughT
         if (rw <= 4 || rh <= 4) return null
 
-        // 局部搜索视口：四周适度外扩 18px，保证包覆实体边缘但杜绝远距漫延
-        val pad = 18
+        // 局部搜索视口：根据最大膨胀比自适应外扩，既包覆真实实体边缘又杜绝远距漫延
+        val pad = maxOf(48, ((rw * (maxExpansion - 1f)).toInt() + 16), ((rh * (maxExpansion - 1f)).toInt() + 16)).coerceIn(32, 160)
         val winL = (roughL - pad).coerceIn(0, imgW - 1)
         val winT = (roughT - pad).coerceIn(0, imgH - 1)
         val winR = (roughR + pad).coerceIn(winL + 1, imgW)
@@ -304,21 +311,18 @@ object SmartEdgeSnapper {
         val winH = winB - winT
         if (winW <= 8 || winH <= 8) return null
 
-        // 1. 快速抽样四周是否有透明像素 (Alpha < 200)，若为全不透明白底/纯色底则交由前景算法处理
+        // 1. 局部视口抽样判断是否有透明像素 (Alpha < 200)，若为全不透明白底/纯色底则交由前景算法处理
         var hasTransparentPixel = false
-        for (y in winT until winB step 4) {
-            if (Color.getA(bitmap.getColor(winL, y)) < 200 || Color.getA(bitmap.getColor(winR - 1, y)) < 200) {
-                hasTransparentPixel = true
-                break
-            }
-        }
-        if (!hasTransparentPixel) {
-            for (x in winL until winR step 4) {
-                if (Color.getA(bitmap.getColor(x, winT)) < 200 || Color.getA(bitmap.getColor(x, winB - 1)) < 200) {
+        val stepX = maxOf(1, winW / 24)
+        val stepY = maxOf(1, winH / 24)
+        for (y in winT until winB step stepY) {
+            for (x in winL until winR step stepX) {
+                if (Color.getA(bitmap.getColor(x, y)) < 200) {
                     hasTransparentPixel = true
                     break
                 }
             }
+            if (hasTransparentPixel) break
         }
         if (!hasTransparentPixel) return null
 
@@ -488,7 +492,8 @@ object SmartEdgeSnapper {
         roughR: Int,
         roughB: Int,
         imgW: Int,
-        imgH: Int
+        imgH: Int,
+        maxExpansion: Float
     ): SerialRect? {
         val rw = roughR - roughL
         val rh = roughB - roughT
@@ -614,7 +619,7 @@ object SmartEdgeSnapper {
                     val bh = maxY - minY + 1
                     val area = bw * bh
 
-                    if (bw >= 18 && bh >= 18 && area >= 450 && bw <= rw * 1.15f && bh <= rh * 1.15f) {
+                    if (bw >= 18 && bh >= 18 && area >= 450 && bw <= rw * maxExpansion && bh <= rh * maxExpansion) {
                         val boxCx = (minX + maxX).toFloat() / 2f
                         val boxCy = (minY + maxY).toFloat() / 2f
                         val dist = kotlin.math.hypot(boxCx - cxCrop, boxCy - cyCrop)

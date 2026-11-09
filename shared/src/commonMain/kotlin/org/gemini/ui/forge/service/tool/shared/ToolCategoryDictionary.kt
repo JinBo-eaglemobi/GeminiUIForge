@@ -53,7 +53,7 @@ object ToolCategoryDictionary {
     fun getToolCategory(toolName: String): String {
         return when (toolName) {
             in setOf(
-                "get_assets", "list_assets", "generate_image", "generate_block_asset", "generate_all_assets",
+                "get_assets", "list_assets", "generate_image", "query_image_job", "generate_block_asset", "generate_all_assets",
                 "remove_background", "chat_refine_image", "bake_nine_patch",
                 "set_block_reference_image", "inspect_block_with_reference",
                 "compare_with_reference", "list_matting_presets"
@@ -64,7 +64,7 @@ object ToolCategoryDictionary {
                 "render_template_overlay"
             ) -> CATEGORY_VIEW
             in setOf(
-                "list_templates", "get_template", "create_template",
+                "list_templates", "get_template", "create_template", "save_project",
                 "import_asset_sheet_pipeline", "analyze_reference_generate_template"
             ) -> CATEGORY_TEMPLATE
             in setOf(

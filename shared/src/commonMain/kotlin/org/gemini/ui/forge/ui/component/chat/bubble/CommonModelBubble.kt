@@ -156,7 +156,11 @@ fun CommonModelBubble(
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 message.toolCalls.forEach { record ->
-                                    ToolExecutionStatusCard(record = record)
+                                    ToolExecutionStatusCard(
+                                        record = record,
+                                        onImageClick = onImageClick,
+                                        imageActions = imageActions
+                                    )
                                 }
                             }
                         }
@@ -234,20 +238,23 @@ fun CommonModelBubble(
                             }
                         }
 
-                        // 3. 模型生成的图片展示
-                        message.generatedImageUri?.takeIf { it.isNotBlank() }?.let { imgUri ->
-                            Spacer(Modifier.height(spacing.small))
-                            AsyncImage(
-                                model = imgUri,
-                                contentDescription = "生成结果图片",
-                                modifier = Modifier
-                                    .size(200.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                                    .clickable { onImageClick?.invoke(imgUri) },
-                                contentScale = ContentScale.Fit
-                            )
-                            imageActions?.invoke(imgUri)
+                        // 3. 模型生成的图片兜底展示（仅当未被工具调用卡片就地内联呈现时展示，杜绝重复渲染）
+                        val hasInlinedToolImage = message.toolCalls.any { !it.imageUri.isNullOrBlank() && it.imageUri == message.generatedImageUri }
+                        if (!hasInlinedToolImage) {
+                            message.generatedImageUri?.takeIf { it.isNotBlank() }?.let { imgUri ->
+                                Spacer(Modifier.height(spacing.small))
+                                AsyncImage(
+                                    model = imgUri,
+                                    contentDescription = "生成结果图片",
+                                    modifier = Modifier
+                                        .size(200.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                        .clickable { onImageClick?.invoke(imgUri) },
+                                    contentScale = ContentScale.Fit
+                                )
+                                imageActions?.invoke(imgUri)
+                            }
                         }
                     }
                 }

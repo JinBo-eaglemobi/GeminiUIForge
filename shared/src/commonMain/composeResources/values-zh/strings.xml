@@ -234,6 +234,10 @@
     <string name="update_preparing">更新包已就绪，准备重启安装...</string>
     <string name="update_latest">当前已是最新版本</string>
     <string name="update_error">检查更新失败，请检查网络</string>
+    <string name="update_dev_mode_title">当前处于本地开发调试模式 (Dev Mode)</string>
+    <string name="update_dev_mode_desc">当前环境正在运行本地源码与调试探针，版本更新检测已自动免除。</string>
+    <string name="update_force_check_action">强制检查更新</string>
+    <string name="update_dev_badge">开发模式</string>
     <string name="action_go_to_settings">前往设置</string>
     
     <!-- 批量生成 -->
@@ -794,4 +798,26 @@
     <string name="dialog_run_as_admin_restart_desc">以管理员身份运行的配置已修改，是否立即重启应用以应用新的权限模式？</string>
     <string name="env_elevation_required_prompt">当前操作 [%1$s] 需要 Windows 管理员特权，但当前程序运行于普通受限权限模式。是否立即提升权限重新拉起应用并继续？ [Y/n]</string>
     <string name="env_elevation_cancelled_msg">已取消管理员提权，操作已中止。您可以随时在设置中重新开启默认管理员模式或手动以管理员身份运行。</string>
+
+    <!-- New View Dialog -->
+    <string name="new_view_dialog_title">新建视图界面</string>
+    <string name="new_view_name_label">视图名称 (如 Game_HUD)</string>
+    <string name="new_view_name_placeholder">请输入视图唯一英文/中文名称</string>
+    <string name="new_view_size_section_title">画布尺寸 (自定义输入)</string>
+    <string name="new_view_width_label">宽度 (W)</string>
+    <string name="new_view_height_label">高度 (H)</string>
+    <string name="new_view_presets_label">快捷预设配置</string>
+    <string name="new_view_preset_inherit">继承工程</string>
+    <string name="new_view_preset_landscape_fhd">横屏大屏</string>
+    <string name="new_view_preset_landscape_hd">横屏标清</string>
+    <string name="new_view_preset_portrait_fhd">竖屏高清</string>
+    <string name="new_view_preset_portrait_hd">移动端小屏</string>
+    <string name="new_view_cancel">取消</string>
+    <string name="new_view_confirm">创建视图</string>
+    <string name="new_view_confirm_tip">创建该视图并立即切换到画布</string>
+
+    <!-- UI Studio Preview Panel -->
+    <string name="preview_open_lightbox">查看原寸大图</string>
+    <string name="preview_relative_path">相对路径</string>
+    <string name="preview_path_copied">相对路径已复制到剪贴板</string>
 </resources>

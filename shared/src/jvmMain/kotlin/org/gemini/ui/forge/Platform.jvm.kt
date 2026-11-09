@@ -143,6 +143,38 @@ class JVMPlatform : Platform {
 
     override fun requestAdminElevationAndRestart(): Boolean =
         org.gemini.ui.forge.utils.SystemElevationHelper.tryElevateSelfOnWindows(emptyArray())
+
+    override val isDevMode: Boolean by lazy {
+        // 1. 显式环境变量 / 系统属性最高优先级覆盖
+        val explicitProp = System.getProperty("app.dev") ?: System.getProperty("gemini.dev") ?: System.getenv("APP_DEV")
+        if (explicitProp != null) {
+            return@lazy explicitProp.equals("true", ignoreCase = true) || explicitProp == "1"
+        }
+
+        // 2. 检测是否为打包发布的 Native 安装包 (jpackage 打包产物具备 jpackage.app-path)
+        val jpackageAppPath = System.getProperty("jpackage.app-path")
+        val composeResourcesDir = System.getProperty("compose.application.resources.dir")
+        if (!jpackageAppPath.isNullOrBlank() || !composeResourcesDir.isNullOrBlank()) {
+            return@lazy false
+        }
+
+        // 3. 检查代码类路径是否来源于构建/IDE输出目录 (build/classes, out) 而非发布 jar
+        val codeSource = try {
+            JVMPlatform::class.java.protectionDomain?.codeSource?.location?.toURI()?.path
+        } catch (e: Exception) {
+            null
+        }
+        val isRunningFromClasses = codeSource != null && !codeSource.endsWith(".jar", ignoreCase = true)
+
+        // 4. 检查是否挂载热重载、IDEA 运行时探针或 Gradle 编译输出
+        val classPath = System.getProperty("java.class.path") ?: ""
+        val isHotReloadOrIdea = classPath.contains("idea_rt.jar") ||
+            classPath.contains("hot-reload") ||
+            classPath.contains("build\\classes") ||
+            classPath.contains("build/classes")
+
+        isRunningFromClasses || isHotReloadOrIdea || jpackageAppPath.isNullOrBlank()
+    }
 }
 
 actual fun getPlatform(): Platform = JVMPlatform()

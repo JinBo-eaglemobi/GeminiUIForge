@@ -96,7 +96,7 @@ fun UIStudioBlockItem(
     val width = (b.right - b.left).coerceAtLeast(1f)
     val height = (b.bottom - b.top).coerceAtLeast(1f)
     val displayName = block.id
-    val isPureContainer = block.isPureContainer || block.type == UIBlockType.CONTAINER
+    val isPureContainer = block.isPureContainer || block.targetPageId != null
 
     val typeColor = when (block.type) {
         UIBlockType.BUTTON, UIBlockType.SPIN_BUTTON -> Color(0xFFF59E0B) // 琥珀金橙

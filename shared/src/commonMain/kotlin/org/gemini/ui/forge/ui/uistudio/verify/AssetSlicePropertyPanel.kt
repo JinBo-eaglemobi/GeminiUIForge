@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
@@ -42,7 +43,8 @@ fun AssetSlicePropertyPanel(
     onDeselect: () -> Unit,
     onUpdateItem: (EditableSliceItem) -> Unit,
     onDeleteItem: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSnapItem: ((EditableSliceItem) -> Unit)? = null
 ) {
     val spacing = LocalAppSpacing.current
 
@@ -266,6 +268,23 @@ fun AssetSlicePropertyPanel(
         }
 
         Spacer(modifier = Modifier.height(spacing.medium))
+
+            // 自适应贴合图片范围按钮
+            FilledTonalButton(
+                onClick = { onSnapItem?.invoke(selectedItem) },
+                modifier = Modifier.fillMaxWidth().tip("根据当前图片内容轮廓，自动吸附并贴合该图元边缘与宽高"),
+                enabled = onSnapItem != null
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AutoFixHigh,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(spacing.small))
+                Text("自适应贴合图片范围", fontSize = 12.sp)
+            }
+
+            Spacer(modifier = Modifier.height(spacing.small))
 
             // 删除当前图元按钮
             OutlinedButton(

@@ -302,7 +302,7 @@ class AiAgentDelegate(
      */
     private fun extractGeneratedImageUri(toolRecords: List<ChatToolCallRecord>): String? {
         for (record in toolRecords) {
-            if (record.isSuccess && (record.toolName == "generate_image" || record.toolName == "chat_refine_image" || record.toolName == "generate_block_asset")) {
+            if (record.isSuccess && (record.toolName == "generate_image" || record.toolName == "query_image_job" || record.toolName == "chat_refine_image" || record.toolName == "generate_block_asset")) {
                 // 1. 优先直接使用工具返回的高清多模态 imageUri (Data URI)
                 if (!record.imageUri.isNullOrBlank()) {
                     return record.imageUri

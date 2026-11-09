@@ -41,6 +41,7 @@ object McpToolRegistry {
             ListTemplatesTool(),
             GetTemplateTool(),
             CreateTemplateTool(),
+            SaveProjectTool(),
             AddBlockTool(),
             UpdateBlockTool(),
             MoveBlockTool(),
@@ -53,6 +54,7 @@ object McpToolRegistry {
 
             // 图像生成与资产处理共享工具
             GenerateImageTool(),
+            QueryImageJobTool(),
             GenerateBlockAssetTool(),
             GenerateAllAssetsTool(),
             ChatRefineImageTool(),

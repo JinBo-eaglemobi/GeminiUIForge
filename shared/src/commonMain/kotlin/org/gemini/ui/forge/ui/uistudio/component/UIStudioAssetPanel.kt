@@ -10,6 +10,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -40,9 +41,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -105,9 +113,22 @@ fun UIStudioAssetPanel(
     var renamingAssetTarget by remember { mutableStateOf<UIAssetItem?>(null) }
     var deletingFolderTarget by remember { mutableStateOf<UIAssetFolder?>(null) }
     var deletingAssetTarget by remember { mutableStateOf<UIAssetItem?>(null) }
+    var showBatchDeleteConfirm by remember { mutableStateOf(false) }
     val folderBoundsMap = remember { mutableStateMapOf<String, Rect>() }
     val listState = rememberLazyListState()
     var skipNextScrollToSelected by remember { mutableStateOf(false) }
+
+    // 计算当前所有可视素材项的 Hash 序列（供 Shift 范围连续选择计算）
+    val allVisibleHashes = remember(library.folders, library.items, state.expandedFolderIds) {
+        buildList {
+            library.folders.forEach { folder ->
+                if (state.expandedFolderIds.contains(folder.id)) {
+                    library.getItemsInFolder(folder.id).forEach { add(it.hash) }
+                }
+            }
+            library.getItemsInFolder(null).forEach { add(it.hash) }
+        }
+    }
 
     // 监听选中的素材变化（如从 AI 聊天存入素材库），自动平滑展开并精准滚动聚焦呈现
     LaunchedEffect(state.selectedAssetHash, library.items) {
@@ -172,11 +193,34 @@ fun UIStudioAssetPanel(
         path?.let { viewModel.assetLibrary.importExternalPaths(listOf(it)) }
     }
 
+    // 键盘焦点请求器与监听：多选时支持按物理键盘 Delete 键直接唤起批量删除二次确认
+    val focusRequester = remember { FocusRequester() }
+
+    // 选中项变化且非空时，自动将物理焦点请求至素材面板，确保敲击物理 Delete 键时能立即命中
+    LaunchedEffect(state.selectedAssetHashes) {
+        if (state.selectedAssetHashes.isNotEmpty()) {
+            try {
+                focusRequester.requestFocus()
+            } catch (_: Exception) {}
+        }
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
         modifier = modifier
             .fillMaxWidth()
+            .focusRequester(focusRequester)
+            .focusable()
+            .onKeyEvent { keyEvent ->
+                // Windows 物理 Delete 键约束（严格仅响应 KeyUp，杜绝退格键混淆）
+                if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Delete) {
+                    if (state.selectedAssetHashes.isNotEmpty()) {
+                        showBatchDeleteConfirm = true
+                        true
+                    } else false
+                } else false
+            }
             // 外部系统拖放导入：拖入图片文件或文件夹直接批量入库（哈希唯一去重）
             .onFileDrop(
                 onDragStateChanged = { isDragging -> isExternalDragHovered = isDragging },
@@ -310,6 +354,14 @@ fun UIStudioAssetPanel(
                     }
                 }
             }
+
+            // PC 端多选批量操作栏（当选中项 > 1 时平滑呈现）
+            UIStudioAssetBatchBar(
+                selectedCount = state.selectedAssetHashes.size,
+                onSelectAll = { viewModel.assetLibrary.selectAllAssets(allVisibleHashes) },
+                onClearSelection = { viewModel.assetLibrary.clearAssetSelection() },
+                onDeleteRequested = { showBatchDeleteConfirm = true }
+            )
 
             // 树形列表内容展示区域
             if (library.items.isEmpty() && library.folders.isEmpty()) {
@@ -479,15 +531,22 @@ fun UIStudioAssetPanel(
                             items(folderItems, key = { "item_${it.hash}_${it.relativePath}" }) { item ->
                                 UIStudioAssetTreeLeafItem(
                                     item = item,
-                                    isSelected = state.selectedAssetHash == item.hash,
+                                    isSelected = state.selectedAssetHashes.contains(item.hash),
                                     indentPadding = 24.dp,
                                     viewModel = viewModel,
                                     templateRepo = templateRepo,
+                                    allVisibleHashes = allVisibleHashes,
                                     onRename = { renamingAssetTarget = it },
                                     onDelete = { deletingAssetTarget = it },
-                                    onSelect = {
+                                    onBatchDeleteRequested = { showBatchDeleteConfirm = true },
+                                    onSelect = { isCtrl, isShift ->
                                         skipNextScrollToSelected = true
-                                        viewModel.assetLibrary.selectAsset(item.hash)
+                                        viewModel.assetLibrary.selectAsset(
+                                            assetHash = item.hash,
+                                            isCtrlOrCmd = isCtrl,
+                                            isShift = isShift,
+                                            visibleAssetHashes = allVisibleHashes
+                                        )
                                     },
                                     onDragHover = { rootPos ->
                                         val liveState = viewModel.state
@@ -534,15 +593,22 @@ fun UIStudioAssetPanel(
                     items(rootItems, key = { "root_item_${it.hash}_${it.relativePath}" }) { item ->
                         UIStudioAssetTreeLeafItem(
                             item = item,
-                            isSelected = state.selectedAssetHash == item.hash,
+                            isSelected = state.selectedAssetHashes.contains(item.hash),
                             indentPadding = 4.dp,
                             viewModel = viewModel,
                             templateRepo = templateRepo,
+                            allVisibleHashes = allVisibleHashes,
                             onRename = { renamingAssetTarget = it },
                             onDelete = { deletingAssetTarget = it },
-                            onSelect = {
+                            onBatchDeleteRequested = { showBatchDeleteConfirm = true },
+                            onSelect = { isCtrl, isShift ->
                                 skipNextScrollToSelected = true
-                                viewModel.assetLibrary.selectAsset(item.hash)
+                                viewModel.assetLibrary.selectAsset(
+                                    assetHash = item.hash,
+                                    isCtrlOrCmd = isCtrl,
+                                    isShift = isShift,
+                                    visibleAssetHashes = allVisibleHashes
+                                )
                             },
                             onDragHover = { rootPos ->
                                 val liveState = viewModel.state
@@ -697,6 +763,22 @@ fun UIStudioAssetPanel(
                 deletingAssetTarget = null
             },
             onDismiss = { deletingAssetTarget = null }
+        )
+    }
+
+    // 批量删除素材二次确认弹窗
+    if (showBatchDeleteConfirm) {
+        val selectedCount = state.selectedAssetHashes.size
+        AppConfirmDialog(
+            title = "确认批量删除素材",
+            message = "是否确认从磁盘彻底删除选中的 $selectedCount 个素材？此操作将永久物理删除文件，不可撤销。",
+            confirmText = "彻底删除 ($selectedCount)",
+            isDestructive = true,
+            onConfirm = {
+                viewModel.assetLibrary.deleteAssets(state.selectedAssetHashes)
+                showBatchDeleteConfirm = false
+            },
+            onDismiss = { showBatchDeleteConfirm = false }
         )
     }
 }

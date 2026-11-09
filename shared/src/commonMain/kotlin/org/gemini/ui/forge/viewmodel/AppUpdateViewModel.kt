@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.io.files.Path
 import org.gemini.ui.forge.ProjectConfig
 import org.gemini.ui.forge.getPlatform
+import org.gemini.ui.forge.isDevMode
 import org.gemini.ui.forge.model.app.UpdateStatus
 import org.gemini.ui.forge.model.app.UpdateInfo
 import org.gemini.ui.forge.service.UpdateService
@@ -33,10 +34,19 @@ class AppUpdateViewModel(
 
     /**
      * 检查软件更新
+     *
+     * @param isManual 是否由用户在界面显式手动点击触发（默认 false，启动时自动触发）
+     * @param force 是否强制跳过开发模式检查直接请求远程接口（默认 false）
      */
-    fun checkForUpdates() {
+    fun checkForUpdates(isManual: Boolean = false, force: Boolean = false) {
         viewModelScope.launch {
-            AppLogger.i("AppUpdateViewModel", "🔄 正在手动触发更新检查...")
+            if (isDevMode && !force) {
+                AppLogger.i("AppUpdateViewModel", "🛠️ 当前处于开发调试模式 (isDevMode=true)，已自动免除版本更新检测。")
+                _status.update { UpdateStatus.DevMode }
+                return@launch
+            }
+
+            AppLogger.i("AppUpdateViewModel", if (isManual) "🔄 正在手动触发更新检查..." else "🔄 启动自检更新...")
             _status.update {
                 UpdateStatus.Checking
             }

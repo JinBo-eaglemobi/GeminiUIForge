@@ -390,7 +390,7 @@ fun UIStudioCanvasArea(
                                                 }
                                             }
                                             val targetContainer = rootParent ?: info.block
-                                            if (targetContainer.isPureContainer || targetContainer.children.isNotEmpty() || targetContainer.type == org.gemini.ui.forge.model.ui.UIBlockType.CONTAINER) {
+                                            if (targetContainer.isPureContainer || targetContainer.children.isNotEmpty() || targetContainer.targetPageId != null) {
                                                 viewModel.pageManager.openContainerTab(targetContainer.id)
                                             }
                                         }

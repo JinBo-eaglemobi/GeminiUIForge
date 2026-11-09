@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,12 +27,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.data.TemplateFile
-import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.extend.copyOnClick
 import org.gemini.ui.forge.model.ui.UIBlockType
+import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.ui.component.AppIconButton
+import org.gemini.ui.forge.ui.component.AppIconButtonTier
+import org.gemini.ui.forge.ui.component.AppIconButtonVariant
+import org.gemini.ui.forge.ui.component.chat.CommonImageLightbox
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
@@ -38,6 +45,7 @@ import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.utils.findBlockById
 import org.gemini.ui.forge.utils.readLocalFileBytes
 import org.gemini.ui.forge.utils.toImageBitmap
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * UI Studio 右侧独立预览面板组件 (Preview Panel)。
@@ -118,7 +126,7 @@ fun UIStudioPreviewPanel(
                                 )
                             }
                         }
-                        selectedBlock != null && (selectedBlock.isPureContainer || selectedBlock.children.isNotEmpty() || selectedBlock.type == UIBlockType.CONTAINER) -> {
+                        selectedBlock != null && (selectedBlock.isPureContainer || selectedBlock.children.isNotEmpty() || selectedBlock.targetPageId != null) -> {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = MaterialTheme.colorScheme.secondaryContainer
@@ -166,7 +174,7 @@ fun UIStudioPreviewPanel(
                         // 1. 预览选中的素材图片与详细尺寸
                         AssetPreviewView(asset = selectedAsset)
                     }
-                    selectedBlock != null && (selectedBlock.isPureContainer || selectedBlock.children.isNotEmpty() || selectedBlock.type == UIBlockType.CONTAINER) -> {
+                    selectedBlock != null && (selectedBlock.isPureContainer || selectedBlock.children.isNotEmpty() || selectedBlock.targetPageId != null) -> {
                         // 2. 预览选中的父组件渲染效果（渲染内部子布局）
                         ContainerPreviewView(
                             container = selectedBlock,
@@ -198,6 +206,7 @@ fun UIStudioPreviewPanel(
 @Composable
 private fun AssetPreviewView(asset: UIAssetItem) {
     var bitmap by remember(asset.relativePath, asset.updatedAt) { mutableStateOf<ImageBitmap?>(null) }
+    var showLightbox by remember { mutableStateOf(false) }
 
     LaunchedEffect(asset.relativePath, asset.updatedAt) {
         withContext(Dispatchers.Default) {
@@ -219,7 +228,7 @@ private fun AssetPreviewView(asset: UIAssetItem) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxSize()
     ) {
-        // 图片画面预览视口
+        // 图片画面预览视口（支持点击全屏原寸放大）
         Surface(
             color = Color(0xFF0F172A),
             shape = RoundedCornerShape(8.dp),
@@ -230,7 +239,9 @@ private fun AssetPreviewView(asset: UIAssetItem) {
                 .padding(bottom = 8.dp)
         ) {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(enabled = bitmap != null) { showLightbox = true },
                 contentAlignment = Alignment.Center
             ) {
                 if (bitmap != null) {
@@ -242,6 +253,18 @@ private fun AssetPreviewView(asset: UIAssetItem) {
                             .fillMaxSize()
                             .padding(8.dp)
                     )
+
+                    // 右上角浮现放大查看快捷按钮
+                    AppIconButton(
+                        imageVector = Icons.Default.ZoomIn,
+                        tooltip = stringResource(Res.string.preview_open_lightbox),
+                        tier = AppIconButtonTier.COMPACT,
+                        variant = AppIconButtonVariant.FILLED_TONAL,
+                        onClick = { showLightbox = true },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                    )
                 } else {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
@@ -252,50 +275,96 @@ private fun AssetPreviewView(asset: UIAssetItem) {
             }
         }
 
-        // 下方素材信息卡片
+        // 下方素材信息卡片（展示名称、Hash、素材库相对路径与尺寸）
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
             shape = RoundedCornerShape(6.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
                         text = asset.name,
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = "${asset.width} × ${asset.height} px",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                // 结构化素材库相对路径展示（支持点击一键复制）
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                        .copyOnClick(asset.relativePath, stringResource(Res.string.preview_path_copied))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = stringResource(Res.string.preview_relative_path),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Hash: ${asset.hash}",
+                        text = asset.relativePath,
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = MaterialTheme.colorScheme.outline,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.copyOnClick(asset.hash, "已复制素材 Hash")
+                        modifier = Modifier
+                            .weight(1f)
+                            .tip("点击复制相对路径: ${asset.relativePath}")
                     )
                 }
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer
-                ) {
-                    Text(
-                        text = "${asset.width} × ${asset.height} px",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
+
+                // Hash
+                Text(
+                    text = "Hash: ${asset.hash}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.outline,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .copyOnClick(asset.hash, "已复制素材 Hash")
+                )
             }
         }
+    }
+
+    // 唤起沉浸式原寸原图灯箱
+    if (showLightbox) {
+        val absolutePath = remember(asset.relativePath) {
+            TemplateFile(asset.relativePath).getAbsolutePath()
+        }
+        CommonImageLightbox(
+            imageUri = absolutePath,
+            onDismiss = { showLightbox = false }
+        )
     }
 }
 
@@ -414,6 +483,7 @@ private fun BlockPreviewView(
     val imagePath = assetPathResolver(block.assetHash)
     val assetUpdatedAt = assetUpdatedAtResolver(block.assetHash)
     var bitmap by remember(imagePath, assetUpdatedAt) { mutableStateOf<ImageBitmap?>(null) }
+    var showLightbox by remember { mutableStateOf(false) }
     val blockW = (block.bounds.right - block.bounds.left).toInt()
     val blockH = (block.bounds.bottom - block.bounds.top).toInt()
 
@@ -446,7 +516,9 @@ private fun BlockPreviewView(
                 .padding(bottom = 8.dp)
         ) {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(enabled = !imagePath.isNullOrBlank() && bitmap != null) { showLightbox = true },
                 contentAlignment = Alignment.Center
             ) {
                 if (bitmap != null) {
@@ -457,6 +529,18 @@ private fun BlockPreviewView(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(8.dp)
+                    )
+
+                    // 右上角浮现放大查看快捷按钮
+                    AppIconButton(
+                        imageVector = Icons.Default.ZoomIn,
+                        tooltip = stringResource(Res.string.preview_open_lightbox),
+                        tier = AppIconButtonTier.COMPACT,
+                        variant = AppIconButtonVariant.FILLED_TONAL,
+                        onClick = { showLightbox = true },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
                     )
                 } else {
                     Icon(
@@ -475,42 +559,92 @@ private fun BlockPreviewView(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
                         text = "组件: ${block.id}",
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
-                    Text(
-                        text = "类型: ${block.type.name}",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        val origW = bitmap?.width ?: blockW
+                        val origH = bitmap?.height ?: blockH
+                        Text(
+                            text = "$origW × $origH px",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer
-                ) {
-                    val origW = bitmap?.width ?: blockW
-                    val origH = bitmap?.height ?: blockH
-                    Text(
-                        text = "$origW × $origH px",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+
+                // 结构化素材库相对路径展示（若存在素材关联）
+                if (!imagePath.isNullOrBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .copyOnClick(imagePath, stringResource(Res.string.preview_path_copied))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = stringResource(Res.string.preview_relative_path),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = imagePath,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f)
+                                .tip("点击复制相对路径: $imagePath")
+                        )
+                    }
                 }
+
+                Text(
+                    text = "类型: ${block.type.name}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
             }
         }
+    }
+
+    // 唤起沉浸式原寸原图灯箱
+    if (showLightbox && !imagePath.isNullOrBlank()) {
+        val absolutePath = remember(imagePath) {
+            if (imagePath.startsWith("/") || (imagePath.length > 2 && imagePath[1] == ':')) {
+                imagePath
+            } else {
+                TemplateFile(imagePath).getAbsolutePath()
+            }
+        }
+        CommonImageLightbox(
+            imageUri = absolutePath,
+            onDismiss = { showLightbox = false }
+        )
     }
 }
 

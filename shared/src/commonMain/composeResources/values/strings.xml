@@ -224,6 +224,10 @@
     <string name="update_preparing">Update ready, preparing to install...</string>
     <string name="update_latest">Current version is up to date</string>
     <string name="update_error">Update check failed, please check your network</string>
+    <string name="update_dev_mode_title">Local Development Mode (Dev Mode)</string>
+    <string name="update_dev_mode_desc">Running local source code and debug agent. Version update checks are exempted.</string>
+    <string name="update_force_check_action">Force Check</string>
+    <string name="update_dev_badge">DEV</string>
     <string name="action_go_to_settings">Go to Settings</string>
     
     <!-- Batch Generation -->
@@ -784,4 +788,26 @@
     <string name="dialog_run_as_admin_restart_desc">The startup administrator privilege setting has been changed. Would you like to restart the application now to apply the new privilege mode?</string>
     <string name="env_elevation_required_prompt">The current operation [%1$s] requires Windows administrator privileges, but the application is currently running in standard user mode. Would you like to elevate privileges and restart the application to continue? [Y/n]</string>
     <string name="env_elevation_cancelled_msg">Administrator elevation cancelled. Operation aborted. You can re-enable administrator startup in Settings or run the application as administrator manually.</string>
+
+    <!-- New View Dialog -->
+    <string name="new_view_dialog_title">New View</string>
+    <string name="new_view_name_label">View Name (e.g. Game_HUD)</string>
+    <string name="new_view_name_placeholder">Enter unique view name...</string>
+    <string name="new_view_size_section_title">Canvas Dimensions</string>
+    <string name="new_view_width_label">Width (W)</string>
+    <string name="new_view_height_label">Height (H)</string>
+    <string name="new_view_presets_label">Quick Presets</string>
+    <string name="new_view_preset_inherit">Inherit Project</string>
+    <string name="new_view_preset_landscape_fhd">Landscape FHD</string>
+    <string name="new_view_preset_landscape_hd">Landscape HD</string>
+    <string name="new_view_preset_portrait_fhd">Portrait FHD</string>
+    <string name="new_view_preset_portrait_hd">Mobile Portrait</string>
+    <string name="new_view_cancel">Cancel</string>
+    <string name="new_view_confirm">Create View</string>
+    <string name="new_view_confirm_tip">Create view and switch to canvas immediately</string>
+
+    <!-- UI Studio Preview Panel -->
+    <string name="preview_open_lightbox">View Full Size Image</string>
+    <string name="preview_relative_path">Relative Path</string>
+    <string name="preview_path_copied">Relative path copied to clipboard</string>
 </resources>

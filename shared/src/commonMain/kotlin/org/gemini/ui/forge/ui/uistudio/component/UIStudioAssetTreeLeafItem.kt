@@ -15,12 +15,15 @@ import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,7 +35,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
@@ -82,7 +88,9 @@ fun UIStudioAssetTreeLeafItem(
     templateRepo: TemplateRepository,
     onRename: (UIAssetItem) -> Unit,
     onDelete: (UIAssetItem) -> Unit,
-    onSelect: (() -> Unit)? = null,
+    onSelect: ((isCtrlOrCmd: Boolean, isShift: Boolean) -> Unit)? = null,
+    onBatchDeleteRequested: (() -> Unit)? = null,
+    allVisibleHashes: List<String> = emptyList(),
     onDragHover: (Offset) -> Unit = {},
     onDragEnd: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -93,6 +101,7 @@ fun UIStudioAssetTreeLeafItem(
     var bitmap by remember(item.relativePath, item.updatedAt) { mutableStateOf<ImageBitmap?>(null) }
     var showContextMenu by remember { mutableStateOf(false) }
     var showMoveFolderDialog by remember { mutableStateOf(false) }
+    var showBatchMoveFolderDialog by remember { mutableStateOf(false) }
     var rowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val isBeingDragged = state.draggedAssetHash == item.hash
 
@@ -117,13 +126,6 @@ fun UIStudioAssetTreeLeafItem(
         val maxMenuWidth = maxOf(280.dp, maxWidth)
 
         Surface(
-            onClick = {
-                if (onSelect != null) {
-                    onSelect()
-                } else {
-                    viewModel.assetLibrary.selectAsset(item.hash)
-                }
-            },
             shape = RoundedCornerShape(6.dp),
             color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
             border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
@@ -139,6 +141,10 @@ fun UIStudioAssetTreeLeafItem(
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                                // 若当前右击的项不在已选中集合中，则将选中态重置为该单项；若已在多选集合中，则保留多选状态
+                                if (!state.selectedAssetHashes.contains(item.hash)) {
+                                    viewModel.assetLibrary.selectAsset(item.hash, isCtrlOrCmd = false, isShift = false)
+                                }
                                 showContextMenu = true
                                 event.changes.forEach { it.consume() }
                             }
@@ -151,6 +157,9 @@ fun UIStudioAssetTreeLeafItem(
                         val down = awaitFirstDown(requireUnconsumed = false)
                         if (!down.pressed) return@awaitEachGesture
                         if (currentEvent.buttons.isSecondaryPressed) return@awaitEachGesture
+
+                        val isCtrl = currentEvent.keyboardModifiers.isCtrlPressed || currentEvent.keyboardModifiers.isMetaPressed
+                        val isShift = currentEvent.keyboardModifiers.isShiftPressed
 
                         var isDragging = false
                         var totalDistance = 0f
@@ -175,7 +184,11 @@ fun UIStudioAssetTreeLeafItem(
                             viewModel.viewport.updateDragCursorPosition(null)
                             onDragEnd()
                         } else if (totalDistance <= 6f) {
-                            viewModel.assetLibrary.selectAsset(item.hash)
+                            if (onSelect != null) {
+                                onSelect(isCtrl, isShift)
+                            } else {
+                                viewModel.assetLibrary.selectAsset(item.hash, isCtrl, isShift)
+                            }
                         }
                     }
                 }
@@ -262,86 +275,188 @@ fun UIStudioAssetTreeLeafItem(
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(10.dp))
                 .padding(vertical = 4.dp)
         ) {
-            DropdownMenuItem(
-                text = { Text("一键去除背景 (生成透明图)", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    viewModel.assetLibrary.removeAssetBackground(item.hash)
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("添加到当前视图画布", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    viewModel.assetLibrary.addAssetToCanvas(item, repo = templateRepo)
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("重命名素材", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    onRename(item)
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("在系统资源管理器中显示", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    viewModel.assetLibrary.revealAssetInExplorer(item)
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("移动至文件夹...", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    showMoveFolderDialog = true
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("复制文件路径", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    copy(item.relativePath, "已复制素材路径: ${item.relativePath}")
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("复制资源哈希 (Hash)", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    val hash = item.hash?.toShortHash()
-                    if (!hash.isNullOrBlank()) {
-                        copy(hash, "已复制资源哈希: $hash")
-                    } else {
-                        coroutineScope.launch {
-                            val computed = viewModel.assetLibrary.getOrComputeAssetHash(item)?.toShortHash()
-                            if (!computed.isNullOrBlank()) {
-                                copy(computed, "已复制资源哈希: $computed")
-                            } else {
-                                org.gemini.ui.forge.utils.Toast.show("暂无可用哈希码", org.gemini.ui.forge.ui.component.ToastType.INFO)
+            val isMultiSelected = state.selectedAssetHashes.size > 1 && state.selectedAssetHashes.contains(item.hash)
+
+            if (isMultiSelected) {
+                // === 多选专属上下文菜单 ===
+                // 1. 顶部多选状态提示
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "已选择 ${state.selectedAssetHashes.size} 项素材",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Collections,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    onClick = {},
+                    enabled = false
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                )
+                // 2. 批量彻底删除 (点击弹出二次确认)
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "批量彻底删除 (${state.selectedAssetHashes.size})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    onClick = {
+                        showContextMenu = false
+                        onBatchDeleteRequested?.invoke()
+                    }
+                )
+                // 3. 批量移动至文件夹...
+                DropdownMenuItem(
+                    text = { Text("批量移动至文件夹...", style = MaterialTheme.typography.bodySmall, maxLines = 1) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.DriveFileMove,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    onClick = {
+                        showContextMenu = false
+                        showBatchMoveFolderDialog = true
+                    }
+                )
+                // 4. 全选所有素材
+                DropdownMenuItem(
+                    text = { Text("全选所有素材", style = MaterialTheme.typography.bodySmall, maxLines = 1) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.SelectAll,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    onClick = {
+                        showContextMenu = false
+                        viewModel.assetLibrary.selectAllAssets(allVisibleHashes)
+                    }
+                )
+                // 5. 取消多选
+                DropdownMenuItem(
+                    text = { Text("取消多选", style = MaterialTheme.typography.bodySmall, maxLines = 1) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    onClick = {
+                        showContextMenu = false
+                        viewModel.assetLibrary.clearAssetSelection()
+                    }
+                )
+            } else {
+                // === 单项专属常规上下文菜单 ===
+                DropdownMenuItem(
+                    text = { Text("一键去除背景 (生成透明图)", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
+                    leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        viewModel.assetLibrary.removeAssetBackground(item.hash)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("添加到当前视图画布", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        viewModel.assetLibrary.addAssetToCanvas(item, repo = templateRepo)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("重命名素材", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        onRename(item)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("在系统资源管理器中显示", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        viewModel.assetLibrary.revealAssetInExplorer(item)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("移动至文件夹...", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        showMoveFolderDialog = true
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("复制文件路径", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
+                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        copy(item.relativePath, "已复制素材路径: ${item.relativePath}")
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("复制资源哈希 (Hash)", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
+                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        val hash = item.hash?.toShortHash()
+                        if (!hash.isNullOrBlank()) {
+                            copy(hash, "已复制资源哈希: $hash")
+                        } else {
+                            coroutineScope.launch {
+                                val computed = viewModel.assetLibrary.getOrComputeAssetHash(item)?.toShortHash()
+                                if (!computed.isNullOrBlank()) {
+                                    copy(computed, "已复制资源哈希: $computed")
+                                } else {
+                                    org.gemini.ui.forge.utils.Toast.show("暂无可用哈希码", org.gemini.ui.forge.ui.component.ToastType.INFO)
+                                }
                             }
                         }
                     }
-                }
-            )
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-            )
-            DropdownMenuItem(
-                text = { Text("删除素材", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
-                onClick = {
-                    showContextMenu = false
-                    onDelete(item)
-                }
-            )
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                )
+                DropdownMenuItem(
+                    text = { Text("删除素材", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, maxLines = 1, softWrap = false) },
+                    leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
+                    onClick = {
+                        showContextMenu = false
+                        onDelete(item)
+                    }
+                )
+            }
         }
     }
 
@@ -443,6 +558,93 @@ fun UIStudioAssetTreeLeafItem(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showMoveFolderDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    // 批量移动多选素材至文件夹弹窗
+    if (showBatchMoveFolderDialog) {
+        AlertDialog(
+            onDismissRequest = { showBatchMoveFolderDialog = false },
+            title = {
+                Text(
+                    text = "批量移动 ${state.selectedAssetHashes.size} 项素材至文件夹",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                val folders = state.assetLibrary.folders
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "请选择目标文件夹：",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // 根目录选项
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.assetLibrary.moveAssetsToFolder(state.selectedAssetHashes, null, templateRepo)
+                                showBatchMoveFolderDialog = false
+                            }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "根目录 (无文件夹)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    // 各个文件夹选项
+                    folders.forEach { folder ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.assetLibrary.moveAssetsToFolder(state.selectedAssetHashes, folder.id, templateRepo)
+                                    showBatchMoveFolderDialog = false
+                                }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            ) {
+                                Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = folder.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showBatchMoveFolderDialog = false }) {
                     Text("取消")
                 }
             }

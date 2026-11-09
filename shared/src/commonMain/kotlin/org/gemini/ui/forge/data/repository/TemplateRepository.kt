@@ -12,6 +12,7 @@ import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.model.app.UIModule
 import org.gemini.ui.forge.model.ui.UIBlock
+import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.model.ui.UIStudioProjectConfig
 import org.gemini.ui.forge.model.ui.UIStudioPageIndexItem
@@ -160,9 +161,11 @@ class TemplateRepository(
         if (projectState.isUiStudioProject) {
             val pagesDir = "$PROJECTS_DIR/$sanitizedName/pages"
             // 1. 各平级页面完整数据独立写入 pages/{page.id}.json（原子刷盘）
+            // 遵循单一事实源原则：落盘前对引用其他页面的图元执行脱敏，清空冗余的 children 避免在主页面中重复复制子图元
             projectState.studioPages.forEach { page ->
                 try {
-                    val pageJson = looseJson.encodeToString(page)
+                    val strippedPage = stripPageReferences(page)
+                    val pageJson = looseJson.encodeToString(strippedPage)
                     fileStorage.saveToFileAtomic("$pagesDir/${page.id}.json", pageJson)
                 } catch (e: Exception) {
                     AppLogger.e("TemplateRepository", "❌ 保存独立页面失败: ${page.id}", e)
@@ -202,13 +205,15 @@ class TemplateRepository(
 
     /**
      * 单独保存指定页面到 pages/{page.id}.json（极速单页面原子落盘，无需重写主清单和其他页面）。
+     * 保存前自动对 targetPageId != null 的图元执行脱敏，避免持久化冗余的 children 镜像。
      */
     suspend fun saveStudioPage(templateName: String, page: UIStudioPage) {
         val sanitizedName = sanitizeName(templateName)
         val pageRelPath = "$PROJECTS_DIR/$sanitizedName/pages/${page.id}.json"
-        val pageJson = looseJson.encodeToString(page)
+        val strippedPage = stripPageReferences(page)
+        val pageJson = looseJson.encodeToString(strippedPage)
         fileStorage.saveToFileAtomic(pageRelPath, pageJson)
-        AppLogger.d("TemplateRepository", "📄 独立页面已原子更新: ${page.id}")
+        AppLogger.d("TemplateRepository", "📄 独立页面已原子更新(已脱敏页面引用): ${page.id}")
     }
 
     /**
@@ -261,6 +266,57 @@ class TemplateRepository(
             block.copy(
                 children = cleanBlockPaths(block.children)
             )
+        }
+    }
+
+    /**
+     * 独立页面保存脱敏：凡是 targetPageId != null 的图元（页面/组件实例），
+     * 其 children 强制脱敏置空为 emptyList()，避免在当前页面 JSON 中冗余持久化被引用页面的子图元数据。
+     */
+    private fun stripPageReferences(page: UIStudioPage): UIStudioPage {
+        fun cleanBlock(block: UIStudioBlock): UIStudioBlock {
+            val cleanedChildren = if (block.targetPageId != null) {
+                emptyList()
+            } else {
+                block.children.map { cleanBlock(it) }
+            }
+            return block.copy(children = cleanedChildren)
+        }
+        return page.copy(blocks = page.blocks.map { cleanBlock(it) })
+    }
+
+    /**
+     * 独立页面加载注水：在反序列化所有页面后，根据图元的 targetPageId 动态组装被引用页面的最新权威图元树。
+     * 内置环路访问检测防爆栈，注水后自动绑定完整的 parent 树状层级。
+     */
+    private fun hydratePageReferences(pages: List<UIStudioPage>): List<UIStudioPage> {
+        val pageMap = pages.associateBy { it.id }
+
+        fun hydrateBlock(block: UIStudioBlock, visitingPageIds: Set<String>): UIStudioBlock {
+            val targetId = block.targetPageId
+            if (targetId != null) {
+                if (visitingPageIds.contains(targetId)) {
+                    AppLogger.w("TemplateRepository", "⚠️ 检测到页面循环引用: $targetId，中断向下递归注水")
+                    return block.copy(children = emptyList())
+                }
+                val targetPage = pageMap[targetId]
+                return if (targetPage != null) {
+                    val nextVisiting = visitingPageIds + targetId
+                    val hydratedChildren = targetPage.blocks.map { hydrateBlock(it, nextVisiting) }
+                    block.copy(children = hydratedChildren.bindParents(block))
+                } else {
+                    AppLogger.w("TemplateRepository", "⚠️ 未找到图元引用目标页面: $targetId")
+                    block.copy(children = emptyList())
+                }
+            } else {
+                val hydratedChildren = block.children.map { hydrateBlock(it, visitingPageIds) }
+                return block.copy(children = hydratedChildren.bindParents(block))
+            }
+        }
+
+        return pages.map { page ->
+            val hydratedBlocks = page.blocks.map { hydrateBlock(it, setOf(page.id)) }
+            page.copy(blocks = hydratedBlocks.bindParents())
         }
     }
 
@@ -340,18 +396,20 @@ class TemplateRepository(
                     assembledPages.add(page)
                 }
             }
-            return projectState.copy(studioPages = assembledPages)
+            return projectState.copy(studioPages = hydratePageReferences(assembledPages))
         } else if (projectState.studioPages.isNotEmpty()) {
-            // 老工程自愈升级：老 template.json 中已带有完整 blocks，自动无感拆分写入 pages/ 目录
+            // 老工程自愈升级：老 template.json 中已带有完整 blocks，自动无感拆分写入 pages/ 目录（落盘前执行引用脱敏）
             AppLogger.i("TemplateRepository", "🔄 检测到存量工程，正在自动拆分为独立页面存储: $sanitizedName")
             for (page in projectState.studioPages) {
                 try {
-                    val pageJson = looseJson.encodeToString(page)
+                    val strippedPage = stripPageReferences(page)
+                    val pageJson = looseJson.encodeToString(strippedPage)
                     fileStorage.saveToFileAtomic("$pagesDir/${page.id}.json", pageJson)
                 } catch (e: Exception) {
                     AppLogger.w("TemplateRepository", "⚠️ 老工程拆分保存失败: ${page.id}: ${e.message}")
                 }
             }
+            return projectState.copy(studioPages = hydratePageReferences(projectState.studioPages))
         }
         return projectState
     }
@@ -443,7 +501,7 @@ class TemplateRepository(
             result.add(UIStudioPage(id = "MainPage", nameStr = "MainPage", width = config.defaultCanvasWidth, height = config.defaultCanvasHeight))
         }
 
-        return result
+        return hydratePageReferences(result)
     }
 
     /**

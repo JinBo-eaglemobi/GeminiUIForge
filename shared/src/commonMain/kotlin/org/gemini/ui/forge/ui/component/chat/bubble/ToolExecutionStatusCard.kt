@@ -24,21 +24,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import org.gemini.ui.forge.model.chat.ChatToolCallRecord
 
 /**
  * AI 工具调用执行状态与结果展示卡片 (遵循 ui-designer.md 规范)
  *
- * 采用嵌套同心圆角 (R_outer 12dp, R_inner 6dp, padding 6dp)，支持展开查看详细出入参。
+ * 采用嵌套同心圆角 (R_outer 12dp, R_inner 6dp, padding 6dp)，支持展开查看详细出入参，
+ * 并支持工具产出图像（imageUri）就地内联预览。
  */
 @Composable
 fun ToolExecutionStatusCard(
     record: ChatToolCallRecord,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onImageClick: ((String) -> Unit)? = null,
+    imageActions: (@Composable (imageUri: String) -> Unit)? = null
 ) {
     var isExpanded by remember { mutableStateOf(false) }
 
@@ -120,6 +125,31 @@ fun ToolExecutionStatusCard(
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+
+            // 若工具产出了图片（如 generate_image / query_image_job），在工具卡片正下方就地呈现图片
+            record.imageUri?.takeIf { it.isNotBlank() }?.let { imgUri ->
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(180.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .clickable { onImageClick?.invoke(imgUri) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = imgUri,
+                        contentDescription = "工具产出图片",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+                if (imageActions != null) {
+                    Spacer(Modifier.height(4.dp))
+                    imageActions(imgUri)
                 }
             }
 

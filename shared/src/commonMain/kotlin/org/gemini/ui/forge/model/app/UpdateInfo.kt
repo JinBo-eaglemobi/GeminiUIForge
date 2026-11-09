@@ -44,6 +44,9 @@ sealed class UpdateStatus {
     /** 已是最新版本：无需更新 */
     object UpToDate : UpdateStatus()
 
+    /** 开发调试环境：已自动免除版本更新检测 */
+    object DevMode : UpdateStatus()
+
     /** 更新过程中出现异常（网络中断、超时、签名失效等） */
     data class Error(val message: String) : UpdateStatus()
 }

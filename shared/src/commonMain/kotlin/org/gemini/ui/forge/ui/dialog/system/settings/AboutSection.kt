@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.ProjectConfig
+import org.gemini.ui.forge.isDevMode
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.model.app.*
 import org.gemini.ui.forge.ui.theme.AppShapes
@@ -79,11 +80,32 @@ fun AboutSection(
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
-        Text(
-            stringResource(Res.string.about_version, currentProjectVersion),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                stringResource(Res.string.about_version, currentProjectVersion),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            if (isDevMode) {
+                Spacer(Modifier.width(LocalAppSpacing.current.small))
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f))
+                ) {
+                    Text(
+                        text = stringResource(Res.string.update_dev_badge),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
 
         Spacer(Modifier.height(LocalAppSpacing.current.medium))
 
@@ -98,11 +120,87 @@ fun AboutSection(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 when (val status = statusState) {
+                    is UpdateStatus.DevMode -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Code,
+                                null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.tertiary
+                            )
+                            Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
+                            Text(
+                                stringResource(Res.string.update_dev_mode_title),
+                                color = MaterialTheme.colorScheme.tertiary,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            stringResource(Res.string.update_dev_mode_desc),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(vertical = LocalAppSpacing.current.extraSmall)
+                        )
+                        TextButton(
+                            onClick = { updateViewModel.checkForUpdates(isManual = true, force = true) },
+                            modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall)
+                        ) {
+                            Icon(Icons.Default.Refresh, null, Modifier.size(14.dp))
+                            Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
+                            Text(
+                                stringResource(Res.string.update_force_check_action),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+
                     is UpdateStatus.Idle -> {
-                        Button(onClick = updateViewModel::checkForUpdates, shape = AppShapes.medium) {
-                            Icon(Icons.Default.SystemUpdateAlt, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(LocalAppSpacing.current.small))
-                            Text(stringResource(Res.string.update_check_action))
+                        if (isDevMode) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Code,
+                                    null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.tertiary
+                                )
+                                Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
+                                Text(
+                                    stringResource(Res.string.update_dev_mode_title),
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                stringResource(Res.string.update_dev_mode_desc),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(vertical = LocalAppSpacing.current.extraSmall)
+                            )
+                            TextButton(
+                                onClick = { updateViewModel.checkForUpdates(isManual = true, force = true) },
+                                modifier = Modifier.padding(top = LocalAppSpacing.current.extraSmall)
+                            ) {
+                                Icon(Icons.Default.Refresh, null, Modifier.size(14.dp))
+                                Spacer(Modifier.width(LocalAppSpacing.current.extraSmall))
+                                Text(
+                                    stringResource(Res.string.update_force_check_action),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        } else {
+                            Button(onClick = updateViewModel::checkForUpdates, shape = AppShapes.medium) {
+                                Icon(Icons.Default.SystemUpdateAlt, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(LocalAppSpacing.current.small))
+                                Text(stringResource(Res.string.update_check_action))
+                            }
                         }
                     }
 

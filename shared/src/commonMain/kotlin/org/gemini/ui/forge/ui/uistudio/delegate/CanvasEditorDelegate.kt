@@ -619,8 +619,8 @@ class CanvasEditorDelegate(
 
         if (position == DropPosition.INSIDE) {
             // 移入目标成组逻辑判定：
-            // 1. 若目标本身就是纯容器
-            if (targetBlock.isPureContainer || targetBlock.type == UIBlockType.CONTAINER) {
+            // 1. 若目标本身就是纯容器或页面组件实例
+            if (targetBlock.isPureContainer || targetBlock.targetPageId != null) {
                 val targetAbsBounds = view.blocks.calculateBlockAbsoluteBounds(targetId) ?: targetBlock.bounds
                 val draggedAbsBounds = view.blocks.calculateBlockAbsoluteBounds(draggedId) ?: draggedBlock.bounds
                 val localBounds = SerialRect(
@@ -739,7 +739,7 @@ class CanvasEditorDelegate(
 
         val container = UIStudioBlock(
             id = containerId,
-            type = UIBlockType.CONTAINER,
+            type = UIBlockType.VIEW,
             isPureContainer = true,
             bounds = unionRect,
             children = listOf(localB, localA),
@@ -894,7 +894,7 @@ class CanvasEditorDelegate(
 
         val instanceBlock = UIStudioBlock(
             id = instanceId,
-            type = UIBlockType.CONTAINER,
+            type = UIBlockType.VIEW,
             isPureContainer = true,
             bounds = SerialRect(posX, posY, posX + targetPage.width, posY + targetPage.height),
             targetPageId = targetPage.id,

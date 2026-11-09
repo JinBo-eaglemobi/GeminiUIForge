@@ -263,7 +263,11 @@ fun App(typography: Typography? = null) {
                 } catch (e: Exception) {
                 }
                 appViewModel.syncInitialSettings(settingsViewModel.getConfigManager())
-                updateViewModel.checkForUpdates()
+                if (!isDevMode) {
+                    updateViewModel.checkForUpdates(isManual = false)
+                } else {
+                    org.gemini.ui.forge.utils.AppLogger.i("App", "🛠️ 当前处于开发调试环境 (isDevMode=true)，启动已自动跳过版本更新检测。")
+                }
                 // 启动系统与进程性能监控 (1.5秒实时轮询)
                 org.gemini.ui.forge.service.SystemPerformanceMonitor.start()
             }

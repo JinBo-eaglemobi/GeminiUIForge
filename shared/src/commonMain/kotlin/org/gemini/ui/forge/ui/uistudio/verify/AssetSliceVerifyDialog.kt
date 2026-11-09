@@ -185,6 +185,38 @@ fun AssetSliceVerifyDialog(
     // 首次进入预览自动执行吸附按钮标记 (生命周期跟随弹窗，每次打开均重置)
     var hasAutoTriggeredSnap by remember { mutableStateOf(false) }
 
+    // 单个图元自适应吸附图片边缘与宽高 (针对选中的特定图元)
+    fun snapSingleItem(targetItem: EditableSliceItem) {
+        if (isSnapping) return
+        val bytes = effectiveBytes ?: return
+        val imgW = effectiveBitmap?.width?.toFloat() ?: 1280f
+        val imgH = effectiveBitmap?.height?.toFloat() ?: 720f
+
+        coroutineScope.launch(Dispatchers.Default) {
+            recordSnapshot()
+            isSnapping = true
+            val result = SmartEdgeSnapper.snapBounds(
+                imageBytes = bytes,
+                logicalBounds = targetItem.bounds,
+                canvasWidth = imgW,
+                canvasHeight = imgH,
+                searchRadius = 64,
+                maxExpansionRatio = 1.85f
+            )
+            isSnapping = false
+            if (result != null) {
+                val idx = editableItems.indexOfFirst { it.id == targetItem.id }
+                if (idx != -1) {
+                    editableItems[idx] = targetItem.copy(bounds = result.logicalRect)
+                    autoPersistDraft()
+                    Toast.show("已自适应贴合图元「${targetItem.name}」边缘与宽高", ToastType.SUCCESS)
+                }
+            } else {
+                Toast.show("当前图元轮廓已完全贴合，无需调整", ToastType.INFO)
+            }
+        }
+    }
+
     // 触发一键智能吸附校准 (顶栏吸附按钮绑定的标准流程，快捷键: Alt+A 或自动调用)
     fun triggerSmartSnap() {
         if (isSnapping || editableItems.isEmpty()) return
@@ -197,23 +229,52 @@ fun AssetSliceVerifyDialog(
             isSnapping = true
             var snappedCount = 0
 
+            val currentSelectedId = selectedItemId
+            if (currentSelectedId != null) {
+                val targetIdx = editableItems.indexOfFirst { it.id == currentSelectedId }
+                if (targetIdx >= 0) {
+                    val item = editableItems[targetIdx]
+                    val result = SmartEdgeSnapper.snapBounds(
+                        imageBytes = bytes,
+                        logicalBounds = item.bounds,
+                        canvasWidth = imgW,
+                        canvasHeight = imgH,
+                        searchRadius = 64,
+                        maxExpansionRatio = 1.85f
+                    )
+                    if (result != null) {
+                        editableItems[targetIdx] = item.copy(bounds = result.logicalRect)
+                        snappedCount++
+                    }
+                }
+            }
+
             editableItems.indices.forEach { idx ->
                 val item = editableItems[idx]
-                val result = SmartEdgeSnapper.snapBounds(
-                    imageBytes = bytes,
-                    logicalBounds = item.bounds,
-                    canvasWidth = imgW,
-                    canvasHeight = imgH
-                )
-                if (result != null) {
-                    editableItems[idx] = item.copy(bounds = result.logicalRect)
-                    snappedCount++
+                if (item.id != currentSelectedId) {
+                    val result = SmartEdgeSnapper.snapBounds(
+                        imageBytes = bytes,
+                        logicalBounds = item.bounds,
+                        canvasWidth = imgW,
+                        canvasHeight = imgH,
+                        maxExpansionRatio = 1.65f
+                    )
+                    if (result != null) {
+                        editableItems[idx] = item.copy(bounds = result.logicalRect)
+                        snappedCount++
+                    }
                 }
             }
 
             isSnapping = false
             autoPersistDraft()
-            Toast.show("边缘微观吸附完成，已智能校对 $snappedCount 个图元", ToastType.SUCCESS)
+            if (currentSelectedId != null && snappedCount > 0) {
+                Toast.show("智能吸附完成，已自适应贴合选中图元及关联项 (共 $snappedCount 项)", ToastType.SUCCESS)
+            } else if (snappedCount > 0) {
+                Toast.show("边缘微观吸附完成，已智能校对 $snappedCount 个图元", ToastType.SUCCESS)
+            } else {
+                Toast.show("所有图元轮廓均已贴合，无需调整", ToastType.INFO)
+            }
         }
     }
 
@@ -542,9 +603,8 @@ fun AssetSliceVerifyDialog(
                                         )
                                         editableItems.add(newItem)
                                         selectedItemId = newId
-                                        toolMode = VerifyToolMode.SELECT
                                         autoPersistDraft()
-                                        Toast.show("已补录新图元: ${newItem.name}", ToastType.SUCCESS)
+                                        Toast.show("已补录新图元: ${newItem.name} (可继续画框)", ToastType.SUCCESS)
                                     }
                                 )
                             }
@@ -577,6 +637,7 @@ fun AssetSliceVerifyDialog(
                             selectedItem = currentSelectedItem,
                             modifier = Modifier.width(rightPanelWidth),
                             onDeselect = { selectedItemId = null },
+                            onSnapItem = { snapSingleItem(it) },
                             onUpdateItem = { updated ->
                                 recordSnapshot()
                                 val idx = editableItems.indexOfFirst { it.id == updated.id }
