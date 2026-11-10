@@ -141,10 +141,14 @@ object GameEnvironmentManager {
             val pb = ProcessBuilder(command).apply {
                 if (workDir != null) directory(workDir)
                 redirectErrorStream(true)
+                // 统一强制现代命令行工具（node/pnpm/git）输出 UTF-8 编码，杜绝 Windows 控制台符号与边框乱码
+                environment()["LANG"] = "en_US.UTF-8"
+                environment()["LC_ALL"] = "en_US.UTF-8"
+                environment()["PYTHONIOENCODING"] = "utf-8"
             }
             val process = pb.start()
-            val charset = if (hostOs.isWindows) Charset.forName("GBK") else Charsets.UTF_8
-            val reader = process.inputStream.bufferedReader(charset)
+            // 现代开发工具链（Node.js/npm/pnpm）默认均以 UTF-8 输出流，统一采用 UTF-8 解析杜绝 Unicode 符号与边框乱码
+            val reader = process.inputStream.bufferedReader(Charsets.UTF_8)
             val fullOutput = StringBuilder()
             var line: String?
             while (reader.readLine().also { line = it } != null) {

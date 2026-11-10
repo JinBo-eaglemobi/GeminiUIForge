@@ -266,6 +266,8 @@ object GameScaffoldService {
           "compilerOptions": {
             "target": "ES6",
             "module": "ESNext",
+            "rootDir": "./src",
+            "ignoreDeprecations": "6.0",
             "lib": ["DOM", "ES2015"],
             "strict": false,
             "esModuleInterop": true,
@@ -323,14 +325,16 @@ object GameScaffoldService {
             const { rollupPack } = require('game-lib/lib/rollup-pack');
             const rootDir = path.resolve(__dirname, '..');
             const inputPath = path.resolve(rootDir, 'src/Main.ts');
-            const outputPath = path.resolve(rootDir, 'build/main.min.js');
+            const outDir = path.resolve(rootDir, 'build');
+            const tsconfigPath = path.resolve(rootDir, 'tsconfig.json');
 
-            await rollupPack({
-                input: inputPath,
-                output: outputPath,
-                projectDir: rootDir
+            await rollupPack(inputPath, 'main', {
+                minify: true,
+                outDir: outDir,
+                tsconfig: tsconfigPath,
+                sourcemap: false
             });
-            console.log('rollupPack build successfully generated:', outputPath);
+            console.log('rollupPack build successfully completed.');
         }
 
         build().catch(err => {
