@@ -19,6 +19,7 @@ import org.gemini.ui.forge.ui.uistudio.LayoutUndoSnapshot
 import org.gemini.ui.forge.ui.uistudio.UIStudioLeftBottomTab
 import org.gemini.ui.forge.ui.uistudio.UIStudioState
 import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.LocalFileStorage
 import org.gemini.ui.forge.utils.Toast
 import org.gemini.ui.forge.utils.bindParents
@@ -59,12 +60,17 @@ class AiLayoutDelegate(
         val applyResult = UiStudioLayoutService.assembleViewPage(
             projectId = projId,
             assetLibrary = state.assetLibrary,
-            args = extractedArgs
+            args = extractedArgs,
+            availablePages = state.project?.studioPages ?: emptyList()
         )
         if (applyResult.isSuccess && applyResult.createdPage != null) {
             if (autoPromptDialog) {
                 // 用户显式触发时才弹出确认对话框，杜绝会话结束自动弹窗打断工作流
                 state = state.copy(pendingLayoutResult = applyResult)
+            }
+        } else if (!applyResult.isSuccess && autoPromptDialog) {
+            scope.launch(Dispatchers.Main) {
+                Toast.show(applyResult.errorMessage ?: "排版数据格式审核失败", ToastType.ERROR)
             }
         }
     }
@@ -219,31 +225,54 @@ class AiLayoutDelegate(
                 ?: return UiStudioLayoutService.PatchElementsResult(false, errorMessage = "当前工作区无可用视图页面")
         }
 
-        val patchResult = UiStudioLayoutService.patchViewElements(targetPage, state.assetLibrary, args)
+        val patchResult = UiStudioLayoutService.patchViewElements(
+            targetPage = targetPage,
+            assetLibrary = state.assetLibrary,
+            args = args,
+            availablePages = proj.studioPages
+        )
         if (!patchResult.isSuccess || patchResult.updatedPage == null) {
+            val errorMsg = patchResult.errorMessage ?: "AI 补丁数据格式审核失败"
+            AppLogger.w(TAG, "执行 executePatchViewElements 失败: $errorMsg")
+            scope.launch(Dispatchers.Main) {
+                Toast.show(errorMsg, ToastType.ERROR)
+            }
             return patchResult
         }
 
         val updatedPage = patchResult.updatedPage
         val repo = TemplateRepository(storage)
 
-        // 1. 更新 studioPages
-        var updatedPages = proj.studioPages.map { if (it.id == updatedPage.id) updatedPage else it }
+        // 1. 更新 studioPages：合并当前更新页面与所有被自动路由修改的关联子页面
+        val routedMap = patchResult.routedPages.associateBy { it.id }
+        var updatedPages = proj.studioPages.map { p ->
+            when {
+                p.id == updatedPage.id -> updatedPage
+                routedMap.containsKey(p.id) -> routedMap[p.id]!!
+                else -> p
+            }
+        }
 
         // 2. 跨页面多重引用镜像同步：将更新后的 blocks 递归同步到所有引用该平级页面的图元内部
-        updatedPages = updatedPages.map { p ->
-            if (p.id != updatedPage.id) {
-                val syncedBlocks = syncReferencedChildren(p.blocks, updatedPage.id, updatedPage.blocks)
-                if (syncedBlocks != p.blocks) p.copy(blocks = syncedBlocks) else p
-            } else p
+        val pagesToSync = listOf(updatedPage) + patchResult.routedPages
+        for (syncedPage in pagesToSync) {
+            updatedPages = updatedPages.map { p ->
+                if (p.id != syncedPage.id) {
+                    val syncedBlocks = syncReferencedChildren(p.blocks, syncedPage.id, syncedPage.blocks)
+                    if (syncedBlocks != p.blocks) p.copy(blocks = syncedBlocks) else p
+                } else p
+            }
         }
 
         val updatedProj = proj.copy(studioPages = updatedPages)
         state = state.copy(project = updatedProj, isDirty = true)
 
-        // 3. 独立单页面原子刷盘
+        // 3. 独立单页面原子刷盘：保存当前修改页面以及所有被路由修改的关联子页面
         scope.launch {
             repo.saveStudioPage(proj.projectId, updatedPage)
+            for (routed in patchResult.routedPages) {
+                repo.saveStudioPage(proj.projectId, routed)
+            }
         }
 
         scope.launch(Dispatchers.Main) {
@@ -375,5 +404,9 @@ class AiLayoutDelegate(
             else -> {}
         }
         return null
+    }
+
+    companion object {
+        private const val TAG = "AiLayoutDelegate"
     }
 }

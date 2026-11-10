@@ -40,7 +40,8 @@ object UiStudioLayoutService {
     fun assembleViewPage(
         projectId: String,
         assetLibrary: UIAssetLibrary,
-        args: JsonObject
+        args: JsonObject,
+        availablePages: List<UIStudioPage> = emptyList()
     ): ApplyLayoutResult {
         return try {
             val rawName = args["viewName"]?.jsonPrimitive?.contentOrNull?.trim()
@@ -59,6 +60,18 @@ object UiStudioLayoutService {
             val height = args["height"]?.jsonPrimitive?.intOrNull?.toFloat() ?: 720f
 
             val rawBlocks = args["blocks"]?.jsonArray ?: JsonArray(emptyList())
+
+            // ★ 前置刚性数据格式审核：严格拦截非法结构、非法图元与引用违规
+            val validationError = validateViewLayoutData(rawBlocks, availablePages)
+            if (validationError != null) {
+                return ApplyLayoutResult(
+                    isSuccess = false,
+                    viewName = viewName,
+                    blockCount = 0,
+                    matchedAssetCount = 0,
+                    errorMessage = "AI 数据格式审核失败: $validationError"
+                )
+            }
 
             // 建立素材库文件名快速索引 (忽略大小写：覆盖显示名、物理文件名及内容哈希)
             val assetMap = mutableMapOf<String, UIAssetItem>()
@@ -155,6 +168,7 @@ object UiStudioLayoutService {
         // 匹配素材库切片（命中即持有其唯一哈希引用，优先匹配 assetHash，次之 assetFileName）
         val assetHash = obj["assetHash"]?.jsonPrimitive?.contentOrNull?.trim()
         val assetFileName = obj["assetFileName"]?.jsonPrimitive?.contentOrNull?.trim()
+        val targetPageId = obj["targetPageId"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
         var matchedAsset: UIAssetItem? = null
         if (!assetHash.isNullOrBlank()) {
             matchedAsset = assetMap[assetHash.lowercase()]
@@ -164,12 +178,13 @@ object UiStudioLayoutService {
                 ?: assetMap[assetFileName.substringBeforeLast('.').lowercase()]
         }
 
-        // 若成功绑定切片素材，强制不能为纯容器（否则画布不渲染底图本体）
-        val isPureContainer = if (matchedAsset != null) {
-            false
-        } else {
-            obj["isPureContainer"]?.jsonPrimitive?.booleanOrNull ?: false
+        // 若为页面引用组件，强制为纯容器且类型为 VIEW；若成功绑定切片素材，强制不能为纯容器
+        val isPureContainer = when {
+            targetPageId != null -> true
+            matchedAsset != null -> false
+            else -> obj["isPureContainer"]?.jsonPrimitive?.booleanOrNull ?: false
         }
+        val finalType = if (targetPageId != null) UIBlockType.VIEW else type
 
         // 若绑定了切片素材，保证宽高严格守恒真实切片的纵横比（Aspect Ratio），彻底杜绝拉伸变形
         val (finalW, finalH) = if (matchedAsset != null && matchedAsset.width > 0 && matchedAsset.height > 0) {
@@ -192,23 +207,26 @@ object UiStudioLayoutService {
 
         val bounds = SerialRect(x, y, x + finalW, y + finalH)
 
-        // 解析嵌套子组件
+        // 解析嵌套子组件：若声明了 targetPageId，页面引用图元严禁内联 children
         val childBlocks = mutableListOf<UIStudioBlock>()
-        val rawChildren = obj["children"]?.jsonArray
-        if (rawChildren != null && rawChildren.isNotEmpty()) {
-            for (childElement in rawChildren) {
-                val childObj = childElement as? JsonObject ?: continue
-                parseBlockRecursive(childObj, assetMap, slotRoleMap, childBlocks)
+        if (targetPageId == null) {
+            val rawChildren = obj["children"]?.jsonArray
+            if (rawChildren != null && rawChildren.isNotEmpty()) {
+                for (childElement in rawChildren) {
+                    val childObj = childElement as? JsonObject ?: continue
+                    parseBlockRecursive(childObj, assetMap, slotRoleMap, childBlocks)
+                }
             }
         }
 
         val block = UIStudioBlock(
             id = id,
-            type = type,
+            type = finalType,
             bounds = bounds,
             isPureContainer = isPureContainer,
             assetHash = matchedAsset?.hash,
-            children = childBlocks
+            children = childBlocks,
+            targetPageId = targetPageId
         )
         outList.add(block)
     }
@@ -395,7 +413,8 @@ object UiStudioLayoutService {
         val updatedPage: UIStudioPage? = null,
         val patchedCount: Int = 0,
         val summary: String = "",
-        val errorMessage: String? = null
+        val errorMessage: String? = null,
+        val routedPages: List<UIStudioPage> = emptyList() // ★ 被自动路由修改的关联子页面列表（需原子刷盘）
     )
 
     /**
@@ -409,7 +428,8 @@ object UiStudioLayoutService {
     fun patchViewElements(
         targetPage: UIStudioPage,
         assetLibrary: UIAssetLibrary,
-        args: JsonObject
+        args: JsonObject,
+        availablePages: List<UIStudioPage> = emptyList()
     ): PatchElementsResult {
         return try {
             // 建立素材索引表
@@ -451,8 +471,18 @@ object UiStudioLayoutService {
                 )
             }
 
+            // ★ 前置刚性数据格式审核：严格拦截非法操作、非法图元与引用破坏
+            val validationError = validatePatchList(patchList, targetPage, availablePages)
+            if (validationError != null) {
+                return PatchElementsResult(
+                    isSuccess = false,
+                    errorMessage = "AI 数据格式审核失败: $validationError"
+                )
+            }
+
             var currentBlocks = targetPage.blocks
             var appliedCount = 0
+            val routedPagesMap = mutableMapOf<String, UIStudioPage>()
 
             for (patch in patchList) {
                 val op = patch["op"]?.jsonPrimitive?.contentOrNull?.uppercase() ?: "UPDATE"
@@ -495,16 +525,26 @@ object UiStudioLayoutService {
                             var isPureContainer = existing.isPureContainer
                             props["isPureContainer"]?.jsonPrimitive?.booleanOrNull?.let { isPureContainer = it }
 
+                            var targetPageId = existing.targetPageId
+                            if (props.containsKey("targetPageId")) {
+                                targetPageId = props["targetPageId"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
+                            }
+                            if (targetPageId != null) {
+                                type = UIBlockType.VIEW
+                                isPureContainer = true
+                            }
+
                             existing.copy(
                                 type = type,
                                 bounds = SerialRect(x, y, x + w, y + h),
                                 isPureContainer = isPureContainer,
-                                assetHash = assetHash
+                                assetHash = assetHash,
+                                targetPageId = targetPageId
                             )
                         }
                         appliedCount++
                     }
-                    "REMOVE" -> {
+                    "REMOVE", "DELETE" -> {
                         if (blockId.isNullOrBlank()) continue
                         currentBlocks = removeBlockRecursively(currentBlocks, blockId)
                         appliedCount++
@@ -517,14 +557,40 @@ object UiStudioLayoutService {
                             val created = tempOut.firstOrNull()
                             if (created != null) {
                                 val parentBlockId = patch["parentBlockId"]?.jsonPrimitive?.contentOrNull
-                                currentBlocks = if (!parentBlockId.isNullOrBlank()) {
-                                    updateBlockRecursively(currentBlocks, parentBlockId) { parent ->
-                                        parent.copy(children = parent.children + created)
+                                if (!parentBlockId.isNullOrBlank()) {
+                                    val parentBlock = findBlockRecursively(currentBlocks, parentBlockId)
+                                    if (parentBlock != null && parentBlock.targetPageId != null) {
+                                        // ★ 引用组件智能路由：父图元持有 targetPageId，严禁内联塞入当前页面，必须重定向追加到独立子页面
+                                        val targetSubPageId = parentBlock.targetPageId
+                                        val currentSubPage = routedPagesMap[targetSubPageId]
+                                            ?: availablePages.find { it.id == targetSubPageId }
+                                        if (currentSubPage != null) {
+                                            val updatedSubBlocks = (currentSubPage.blocks + created).bindParents()
+                                            val updatedSubPage = currentSubPage.copy(blocks = updatedSubBlocks)
+                                            routedPagesMap[targetSubPageId] = updatedSubPage
+
+                                            // 同步更新当前主页面的内存镜像 children，使画布即时渲染显示
+                                            currentBlocks = updateBlockRecursively(currentBlocks, parentBlockId) { parent ->
+                                                parent.copy(children = parent.children + created)
+                                            }
+                                            appliedCount++
+                                        } else {
+                                            return PatchElementsResult(
+                                                isSuccess = false,
+                                                errorMessage = "智能路由失败：未在工程中找到引用组件 [${parentBlock.id}] 绑定的目标页面 [$targetSubPageId]"
+                                            )
+                                        }
+                                    } else {
+                                        // 普通容器图元
+                                        currentBlocks = updateBlockRecursively(currentBlocks, parentBlockId) { parent ->
+                                            parent.copy(children = parent.children + created)
+                                        }
+                                        appliedCount++
                                     }
                                 } else {
-                                    currentBlocks + created
+                                    currentBlocks = currentBlocks + created
+                                    appliedCount++
                                 }
-                                appliedCount++
                             }
                         }
                     }
@@ -532,11 +598,14 @@ object UiStudioLayoutService {
             }
 
             val updatedPage = targetPage.copy(blocks = currentBlocks.bindParents())
+            val routedList = routedPagesMap.values.toList()
             PatchElementsResult(
                 isSuccess = true,
                 updatedPage = updatedPage,
                 patchedCount = appliedCount,
-                summary = "成功在页面 [${targetPage.nameStr}] 执行 $appliedCount 项局部属性补丁更新"
+                summary = "成功在页面 [${targetPage.nameStr}] 执行 $appliedCount 项局部属性补丁更新" +
+                        if (routedList.isNotEmpty()) " (已自动路由并同步更新 ${routedList.size} 个关联组件页面)" else "",
+                routedPages = routedList
             )
         } catch (e: Exception) {
             AppLogger.e(TAG, "执行 patchViewElements 异常", e)
@@ -545,6 +614,175 @@ object UiStudioLayoutService {
                 errorMessage = "局部补丁装配失败: ${e.message}"
             )
         }
+    }
+
+    /**
+     * 前置刚性数据格式审核：验证 patch_view_elements 操作列表
+     */
+    private fun validatePatchList(
+        patchList: List<JsonObject>,
+        targetPage: UIStudioPage,
+        availablePages: List<UIStudioPage>
+    ): String? {
+        val availablePageIds = availablePages.map { it.id }.toSet()
+        val existingBlockIds = mutableSetOf<String>()
+        fun collectExistingIds(blocks: List<UIStudioBlock>) {
+            for (b in blocks) {
+                existingBlockIds.add(b.id)
+                if (b.children.isNotEmpty()) collectExistingIds(b.children)
+            }
+        }
+        collectExistingIds(targetPage.blocks)
+
+        for ((index, patch) in patchList.withIndex()) {
+            val step = "第 ${index + 1} 项补丁"
+            val op = patch["op"]?.jsonPrimitive?.contentOrNull?.uppercase()
+            if (op == null || op !in listOf("UPDATE", "ADD", "REMOVE", "DELETE")) {
+                return "$step: 缺少或包含非法的操作动词 'op' (当前值: '${patch["op"]?.jsonPrimitive?.contentOrNull}')，仅支持 UPDATE, ADD, REMOVE"
+            }
+
+            val blockId = patch["blockId"]?.jsonPrimitive?.contentOrNull
+            when (op) {
+                "UPDATE" -> {
+                    if (blockId.isNullOrBlank()) {
+                        return "$step: UPDATE 操作必须指定非空的 'blockId'"
+                    }
+                    if (blockId !in existingBlockIds) {
+                        return "$step: UPDATE 目标图元 '$blockId' 在当前页面 [${targetPage.nameStr}] 中不存在"
+                    }
+                    val props = patch["properties"]?.jsonObject ?: patch
+                    props["width"]?.jsonPrimitive?.floatOrNull?.let { w ->
+                        if (w <= 0f) return "$step: 图元 '$blockId' 修改后的 width 必须大于 0 (当前值: $w)"
+                    }
+                    props["height"]?.jsonPrimitive?.floatOrNull?.let { h ->
+                        if (h <= 0f) return "$step: 图元 '$blockId' 修改后的 height 必须大于 0 (当前值: $h)"
+                    }
+                    val targetPageId = props["targetPageId"]?.jsonPrimitive?.contentOrNull?.trim()
+                    if (!targetPageId.isNullOrBlank() && availablePageIds.isNotEmpty() && targetPageId !in availablePageIds) {
+                        return "$step: 图元 '$blockId' 指定的引用目标页面 '$targetPageId' 不存在"
+                    }
+                    val typeStr = props["type"]?.jsonPrimitive?.contentOrNull?.uppercase()?.trim()
+                    if (typeStr == "CONTAINER") {
+                        return "$step: 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 并配合 isPureContainer 或 targetPageId"
+                    }
+                }
+                "REMOVE", "DELETE" -> {
+                    if (blockId.isNullOrBlank()) {
+                        return "$step: REMOVE 操作必须指定非空的 'blockId'"
+                    }
+                    if (blockId !in existingBlockIds) {
+                        return "$step: REMOVE 目标图元 '$blockId' 在当前页面 [${targetPage.nameStr}] 中不存在"
+                    }
+                }
+                "ADD" -> {
+                    val blockObj = patch["block"]?.jsonObject ?: patch["properties"]?.jsonObject
+                    if (blockObj == null) {
+                        return "$step: ADD 操作必须提供包含图元属性的 'block' 或 'properties' 对象"
+                    }
+                    val newId = blockObj["id"]?.jsonPrimitive?.contentOrNull
+                    if (newId.isNullOrBlank()) {
+                        return "$step: ADD 新图元必须指定非空的 'id'"
+                    }
+                    blockObj["width"]?.jsonPrimitive?.floatOrNull?.let { w ->
+                        if (w <= 0f) return "$step: 新图元 '$newId' 的 width 必须大于 0 (当前值: $w)"
+                    }
+                    blockObj["height"]?.jsonPrimitive?.floatOrNull?.let { h ->
+                        if (h <= 0f) return "$step: 新图元 '$newId' 的 height 必须大于 0 (当前值: $h)"
+                    }
+                    val newType = blockObj["type"]?.jsonPrimitive?.contentOrNull?.uppercase()?.trim()
+                    if (newType == "CONTAINER") {
+                        return "$step: 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 并配合 isPureContainer"
+                    }
+                    val parentBlockId = patch["parentBlockId"]?.jsonPrimitive?.contentOrNull
+                    if (!parentBlockId.isNullOrBlank() && parentBlockId !in existingBlockIds) {
+                        return "$step: ADD 指定的父容器 parentBlockId '$parentBlockId' 在当前页面中不存在"
+                    }
+                    val newTargetPageId = blockObj["targetPageId"]?.jsonPrimitive?.contentOrNull?.trim()
+                    val children = blockObj["children"]?.jsonArray
+                    if (!newTargetPageId.isNullOrBlank() && children != null && children.isNotEmpty()) {
+                        return "$step: 新图元 '$newId' 为页面引用实例 (targetPageId='$newTargetPageId')，严禁在 children 中内联塞入子图元"
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * 前置刚性数据格式审核：验证 apply_view_layout 全量排版 blocks
+     */
+    private fun validateViewLayoutData(
+        rawBlocks: JsonArray,
+        availablePages: List<UIStudioPage>
+    ): String? {
+        if (rawBlocks.isEmpty()) {
+            return "全量排版数据中 blocks 数组不能为空"
+        }
+        val availablePageIds = availablePages.map { it.id }.toSet()
+        val visitedIds = mutableSetOf<String>()
+
+        fun validateBlockNode(obj: JsonObject, path: String): String? {
+            val id = obj["id"]?.jsonPrimitive?.contentOrNull?.trim()
+            if (id.isNullOrBlank()) {
+                return "$path: 图元缺少必填的 'id' 字段"
+            }
+            if (id in visitedIds) {
+                return "$path: 图元 ID '$id' 重复，同一视图内图元 ID 必须唯一"
+            }
+            visitedIds.add(id)
+
+            val typeStr = obj["type"]?.jsonPrimitive?.contentOrNull?.uppercase()?.trim()
+            if (typeStr == "CONTAINER") {
+                return "$path (图元 '$id'): 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 并配合 isPureContainer 或 targetPageId"
+            }
+
+            obj["width"]?.jsonPrimitive?.floatOrNull?.let { w ->
+                if (w <= 0f) return "$path (图元 '$id'): width 必须大于 0 (当前值: $w)"
+            }
+            obj["height"]?.jsonPrimitive?.floatOrNull?.let { h ->
+                if (h <= 0f) return "$path (图元 '$id'): height 必须大于 0 (当前值: $h)"
+            }
+
+            val targetPageId = obj["targetPageId"]?.jsonPrimitive?.contentOrNull?.trim()
+            val children = obj["children"]?.jsonArray
+            if (!targetPageId.isNullOrBlank()) {
+                if (availablePageIds.isNotEmpty() && targetPageId !in availablePageIds) {
+                    return "$path (图元 '$id'): 指定的引用页面 targetPageId '$targetPageId' 不存在"
+                }
+                if (children != null && children.isNotEmpty()) {
+                    return "$path (图元 '$id'): 是页面引用实例 (targetPageId='$targetPageId')，严禁在 children 中内联塞入子图元！组件内容必须在其独立子页面中维护"
+                }
+            }
+
+            if (children != null) {
+                for ((cIdx, child) in children.withIndex()) {
+                    val childObj = child as? JsonObject
+                        ?: return "$path (图元 '$id') -> children[$cIdx]: 格式错误，必须为 JSON 对象"
+                    val childErr = validateBlockNode(childObj, "$path -> $id -> children[$cIdx]")
+                    if (childErr != null) return childErr
+                }
+            }
+            return null
+        }
+
+        for ((idx, item) in rawBlocks.withIndex()) {
+            val blockObj = item as? JsonObject
+                ?: return "blocks[$idx]: 格式错误，必须为 JSON 对象"
+            val err = validateBlockNode(blockObj, "blocks[$idx]")
+            if (err != null) return err
+        }
+        return null
+    }
+
+    private fun findBlockRecursively(blocks: List<UIStudioBlock>, targetId: String): UIStudioBlock? {
+        for (b in blocks) {
+            if (b.id == targetId) return b
+            if (b.children.isNotEmpty()) {
+                val found = findBlockRecursively(b.children, targetId)
+                if (found != null) return found
+            }
+        }
+        return null
     }
 
     private fun updateBlockRecursively(

@@ -280,10 +280,11 @@ object UiStudioSkillManager {
                                 put("isPureContainer", buildJsonObject { put("type", "BOOLEAN"); put("description", "是否为纯布局排版占位容器（不生成独立图片）") })
                                 put("assetHash", buildJsonObject { put("type", "STRING"); put("description", "绑定的素材库切片唯一Hash（最高优先级精确装配主键）") })
                                 put("assetFileName", buildJsonObject { put("type", "STRING"); put("description", "绑定的素材库切片文件名，如 'Back_Button.png'") })
+                                put("targetPageId", buildJsonObject { put("type", "STRING"); put("description", "引用的平级子页面 ID（若该图元为组件实例，如 slots_window，指向对应子页面，此时严禁传入 children）") })
                                 put("slotRole", buildJsonObject { put("type", "STRING"); put("description", "插槽语义角色(用于全自动装配): BACKGROUND, SPIN_BUTTON, REEL_SYMBOL, BUTTON, HUD_FRAME, TITLE_LOGO, BET_CONTROL") })
                                 put("children", buildJsonObject {
                                     put("type", "ARRAY")
-                                    put("description", "嵌套子图元列表")
+                                    put("description", "嵌套子图元列表（注意：当设置了 targetPageId 时，严禁包含任何 children）")
                                     put("items", buildJsonObject { put("type", "OBJECT") })
                                 })
                             })
@@ -314,7 +315,7 @@ object UiStudioSkillManager {
     private fun buildPatchViewElementsDeclaration(): JsonObject {
         return buildJsonObject {
             put("name", "patch_view_elements")
-            put("description", "对 UI Studio 当前或指定视图页面中的个别图元进行精确的局部增删改 (Patch)，无需全量重新输出整张页面的全部 blocks。修改仅局限在参与的指定字段上，响应极速且零丢数据隐患。")
+            put("description", "对 UI Studio 当前或指定视图页面中的个别图元进行精确的局部增删改 (Patch)，无需全量重新输出整张页面的全部 blocks。修改仅局限在参与的指定字段上，响应极速且零丢数据隐患。【严格数据审核红线】：1. width/height必须>0；2. 禁止使用废弃的 CONTAINER 类型；3. 引用组件（持有 targetPageId）严禁内联塞 children，向其 ADD 子图元时系统将自动路由写入对应独立子页面并保持干净隔离；4. 审核不符合规范将直接执行失败并返回具体错误原因。")
             put("parameters", buildJsonObject {
                 put("type", "OBJECT")
                 put("properties", buildJsonObject {
@@ -338,11 +339,11 @@ object UiStudioSkillManager {
                                 })
                                 put("parentBlockId", buildJsonObject {
                                     put("type", "STRING")
-                                    put("description", "ADD 追加图元时的目标父容器 ID（可空，缺省时追加到页面顶层）")
+                                    put("description", "ADD 追加图元时的目标父容器 ID（可空，缺省时追加到页面顶层；若目标父图元为引用组件，将自动路由追加到对应独立子页面）")
                                 })
                                 put("properties", buildJsonObject {
                                     put("type", "OBJECT")
-                                    put("description", "需要修改或添加的图元属性字典 (仅需传入发生变化的字段: x, y, width, height, assetFileName, assetHash, isPureContainer, type)")
+                                    put("description", "需要修改或添加的图元属性字典 (仅需传入发生变化的字段: x, y, width, height, assetFileName, assetHash, isPureContainer, type, targetPageId)")
                                 })
                             })
                             put("required", buildJsonArray {
