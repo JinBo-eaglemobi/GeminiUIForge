@@ -737,6 +737,33 @@
     <string name="ui_studio_tab_collapse_tip">Collapse Right Sidebar</string>
     <string name="ui_studio_tab_expand_tip">Expand Right Sidebar</string>
     <string name="ui_studio_dialog_dock_to_sidebar_tip">Dock to right sidebar</string>
+    <string name="ui_studio_btn_run_preview">Run Preview</string>
+    <string name="ui_studio_btn_run_preview_tip">Run and preview the game in browser</string>
+    <string name="game_activation_dialog_title">Activate Game Project</string>
+    <string name="game_activation_dialog_desc">Initialize scaffolding, environment, dependencies, and build pipeline for the game project.</string>
+    <string name="game_activation_field_project_name">Game Project Name</string>
+    <string name="game_activation_field_project_path">Game Save Location (Parent Directory)</string>
+    <string name="game_activation_final_directory">Final Project Directory</string>
+    <string name="game_activation_field_select_path">Browse...</string>
+    <string name="game_activation_path_private_cache_error">The game directory cannot be inside the program private cache directory (~/.geminiuiforge)!</string>
+    <string name="game_activation_path_empty_error">Please select a valid game directory.</string>
+    <string name="game_activation_name_empty_error">Please enter a valid game project name.</string>
+    <string name="game_activation_btn_activate">Activate &amp; Run</string>
+    <string name="game_activation_btn_confirm">Initialize &amp; Activate</string>
+    <string name="game_activation_btn_cancel">Cancel</string>
+    <string name="game_activation_step_checking_env">Checking Node.js &amp; pnpm runtime...</string>
+    <string name="game_activation_step_installing_env">Auto-installing Node.js/pnpm portable runtime...</string>
+    <string name="game_activation_step_writing_scaffold">Writing game scaffolding and config files...</string>
+    <string name="game_activation_step_installing_deps">Running pnpm install (installing dependencies)...</string>
+    <string name="game_activation_step_copying_files">Distributing game-lib static assets...</string>
+    <string name="game_activation_step_building">Building TypeScript bundle to build/main.min.js...</string>
+    <string name="game_activation_step_verifying">Verifying build outputs...</string>
+    <string name="game_activation_step_completed">Game project activated successfully!</string>
+    <string name="game_activation_step_failed">Activation failed: %1$s</string>
+    <string name="game_activation_console_copy_all">Copy All Logs</string>
+    <string name="game_activation_console_copy_success">All terminal logs copied to clipboard</string>
+    <string name="game_activation_console_fullscreen">Fullscreen Console</string>
+    <string name="game_activation_console_exit_fullscreen">Exit Fullscreen</string>
 
     <!-- AI Chat Image Save & Mount to View -->
     <string name="chat_image_ready_hint">Image Generated (Pending Save)</string>

@@ -168,7 +168,14 @@ data class UIStudioState(
     val showMaxToolRoundsContinueDialog: Boolean = false,
     val currentToolLoopRound: Int = 0,
     val maxToolLoopRoundLimit: Int = 50,
-    val importConflictState: ImportConflictState? = null
+    val importConflictState: ImportConflictState? = null,
+    val isGameActivationDialogVisible: Boolean = false,
+    val isGameActivating: Boolean = false,
+    val gameActivationStep: Int = 0,
+    val gameActivationTotalSteps: Int = 6,
+    val gameActivationMessage: String = "",
+    val gameActivationLogs: List<String> = emptyList(),
+    val gameActivationError: String? = null
 ) {
     val canUndo: Boolean get() = undoStack.isNotEmpty()
     val canRedo: Boolean get() = redoStack.isNotEmpty()

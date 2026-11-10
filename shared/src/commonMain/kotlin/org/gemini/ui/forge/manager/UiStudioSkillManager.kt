@@ -245,7 +245,7 @@ object UiStudioSkillManager {
     private fun buildApplyViewLayoutDeclaration(): JsonObject {
         return buildJsonObject {
             put("name", "apply_view_layout")
-            put("description", "在 UI Studio 中创建或更新一个视图界面，并将解析后的图元树（UIBlock Tree）自动装配到该页面中，直接在当前工作区画布呈现。")
+            put("description", "在 UI Studio 中创建或更新一个视图界面，并将解析后的图元树（UIBlock Tree）自动装配到该页面中，直接在当前工作区画布呈现。【执行前红线约束】：若创建全新页面或对既有页面全量重构排版，严禁直接盲目调用！必须先通过 ask_user_question 明确向用户汇报拟建页面大纲（名称/分辨率/核心模块清单）并获得授权同意后，方允许调用本工具完成装配；排版完成后必须立即调用 save_project 落盘。")
             put("parameters", buildJsonObject {
                 put("type", "OBJECT")
                 put("properties", buildJsonObject {
@@ -264,6 +264,10 @@ object UiStudioSkillManager {
                     put("description", buildJsonObject {
                         put("type", "STRING")
                         put("description", "简短阐述当前界面的设计布局构思与核心模块划分")
+                    })
+                    put("overrideConfirmed", buildJsonObject {
+                        put("type", "BOOLEAN")
+                        put("description", "当目标 viewName 已存在且包含已有组件时，全量覆盖将彻底抹除该页面全部既有图元。若已获得用户明确授权重构覆盖，请传入 true；若未传或传 false，系统将触发安全拦截防冲垮保护。")
                     })
                     put("blocks", buildJsonObject {
                         put("type", "ARRAY")
@@ -315,7 +319,7 @@ object UiStudioSkillManager {
     private fun buildPatchViewElementsDeclaration(): JsonObject {
         return buildJsonObject {
             put("name", "patch_view_elements")
-            put("description", "对 UI Studio 当前或指定视图页面中的个别图元进行精确的局部增删改 (Patch)，无需全量重新输出整张页面的全部 blocks。修改仅局限在参与的指定字段上，响应极速且零丢数据隐患。【严格数据审核红线】：1. width/height必须>0；2. 禁止使用废弃的 CONTAINER 类型；3. 引用组件（持有 targetPageId）严禁内联塞 children，向其 ADD 子图元时系统将自动路由写入对应独立子页面并保持干净隔离；4. 审核不符合规范将直接执行失败并返回具体错误原因。")
+            put("description", "对 UI Studio 当前或指定视图页面中的个别图元进行精确的局部增删改 (Patch)，无需全量重新输出整张页面的全部 blocks。修改仅局限在参与的指定字段上，响应极速且零丢数据隐患。【严格数据审核与分级确认红线】：1. 结构变更（新增图元 ADD、删除图元 DELETE 或跨容器迁移）：严禁私自调用，必须先审查图元树向用户提呈 5 维全景方案（模式/父容器/层深/坐标/语义）并通过 ask_user_question 确认同意后方可执行；2. 微观属性微调（用户已明确指定具体坐标/尺寸/文本/透明度等参数）：豁免弹窗，直接执行并在回复中汇报变更；3. width/height必须>0；4. 禁止使用废弃的 CONTAINER 类型；5. 引用组件（持有 targetPageId）严禁内联塞 children；6. 修改后必须调用 save_project 落盘。")
             put("parameters", buildJsonObject {
                 put("type", "OBJECT")
                 put("properties", buildJsonObject {

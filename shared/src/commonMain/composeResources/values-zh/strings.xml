@@ -747,6 +747,33 @@
     <string name="ui_studio_tab_collapse_tip">收起右侧边栏</string>
     <string name="ui_studio_tab_expand_tip">展开右侧边栏</string>
     <string name="ui_studio_dialog_dock_to_sidebar_tip">收纳至右侧边栏</string>
+    <string name="ui_studio_btn_run_preview">运行预览</string>
+    <string name="ui_studio_btn_run_preview_tip">在浏览器中运行与预览游戏</string>
+    <string name="game_activation_dialog_title">激活游戏项目</string>
+    <string name="game_activation_dialog_desc">为游戏项目初始化脚手架、环境、依赖与构建流水线。</string>
+    <string name="game_activation_field_project_name">游戏项目名称</string>
+    <string name="game_activation_field_project_path">游戏保存目录 (父目录)</string>
+    <string name="game_activation_final_directory">最终存放目录</string>
+    <string name="game_activation_field_select_path">浏览选择...</string>
+    <string name="game_activation_path_private_cache_error">游戏项目目录严禁存放在程序私有缓存路径（~/.geminiuiforge）下！</string>
+    <string name="game_activation_path_empty_error">请选择有效的游戏保存目录。</string>
+    <string name="game_activation_name_empty_error">请输入有效的游戏项目名称。</string>
+    <string name="game_activation_btn_activate">激活并运行</string>
+    <string name="game_activation_btn_confirm">初始化并激活</string>
+    <string name="game_activation_btn_cancel">取消</string>
+    <string name="game_activation_step_checking_env">正在自检 Node.js 与 pnpm 运行环境...</string>
+    <string name="game_activation_step_installing_env">正在自动安装 Node.js/pnpm 便携环境...</string>
+    <string name="game_activation_step_writing_scaffold">正在写入游戏脚手架与配置文件...</string>
+    <string name="game_activation_step_installing_deps">正在执行 pnpm install 安装依赖...</string>
+    <string name="game_activation_step_copying_files">正在分发 game-lib 静态资源与核心库...</string>
+    <string name="game_activation_step_building">正在打包构建 TypeScript 至 build/main.min.js...</string>
+    <string name="game_activation_step_verifying">正在校验运行目录与入口文件...</string>
+    <string name="game_activation_step_completed">游戏项目已成功激活！</string>
+    <string name="game_activation_step_failed">激活失败：%1$s</string>
+    <string name="game_activation_console_copy_all">复制全部日志</string>
+    <string name="game_activation_console_copy_success">已复制全部终端日志到剪贴板</string>
+    <string name="game_activation_console_fullscreen">全屏查看控制台</string>
+    <string name="game_activation_console_exit_fullscreen">退出全屏</string>
 
     <!-- AI Chat Image Save & Mount to View -->
     <string name="chat_image_ready_hint">图片已生成 (待保存)</string>

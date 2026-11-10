@@ -61,8 +61,24 @@ object UiStudioLayoutService {
 
             val rawBlocks = args["blocks"]?.jsonArray ?: JsonArray(emptyList())
 
-            // ★ 前置刚性数据格式审核：严格拦截非法结构、非法图元与引用违规
-            val validationError = validateViewLayoutData(rawBlocks, availablePages)
+            // ★ 核心安全防呆拦截：防冲垮非空已有视图
+            val overrideConfirmed = args["overrideConfirmed"]?.jsonPrimitive?.booleanOrNull ?: false
+            val existingPage = availablePages.find { 
+                it.nameStr.equals(viewName, ignoreCase = true) || it.id.equals("page_$viewName", ignoreCase = true) 
+            }
+            if (existingPage != null && existingPage.blocks.isNotEmpty() && !overrideConfirmed) {
+                val existingCount = countAllBlocks(existingPage.blocks)
+                return ApplyLayoutResult(
+                    isSuccess = false,
+                    viewName = viewName,
+                    blockCount = 0,
+                    matchedAssetCount = 0,
+                    errorMessage = "【安全拦截】：视图 [$viewName] 已经存在且包含 $existingCount 个已有图元组件！直接调用 apply_view_layout 将彻底冲垮并抹除该页面的全部已有设计。若确实需要全量重构整页，必须首先通过 'ask_user_question' 弹出确认卡片征得用户授权，并在调用时显式传入 'overrideConfirmed = true'；若仅是新增或微调个别组件，请改用 'patch_view_elements' 执行局部精准增删改。"
+                )
+            }
+
+            // ★ 前置刚性数据格式审核：严格拦截非法结构、非法图元、引用违规与未入库资产
+            val validationError = validateViewLayoutData(rawBlocks, availablePages, assetLibrary)
             if (validationError != null) {
                 return ApplyLayoutResult(
                     isSuccess = false,
@@ -471,8 +487,8 @@ object UiStudioLayoutService {
                 )
             }
 
-            // ★ 前置刚性数据格式审核：严格拦截非法操作、非法图元与引用破坏
-            val validationError = validatePatchList(patchList, targetPage, availablePages)
+            // ★ 前置刚性数据格式审核：严格拦截非法操作、非法图元、引用破坏与未入库资产
+            val validationError = validatePatchList(patchList, targetPage, availablePages, assetLibrary)
             if (validationError != null) {
                 return PatchElementsResult(
                     isSuccess = false,
@@ -622,9 +638,11 @@ object UiStudioLayoutService {
     private fun validatePatchList(
         patchList: List<JsonObject>,
         targetPage: UIStudioPage,
-        availablePages: List<UIStudioPage>
+        availablePages: List<UIStudioPage>,
+        assetLibrary: UIAssetLibrary
     ): String? {
         val availablePageIds = availablePages.map { it.id }.toSet()
+        val validAssetHashes = assetLibrary.items.mapNotNull { it.hash?.lowercase()?.trim() }.toSet()
         val existingBlockIds = mutableSetOf<String>()
         fun collectExistingIds(blocks: List<UIStudioBlock>) {
             for (b in blocks) {
@@ -665,6 +683,10 @@ object UiStudioLayoutService {
                     if (typeStr == "CONTAINER") {
                         return "$step: 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 并配合 isPureContainer 或 targetPageId"
                     }
+                    val reqAssetHash = props["assetHash"]?.jsonPrimitive?.contentOrNull?.trim()
+                    if (!reqAssetHash.isNullOrBlank() && validAssetHashes.isNotEmpty() && reqAssetHash.lowercase() !in validAssetHashes) {
+                        return "$step: 图元 '$blockId' 指定的 assetHash '$reqAssetHash' 在当前工程素材库中不存在！严禁伪造或预填不存在的 Hash。若为新生成的图片，必须先通过 'ask_user_question' 征得用户同意，并调用 'save_image_to_asset_library' 落盘入库获取真实 assetHash 后方可装配。"
+                    }
                 }
                 "REMOVE", "DELETE" -> {
                     if (blockId.isNullOrBlank()) {
@@ -702,6 +724,10 @@ object UiStudioLayoutService {
                     if (!newTargetPageId.isNullOrBlank() && children != null && children.isNotEmpty()) {
                         return "$step: 新图元 '$newId' 为页面引用实例 (targetPageId='$newTargetPageId')，严禁在 children 中内联塞入子图元"
                     }
+                    val newAssetHash = blockObj["assetHash"]?.jsonPrimitive?.contentOrNull?.trim()
+                    if (!newAssetHash.isNullOrBlank() && validAssetHashes.isNotEmpty() && newAssetHash.lowercase() !in validAssetHashes) {
+                        return "$step: 新图元 '$newId' 指定的 assetHash '$newAssetHash' 在当前工程素材库中不存在！严禁伪造或预填不存在的 Hash。若为新生成的图片，必须先通过 'ask_user_question' 征得用户同意，并调用 'save_image_to_asset_library' 落盘入库获取真实 assetHash 后方可装配。"
+                    }
                 }
             }
         }
@@ -713,13 +739,15 @@ object UiStudioLayoutService {
      */
     private fun validateViewLayoutData(
         rawBlocks: JsonArray,
-        availablePages: List<UIStudioPage>
+        availablePages: List<UIStudioPage>,
+        assetLibrary: UIAssetLibrary
     ): String? {
         if (rawBlocks.isEmpty()) {
             return "全量排版数据中 blocks 数组不能为空"
         }
         val availablePageIds = availablePages.map { it.id }.toSet()
         val visitedIds = mutableSetOf<String>()
+        val validAssetHashes = assetLibrary.items.mapNotNull { it.hash?.lowercase() }.toSet()
 
         fun validateBlockNode(obj: JsonObject, path: String): String? {
             val id = obj["id"]?.jsonPrimitive?.contentOrNull?.trim()
@@ -752,6 +780,11 @@ object UiStudioLayoutService {
                 if (children != null && children.isNotEmpty()) {
                     return "$path (图元 '$id'): 是页面引用实例 (targetPageId='$targetPageId')，严禁在 children 中内联塞入子图元！组件内容必须在其独立子页面中维护"
                 }
+            }
+
+            val reqAssetHash = obj["assetHash"]?.jsonPrimitive?.contentOrNull?.trim()
+            if (!reqAssetHash.isNullOrBlank() && validAssetHashes.isNotEmpty() && reqAssetHash.lowercase() !in validAssetHashes) {
+                return "$path (图元 '$id'): 指定的 assetHash '$reqAssetHash' 在当前工程素材库中不存在！严禁伪造或预填不存在的 Hash。若为新生成的图片，必须先通过 'ask_user_question' 征得用户同意，并调用 'save_image_to_asset_library' 落盘入库获取真实 assetHash 后方可装配。"
             }
 
             if (children != null) {

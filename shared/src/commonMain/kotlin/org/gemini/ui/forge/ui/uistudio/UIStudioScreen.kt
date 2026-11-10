@@ -508,5 +508,12 @@ fun UIStudioScreen(
                 }
             )
         }
+
+        if (state.isGameActivationDialogVisible) {
+            GameProjectActivationDialog(
+                viewModel = viewModel,
+                templateRepo = templateRepository
+            )
+        }
     }
 }

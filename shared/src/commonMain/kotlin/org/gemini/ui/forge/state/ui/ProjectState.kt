@@ -30,7 +30,9 @@ data class ProjectState(
     /** UI Studio 独立工作台的视图界面集合（图元模型为 UIStudioBlock，不含任何路径引用属性；传统 Slots 工程恒为空） */
     val studioPages: List<UIStudioPage> = emptyList(),
     /** 模板创建时间戳（毫秒） */
-    val createdAt: Long = 0L
+    val createdAt: Long = 0L,
+    /** 绑定的外部游戏工程物理根目录（为 UI Studio 提供游戏运行预览与代码生成对接） */
+    val gameProjectPath: String? = null
 ) {
 
     /**

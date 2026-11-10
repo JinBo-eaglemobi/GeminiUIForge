@@ -28,5 +28,6 @@ data class UIStudioProjectConfig(
     val defaultCanvasWidth: Float = 1080f,
     val defaultCanvasHeight: Float = 1920f,
     val activeViewId: String? = null,
+    val gameProjectPath: String? = null,
     val pageIndex: List<UIStudioPageIndexItem> = emptyList()
 )

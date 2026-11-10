@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.filled.ViewSidebar
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.action_save_layout
 import geminiuiforge.composeapp.generated.resources.back_to_home
+import geminiuiforge.composeapp.generated.resources.ui_studio_btn_run_preview
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.ui.component.AppIconButton
 import org.gemini.ui.forge.ui.component.AppIconButtonTier
@@ -169,6 +172,20 @@ fun UIStudioTopBar(
                     tier = AppIconButtonTier.LARGE,
                     tooltip = "重做 (Ctrl+Y)",
                     tint = if (state.canRedo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                )
+
+                // 运行游戏预览按钮 (▶ 运行预览)
+                val isGameActivated = remember(state.project?.gameProjectPath) {
+                    val p = state.project?.gameProjectPath
+                    !p.isNullOrBlank() && viewModel.scaffoldBridge.isGameProjectActivated(p)
+                }
+
+                AppIconButton(
+                    imageVector = Icons.Default.PlayArrow,
+                    onClick = { viewModel.onRunPreviewClicked() },
+                    tier = AppIconButtonTier.LARGE,
+                    tooltip = stringResource(Res.string.ui_studio_btn_run_preview),
+                    tint = if (isGameActivated) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
                 )
 
                 // 一键保存工程按钮（带未保存状态小圆点指示）

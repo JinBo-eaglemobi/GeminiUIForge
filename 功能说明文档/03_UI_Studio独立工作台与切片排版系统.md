@@ -109,7 +109,32 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
 
 ### 8. 悬浮式 AI 架构师协同入口
 - 画布右下角常驻悬浮轻量级 AI 对话胶囊，一键唤起 `UIProjectAiStudioDialog` 项目级 AI 架构师；
-- 架构师具备完整感知当前视口图元树、素材库清单与排版状态的能力，支持自然语言分发排版指令。
+- 架构师具备完整感知当前视口图元树、素材库清单与排版状态的能力，支持自然语言分发排版指令；
+- **生图执行引擎合一**：架构师对话中无论选择普通对话模型（Function Calling）还是生图专属模型（生图轮直调），生图执行统一经 `generate_image` 工具管道（重试/抠图/素材库归档齐备）；模型菜单保持自由选择不变，详见[06 AI多模态生成与智能体对话系统](06_AI多模态生成与智能体对话系统.md)；
+- **同尺寸重生链路**：选中画布图元后以文案要求“换风格重生”，架构师可经 `get_runtime_status` 查询选中图元精确 bounds → `generate_image(targetWidth/targetHeight)` 以像素级同尺寸生成 → `patch_view_elements` 原位替换素材绑定。
+
+### 9. 游戏项目激活脚手架与全自动构建运行闭环 (Game Project Activation & Build Lifecycle)
+- **TopBar 【▶ 运行预览】交互入口**：
+  - 顶栏右侧配备专属「运行预览」操作按钮，根据当前工程是否激活自适应呈现紫色强调或绿色就绪高亮；
+  - 若当前工程已激活（检测到有效的 `forge-game.json` 且 `build/index.html` 存在），单击直接调起系统默认浏览器访问本地方案预览地址（`http://localhost:1234/<Drive>/.../build/index.html`）；
+  - 若尚未激活，单击秒级弹出【激活游戏项目】专属向导弹窗（`GameProjectActivationDialog`）。
+- **保存父目录设定与最终存放目录动态联动**：
+  - 采用现代 IDE 架构：用户输入「游戏项目名称」，并通过原生目录手柄选择「游戏保存父目录」；
+  - 界面动态高亮展示「最终存放目录」（父目录 + 项目名），并随用户输入实时联动刷新，杜绝路径层级混乱；
+  - **私有缓存物理拦截**：强校验拦截机制，对最终存放目录严格排查，严禁选在软件私有缓存目录（`~/.geminiuiforge` 及其子路径）下，确保项目代码的持久安全与独立归属。
+- **运行环境自动检测与静默就绪 (Node.js & PNPM)**：
+  - 初始化流水线第一步自动探测宿主机环境是否已安装 Node.js 与 pnpm；
+  - 若缺失环境，全自动在后台执行静默安装与环境就绪，确保用户零配置即开即用。
+- **脚手架物理写入与源码模板注入**：
+  - 自动向目标目录写入核心配置文件：`package.json`（依赖 `@boge-mvp/game-lib@^2.5.4`）、`tsconfig.json`、`copyFiles.js`、`game/build.js`；
+  - 写入运行目录静态模板：`build/index.html`（自适应 WebGL 视口画布）、`build/config.js`、`build/index.js`（按序加载 LayaAir、FairyGUI、gameLib、tsCore 与 main.min.js）；
+  - 写入 TypeScript 源码骨架：`src/Main.ts`（继承 `tsCore.EProxy`，动态初始化当前工程基准分辨率与 FairyGUI 字体体系，挂载生命周期）。
+- **全自动构建流水线与物理产物断言**：
+  - 依次在后台调度执行：`pnpm install`（安装项目依赖） $\rightarrow$ `node copyFiles.js`（分发核心类库至 `build/` 目录） $\rightarrow$ `node game/build.js`（通过 Rollup 打包 `src/Main.ts` 至 `build/main.min.js`）；
+  - 物理断言 `build/main.min.js` 与 `build/index.html` 真实存在，在根目录原子持久化专属识别配置文件 `forge-game.json`，将项目标记为已激活状态，并在向导弹窗中流式展示控制台日志与步骤进度条；全部流程不出错即代表初始化完成！
+- **命令行控制台人机工程学与全屏沉浸模式**：
+  - 控制台可视高度扩容至 240dp，外层原生接入 `SelectionContainer`，支持自由鼠标划词、多行框选文字并通过 `Ctrl+C` 快捷复制；
+  - 控制台操作栏与弹窗 Header 均配备一键切换【全屏沉浸模式】（弹窗舒展至 960dp，上部表单折叠为单行紧凑胶囊摘要，控制台高度自适应提升至 480dp）与【一键复制全部日志】（内置成功气泡通知），极大改善长日志排错与查看体验。
 
 ---
 
@@ -155,6 +180,9 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
 10. **【AI 排版数据格式刚性审核准入与引用智能路由红线 (AI Layout Rigorous Validation & Reference Auto-Routing)】**：
     - **数据格式刚性准入审核**：系统在接收到 AI 返回的视图排版数据（`apply_view_layout`）或图元增量补丁（`patch_view_elements`）时，必须执行前置的数据完整性与合法性刚性审核。凡出现：图元缺失必填 `id`、同一视图内 `id` 冲突、图元宽或高 $\le 0$、引用了已废弃的 `CONTAINER` 类型、图元声明的 `targetPageId` 在工程中不存在、或在页面引用实例节点（`targetPageId != null`）的 `children` 中内联塞入子图元等违规情况，系统一律立即拒绝执行并阻断，直接反馈执行失败，并通过 Toast 气泡与执行结果明确告知具体的违规字段与错误原因；
     - **页面引用实例智能自动路由**：在执行 `ADD` 增量补丁时，若目标父节点（`parentBlockId`）为页面引用组件（`targetPageId != null`），系统严禁将其直接追加到当前宿主页面的 children 中，而是智能拦截并自动路由重定向追加至对应的目标独立子页面（`targetSubPage`）顶层；同时自动同步内存镜像并调度协程对被修改的子页面独立执行原子持久化落盘，确保各独立界面的物理单一事实源与跨页面引用关系的绝对纯洁。
+
+11. **【游戏项目独立保存目录与防缓存污染红线】**：游戏项目的源码、依赖库与运行编译产物必须保存在用户显式指定的外部独立物理目录中，**绝对严禁**存放在程序自身私有缓存目录（如 `~/.geminiuiforge/templates/...`）下，从底层杜绝因程序缓存清理导致用户代码被误删的严重隐患；
+12. **【专属配置文件单一事实源红线 (forge-game.json)】**：未包含有效专属识别配置文件 `forge-game.json` 的目录，系统坚决不认定为有效游戏工程；运行预览时若项目已激活则直接浏览器极速拉起，未激活则强制弹出向导弹窗完成环境就绪、脚手架写入与完整构建流水线校验。
 
 ---
 

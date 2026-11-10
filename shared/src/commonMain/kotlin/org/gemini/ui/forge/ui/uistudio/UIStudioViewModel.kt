@@ -11,15 +11,19 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.manager.SessionTrafficStore
 import org.gemini.ui.forge.model.assetsheet.AssetImportDraft
 import org.gemini.ui.forge.model.assetsheet.NormalizedAssetItem
 import org.gemini.ui.forge.model.ui.UIStudioPage
+import org.gemini.ui.forge.model.ui.UIStudioProjectConfig
 import org.gemini.ui.forge.service.LocalMattingService
 import org.gemini.ui.forge.service.tool.ai.AiToolExecutionDispatcher
 import org.gemini.ui.forge.service.ai.GeminiChatEngine
 import org.gemini.ui.forge.service.canvas.CanvasScreenshotService
+import org.gemini.ui.forge.service.game.GameScaffoldBridge
+import org.gemini.ui.forge.service.game.createGameScaffoldBridge
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.uistudio.delegate.*
@@ -69,6 +73,9 @@ class UIStudioViewModel {
     /** 界面响应式状态快照 */
     var state by mutableStateOf(UIStudioState())
         private set
+
+    /** 跨端游戏工程脚手架服务桥接 */
+    val scaffoldBridge: GameScaffoldBridge = createGameScaffoldBridge()
 
     /**
      * 初始化或重新加载 UI Studio 工程。
@@ -277,6 +284,121 @@ class UIStudioViewModel {
             } finally {
                 state = state.copy(isSaving = false)
             }
+        }
+    }
+
+    /**
+     * 显式弹出游戏项目初始化与激活向导弹窗。
+     */
+    fun showGameActivationDialog() {
+        state = state.copy(
+            isGameActivationDialogVisible = true,
+            isGameActivating = false,
+            gameActivationStep = 0,
+            gameActivationMessage = "",
+            gameActivationLogs = emptyList(),
+            gameActivationError = null
+        )
+    }
+
+    /**
+     * 关闭游戏激活向导弹窗（进行中时阻断关闭）。
+     */
+    fun dismissGameActivationDialog() {
+        if (state.isGameActivating) return
+        state = state.copy(isGameActivationDialogVisible = false)
+    }
+
+    /**
+     * 点击【▶ 运行预览】核心处理流程：
+     * 若已绑定且已激活则直接拉起浏览器打开静态预览服务；
+     * 否则弹出首次激活与初始化配置向导弹窗。
+     */
+    fun onRunPreviewClicked() {
+        val proj = state.project ?: return
+        val gamePath = proj.gameProjectPath
+        if (!gamePath.isNullOrBlank() && scaffoldBridge.isGameProjectActivated(gamePath)) {
+            val previewUrl = scaffoldBridge.getPreviewUrl(gamePath)
+            if (!previewUrl.isNullOrBlank()) {
+                Toast.show("正在启动游戏预览", ToastType.INFO)
+                getPlatform().openInBrowser(previewUrl)
+                return
+            }
+        }
+        showGameActivationDialog()
+    }
+
+    /**
+     * 启动游戏工程全自动脚手架流水线与激活构建。
+     *
+     * @param repo 模板仓储服务
+     * @param gameProjectName 游戏项目英文标识/名称
+     * @param targetDir 宿主机外部物理保存目录
+     */
+    fun activateGameProject(
+        repo: TemplateRepository,
+        gameProjectName: String,
+        targetDir: String
+    ) {
+        val proj = state.project ?: return
+        if (state.isGameActivating) return
+
+        state = state.copy(
+            isGameActivating = true,
+            gameActivationStep = 1,
+            gameActivationMessage = "正在初始化环境与脚手架...",
+            gameActivationLogs = emptyList(),
+            gameActivationError = null
+        )
+
+        scope.launch {
+            val currentView = state.currentView
+            val currentW = currentView?.width?.toInt() ?: state.canvasWidth.toInt()
+            val currentH = currentView?.height?.toInt() ?: state.canvasHeight.toInt()
+
+            val result = scaffoldBridge.activateGameProject(
+                gameRootDirPath = targetDir,
+                projectName = gameProjectName,
+                canvasWidth = currentW,
+                canvasHeight = currentH,
+                onProgress = { step, total, message ->
+                    state = state.copy(
+                        gameActivationStep = step,
+                        gameActivationTotalSteps = total,
+                        gameActivationMessage = message
+                    )
+                },
+                onLog = { line ->
+                    state = state.copy(
+                        gameActivationLogs = state.gameActivationLogs + line
+                    )
+                }
+            )
+
+            result.fold(
+                onSuccess = { _ ->
+                    val updatedProj = proj.copy(gameProjectPath = targetDir)
+                    state = state.copy(
+                        project = updatedProj,
+                        isGameActivating = false,
+                        isGameActivationDialogVisible = false
+                    )
+                    // 自动持久化保存到模板工程配置中
+                    saveProject(repo)
+                    Toast.show("游戏项目初始化与构建成功！", ToastType.SUCCESS)
+
+                    val previewUrl = scaffoldBridge.getPreviewUrl(targetDir)
+                    if (!previewUrl.isNullOrBlank()) {
+                        getPlatform().openInBrowser(previewUrl)
+                    }
+                },
+                onFailure = { err ->
+                    state = state.copy(
+                        isGameActivating = false,
+                        gameActivationError = err.message ?: "激活游戏工程失败"
+                    )
+                }
+            )
         }
     }
 

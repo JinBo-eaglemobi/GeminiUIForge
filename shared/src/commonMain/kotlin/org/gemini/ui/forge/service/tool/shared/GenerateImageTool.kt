@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.service.tool.shared
 
 import org.gemini.ui.forge.service.job.ImageJobManager
+import org.gemini.ui.forge.service.job.ImageJobStatus
 import org.gemini.ui.forge.service.tool.ToolAnnotations
 import org.gemini.ui.forge.service.tool.ToolDefinition
 import org.gemini.ui.forge.service.tool.ToolResult
@@ -32,7 +33,7 @@ class GenerateImageTool(
         openWorldHint = true
     )
 
-    override val timeoutMs: Long = 10_000L
+    override val timeoutMs: Long = 310_000L
 
     override val inputSchema: JsonObject = buildJsonObject {
         put("type", "object")
@@ -68,6 +69,18 @@ class GenerateImageTool(
                     "可选：画面宽高比例，默认为 '1:1'。支持 14 种标准比例：'1:1'（正方形图标/角色头像）、'16:9'/'21:9'（横屏宽幅全景底图）、'9:16'（竖屏全屏底图）、'4:3'/'3:2'/'5:4'（常规横向面板）、'3:4'/'2:3'/'4:5'（竖向卡片/列表项）、'8:1'/'4:1'（横条饰带/标题横幅）、'1:8'/'1:4'（极窄竖条背景/侧边装饰栏）。"
                 )
             }
+            put("targetWidth", buildJsonObject {
+                put("type", "number")
+                put("description", "可选：精确像素宽度（须与 targetHeight 成对提供，提供后优先于 aspectRatio 枚举）。重生图元场景请先调用 get_runtime_status 查询选中图元 bounds 的 width/height 原样传入，确保生成图与原图元尺寸完全一致")
+            })
+            put("targetHeight", buildJsonObject {
+                put("type", "number")
+                put("description", "可选：精确像素高度（须与 targetWidth 成对提供，提供后优先于 aspectRatio 枚举）")
+            })
+            put("waitSeconds", buildJsonObject {
+                put("type", "number")
+                put("description", "可选：同步等待生图完成的最长秒数（默认 0 = 保持异步提交语义，仅返回 jobId）。大于 0 时将阻塞至任务完成并直接返回 results 结果数组，适合需要立即拿到图像数据的调用方")
+            })
             put("isPng", buildJsonObject {
                 put("type", "boolean")
                 put("description", "可选：是否自动通过本地 AI 算法进行透明抠图去背，默认为 false。对图标、独立角色、小动物切片建议设为 true")
@@ -108,6 +121,13 @@ class GenerateImageTool(
         val aspectRatio = arguments["aspectRatio"]?.jsonPrimitive?.contentOrNull ?: "1:1"
         val isPng = arguments["isPng"]?.jsonPrimitive?.booleanOrNull ?: false
 
+        // 可选：调用方显式指定的精确像素尺寸（成对提供且宽高比在物理夹具范围内时优先于枚举比例）
+        val explicitWidth = arguments["targetWidth"]?.jsonPrimitive?.doubleOrNull?.toFloat()
+        val explicitHeight = arguments["targetHeight"]?.jsonPrimitive?.doubleOrNull?.toFloat()
+
+        // 可选：同步等待秒数（默认 0 = 保持异步提交语义，兼容 MCP 现有调用）
+        val waitSeconds = arguments["waitSeconds"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: 0
+
         val configManager = ConfigManager()
         val presetModel = configManager.loadKey("DEFAULT_IMAGE_GEN_MODEL")?.ifBlank { null }
         val requestedModelName = arguments["modelName"]?.jsonPrimitive?.contentOrNull
@@ -120,22 +140,31 @@ class GenerateImageTool(
             ?: configManager.loadGlobalGeminiKey()
             ?: return ToolResult.error("未找到有效的 Gemini API Key，请先在设置中配置密钥")
 
-        val (targetWidth, targetHeight) = when (aspectRatio) {
-            "1:1" -> 1024f to 1024f
-            "2:3" -> 832f to 1248f
-            "3:2" -> 1248f to 832f
-            "3:4" -> 768f to 1024f
-            "4:3" -> 1024f to 768f
-            "4:5" -> 816f to 1020f
-            "5:4" -> 1020f to 816f
-            "9:16" -> 720f to 1280f
-            "16:9" -> 1280f to 720f
-            "21:9" -> 1536f to 656f
-            "1:8" -> 160f to 1280f
-            "8:1" -> 1280f to 160f
-            "1:4" -> 320f to 1280f
-            "4:1" -> 1280f to 320f
-            else -> 1024f to 1024f
+        // 尺寸决策：显式像素成对提供且宽高比在物理夹具 0.05~20 内时优先，否则回退 14 档枚举映射
+        val explicitRatioValid = explicitWidth != null && explicitHeight != null &&
+            explicitWidth > 0f && explicitHeight > 0f &&
+            (explicitWidth / explicitHeight) in 0.05f..20f
+
+        val (targetWidth, targetHeight) = if (explicitRatioValid) {
+            explicitWidth!! to explicitHeight!!
+        } else {
+            when (aspectRatio) {
+                "1:1" -> 1024f to 1024f
+                "2:3" -> 832f to 1248f
+                "3:2" -> 1248f to 832f
+                "3:4" -> 768f to 1024f
+                "4:3" -> 1024f to 768f
+                "4:5" -> 816f to 1020f
+                "5:4" -> 1020f to 816f
+                "9:16" -> 720f to 1280f
+                "16:9" -> 1280f to 720f
+                "21:9" -> 1536f to 656f
+                "1:8" -> 160f to 1280f
+                "8:1" -> 1280f to 160f
+                "1:4" -> 320f to 1280f
+                "4:1" -> 1280f to 320f
+                else -> 1024f to 1024f
+            }
         }
 
         val customSubPath = arguments["customSubPath"]?.jsonPrimitive?.contentOrNull?.trim()?.trim('/', '\\') ?: ""
@@ -157,6 +186,54 @@ class GenerateImageTool(
             addToView = addToView,
             storage = storage
         )
+
+        // 可选同步语义：waitSeconds > 0 时阻塞等待任务终态并直接返回图像结果（默认 0 保持异步零波及）
+        if (waitSeconds > 0) {
+            onProgress?.invoke(0.5f, "生图任务已提交，同步等待生成完成（最长 ${waitSeconds}s）...")
+            val finalRecord = try {
+                ImageJobManager.awaitJobCompleted(jobId, timeoutSeconds = waitSeconds)
+            } catch (e: Exception) {
+                return ToolResult.error("同步等待生图结果失败: ${e.message}")
+            }
+
+            val syncJson = buildJsonObject {
+                put("status", finalRecord.status.name)
+                put("jobId", jobId)
+                put("prompt", prompt)
+                put("aspectRatio", aspectRatio)
+                put("width", finalRecord.width)
+                put("height", finalRecord.height)
+                if (!finalRecord.imageUri.isNullOrBlank()) put("imageUri", finalRecord.imageUri)
+                if (!finalRecord.base64Data.isNullOrBlank()) put("base64Data", finalRecord.base64Data)
+                if (!finalRecord.mimeType.isNullOrBlank()) put("mimeType", finalRecord.mimeType)
+                if (!finalRecord.savedRelativePath.isNullOrBlank()) put("savedRelativePath", finalRecord.savedRelativePath)
+                if (!finalRecord.errorMessage.isNullOrBlank()) put("errorMessage", finalRecord.errorMessage)
+                put("results", buildJsonArray {
+                    add(buildJsonObject {
+                        put("jobId", jobId)
+                        if (!finalRecord.imageUri.isNullOrBlank()) put("imageUri", finalRecord.imageUri)
+                        if (!finalRecord.base64Data.isNullOrBlank()) put("base64Data", finalRecord.base64Data)
+                        if (!finalRecord.mimeType.isNullOrBlank()) put("mimeType", finalRecord.mimeType)
+                        if (!finalRecord.savedRelativePath.isNullOrBlank()) put("savedRelativePath", finalRecord.savedRelativePath)
+                    })
+                })
+                put(
+                    "message",
+                    if (finalRecord.status == ImageJobStatus.SUCCESS) {
+                        "生图任务已同步完成并返回图像数据。"
+                    } else {
+                        "生图任务失败: ${finalRecord.errorMessage ?: "未知错误"}"
+                    }
+                )
+            }
+
+            onProgress?.invoke(1.0f, "生图同步等待结束: ${finalRecord.status.name}")
+            return if (finalRecord.status == ImageJobStatus.SUCCESS) {
+                ToolResult.text(syncJson.toString())
+            } else {
+                ToolResult.error(syncJson.toString())
+            }
+        }
 
         val responseJson = buildJsonObject {
             put("status", "RUNNING")

@@ -19,11 +19,11 @@
 
 ## 质量与校验（红线规则）
 
-- **热重载前置健康体检与防并发撞车红线 (Pre-Reload Health & Concurrency Guard)**: **【红线规则】**
-  全项目在调用 `tools["compose-hot-reload"].reload()` 发起任何增量热更之前，**必须严格执行“前置状态感知与并发巡检”**：
-  1. **【前置并发防撞车感知（第一优先级绝对铁律）】**：在发起热更或执行任何体检前，**必须首先调用 `tools["compose-hot-reload"].status()` 检查当前 `reloadState`**！若当前正处于 `"reloading"`（已被前序动作或其他守护进程调用），**绝对严禁执行任何外部脚本，绝对严禁发起新热更**，必须挂起安全轮询等待（最长等待 25 秒），直至其自然变为 `"ok"` 或 `"failed"` 收口；
-  2. **【绝对严禁强杀 GradleDaemon 进程】**：GradleDaemon 为跨工程全局共享资源，由 Gradle 官方生命周期与 `gradle.properties` (`org.gradle.daemon.idletimeout=180000`) 自动优雅回收。**严禁编写或执行任何强杀 GradleDaemon 进程的脚本或命令**！严防误杀其他项目正在进行的构建，严防导致当前工程陷入耗时长达数分钟的全量冷启动惩罚；
-  3. **【Kotlin 注册文件定点清理】**：前置体检脚本仅限扫描清理无存活进程的孤儿 `%LOCALAPPDATA%\kotlin\daemon\*.run` 注册文件，绝不触碰任何运行中的活跃进程，保障健康守护进程秒级增量编译；
+- **热重载前置并发巡检与防撞车红线 (Pre-Reload Concurrency Guard & Zero External Scripts)**: **【红线规则】**
+  全项目在调用 `tools["compose-hot-reload"].reload()` 发起任何增量热更之前，**必须严格执行“前置状态感知与并发巡检”，且严禁依赖任何外部体检脚本**：
+  1. **【前置并发防撞车感知（第一优先级绝对铁律）】**：在发起热更前，**必须首先调用 `tools["compose-hot-reload"].status()` 检查当前 `reloadState`**！若当前正处于 `"reloading"`（已被前序动作或其他守护进程调用），**绝对严禁执行任何外部脚本，绝对严禁发起新热更**，必须挂起安全轮询等待（最长等待 25 秒），直至其自然变为 `"ok"` 或 `"failed"` 收口；
+  2. **【绝对严禁强杀 GradleDaemon 进程】**：GradleDaemon 为跨工程全局共享资源，由 Gradle 官方生命周期与 `gradle.properties` (`org.gradle.daemon.idletimeout=180000`) 自动优雅回收。**严禁编写、保留或执行任何强杀 GradleDaemon 进程或执行 `./gradlew --stop` 的外部脚本与命令**！严防误杀其他项目正在进行的构建，严防导致当前工程陷入耗时长达数分钟的全量冷启动惩罚；
+  3. **【孤儿文件清理】**：严防外部脚本进程竞争与资源开销；仅在发现热更耗时异常（> 20s）时由 AI 定点巡检并删除无存活进程的孤儿 `%LOCALAPPDATA%\kotlin\daemon\*.run` 注册文件，绝不触碰任何运行中的活跃进程；
   4. **【发起后 >20s 刚性秒表探针】**：发起热更后，严禁无限制被动挂起。一旦轮询等待超过 20 秒，强制立刻介入分析 `%TEMP%\kotlin-daemon*.log`，严防静默死锁。
 
 - **IntelliJ IDEA 研发编译与热重载单通道分流校验规范**: **【红线规则】**
@@ -40,6 +40,25 @@
   3. **【僵尸 Daemon `LastSession` 选举自杀循环巡检与手术刀清理】**：
      - **底层病理警示**：若宿主机残留了卡死在 `actual: LastSession` 状态的陈旧 `KotlinCompileDaemon` 及其 `%LOCALAPPDATA%\kotlin\daemon\*.run` 注册文件，新启动的同版本 `KotlinCompileDaemon` 在 `initiate elections`（守护进程选举）时会误判旧僵尸优先级更高并打印 `Assuming other daemons have higher prio... Graceful shutdown signalled`，导致每次编译完立即自杀退出、每次热更被迫冷启动 JVM；
      - **外科手术式精准清理（严禁误杀应用）**：一旦发现热重载耗时异常（> 20s）或 `%TEMP%\kotlin-daemon*.log` 出现 `requested state: Alive > actual: LastSession` / `Assuming other daemons have higher prio`，必须立即**仅针对该僵尸 `KotlinCompileDaemon` 的 PID 及陈旧 `.run` 文件执行定点清除**（绝不触碰运行中的桌面端主进程与活跃的热重载守护进程），确保健康的新 `KotlinCompileDaemon` 赢得选举并常驻内存保持 3~4 秒极速增量热更！
+
+- **Compose 热重载物理硬边界与分流生效铁律 (Compose Hot Reload Boundaries & Dispatching Invariant)**: **【红线规则】**
+  Compose Hot Reload 依赖底层 JVM 字节码热替换（HotSwap）与 Compose 运行时重组重绘（Recomposition），全项目必须严格遵循四级分流生效标准，杜绝盲目死等或误判热更失效：
+  1. **【JVM 字节码热替换物理硬边界（何时绝对无法热更）】**：
+     - **✅ 允许毫秒级热更（2~3s，直接调用 `reload()`）**：仅限 `@Composable` 或普通函数**内部实现体（Method Body）**的排版、尺寸间距、颜色、修饰符 `Modifier`、局部算法与事件回调修改；
+     - **🚨 JVM 底层物理绝对无法热更（JVM HotSwap 强硬拦截，必须调用官方原生极速重启 `tools["compose-hot-reload"].restart()`）**：
+       ① 增删类字段（如 `ProjectState`、`UIStudioState` 或数据类中新增/删除属性）；
+       ② 修改方法签名（增删实参、修改返回类型）；
+       ③ 修改 `enum class` 枚举条目；
+       ④ 修改被 `@Serializable` 标记的数据类（因生成了静态结构化 `SerialDescriptor` 导致字节码不兼容）；
+       ⑤ 修改类的继承体系或接口实现。
+       **遇上述改动严禁死等热更，必须直接调用官方 `restart()` 极速拉起新进程并保持常驻！**
+  2. **【Compose `remember` 状态固化假失效与 `reset_ui()` 强制刷新】**：
+     - 若修改了组件内部 `remember { ... }` 缓存的初始值或状态重组逻辑，因挂载在屏幕上的 Composition 实例依然存留旧内存，热替换后界面不会自动刷回初始态；
+     - **标准动作**：调用 `reload()` 热更完成后，必须紧跟调用 `tools["compose-hot-reload"].reset_ui()`，在毫秒级内丢弃全部记忆树并以新代码初次构造型挂载！
+  3. **【多语言与 XML 资源代码生成耗时惩罚感知】**：
+     - 凡修改 `strings.xml` 或资源文件，会强制触发 Gradle `:shared:generateComposeResClass` 与跨模块重打包（耗时 10~15s），属正常代码生成流水线，严禁误判为卡死！
+  4. **【孤儿僵尸 `.run` 注册文件定点清理与选举自杀预防】**：
+     - 每次发起热更若耗时异常（> 20s），必须巡检 `%LOCALAPPDATA%\kotlin\daemon\*.run`。若对应 PID 进程已死亡，必须立刻定点清除该孤儿 `.run` 文件，杜绝新守护进程误判选举而每次“编译完就自杀退出”，保障健康守护进程秒级增量编译！
 
 - **功能说明文档生命周期与先锁后更铁律 (Feature Documentation Lifecycle & Pre-Post Redline)**: **【红线规则】**
   全项目功能基线与架构规范统一以根目录 `功能说明文档/` 目录下的系列文档为权威单一事实源。

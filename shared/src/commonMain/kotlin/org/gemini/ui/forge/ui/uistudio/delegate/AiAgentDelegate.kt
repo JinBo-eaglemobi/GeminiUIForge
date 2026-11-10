@@ -12,7 +12,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -294,6 +296,104 @@ class AiAgentDelegate(
         } catch (e: Exception) {
             AppLogger.e("AiAgentDelegate", "持久化 AI 生成图像失败", e)
             null
+        }
+    }
+
+    /**
+     * 【生图执行引擎合一】生图专属模型轮次的统一执行入口。
+     *
+     * 生图轮不再经 GeminiChatEngine chat 直连出图，而是构造合成 generate_image 工具调用，
+     * 复用 ToolHub → GenerateImageTool → ImageJobManager 统一生图管道，
+     * 完整获得批次重试、本地透明抠图与素材库归档能力；
+     * 界面交互（模型菜单自由选择、消息卡片呈现）保持现状不变。
+     *
+     * @param requestModel 用户当前选择的生图专属模型（作为执行引擎透传）
+     * @param userText 用户本轮生图描述文本
+     * @return 三元组：合成结果 / 落盘图像路径 / 工具调用记录
+     */
+    private suspend fun executeImageGenTurnViaUnifiedTool(
+        requestModel: GeminiModel,
+        userText: String
+    ): Triple<GeminiChatResult, String?, List<ChatToolCallRecord>> {
+        return try {
+            state = state.copy(streamingAiThought = "🎨 正在通过统一生图引擎渲染图像...")
+            // 构造合成 generate_image 调用：执行引擎仍为用户所选生图专属模型，仅编排管道统一
+            val syntheticCall = GeminiFunctionCallRecord(
+                name = "generate_image",
+                argsJson = buildJsonObject {
+                    put("prompt", userText)
+                    put("modelName", requestModel.modelName)
+                    put("isPng", true)
+                    put("waitSeconds", 120)
+                }.toString(),
+                callId = "agent_img_${getCurrentTimeMillis()}"
+            )
+            val records = executeDetectedAiTools("", userText, listOf(syntheticCall))
+            val record = records.firstOrNull { it.toolName == "generate_image" }
+            if (record == null || !record.isSuccess) {
+                val error = record?.resultSummary?.ifBlank { null } ?: "生图工具执行失败"
+                Triple(
+                    GeminiChatResult(
+                        text = "",
+                        rawResponseJson = "",
+                        isSuccess = false,
+                        errorMessage = error,
+                        modelName = requestModel.modelName
+                    ),
+                    null,
+                    records
+                )
+            } else {
+                // 从工具返回 JSON 中提取 Base64 图像并落盘至会话附件目录（保证会话持久化轻量）
+                val diskPath = runCatching {
+                    val raw = record.rawOutput ?: ""
+                    val base64 = if (raw.startsWith("{")) {
+                        jsonHelper.parseToJsonElement(raw).jsonObject["base64Data"]?.jsonPrimitive?.contentOrNull
+                    } else {
+                        null
+                    }
+                    base64?.let { persistGeneratedChatImage(it) }
+                }.getOrNull()
+                if (diskPath.isNullOrBlank()) {
+                    Triple(
+                        GeminiChatResult(
+                            text = "",
+                            rawResponseJson = "",
+                            isSuccess = false,
+                            errorMessage = "生图工具未返回有效图像数据",
+                            modelName = requestModel.modelName
+                        ),
+                        null,
+                        records
+                    )
+                } else {
+                    Triple(
+                        GeminiChatResult(
+                            text = "",
+                            rawResponseJson = "",
+                            isSuccess = true,
+                            modelName = requestModel.modelName
+                        ),
+                        diskPath,
+                        records
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            AppLogger.e("AiAgentDelegate", "统一生图引擎执行异常", e)
+            Triple(
+                GeminiChatResult(
+                    text = "",
+                    rawResponseJson = "",
+                    isSuccess = false,
+                    errorMessage = e.message ?: "生图执行异常",
+                    modelName = requestModel.modelName
+                ),
+                null,
+                emptyList()
+            )
+        } finally {
+            state = state.copy(streamingAiThought = "")
         }
     }
 
@@ -675,6 +775,20 @@ class AiAgentDelegate(
                     )
                 )
 
+                // 【生图执行引擎合一】生图专属模型轮次不再走 chat 直连出图，
+                // 统一经 generate_image 工具管道执行（重试/抠图/素材库归档能力齐备），界面交互保持现状
+                var imageGenTurnRecords: List<ChatToolCallRecord> = emptyList()
+                var imageGenToolDiskPath: String? = null
+                var imageGenSuccess = true
+                var imageGenErrorMessage: String? = null
+                if (isImageGenTurn) {
+                    val (synthResult, diskPath, records) = executeImageGenTurnViaUnifiedTool(requestModel, userText)
+                    imageGenTurnRecords = records
+                    imageGenToolDiskPath = diskPath
+                    imageGenSuccess = synthResult.isSuccess
+                    imageGenErrorMessage = synthResult.errorMessage
+                }
+
                 var currentChatRequest = chatRequest
                 val allExecutedToolRecords = mutableListOf<ChatToolCallRecord>()
                 var round = 0
@@ -697,7 +811,7 @@ class AiAgentDelegate(
                     chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it }
                 )
 
-                while (round < maxToolRounds) {
+                while (!isImageGenTurn && round < maxToolRounds) {
                     round++
                     val currentRound = round
                     var currentStreamingThoughtThisRound = ""
@@ -891,13 +1005,30 @@ class AiAgentDelegate(
                     )
                 }
 
-                val finalResult = lastResult ?: GeminiChatResult(
-                    text = "（无响应结果）",
-                    rawResponseJson = "",
-                    isSuccess = false
-                )
+                // 生图轮：补挂统一生图引擎产出的工具记录卡片
+                if (isImageGenTurn) {
+                    allExecutedToolRecords.addAll(imageGenTurnRecords)
+                }
+                val finalResult = if (isImageGenTurn) {
+                    // 生图轮：构造合成结果驱动既有收尾渲染（图像经 generatedImageUri 卡片呈现）
+                    GeminiChatResult(
+                        text = "",
+                        rawResponseJson = "",
+                        isSuccess = imageGenSuccess,
+                        errorMessage = imageGenErrorMessage,
+                        modelName = requestModel.modelName
+                    )
+                } else {
+                    lastResult ?: GeminiChatResult(
+                        text = "（无响应结果）",
+                        rawResponseJson = "",
+                        isSuccess = false
+                    )
+                }
 
-                val directGeneratedImageUri = finalResult.generatedImageData?.let { persistGeneratedChatImage(it) }
+                // 生图轮图像已由统一引擎落盘；普通轮维持原提取逻辑
+                val directGeneratedImageUri = imageGenToolDiskPath
+                    ?: finalResult.generatedImageData?.let { persistGeneratedChatImage(it) }
                 val generatedImgPath = directGeneratedImageUri ?: extractGeneratedImageUri(allExecutedToolRecords)
                 if (generatedImgPath != null) {
                     state.project?.projectId?.let { assetLibrary.loadAssetLibrary(it) }
@@ -1063,32 +1194,46 @@ class AiAgentDelegate(
                     )
                 )
 
-                val result = chatEngine.executeChat(
-                    request = chatRequest,
-                    onChunk = { chunk ->
-                        state = state.copy(streamingAiText = state.streamingAiText + chunk)
-                    },
-                    onThought = { thought: String, _ ->
-                        if (state.streamingAiText.isBlank() && thought.isNotBlank()) {
-                            state = state.copy(streamingAiText = "🧠 " + thought.takeLast(120))
+                // 【生图执行引擎合一】生图轮跳过 chat 直连，统一经 generate_image 工具管道执行（界面交互保持现状）
+                val result: GeminiChatResult
+                var imageGenTurnRecords: List<ChatToolCallRecord> = emptyList()
+                var imageGenToolDiskPath: String? = null
+                if (isImageGenTurn) {
+                    val (synthResult, diskPath, records) = executeImageGenTurnViaUnifiedTool(requestModel, userMsg.prompt)
+                    result = synthResult
+                    imageGenTurnRecords = records
+                    imageGenToolDiskPath = diskPath
+                } else {
+                    result = chatEngine.executeChat(
+                        request = chatRequest,
+                        onChunk = { chunk ->
+                            state = state.copy(streamingAiText = state.streamingAiText + chunk)
+                        },
+                        onThought = { thought: String, _ ->
+                            if (state.streamingAiText.isBlank() && thought.isNotBlank()) {
+                                state = state.copy(streamingAiText = "🧠 " + thought.takeLast(120))
+                            }
+                        },
+                        onRawTraffic = { direction, rawUrl, body ->
+                            scope.launch(Dispatchers.Default) {
+                                val record = TrafficRecord(
+                                    seq = 0,
+                                    direction = direction,
+                                    timestamp = getCurrentTimeMillis(),
+                                    url = rawUrl,
+                                    model = requestModel.modelName,
+                                    body = body
+                                )
+                                trafficStore.append(record, trafficScopeId, activeSession.id)
+                            }
                         }
-                    },
-                    onRawTraffic = { direction, rawUrl, body ->
-                        scope.launch(Dispatchers.Default) {
-                            val record = TrafficRecord(
-                                seq = 0,
-                                direction = direction,
-                                timestamp = getCurrentTimeMillis(),
-                                url = rawUrl,
-                                model = requestModel.modelName,
-                                body = body
-                            )
-                            trafficStore.append(record, trafficScopeId, activeSession.id)
-                        }
-                    }
-                )
+                    )
+                }
 
-                val executedToolRecords = if (result.isSuccess) {
+                val executedToolRecords = if (isImageGenTurn) {
+                    // 生图轮：工具记录已由统一引擎产出，直接复用
+                    imageGenTurnRecords
+                } else if (result.isSuccess) {
                     state = state.copy(streamingAiThought = "🛠️ 正在执行系统工具 [generate_image] 生成并落盘素材...")
                     try {
                         executeDetectedAiTools(result.rawResponseJson, result.text, result.functionCalls)
@@ -1097,7 +1242,9 @@ class AiAgentDelegate(
                     }
                 } else emptyList()
 
-                val directGeneratedImageUri = result.generatedImageData?.let { persistGeneratedChatImage(it) }
+                // 生图轮图像已由统一引擎落盘；普通轮维持原直连提取逻辑
+                val directGeneratedImageUri = imageGenToolDiskPath
+                    ?: result.generatedImageData?.let { persistGeneratedChatImage(it) }
                 val generatedImgPath = directGeneratedImageUri ?: extractGeneratedImageUri(executedToolRecords)
                 if (generatedImgPath != null) {
                     state.project?.projectId?.let { assetLibrary.loadAssetLibrary(it) }

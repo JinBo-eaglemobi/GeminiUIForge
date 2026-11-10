@@ -3,6 +3,7 @@ package org.gemini.ui.forge.service.job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -97,6 +98,42 @@ object ImageJobManager {
      */
     suspend fun getJob(jobId: String): ImageJobRecord? {
         return mutex.withLock { jobs[jobId] }
+    }
+
+    /**
+     * 同步等待指定生图任务到达终态（SUCCESS / FAILED）
+     *
+     * 遵循三级可配置规范：调用端入参可覆盖 + 出厂默认值 + 物理安全夹具（超时上限 300s），
+     * 供 [org.gemini.ui.forge.service.tool.shared.GenerateImageTool] 的 waitSeconds 同步语义与
+     * UI Studio Agent 生图轮直调链路使用。
+     *
+     * @param jobId 任务唯一标识
+     * @param timeoutSeconds 最长等待秒数（出厂默认 120s，物理夹具钳制在 5~300s 区间）
+     * @param pollIntervalMs 轮询间隔毫秒数
+     * @return 终态任务记录（SUCCESS 或 FAILED）
+     * @throws IllegalStateException 等待超时或任务记录丢失时抛出
+     */
+    suspend fun awaitJobCompleted(
+        jobId: String,
+        timeoutSeconds: Int = 120,
+        pollIntervalMs: Long = 500L
+    ): ImageJobRecord {
+        // 物理安全夹具：防止外部误配置引发无限等待死锁
+        val clampedTimeoutSeconds = timeoutSeconds.coerceIn(5, 300)
+        val deadline = getCurrentTimeMillis() + clampedTimeoutSeconds * 1000L
+
+        while (getCurrentTimeMillis() < deadline) {
+            val record = getJob(jobId)
+            if (record == null) {
+                // 任务记录可能被清理策略回收，视为异常终态
+                throw IllegalStateException("生图任务记录不存在或已被清理: $jobId")
+            }
+            if (record.status == ImageJobStatus.SUCCESS || record.status == ImageJobStatus.FAILED) {
+                return record
+            }
+            delay(pollIntervalMs)
+        }
+        throw IllegalStateException("等待生图任务完成超时（${clampedTimeoutSeconds}s）: $jobId")
     }
 
     private suspend fun updateJob(jobId: String, transform: (ImageJobRecord) -> ImageJobRecord) {

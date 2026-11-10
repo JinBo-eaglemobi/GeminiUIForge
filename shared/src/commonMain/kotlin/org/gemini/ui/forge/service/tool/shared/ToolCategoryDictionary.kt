@@ -53,7 +53,7 @@ object ToolCategoryDictionary {
     fun getToolCategory(toolName: String): String {
         return when (toolName) {
             in setOf(
-                "get_assets", "list_assets", "generate_image", "query_image_job", "generate_block_asset", "generate_all_assets",
+                "get_assets", "list_assets", "save_image_to_asset_library", "generate_image", "query_image_job", "generate_block_asset", "generate_all_assets",
                 "remove_background", "chat_refine_image", "bake_nine_patch",
                 "set_block_reference_image", "inspect_block_with_reference",
                 "compare_with_reference", "list_matting_presets"
