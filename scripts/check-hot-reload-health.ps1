@@ -72,8 +72,10 @@ function Log-Detail {
 }
 
 # ==============================================================================
-# ---- 阶段 1：巡检 Gradle Daemon 守护进程风暴与堆积清理 ----
+# ---- 阶段 1：巡检 Gradle Daemon 守护进程池（只读巡检，绝对严禁外部暴力强杀） ----
 # ==============================================================================
+# 铁律：GradleDaemon 由 Gradle 官方机制与 gradle.properties (idletimeout=180000) 自主管理。
+# 跨项目共享同版本 GradleDaemon，外部脚本绝对严禁随意 Stop-Process 强杀，严防误杀其他工程正在进行的编译！
 $gradleDaemons = Get-CimInstance Win32_Process -Filter "Name LIKE 'java%.exe'" -ErrorAction SilentlyContinue | Where-Object {
     $_.CommandLine -match 'GradleDaemon' -and $_.CommandLine -notmatch 'GeminiUIForge'
 }
@@ -82,21 +84,7 @@ $gradleDaemonCount = if ($gradleDaemons) { ($gradleDaemons | Measure-Object).Cou
 $result.gradleDaemonsCount = $gradleDaemonCount
 
 if ($gradleDaemonCount -gt 2) {
-    Log-Detail "警告: 检测到当前存在 $gradleDaemonCount 个 GradleDaemon 进程 (超出安全阈值 2)，存在严重进程风暴与端口抢占隐患！"
-    if ($AutoHealZombies) {
-        # 尝试通过优雅方式停止多余 Daemon，或外科手术式保留最新一个、清除其余陈旧进程
-        Log-Detail "正在执行 Gradle 守护进程池定点手术刀清理..."
-        $sortedGradle = $gradleDaemons | Sort-Object -Property CreationDate -Descending
-        # 索引 0 为最新活跃进程，将索引 >= 1 的孤儿进程强行终止
-        for ($i = 1; $i -lt $sortedGradle.Count; $i++) {
-            $gPid = $sortedGradle[$i].ProcessId
-            try {
-                Stop-Process -Id $gPid -Force -ErrorAction SilentlyContinue
-                $result.gradleDaemonsCleaned++
-                Log-Detail "已清除陈旧孤儿 GradleDaemon (PID: $gPid)"
-            } catch {}
-        }
-    }
+    Log-Detail "巡检提示: 当前检测到 $gradleDaemonCount 个 GradleDaemon 活跃进程（可能包含其他项目的编译守护进程，由 Gradle idletimeout 自动回收，本脚本绝不越权滥杀）。"
 } else {
     Log-Detail "Gradle 守护进程数量正常: $gradleDaemonCount 个活跃进程"
 }

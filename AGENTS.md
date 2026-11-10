@@ -20,10 +20,10 @@
 ## 质量与校验（红线规则）
 
 - **热重载前置健康体检与防并发撞车红线 (Pre-Reload Health & Concurrency Guard)**: **【红线规则】**
-  全项目在调用 `tools["compose-hot-reload"].reload()` 发起任何增量热更之前，**必须严格执行“前置健康体检与并发巡检”**：
-  1. **【严禁裸调 reload() 绝对铁律】**：**严禁直接裸调用 `tools["compose-hot-reload"].reload()`**！在发起 reload 之前，**必须在当前轮次首先调用终端命令显式执行 `pwsh -File scripts/check-hot-reload-health.ps1` 进行物理体检**！只有脚本退出码为 0（输出 `🟢 就绪 (HEALTHY / HEALED_READY)`）后，方可获准发起 `reload()`！严禁任何形式的跳步绕过！
-  2. **【前置并发防撞车等待】**：调用 `status()` 检查当前 `reloadState`。若当前正处于 `"reloading"`（已被前序动作或其他守护进程调用），**绝对严禁立即发起新热更**，必须挂起安全轮询等待（最长等待 25 秒），直至其自然变为 `"ok"` 或 `"failed"` 收口；若超时仍未收口方可判定为通道阻塞；
-  3. **【Gradle 与 Kotlin 守护进程双重自愈】**：在发起热更前，体检脚本自动巡检当前运行的 `GradleDaemon` 与 `KotlinCompileDaemon` 进程总数。若检测到孤儿/僵尸进程争抢资源（例如堆积多个 Gradle Daemon 导致卡死），自动外科手术式清除多余进程并释放锁，杜绝恶性降级全量冷编；
+  全项目在调用 `tools["compose-hot-reload"].reload()` 发起任何增量热更之前，**必须严格执行“前置状态感知与并发巡检”**：
+  1. **【前置并发防撞车感知（第一优先级绝对铁律）】**：在发起热更或执行任何体检前，**必须首先调用 `tools["compose-hot-reload"].status()` 检查当前 `reloadState`**！若当前正处于 `"reloading"`（已被前序动作或其他守护进程调用），**绝对严禁执行任何外部脚本，绝对严禁发起新热更**，必须挂起安全轮询等待（最长等待 25 秒），直至其自然变为 `"ok"` 或 `"failed"` 收口；
+  2. **【绝对严禁强杀 GradleDaemon 进程】**：GradleDaemon 为跨工程全局共享资源，由 Gradle 官方生命周期与 `gradle.properties` (`org.gradle.daemon.idletimeout=180000`) 自动优雅回收。**严禁编写或执行任何强杀 GradleDaemon 进程的脚本或命令**！严防误杀其他项目正在进行的构建，严防导致当前工程陷入耗时长达数分钟的全量冷启动惩罚；
+  3. **【Kotlin 注册文件定点清理】**：前置体检脚本仅限扫描清理无存活进程的孤儿 `%LOCALAPPDATA%\kotlin\daemon\*.run` 注册文件，绝不触碰任何运行中的活跃进程，保障健康守护进程秒级增量编译；
   4. **【发起后 >20s 刚性秒表探针】**：发起热更后，严禁无限制被动挂起。一旦轮询等待超过 20 秒，强制立刻介入分析 `%TEMP%\kotlin-daemon*.log`，严防静默死锁。
 
 - **IntelliJ IDEA 研发编译与热重载单通道分流校验规范**: **【红线规则】**
