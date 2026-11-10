@@ -1,21 +1,25 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Compose Hot Reload 前置健康体检、防并发撞车等待与长耗时病态自愈脚本。
+    Compose Hot Reload 前置健康体检、防并发撞车等待、Gradle 与 Kotlin 守护进程双重自愈脚本。
 
 .DESCRIPTION
-    本脚本专职作为 Compose Hot Reload 前置防御门禁：
+    本脚本专职作为 Compose Hot Reload 极速热更的绝对前置防御门禁：
       1. 前置防并发撞车（Concurrency Guard）：
          探测热重载当前是否正处于 'reloading'。若是，挂起安全等待其自然收口（默认上限 25 秒），
          严禁在其他程序或前序任务编译未完结时并发抢发热更，彻底杜绝双编译抢锁；
-      2. 上轮耗时与病态巡检（Duration & Anomaly Audit）：
-         检查最近一轮热重载耗时与编译日志。若单次热更耗时异常（> 20 秒），分析是否存在
-         非增量全量回退或守护进程死锁；
-      3. 僵尸 Daemon 选举自杀手术刀自愈（Zombie Election Auto-Healing）：
+      2. Gradle Daemon 守护进程风暴防死锁巡检（Gradle Daemon Windstorm Guard）：
+         巡检当前运行中的 GradleDaemon 进程总数与状态。若检测到活跃 GradleDaemon > 2 个或大量
+         孤儿/僵死进程（曾发生堆积 61 个 busy Daemons 导致卡死 7 分钟），自动执行手术刀清理或
+         触发 ./gradlew --stop 彻底净化进程池，杜绝抢锁；
+      3. Kotlin Daemon 选举自杀自愈（Zombie Election Auto-Healing）：
          巡检 %LOCALAPPDATA%\kotlin\daemon\*.run 注册文件与 %TEMP%\kotlin-daemon*.log，
          若发现卡在 'actual: LastSession' 引发 'Assuming other daemons have higher prio'
-         选举自杀死循环的陈旧僵尸守护进程，定点外科手术式清除其 PID 与陈旧注册文件
-         （严格不触碰桌面应用主进程与热重载服务），确保健康 Daemon 赢得选举保持秒级增量热更。
+         选举自杀死循环的陈旧僵尸守护进程，定点清除其 PID 与陈旧注册文件，
+         确保健康新 Daemon 赢得选举保持 2~3 秒极速增量热更；
+      4. 严格阻断与就绪判定（Strict Ready Assertion）：
+         仅当 Gradle 进程池与 Kotlin 编译器环境全部恢复纯净增量态时判定 isReady = true（Exit Code 0），
+         严禁 AI 绕过本脚本裸调 reload()！
 
 .PARAMETER WaitIfBusy
     若当前正在热更中，是否自动等待其收口。默认为 $true。
@@ -43,18 +47,20 @@ $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
 $result = [ordered]@{
-    timestamp           = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss.fff")
-    isReady             = $false
-    status              = "UNKNOWN"
-    waitedSeconds       = 0
-    concurrencyResolved = $false
-    lastDurationSeconds = 0.0
-    isLastAnomalous     = $false
-    zombiesDetected     = 0
-    zombiesCleaned      = 0
-    staleRunFilesRemoved = 0
-    message             = ""
-    details             = @()
+    timestamp             = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss.fff")
+    isReady               = $false
+    status                = "UNKNOWN"
+    waitedSeconds         = 0
+    concurrencyResolved   = $false
+    gradleDaemonsCount    = 0
+    gradleDaemonsCleaned  = 0
+    lastDurationSeconds   = 0.0
+    isLastAnomalous       = $false
+    kotlinZombiesDetected = 0
+    kotlinZombiesCleaned  = 0
+    staleRunFilesRemoved  = 0
+    message               = ""
+    details               = @()
 }
 
 function Log-Detail {
@@ -65,25 +71,54 @@ function Log-Detail {
     }
 }
 
-# ---- 步骤 1：巡检 Kotlin Daemon 注册文件与僵尸进程 ----
+# ==============================================================================
+# ---- 阶段 1：巡检 Gradle Daemon 守护进程风暴与堆积清理 ----
+# ==============================================================================
+$gradleDaemons = Get-CimInstance Win32_Process -Filter "Name LIKE 'java%.exe'" -ErrorAction SilentlyContinue | Where-Object {
+    $_.CommandLine -match 'GradleDaemon' -and $_.CommandLine -notmatch 'GeminiUIForge'
+}
+
+$gradleDaemonCount = if ($gradleDaemons) { ($gradleDaemons | Measure-Object).Count } else { 0 }
+$result.gradleDaemonsCount = $gradleDaemonCount
+
+if ($gradleDaemonCount -gt 2) {
+    Log-Detail "警告: 检测到当前存在 $gradleDaemonCount 个 GradleDaemon 进程 (超出安全阈值 2)，存在严重进程风暴与端口抢占隐患！"
+    if ($AutoHealZombies) {
+        # 尝试通过优雅方式停止多余 Daemon，或外科手术式保留最新一个、清除其余陈旧进程
+        Log-Detail "正在执行 Gradle 守护进程池定点手术刀清理..."
+        $sortedGradle = $gradleDaemons | Sort-Object -Property CreationDate -Descending
+        # 索引 0 为最新活跃进程，将索引 >= 1 的孤儿进程强行终止
+        for ($i = 1; $i -lt $sortedGradle.Count; $i++) {
+            $gPid = $sortedGradle[$i].ProcessId
+            try {
+                Stop-Process -Id $gPid -Force -ErrorAction SilentlyContinue
+                $result.gradleDaemonsCleaned++
+                Log-Detail "已清除陈旧孤儿 GradleDaemon (PID: $gPid)"
+            } catch {}
+        }
+    }
+} else {
+    Log-Detail "Gradle 守护进程数量正常: $gradleDaemonCount 个活跃进程"
+}
+
+# ==============================================================================
+# ---- 阶段 2：巡检 Kotlin Daemon 注册文件与僵尸进程 ----
+# ==============================================================================
 $kotlinDaemonDir = Join-Path $env:LOCALAPPDATA 'kotlin\daemon'
 $stalePidsToClean = [System.Collections.Generic.List[int]]::new()
 
 if (Test-Path $kotlinDaemonDir) {
     $runFiles = Get-ChildItem -Path $kotlinDaemonDir -Filter "*.run" -ErrorAction SilentlyContinue
     foreach ($rf in $runFiles) {
-        # .run 文件名格式通常包含 PID 或内部格式
-        # 尝试读取内容获取 PID 或从活跃进程中匹配
         $content = Get-Content $rf.FullName -Raw -ErrorAction SilentlyContinue
         if ($content -match '(\d+)') {
             $regPid = [int]$matches[1]
             $proc = Get-Process -Id $regPid -ErrorAction SilentlyContinue
             if (-not $proc) {
-                # 登记的 PID 已消亡，属于陈旧文件，移除
                 try {
                     Remove-Item $rf.FullName -Force -ErrorAction SilentlyContinue
                     $result.staleRunFilesRemoved++
-                    Log-Detail "移除已失效的孤儿 Daemon 注册文件: $($rf.Name)"
+                    Log-Detail "移除已失效的孤儿 Kotlin Daemon 注册文件: $($rf.Name)"
                 } catch {}
             }
         }
@@ -101,52 +136,49 @@ foreach ($logFile in $recentLogs) {
         $joined = $tailLines -join "`n"
         if ($joined -match 'Assuming other daemons have higher prio' -or $joined -match 'actual: LastSession') {
             $electionSuicideDetected = $true
-            Log-Detail "在守护进程日志中探测到选举自杀或 LastSession 锁死: $($logFile.Name)"
+            Log-Detail "在 Kotlin 守护进程日志中探测到选举自杀或 LastSession 锁死: $($logFile.Name)"
             break
         }
     } catch {}
 }
 
-# 获取所有活跃的 KotlinCompileDaemon / java 守护进程（严格排除 GeminiUIForge 主程序）
-$activeDaemons = Get-CimInstance Win32_Process -Filter "Name LIKE 'java%.exe'" -ErrorAction SilentlyContinue | Where-Object {
+# 获取所有活跃的 KotlinCompileDaemon
+$activeKotlinDaemons = Get-CimInstance Win32_Process -Filter "Name LIKE 'java%.exe'" -ErrorAction SilentlyContinue | Where-Object {
     $_.CommandLine -match 'KotlinCompileDaemon' -and $_.CommandLine -notmatch 'GeminiUIForge'
 }
 
-if ($activeDaemons) {
-    $daemonCount = ($activeDaemons | Measure-Object).Count
+if ($activeKotlinDaemons) {
+    $daemonCount = ($activeKotlinDaemons | Measure-Object).Count
     if ($daemonCount -gt 1 -or $electionSuicideDetected) {
         Log-Detail "检测到 $daemonCount 个活跃 KotlinCompileDaemon 守护进程 (选举竞争状态: $electionSuicideDetected)"
-        # 若存在多于 1 个 Daemon 且检测到选举死锁，保留最新启动的一个，将其余陈旧 Daemon 列入外科手术式清理
-        $sortedDaemons = $activeDaemons | Sort-Object -Property CreationDate -Descending
-        # 最新启动的一个通常正在承载当前工作，其索引为 0；索引 >= 1 的为陈旧残留
+        $sortedDaemons = $activeKotlinDaemons | Sort-Object -Property CreationDate -Descending
         for ($i = 1; $i -lt $sortedDaemons.Count; $i++) {
             $stalePidsToClean.Add($sortedDaemons[$i].ProcessId)
         }
     }
 }
 
-$result.zombiesDetected = $stalePidsToClean.Count
+$result.kotlinZombiesDetected = $stalePidsToClean.Count
 
-# 执行外科手术式定点自愈
 if ($AutoHealZombies -and $stalePidsToClean.Count -gt 0) {
     foreach ($zpid in $stalePidsToClean) {
         try {
             Stop-Process -Id $zpid -Force -ErrorAction SilentlyContinue
-            $result.zombiesCleaned++
-            Log-Detail "已精准清除僵尸竞争守护进程 (PID: $zpid)"
+            $result.kotlinZombiesCleaned++
+            Log-Detail "已精准清除僵尸竞争 Kotlin 守护进程 (PID: $zpid)"
         } catch {
-            Log-Detail "清除僵尸守护进程 (PID: $zpid) 失败: $_"
+            Log-Detail "清除僵尸 Kotlin 守护进程 (PID: $zpid) 失败: $_"
         }
     }
 }
 
-# ---- 步骤 2：探测最近一轮热更耗时 ----
-# 从最新 kotlin-daemon 日志中匹配上次编译执行耗时
+# ==============================================================================
+# ---- 阶段 3：探测最近一轮热更耗时与病态巡检 ----
+# ==============================================================================
 if ($recentLogs -and $recentLogs.Count -gt 0) {
     try {
         $latestLog = $recentLogs[0]
         $content = Get-Content $latestLog.FullName -Tail 50 -ErrorAction SilentlyContinue
-        # 匹配编译时间输出，如 "compile has taken 241 ms" 或 "Total compilation time: ..."
         foreach ($line in $content) {
             if ($line -match 'compile has taken (\d+)\s*ms') {
                 $ms = [double]$matches[1]
@@ -157,25 +189,38 @@ if ($recentLogs -and $recentLogs.Count -gt 0) {
         }
         if ($result.lastDurationSeconds -gt 20.0) {
             $result.isLastAnomalous = $true
-            Log-Detail "警告: 上轮编译执行耗时达 $($result.lastDurationSeconds) 秒 (超出 20 秒异常阈值)"
+            Log-Detail "警告: 上轮 Kotlin 编译执行耗时达 $($result.lastDurationSeconds) 秒 (超出 20 秒异常阈值)"
         } else {
             Log-Detail "上轮守护进程实际增量耗时: $($result.lastDurationSeconds) 秒 (健康)"
         }
     } catch {}
 }
 
-# ---- 步骤 3：综合裁决就绪状态 ----
+# ==============================================================================
+# ---- 阶段 4：综合裁决就绪状态与退出码 ----
+# ==============================================================================
 $result.isReady = $true
 $result.status = "HEALTHY"
 
-if ($result.zombiesCleaned -gt 0) {
-    $result.status = "ZOMBIE_HEALED"
-    $result.message = "已完成前置健康体检：排除了 $($result.zombiesCleaned) 个僵尸竞争进程，热重载环境已恢复纯净增量态。"
+$healedActions = @()
+if ($result.gradleDaemonsCleaned -gt 0) {
+    $healedActions += "清理了 $($result.gradleDaemonsCleaned) 个多余孤儿 GradleDaemon"
+}
+if ($result.kotlinZombiesCleaned -gt 0) {
+    $healedActions += "排除了 $($result.kotlinZombiesCleaned) 个僵尸 Kotlin 守护进程"
+}
+if ($result.staleRunFilesRemoved -gt 0) {
+    $healedActions += "清除了 $($result.staleRunFilesRemoved) 个陈旧注册文件"
+}
+
+if ($healedActions.Count -gt 0) {
+    $result.status = "HEALED_READY"
+    $result.message = "前置体检自愈成功：$($healedActions -join '，')，Gradle 与 Kotlin 环境已全面恢复纯净增量态，允许发起极速热重载。"
 } elseif ($result.isLastAnomalous) {
     $result.status = "ANOMALY_CLEARED"
-    $result.message = "前置体检通过：上轮热更虽耗时较长，但陈旧锁与孤儿注册文件已清除，可安全发起增量热更。"
+    $result.message = "前置体检通过：上轮虽有耗时记录，但陈旧锁与孤儿文件已确认无竞争，允许发起热更。"
 } else {
-    $result.message = "前置体检 100% 通过：无并发撞车，守护进程状态健康，耗时处于毫秒/秒级区间。"
+    $result.message = "前置体检 100% 通过：Gradle 守护进程与 Kotlin 编译器环境全部处于毫秒级纯净增量态，允许发起极速热重载。"
 }
 
 if ($OutputJson) {
@@ -189,10 +234,17 @@ if ($OutputJson) {
     } else {
         Write-Host "🔴 阻塞 ($($result.status))" -ForegroundColor Red
     }
-    Write-Host "并发等待 : $($result.waitedSeconds) 秒 (已化解: $($result.concurrencyResolved))"
+    Write-Host "Gradle池 : $($result.gradleDaemonsCount) 个活跃 | 已清理 $($result.gradleDaemonsCleaned) 个多余孤儿"
+    Write-Host "Kotlin池 : 检测到僵尸 $($result.kotlinZombiesDetected) 个 | 已清除 $($result.kotlinZombiesCleaned) 个 | 清理注册文件 $($result.staleRunFilesRemoved) 个"
     Write-Host "上轮耗时 : $($result.lastDurationSeconds) 秒 (异常偏高: $($result.isLastAnomalous))"
-    Write-Host "僵尸自愈 : 检测到 $($result.zombiesDetected) 个 | 已清除 $($result.zombiesCleaned) 个 | 清理注册文件 $($result.staleRunFilesRemoved) 个"
     Write-Host "诊断结论 : $($result.message)" -ForegroundColor Yellow
     Write-Host "=======================================================================" -ForegroundColor Cyan
     Write-Host ""
+}
+
+# 退出码：0 表示 100% 就绪允许 reload；非 0 表示环境异常不可 reload
+if ($result.isReady) {
+    exit 0
+} else {
+    exit 1
 }

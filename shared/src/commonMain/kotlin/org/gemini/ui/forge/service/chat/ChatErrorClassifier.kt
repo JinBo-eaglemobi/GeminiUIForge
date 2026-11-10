@@ -66,12 +66,12 @@ object ChatErrorClassifier {
                     recommendedAction = ChatErrorAction.RETRY
                 )
             }
-            // 超时
-            lower.contains("timeout") || lower.contains("timed out") || lower.contains("sockettimeout") || lower.contains("connectexception") -> {
+            // 超时或 DNS/网络异常
+            lower.contains("timeout") || lower.contains("timed out") || lower.contains("sockettimeout") || lower.contains("connectexception") || lower.contains("unresolvedaddress") || lower.contains("dns") || lower.contains("network") || lower.contains("网络通信") -> {
                 ClassifiedChatError(
                     type = ChatErrorType.TIMEOUT,
-                    friendlyTitle = "网络连接超时 (Network Timeout)",
-                    friendlyAdvice = "与 Google AI 服务器建立连接超时。请核对本地网络与代理设置是否通畅后点击重试。",
+                    friendlyTitle = "网络连接或域名解析异常 (Network / DNS Error)",
+                    friendlyAdvice = "与 Google AI 服务器建立连接或域名解析失败 (如 UnresolvedAddressException)。请核对本地网络连接与代理软件是否正常通畅后点击重试。",
                     originalMessage = msg,
                     recommendedAction = ChatErrorAction.RETRY
                 )

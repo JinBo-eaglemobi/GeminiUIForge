@@ -166,18 +166,15 @@ fun CommonModelBubble(
                         }
 
                         // 2. 模型核心正文 或 专属错误卡片
-                        // 必须以当前选中的具体回答版本 (modelText) 判定，严禁被历史整体消息的 isError 误伤成功版本
                         // 核心防误判铁律：
-                        // ① 若本轮消息执行了系统/MCP工具调用，正文为空属于合法正常现象，严禁误报为服务异常卡片；
-                        // ② 严禁在消息处于初始占位或流式推演未完成阶段 (isError == false 且没有明确的 ⚠️ 异常前缀) 时，
-                        //    仅仅因为 modelText 和 thought 暂时为空就误报为服务响应异常（API Error）！
-                        val hasToolCalls = message.toolCalls.isNotEmpty()
-                        val isCurrentVariantFailed = if (hasToolCalls) {
-                            message.isError && message.toolCalls.all { !it.isSuccess }
-                        } else {
-                            modelText.startsWith("⚠️") ||
-                                (message.isError && (modelText.isBlank() || message.errorMessage != null))
-                        }
+                        // ① 严禁在消息处于初始占位或流式推演未完成阶段 (isGenerating == true) 误报为服务响应异常；
+                        // ② 生成结束后，只要被明确标记为异常 (message.isError || errorMessage != null)，即使此前执行过部分工具，
+                        //    也必须完整呈现 ChatErrorActionCard，杜绝异常被工具记录静默吞没；
+                        val isCurrentVariantFailed = !isGenerating && (
+                            message.isError ||
+                            (!message.errorMessage.isNullOrBlank()) ||
+                            modelText.startsWith("⚠️")
+                        )
                         if (isCurrentVariantFailed) {
                             val errDetail = message.errorMessage?.ifBlank { null }
                                 ?: modelText.ifBlank { null }

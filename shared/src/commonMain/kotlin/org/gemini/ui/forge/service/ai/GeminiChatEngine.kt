@@ -1,5 +1,6 @@
 package org.gemini.ui.forge.service.ai
 
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
@@ -52,6 +53,39 @@ class GeminiChatEngine(
     }
 
     /**
+     * 解析生效的最大重试次数 (优先配置中心，出厂默认 10 次，不设人为上限)
+     */
+    suspend fun resolveEffectiveMaxRetryCount(): Int {
+        val raw = configManager.loadKey("AI_MAX_RETRY_COUNT")
+        return raw?.toIntOrNull()?.coerceAtLeast(0) ?: 10
+    }
+
+    /**
+     * 判断错误是否属于可自动重试的瞬态网络/服务异常
+     */
+    private fun isRetryableError(errorMessage: String?): Boolean {
+        if (errorMessage.isNullOrBlank()) return false
+        val lower = errorMessage.lowercase()
+        return lower.contains("unresolvedaddress") ||
+                lower.contains("connectexception") ||
+                lower.contains("sockettimeout") ||
+                lower.contains("timeoutexception") ||
+                lower.contains("connection refused") ||
+                lower.contains("connection reset") ||
+                lower.contains("broken pipe") ||
+                lower.contains("failed to connect") ||
+                lower.contains("503") ||
+                lower.contains("502") ||
+                lower.contains("504") ||
+                lower.contains("429") ||
+                lower.contains("resource_exhausted") ||
+                lower.contains("unavailable") ||
+                lower.contains("timeout") ||
+                lower.contains("dns") ||
+                lower.contains("网络通信异常")
+    }
+
+    /**
      * 一次性执行聊天推理 (底层复用 [streamChat])
      */
     suspend fun executeChat(
@@ -100,26 +134,62 @@ class GeminiChatEngine(
         // 1. 处理附件上传：若开启 preferCloudUpload 则优先通过 Google File API 同步
         val processedAttachments = processAttachments(request.attachments, request.preferCloudUpload, apiKey, onStatusLog)
 
-        return when (request.apiFlavor) {
-            ApiFlavor.GENERATE_CONTENT -> {
-                executeGenerateContentStream(
-                    request = request.copy(apiKey = apiKey, baseUrl = baseUrl, attachments = processedAttachments),
-                    onChunk = onChunk,
-                    onThought = onThought,
-                    onStatusLog = onStatusLog,
-                    onRawTraffic = onRawTraffic
+        val maxRetries = resolveEffectiveMaxRetryCount()
+        var currentAttempt = 0
+        var lastResult = GeminiChatResult(text = "", isSuccess = false, errorMessage = "未发起网络请求")
+
+        while (true) {
+            val chunkBuffer = StringBuilder()
+            val chunkInterceptor: (String) -> Unit = { chunk ->
+                chunkBuffer.append(chunk)
+                onChunk(chunk)
+            }
+
+            try {
+                lastResult = when (request.apiFlavor) {
+                    ApiFlavor.GENERATE_CONTENT -> {
+                        executeGenerateContentStream(
+                            request = request.copy(apiKey = apiKey, baseUrl = baseUrl, attachments = processedAttachments),
+                            onChunk = chunkInterceptor,
+                            onThought = onThought,
+                            onStatusLog = onStatusLog,
+                            onRawTraffic = onRawTraffic
+                        )
+                    }
+                    ApiFlavor.INTERACTIONS -> {
+                        executeInteractionsStream(
+                            request = request.copy(apiKey = apiKey, baseUrl = baseUrl, attachments = processedAttachments),
+                            onChunk = chunkInterceptor,
+                            onThought = onThought,
+                            onStatusLog = onStatusLog,
+                            onRawTraffic = onRawTraffic
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                val errorDesc = e.message?.ifBlank { null } ?: "${e::class.simpleName ?: "Exception"}: 网络通信异常"
+                lastResult = GeminiChatResult(
+                    text = chunkBuffer.toString(),
+                    isSuccess = false,
+                    errorMessage = errorDesc
                 )
             }
-            ApiFlavor.INTERACTIONS -> {
-                executeInteractionsStream(
-                    request = request.copy(apiKey = apiKey, baseUrl = baseUrl, attachments = processedAttachments),
-                    onChunk = onChunk,
-                    onThought = onThought,
-                    onStatusLog = onStatusLog,
-                    onRawTraffic = onRawTraffic
-                )
+
+            if (lastResult.isSuccess) {
+                return lastResult
+            }
+
+            if (currentAttempt < maxRetries && isRetryableError(lastResult.errorMessage)) {
+                currentAttempt++
+                val delayMs = (currentAttempt * 1000L).coerceAtMost(5000L)
+                onStatusLog("⚡ [网络层重试] 检测到瞬时网络/服务异常 (${lastResult.errorMessage})，将在 ${(delayMs / 1000f).toInt()}s 后执行第 $currentAttempt/$maxRetries 次自动重试...")
+                delay(delayMs)
+            } else {
+                break
             }
         }
+
+        return lastResult
     }
 
     /**
@@ -458,12 +528,13 @@ class GeminiChatEngine(
         } catch (e: Exception) {
             val durationMs = getCurrentTimeMillis() - startTime
             AppLogger.e(TAG, "generateContent 流式执行失败", e)
+            val errorDesc = e.message?.ifBlank { null } ?: "${e::class.simpleName ?: "Exception"}: 网络通信异常"
             GeminiChatResult(
                 text = fullTextBuilder.toString(),
                 modelName = request.model.displayName,
                 durationMs = durationMs,
                 isSuccess = false,
-                errorMessage = e.message ?: "网络通信异常"
+                errorMessage = errorDesc
             )
         }
     }
@@ -731,12 +802,13 @@ class GeminiChatEngine(
         } catch (e: Exception) {
             val durationMs = getCurrentTimeMillis() - startTime
             AppLogger.e(TAG, "Interactions API 流式执行失败", e)
+            val errorDesc = e.message?.ifBlank { null } ?: "${e::class.simpleName ?: "Exception"}: 网络通信异常"
             GeminiChatResult(
                 text = fullTextBuilder.toString(),
                 modelName = request.model.displayName,
                 durationMs = durationMs,
                 isSuccess = false,
-                errorMessage = e.message ?: "网络通信异常",
+                errorMessage = errorDesc,
                 rawResponseJson = rawResponseAggregator ?: ""
             )
         }

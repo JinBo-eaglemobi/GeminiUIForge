@@ -764,12 +764,11 @@ class AiAgentDelegate(
                         )
                     } catch (e: Exception) {
                         AppLogger.e("AiAgentDelegate", "Gemini API 调用异常", e)
-                        Toast.show("AI 回复失败: ${e.message}", ToastType.ERROR)
                         GeminiChatResult(
-                            text = "⚠️ 网络通信异常：${e.message ?: "未知网络错误"}\n可点击顶部网络通信图标 (Receipt) 查看原始 HTTP 报文排查问题。",
+                            text = "",
                             rawResponseJson = e.message ?: "",
                             isSuccess = false,
-                            errorMessage = e.message
+                            errorMessage = e.message?.ifBlank { null } ?: "${e::class.simpleName ?: "Exception"}: 网络通信异常"
                         )
                     } finally {
                         state = state.copy(streamingAiText = "", streamingAiThought = "")
@@ -786,10 +785,7 @@ class AiAgentDelegate(
                     }
 
                     if (!result.isSuccess) {
-                        val errMsg = result.errorMessage ?: "服务调用未成功"
-                        withContext(Dispatchers.Main) {
-                            Toast.show("AI 响应异常: $errMsg", ToastType.ERROR)
-                        }
+                        // 遵循规范：异常统一在会话气泡内通过 ChatErrorActionCard 呈现，绝不弹 Toast 烦扰用户，中断工具循环
                         break
                     }
 
@@ -916,7 +912,7 @@ class AiAgentDelegate(
                 } else if (generatedImgPath != null) {
                     "" // 图像已成功生成并挂载卡片，无需拼接机械的“未收到有效内容”提示
                 } else if (!finalResult.isSuccess) {
-                    finalResult.errorMessage ?: "服务端未返回错误详情"
+                    "" // 遵循零污染铁律：异常统一由 errorMessage 与 ChatErrorActionCard 渲染，绝不向 prompt 注入机械错误文本污染历史记录
                 } else {
                     "（未收到有效文本内容）"
                 }
@@ -929,7 +925,7 @@ class AiAgentDelegate(
 
                 val assistantMsg = liveAssistantMsg.copy(
                     prompt = finalAssistantText,
-                    variants = listOf(finalAssistantText),
+                    variants = if (finalAssistantText.isNotBlank()) listOf(finalAssistantText) else emptyList(),
                     activeVariantIndex = 0,
                     thought = finalThoughtText,
                     thoughtSignature = finalResult.thoughtSignature,
@@ -941,7 +937,7 @@ class AiAgentDelegate(
                     totalTokens = finalResult.totalTokens,
                     timestamp = getCurrentTimeMillis(),
                     isError = !finalResult.isSuccess,
-                    errorMessage = finalResult.errorMessage,
+                    errorMessage = if (!finalResult.isSuccess) finalResult.errorMessage ?: "服务调用异常" else null,
                     toolCalls = allExecutedToolRecords,
                     generatedImageUri = generatedImgPath
                 )
@@ -1114,7 +1110,7 @@ class AiAgentDelegate(
                 } else if (generatedImgPath != null) {
                     "" // 图像已成功生成并挂载卡片，保持界面纯净
                 } else if (!result.isSuccess) {
-                    result.errorMessage ?: "服务端未返回错误详情"
+                    "" // 遵循零污染铁律：异常统一由 errorMessage 与 ChatErrorActionCard 呈现，绝不向 prompt 注入机械错误文本
                 } else {
                     "（未收到有效文本内容）"
                 }
@@ -1136,7 +1132,7 @@ class AiAgentDelegate(
                         totalTokens = result.totalTokens,
                         timestamp = getCurrentTimeMillis(),
                         isError = !result.isSuccess,
-                        errorMessage = result.errorMessage,
+                        errorMessage = if (!result.isSuccess) result.errorMessage else null,
                         toolCalls = executedToolRecords,
                         generatedImageUri = generatedImgPath ?: modelMsg.generatedImageUri
                     )
@@ -1145,7 +1141,7 @@ class AiAgentDelegate(
                         id = "msg_${getCurrentTimeMillis()}_assistant",
                         role = "model",
                         prompt = finalResultText,
-                        variants = listOf(finalResultText),
+                        variants = if (finalResultText.isNotBlank()) listOf(finalResultText) else emptyList(),
                         activeVariantIndex = 0,
                         thought = result.thoughtText,
                         thoughtSignature = result.thoughtSignature,
@@ -1157,7 +1153,7 @@ class AiAgentDelegate(
                         totalTokens = result.totalTokens,
                         timestamp = getCurrentTimeMillis(),
                         isError = !result.isSuccess,
-                        errorMessage = result.errorMessage,
+                        errorMessage = if (!result.isSuccess) result.errorMessage else null,
                         toolCalls = executedToolRecords,
                         generatedImageUri = generatedImgPath
                     )

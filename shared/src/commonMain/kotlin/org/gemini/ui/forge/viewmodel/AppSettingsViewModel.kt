@@ -141,6 +141,23 @@ class AppSettingsViewModel(
     suspend fun getAiAgentMaxToolRounds(): Int {
         return configManager.loadKey("AI_AGENT_MAX_TOOL_ROUNDS")?.toIntOrNull()?.coerceIn(5, 500) ?: 50
     }
+
+    /**
+     * 保存 AI 会话请求失败最大自动重试次数（默认 10，不限制上限，必须是非负数）
+     */
+    fun saveAiMaxRetryCount(count: Int) {
+        val safeCount = count.coerceAtLeast(0)
+        viewModelScope.launch {
+            configManager.saveKey("AI_MAX_RETRY_COUNT", safeCount.toString())
+        }
+    }
+
+    /**
+     * 获取 AI 会话请求失败最大自动重试次数（默认 10）
+     */
+    suspend fun getAiMaxRetryCount(): Int {
+        return configManager.loadKey("AI_MAX_RETRY_COUNT")?.toIntOrNull()?.coerceAtLeast(0) ?: 10
+    }
     
     /**
      * 获取 ConfigManager 实例，用于初始化加载
