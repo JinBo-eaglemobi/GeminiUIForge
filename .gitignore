@@ -4,6 +4,7 @@
 **/build/
 xcuserdata
 !src/**/build/
+!**/src/**/resources/**/build/
 .idea
 .DS_Store
 captures
