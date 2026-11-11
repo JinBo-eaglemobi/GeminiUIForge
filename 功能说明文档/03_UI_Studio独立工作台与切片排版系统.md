@@ -188,6 +188,9 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
     - **规范化纯代码构建**：游戏端 UI 一律严格遵循《纯代码创建UI规则 (UIFactory)》标准规范，通过 `tsCore.UIFactory` 配置化工厂驱动纯代码 FGUI 界面（严禁使用 Laya 原生对象）。UI Studio 当前视图自动转换为 `game/src/ui/layoutConfig.ts`（包含 icon、panel、尺寸、坐标、不透明度与层级树），并在主类 `game/src/Main.ts` 中通过 `UIFactory.createPanel(layoutConfig, width, height)` 纯代码构建并挂载至 `fgui.GRoot.inst`；
     - **切片素材原子物理同步**：每次导出时，系统自动扫描当前视图引用的全部素材切片，并将其从程序数据目录（`~/.geminiuiforge/templates/{projectName}/assets/...`）物理同步拷贝至游戏工程的静态资源目录（`build/res/gameui/<fileName>`）；全局统一配置 `tsCore.UIFactory.resBasePath = "res/gameui/"`，实现切片相对路径的无缝静态寻址与加载；
     - **GM 动态脚本批加载流水线与 Google Analytics 脱敏**：静态脚手架（`build/index.html` 与 `build/index.js`）完全对齐 GM 商业工程的动态分批脚本加载流水线，统一引入 `common.min.js` 及其类型定义 `common.d.ts`，彻底剥离第三方谷歌统计（Google Analytics）逻辑，确保单机纯净、秒级启动并在本地 `http://localhost:1234/` 端口实现 100% 视觉无损预览。
+14. **【纯代码组件按 Type 严格分发与按钮点击变暗特效红线】**：
+    - **严格 Type 单一事实源分发**：系统将 UI Studio 图元树转换为 `layoutConfig.ts` 时，**必须 100% 严格依据图元自身的强类型字段 `block.type`（`UIBlockType`）决定导出组件类型，绝对禁止依据图元名称（如包含 btn/button）进行任何模糊猜测**；
+    - **按钮默认点击变暗特效**：凡 `block.type == UIBlockType.BUTTON` 的组件，导出为 UIFactory 的 `type: "button"`（对应 `fgui.GButton`），并**默认且强制注入点击变暗特效**（`downEffect: 1, downEffectValue: 0.8`）；若按钮自身绑定切片资产，自动将其作为内部 `icon` 元件填充至 `elements` 中（若有子图元则一并嵌套）；当鼠标点击该按钮时，子元件亮度自动降为 80% 产生自然的点击变暗视觉反馈，松开时平滑恢复。
 
 ---
 

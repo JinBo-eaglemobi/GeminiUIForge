@@ -150,37 +150,123 @@ object GameUiExportService {
             val alpha = block.opacity
 
             appendLine("$indent{")
-            if (!assetFileName.isNullOrBlank()) {
-                // 有切片资产，按 icon 渲染
-                appendLine("$indent    type: 'icon',")
-                appendLine("$indent    name: '${block.id}',")
-                appendLine("$indent    url: '$assetFileName',")
-                appendLine("$indent    x: $x,")
-                appendLine("$indent    y: $y,")
-                appendLine("$indent    width: $w,")
-                appendLine("$indent    height: $h,")
-                appendLine("$indent    alpha: $alpha")
-            } else if (block.type == UIBlockType.VIEW || block.children.isNotEmpty()) {
-                // 容器层，按 panel 嵌套渲染
-                appendLine("$indent    type: 'panel',")
-                appendLine("$indent    name: '${block.id}',")
-                appendLine("$indent    x: $x,")
-                appendLine("$indent    y: $y,")
-                appendLine("$indent    width: $w,")
-                appendLine("$indent    height: $h,")
-                appendLine("$indent    alpha: $alpha,")
-                appendLine("$indent    elements: [")
-                append(generateElementsTsCode(block.children, assetNameMap, "$indent        "))
-                appendLine("$indent    ]")
-            } else {
-                // 普通空白图元或占位图元，按 panel 容器渲染
-                appendLine("$indent    type: 'panel',")
-                appendLine("$indent    name: '${block.id}',")
-                appendLine("$indent    x: $x,")
-                appendLine("$indent    y: $y,")
-                appendLine("$indent    width: $w,")
-                appendLine("$indent    height: $h,")
-                appendLine("$indent    alpha: $alpha")
+            when (block.type) {
+                UIBlockType.BUTTON -> {
+                    // 按钮类型：构建为 fgui.GButton，默认注入点击变暗特效（downEffect: 1, downEffectValue: 0.8）
+                    appendLine("$indent    type: 'button',")
+                    appendLine("$indent    name: '${block.id}',")
+                    appendLine("$indent    x: $x,")
+                    appendLine("$indent    y: $y,")
+                    appendLine("$indent    width: $w,")
+                    appendLine("$indent    height: $h,")
+                    appendLine("$indent    alpha: $alpha,")
+                    appendLine("$indent    downEffect: 1,")
+                    appendLine("$indent    downEffectValue: 0.8,")
+                    appendLine("$indent    elements: [")
+
+                    val buttonElements = mutableListOf<String>()
+                    // 1. 若按钮自身绑定切片资产，作为内部背景/主体 icon 元件
+                    if (!assetFileName.isNullOrBlank()) {
+                        val iconCode = buildString {
+                            appendLine("$indent        {")
+                            appendLine("$indent            type: 'icon',")
+                            appendLine("$indent            name: '${block.id}_icon',")
+                            appendLine("$indent            url: '$assetFileName',")
+                            appendLine("$indent            x: 0,")
+                            appendLine("$indent            y: 0,")
+                            appendLine("$indent            width: $w,")
+                            appendLine("$indent            height: $h")
+                            append("$indent        }")
+                        }
+                        buttonElements.add(iconCode)
+                    }
+
+                    // 2. 若按钮包含子图元，递归渲染
+                    if (block.children.isNotEmpty()) {
+                        val childrenCode = generateElementsTsCode(block.children, assetNameMap, "$indent        ").trimEnd()
+                        if (childrenCode.isNotBlank()) {
+                            buttonElements.add(childrenCode)
+                        }
+                    }
+
+                    if (buttonElements.isNotEmpty()) {
+                        appendLine(buttonElements.joinToString(",\n"))
+                    }
+                    appendLine("$indent    ]")
+                }
+
+                UIBlockType.VIEW -> {
+                    // 纯视图容器层，构建为 panel 并递归嵌套子图元
+                    appendLine("$indent    type: 'panel',")
+                    appendLine("$indent    name: '${block.id}',")
+                    appendLine("$indent    x: $x,")
+                    appendLine("$indent    y: $y,")
+                    appendLine("$indent    width: $w,")
+                    appendLine("$indent    height: $h,")
+                    appendLine("$indent    alpha: $alpha,")
+                    appendLine("$indent    elements: [")
+                    append(generateElementsTsCode(block.children, assetNameMap, "$indent        "))
+                    appendLine("$indent    ]")
+                }
+
+                UIBlockType.TEXT -> {
+                    // 纯文本图元
+                    appendLine("$indent    type: 'text',")
+                    appendLine("$indent    name: '${block.id}',")
+                    appendLine("$indent    text: '${block.id}',")
+                    appendLine("$indent    x: $x,")
+                    appendLine("$indent    y: $y,")
+                    appendLine("$indent    width: $w,")
+                    appendLine("$indent    height: $h,")
+                    appendLine("$indent    alpha: $alpha")
+                }
+
+                else -> {
+                    // 其他图元类型（IMAGE, BACKGROUND, ICON 等）
+                    if (block.children.isNotEmpty()) {
+                        // 带有子图元的复合图元，构建为 panel 容器
+                        appendLine("$indent    type: 'panel',")
+                        appendLine("$indent    name: '${block.id}',")
+                        appendLine("$indent    x: $x,")
+                        appendLine("$indent    y: $y,")
+                        appendLine("$indent    width: $w,")
+                        appendLine("$indent    height: $h,")
+                        appendLine("$indent    alpha: $alpha,")
+                        appendLine("$indent    elements: [")
+                        if (!assetFileName.isNullOrBlank()) {
+                            appendLine("$indent        {")
+                            appendLine("$indent            type: 'icon',")
+                            appendLine("$indent            name: '${block.id}_bg',")
+                            appendLine("$indent            url: '$assetFileName',")
+                            appendLine("$indent            x: 0,")
+                            appendLine("$indent            y: 0,")
+                            appendLine("$indent            width: $w,")
+                            appendLine("$indent            height: $h")
+                            appendLine("$indent        },")
+                        }
+                        append(generateElementsTsCode(block.children, assetNameMap, "$indent        "))
+                        appendLine("$indent    ]")
+                    } else if (!assetFileName.isNullOrBlank()) {
+                        // 独立切片图元，构建为 icon
+                        appendLine("$indent    type: 'icon',")
+                        appendLine("$indent    name: '${block.id}',")
+                        appendLine("$indent    url: '$assetFileName',")
+                        appendLine("$indent    x: $x,")
+                        appendLine("$indent    y: $y,")
+                        appendLine("$indent    width: $w,")
+                        appendLine("$indent    height: $h,")
+                        appendLine("$indent    alpha: $alpha")
+                    } else {
+                        // 空白占位图元，构建为基础 panel
+                        appendLine("$indent    type: 'panel',")
+                        appendLine("$indent    name: '${block.id}',")
+                        appendLine("$indent    x: $x,")
+                        appendLine("$indent    y: $y,")
+                        appendLine("$indent    width: $w,")
+                        appendLine("$indent    height: $h,")
+                        appendLine("$indent    alpha: $alpha")
+                    }
+                }
             }
             append("$indent}")
             if (idx < blocks.size - 1) append(",")
