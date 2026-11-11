@@ -1,6 +1,8 @@
 package org.gemini.ui.forge.service.game
 
 import org.gemini.ui.forge.model.gameproject.ForgeGameProjectConfig
+import org.gemini.ui.forge.model.ui.UIStudioPage
+import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
 
 /**
  * UI Studio 游戏项目脚手架与激活服务跨平台契约接口。
@@ -28,6 +30,16 @@ interface GameScaffoldBridge {
 
     /** 获取可用于在浏览器中运行 index.html 的本地服务 URL 地址 */
     fun getPreviewUrl(gameRootDirPath: String): String?
+
+    /**
+     * 将当前 UI Studio 页面图元树与切片资产导出到游戏项目，并执行一次 rollup 极速编译打包
+     */
+    suspend fun exportCurrentPageToGame(
+        gameRootDirPath: String,
+        page: UIStudioPage,
+        assetLibrary: UIAssetLibrary?,
+        onLog: (String) -> Unit = {}
+    ): Result<Unit>
 }
 
 expect fun createGameScaffoldBridge(): GameScaffoldBridge

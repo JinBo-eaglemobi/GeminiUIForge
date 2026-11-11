@@ -11,7 +11,7 @@ import kotlinx.serialization.Serializable
  * @property gameProjectName 游戏项目名称
  * @property gameRootPath 游戏项目的本地绝对根路径
  * @property runDir 测试运行目录（默认 "build"）
- * @property sourceDir 源码目录（默认 "src"）
+ * @property sourceDir 源码目录（默认 "game/src"）
  * @property entryHtml 入口 HTML 文件名（默认 "index.html"）
  * @property entryJs 启动引导脚本文件名（默认 "index.js"）
  * @property mainBundle 构建输出的主 JS bundle 文件相对路径（默认 "build/main.min.js"）
@@ -27,7 +27,7 @@ data class ForgeGameProjectConfig(
     val gameProjectName: String,
     val gameRootPath: String,
     val runDir: String = "build",
-    val sourceDir: String = "src",
+    val sourceDir: String = "game/src",
     val entryHtml: String = "index.html",
     val entryJs: String = "index.js",
     val mainBundle: String = "build/main.min.js",

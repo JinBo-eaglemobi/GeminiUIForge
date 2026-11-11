@@ -125,12 +125,13 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
 - **运行环境自动检测与静默就绪 (Node.js & PNPM)**：
   - 初始化流水线第一步自动探测宿主机环境是否已安装 Node.js 与 pnpm；
   - 若缺失环境，全自动在后台执行静默安装与环境就绪，确保用户零配置即开即用。
-- **脚手架物理写入与源码模板注入**：
-  - 自动向目标目录写入核心配置文件：`package.json`（依赖 `@boge-mvp/game-lib@^2.5.4`）、`tsconfig.json`、`copyFiles.js`、`game/build.js`；
+- **脚手架资源模板外置与源码结构规范**：
+  - 脚手架与嵌入式模板全部外置收归至资源目录（`shared/src/commonMain/resources/templates/game_scaffold/`），坚决杜绝代码硬编码模板字符串；
+  - 自动向目标目录写入核心配置文件：`package.json`（依赖 `@boge-mvp/game-lib@^2.5.4`）、`tsconfig.json`（配置 `"rootDir": "./game/src"`）、`copyFiles.js`、`game/build.js`；
   - 写入运行目录静态模板：`build/index.html`（自适应 WebGL 视口画布）、`build/config.js`、`build/index.js`（按序加载 LayaAir、FairyGUI、gameLib、tsCore 与 main.min.js）；
-  - 写入 TypeScript 源码骨架：`src/Main.ts`（继承 `tsCore.EProxy`，动态初始化当前工程基准分辨率与 FairyGUI 字体体系，挂载生命周期）。
+  - 写入 TypeScript 源码骨架：`game/src/Main.ts`（规范存放于 `game/src/` 目录下，与参考项目结构一致，继承 `tsCore.EProxy`，动态初始化当前工程基准分辨率与 FairyGUI 字体体系，挂载生命周期）。
 - **全自动构建流水线与物理产物断言**：
-  - 依次在后台调度执行：`pnpm install`（安装项目依赖） $\rightarrow$ `node copyFiles.js`（分发核心类库至 `build/` 目录） $\rightarrow$ `node game/build.js`（通过 Rollup 打包 `src/Main.ts` 至 `build/main.min.js`）；
+  - 依次在后台调度执行：`pnpm install`（安装项目依赖） $\rightarrow$ `node copyFiles.js`（分发核心类库至 `build/` 目录） $\rightarrow$ `node game/build.js`（通过 Rollup 打包 `game/src/Main.ts` 至 `build/main.min.js`）；
   - 物理断言 `build/main.min.js` 与 `build/index.html` 真实存在，在根目录原子持久化专属识别配置文件 `forge-game.json`，将项目标记为已激活状态，并在向导弹窗中流式展示控制台日志与步骤进度条；全部流程不出错即代表初始化完成！
 - **命令行控制台人机工程学与全屏沉浸模式**：
   - 控制台可视高度扩容至 240dp，外层原生接入 `SelectionContainer`，支持自由鼠标划词、多行框选文字并通过 `Ctrl+C` 快捷复制；
@@ -182,7 +183,11 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
     - **页面引用实例智能自动路由**：在执行 `ADD` 增量补丁时，若目标父节点（`parentBlockId`）为页面引用组件（`targetPageId != null`），系统严禁将其直接追加到当前宿主页面的 children 中，而是智能拦截并自动路由重定向追加至对应的目标独立子页面（`targetSubPage`）顶层；同时自动同步内存镜像并调度协程对被修改的子页面独立执行原子持久化落盘，确保各独立界面的物理单一事实源与跨页面引用关系的绝对纯洁。
 
 11. **【游戏项目独立保存目录与防缓存污染红线】**：游戏项目的源码、依赖库与运行编译产物必须保存在用户显式指定的外部独立物理目录中，**绝对严禁**存放在程序自身私有缓存目录（如 `~/.geminiuiforge/templates/...`）下，从底层杜绝因程序缓存清理导致用户代码被误删的严重隐患；
-12. **【专属配置文件单一事实源红线 (forge-game.json)】**：未包含有效专属识别配置文件 `forge-game.json` 的目录，系统坚决不认定为有效游戏工程；运行预览时若项目已激活则直接浏览器极速拉起，未激活则强制弹出向导弹窗完成环境就绪、脚手架写入与完整构建流水线校验。
+12. **【专属配置文件单一事实源红线 (forge-game.json)】**：未包含有效专属识别配置文件 `forge-game.json` 的目录，系统坚决不认定为有效游戏工程；运行预览时若项目已激活则直接浏览器极速拉起，未激活则强制弹出向导弹窗完成环境就绪、脚手架写入与完整构建流水线校验；
+13. **【纯代码 UIFactory 界面导出与切片物理同步红线】**：
+    - **规范化纯代码构建**：游戏端 UI 一律严格遵循《纯代码创建UI规则 (UIFactory)》标准规范，通过 `tsCore.UIFactory` 配置化工厂驱动纯代码 FGUI 界面（严禁使用 Laya 原生对象）。UI Studio 当前视图自动转换为 `game/src/ui/layoutConfig.ts`（包含 icon、panel、尺寸、坐标、不透明度与层级树），并在主类 `game/src/Main.ts` 中通过 `UIFactory.createPanel(layoutConfig, width, height)` 纯代码构建并挂载至 `fgui.GRoot.inst`；
+    - **切片素材原子物理同步**：每次导出时，系统自动扫描当前视图引用的全部素材切片，并将其从程序数据目录（`~/.geminiuiforge/templates/{projectName}/assets/...`）物理同步拷贝至游戏工程的静态资源目录（`build/res/gameui/<fileName>`）；全局统一配置 `tsCore.UIFactory.resBasePath = "res/gameui/"`，实现切片相对路径的无缝静态寻址与加载；
+    - **GM 动态脚本批加载流水线与 Google Analytics 脱敏**：静态脚手架（`build/index.html` 与 `build/index.js`）完全对齐 GM 商业工程的动态分批脚本加载流水线，统一引入 `common.min.js` 及其类型定义 `common.d.ts`，彻底剥离第三方谷歌统计（Google Analytics）逻辑，确保单机纯净、秒级启动并在本地 `http://localhost:1234/` 端口实现 100% 视觉无损预览。
 
 ---
 

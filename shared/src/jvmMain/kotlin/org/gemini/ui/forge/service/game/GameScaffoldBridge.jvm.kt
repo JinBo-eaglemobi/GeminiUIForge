@@ -1,6 +1,8 @@
 package org.gemini.ui.forge.service.game
 
 import org.gemini.ui.forge.model.gameproject.ForgeGameProjectConfig
+import org.gemini.ui.forge.model.ui.UIStudioPage
+import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
 import java.io.File
 
 /**
@@ -53,6 +55,19 @@ class JvmGameScaffoldBridge : GameScaffoldBridge {
             "http://localhost:1234/${absPath.trimStart('/')}"
         }
     }
+
+    override suspend fun exportCurrentPageToGame(
+        gameRootDirPath: String,
+        page: UIStudioPage,
+        assetLibrary: UIAssetLibrary?,
+        onLog: (String) -> Unit
+    ): Result<Unit> =
+        GameUiExportService.exportPageToGameProject(
+            gameRootDir = File(gameRootDirPath),
+            page = page,
+            assetLibrary = assetLibrary,
+            onLog = onLog
+        )
 }
 
 actual fun createGameScaffoldBridge(): GameScaffoldBridge = JvmGameScaffoldBridge()

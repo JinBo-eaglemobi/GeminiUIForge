@@ -318,6 +318,22 @@ class UIStudioViewModel {
         val proj = state.project ?: return
         val gamePath = proj.gameProjectPath
         if (!gamePath.isNullOrBlank() && scaffoldBridge.isGameProjectActivated(gamePath)) {
+            val currentView = state.currentView
+            if (currentView != null) {
+                Toast.show("正在同步UI并构建预览...", ToastType.INFO)
+                scope.launch {
+                    scaffoldBridge.exportCurrentPageToGame(
+                        gameRootDirPath = gamePath,
+                        page = currentView,
+                        assetLibrary = state.assetLibrary
+                    )
+                    val previewUrl = scaffoldBridge.getPreviewUrl(gamePath)
+                    if (!previewUrl.isNullOrBlank()) {
+                        getPlatform().openInBrowser(previewUrl)
+                    }
+                }
+                return
+            }
             val previewUrl = scaffoldBridge.getPreviewUrl(gamePath)
             if (!previewUrl.isNullOrBlank()) {
                 Toast.show("正在启动游戏预览", ToastType.INFO)
@@ -385,6 +401,18 @@ class UIStudioViewModel {
                     )
                     // 自动持久化保存到模板工程配置中
                     saveProject(repo)
+
+                    // 首次激活成功后，若有当前视图，立即同步导出当前已排版的图元与素材
+                    if (currentView != null) {
+                        try {
+                            scaffoldBridge.exportCurrentPageToGame(
+                                gameRootDirPath = targetDir,
+                                page = currentView,
+                                assetLibrary = state.assetLibrary
+                            )
+                        } catch (_: Throwable) {}
+                    }
+
                     Toast.show("游戏项目初始化与构建成功！", ToastType.SUCCESS)
 
                     val previewUrl = scaffoldBridge.getPreviewUrl(targetDir)

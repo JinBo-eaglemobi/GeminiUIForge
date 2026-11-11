@@ -15,6 +15,12 @@ class JsGameScaffoldBridge : GameScaffoldBridge {
         onLog: (String) -> Unit
     ): Result<ForgeGameProjectConfig> = Result.failure(UnsupportedOperationException("Web 平台不支持直接构建游戏脚手架"))
     override fun getPreviewUrl(gameRootDirPath: String): String? = null
+    override suspend fun exportCurrentPageToGame(
+        gameRootDirPath: String,
+        page: org.gemini.ui.forge.model.ui.UIStudioPage,
+        assetLibrary: org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary?,
+        onLog: (String) -> Unit
+    ): Result<Unit> = Result.failure(UnsupportedOperationException("Web 平台不支持直接构建游戏脚手架"))
 }
 
 actual fun createGameScaffoldBridge(): GameScaffoldBridge = JsGameScaffoldBridge()

@@ -22,4 +22,12 @@ private object IosGameScaffoldBridge : GameScaffoldBridge {
         Result.failure(UnsupportedOperationException("iOS does not support game scaffold activation"))
 
     override fun getPreviewUrl(gameRootDirPath: String): String? = null
+
+    override suspend fun exportCurrentPageToGame(
+        gameRootDirPath: String,
+        page: org.gemini.ui.forge.model.ui.UIStudioPage,
+        assetLibrary: org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary?,
+        onLog: (String) -> Unit
+    ): Result<Unit> =
+        Result.failure(UnsupportedOperationException("iOS does not support game scaffold activation"))
 }
