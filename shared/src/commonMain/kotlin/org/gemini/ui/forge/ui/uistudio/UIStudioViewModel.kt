@@ -431,6 +431,78 @@ class UIStudioViewModel {
     }
 
     /**
+     * 将已存在的成熟游戏工程直接无损关联接入，保留全部已有代码和依赖。
+     */
+    fun bindExistingGameProject(
+        repo: TemplateRepository,
+        gameProjectName: String,
+        targetDir: String
+    ) {
+        val proj = state.project ?: return
+        if (state.isGameActivating) return
+
+        state = state.copy(
+            isGameActivating = true,
+            gameActivationStep = 1,
+            gameActivationTotalSteps = 1,
+            gameActivationMessage = "正在无损接入成熟游戏工程...",
+            gameActivationLogs = emptyList(),
+            gameActivationError = null
+        )
+
+        scope.launch {
+            val currentView = state.currentView
+            val currentW = currentView?.width?.toInt() ?: state.canvasWidth.toInt()
+            val currentH = currentView?.height?.toInt() ?: state.canvasHeight.toInt()
+
+            val result = scaffoldBridge.bindExistingGameProject(
+                gameRootDirPath = targetDir,
+                projectName = gameProjectName,
+                canvasWidth = currentW,
+                canvasHeight = currentH
+            )
+
+            result.fold(
+                onSuccess = { _ ->
+                    val updatedProj = proj.copy(gameProjectPath = targetDir)
+                    state = state.copy(
+                        project = updatedProj,
+                        isGameActivating = false,
+                        isGameActivationDialogVisible = false
+                    )
+                    saveProject(repo)
+                    Toast.show("成功关联已有游戏工程！保留全部既有代码与依赖", ToastType.SUCCESS)
+
+                    val previewUrl = scaffoldBridge.getPreviewUrl(targetDir)
+                    if (!previewUrl.isNullOrBlank()) {
+                        getPlatform().openInBrowser(previewUrl)
+                    }
+                },
+                onFailure = { err ->
+                    state = state.copy(
+                        isGameActivating = false,
+                        gameActivationError = err.message ?: "关联游戏工程失败"
+                    )
+                }
+            )
+        }
+    }
+
+    /**
+     * 清除当前项目绑定的游戏代码工程路径并持久化保存。
+     */
+    fun clearGameProjectPath(repo: TemplateRepository) {
+        val proj = state.project ?: return
+        val updatedProj = proj.copy(gameProjectPath = null)
+        state = state.copy(
+            project = updatedProj,
+            isGameActivationDialogVisible = false
+        )
+        saveProject(repo)
+        Toast.show("已清除项目关联的代码路径", ToastType.INFO)
+    }
+
+    /**
      * 创建一个带指定名称和分辨率的默认空白模板工程。
      */
     private fun createDefaultBlankProject(name: String, width: Float, height: Float): ProjectState {

@@ -22,7 +22,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  * 1. 专职且仅负责将 Base64 数据写入项目素材库 (templates/{proj}/assets/image/...) 并自动登记资产账本；
  * 2. 彻底剥离任何画布修改与图元装配旁路（严禁直接修改当前页面 UIBlock）；
  * 3. 工具执行成功后，返回不可变的 assetHash，并返回【全景方案先行】的红线锚定提示，
- *    严格阻断 AI 未经二次确认擅自调用 patch_view_elements。
+ *    严格阻断 AI 未经二次确认擅自调用 edit_view_layout。
  */
 class SaveImageToAssetLibraryTool(
     private val storage: LocalFileStorage = LocalFileStorage()
@@ -184,7 +184,7 @@ class SaveImageToAssetLibraryTool(
             put(
                 "message",
                 "✅ 图片已成功落盘至素材库并登记资产 Hash: $assetHash。\n" +
-                "【⚠️ 严格操作门禁】：本步骤仅完成了素材入库。若需要将该素材装配应用到界面画布，严禁擅自直接调用 patch_view_elements！" +
+                "【⚠️ 严格操作门禁】：本步骤仅完成了素材入库。若需要将该素材装配应用到界面画布，严禁擅自直接调用 edit_view_layout！" +
                 "你必须首先基于当前图元树进行人机工程学与层级分析，向用户输出完整的【装配方案卡片】（说明是替换现有图元还是新建图元、所属父容器、层级深度、目标尺寸与语义），" +
                 "并在获得用户明确同意后方可执行装配！"
             )

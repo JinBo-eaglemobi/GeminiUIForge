@@ -30,7 +30,11 @@ object ToolExposurePolicy {
         // 5. 图像生成与异步查询
         "generate_image",
         "query_image_job",
-        // 6. 工程原子持久化落盘
+        // 6. 视图排版与局部微调核心工具
+        "edit_view_layout",
+        // 7. 视图数据异常诊断工具
+        "diagnose_view_data",
+        // 8. 工程原子持久化落盘
         "save_project"
     )
 

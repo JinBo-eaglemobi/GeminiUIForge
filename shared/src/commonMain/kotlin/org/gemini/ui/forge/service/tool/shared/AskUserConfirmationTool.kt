@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.service.tool.mcp.exclusive
+package org.gemini.ui.forge.service.tool.shared
 
 import org.gemini.ui.forge.service.tool.ToolAnnotations
 import org.gemini.ui.forge.service.tool.ToolContent
@@ -7,6 +7,7 @@ import org.gemini.ui.forge.service.tool.ToolResult
 
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.service.mcp.McpInteractionBridge
+import org.gemini.ui.forge.service.mcp.McpJobManager
 
 /**
  * 询问确认弹窗工具：向真实用户弹出确认弹窗并挂起等待人工决策
@@ -23,7 +24,7 @@ class AskUserConfirmationTool : ToolDefinition {
         idempotentHint = true
     )
 
-    override val timeoutMs: Long = 300_000L // 最多等待 5 分钟
+    override val timeoutMs: Long = Long.MAX_VALUE // 无限挂起等待用户真实决策
 
     override val inputSchema: JsonObject = buildJsonObject {
         put("type", "object")
@@ -54,7 +55,7 @@ class AskUserConfirmationTool : ToolDefinition {
             })
             put("async", buildJsonObject {
                 put("type", "boolean")
-                put("description", "可选：是否采用异步任务模式执行。默认为 true（立即返回 jobId 并通过 get_job_status 长轮询进度，彻底免疫客户端超时）。传入 false 则保持同步阻塞等待。")
+                put("description", "可选：是否采用异步任务模式执行。默认为 false（保持同步阻塞挂起协程，等待用户在屏幕界面点击二次确认后方可返回结果）。仅当外部调用方有极短超时限制时方可传入 true。")
             })
         })
         put("required", buildJsonArray {
@@ -67,9 +68,9 @@ class AskUserConfirmationTool : ToolDefinition {
         arguments: JsonObject,
         onProgress: ((progress: Float, message: String?) -> Unit)?
     ): ToolResult {
-        val isAsync = arguments["async"]?.jsonPrimitive?.booleanOrNull ?: true
+        val isAsync = arguments["async"]?.jsonPrimitive?.booleanOrNull ?: false
         if (isAsync) {
-            val jobId = org.gemini.ui.forge.service.mcp.McpJobManager.submitJob(name) { progressReporter ->
+            val jobId = McpJobManager.submitJob(name) { progressReporter ->
                 executeInternal(arguments, progressReporter)
             }
             val initialJson = buildJsonObject {
@@ -94,8 +95,7 @@ class AskUserConfirmationTool : ToolDefinition {
         val isDestructive = arguments["isDestructive"]?.jsonPrimitive?.booleanOrNull ?: false
         val confirmText = arguments["confirmText"]?.jsonPrimitive?.contentOrNull ?: "允许执行"
         val dismissText = arguments["dismissText"]?.jsonPrimitive?.contentOrNull ?: "拒绝"
-        val timeoutSeconds = arguments["timeoutSeconds"]?.jsonPrimitive?.intOrNull ?: 240
-        val timeoutMs = (timeoutSeconds.coerceIn(5, 300)) * 1000L
+        val timeoutMs = Long.MAX_VALUE
 
         onProgress?.invoke(0.2f, "正在向用户屏幕推送确认弹窗...")
         val result = McpInteractionBridge.requestConfirmation(
@@ -127,4 +127,3 @@ class AskUserConfirmationTool : ToolDefinition {
         }
     }
 }
-

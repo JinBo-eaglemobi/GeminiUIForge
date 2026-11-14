@@ -764,6 +764,11 @@
     <string name="game_activation_console_copy_success">All terminal logs copied to clipboard</string>
     <string name="game_activation_console_fullscreen">Fullscreen Console</string>
     <string name="game_activation_console_exit_fullscreen">Exit Fullscreen</string>
+    <string name="game_activation_btn_bind_existing">Directly Bind Existing (No Setup Needed)</string>
+    <string name="game_activation_btn_build_existing">Build &amp; Activate</string>
+    <string name="game_activation_kind_complete">⚡ Mature Game Project Detected</string>
+    <string name="game_activation_kind_source">📦 Existing Source Code Detected</string>
+    <string name="game_activation_kind_new">✨ New Game Scaffold Project</string>
 
     <!-- AI Chat Image Save & Mount to View -->
     <string name="chat_image_ready_hint">Image Generated (Pending Save)</string>

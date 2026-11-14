@@ -154,35 +154,39 @@ class AiAgentDelegate(
             job.cancel()
             activeChatJob = null
         }
-        val currentStreamText = state.streamingAiText
         val activeSession = state.currentChatSession
-        if (currentStreamText.isNotBlank() && activeSession != null) {
-            val truncatedText = "$currentStreamText\n\n*(⏹ 用户已主动中止本次生成)*"
-            val now = getCurrentTimeMillis()
-            val stoppedMsg = VisualChatMessage(
-                id = "msg_${now}_assistant_stopped",
-                role = "model",
-                prompt = truncatedText,
-                variants = listOf(truncatedText),
-                activeVariantIndex = 0,
-                timestamp = now
-            )
-            val updatedMessages = activeSession.messages + stoppedMsg
-            val updatedSession = activeSession.copy(
-                messages = updatedMessages,
-                updatedAt = now
-            )
-            val updatedSessions = state.chatSessions.map { if (it.id == updatedSession.id) updatedSession else it }
-            state = state.copy(
-                chatSessions = updatedSessions,
-                isAiChatSending = false,
-                streamingAiText = ""
-            )
-            chatSession.saveSession(updatedSession)
+        if (activeSession != null) {
+            val lastMsg = activeSession.messages.lastOrNull()
+            if (lastMsg != null && lastMsg.role == "model") {
+                val updatedLastMsg = lastMsg.copy(
+                    isCancelled = true,
+                    isError = false,
+                    errorMessage = null
+                )
+                val updatedSession = activeSession.copy(
+                    messages = activeSession.messages.dropLast(1) + updatedLastMsg,
+                    updatedAt = getCurrentTimeMillis()
+                )
+                val updatedSessions = state.chatSessions.map { if (it.id == updatedSession.id) updatedSession else it }
+                state = state.copy(
+                    chatSessions = updatedSessions,
+                    isAiChatSending = false,
+                    streamingAiText = "",
+                    streamingAiThought = ""
+                )
+                chatSession.saveSession(updatedSession)
+            } else {
+                state = state.copy(
+                    isAiChatSending = false,
+                    streamingAiText = "",
+                    streamingAiThought = ""
+                )
+            }
         } else {
             state = state.copy(
                 isAiChatSending = false,
-                streamingAiText = ""
+                streamingAiText = "",
+                streamingAiThought = ""
             )
         }
         Toast.show("已停止 AI 生成", ToastType.INFO)
@@ -217,24 +221,18 @@ class AiAgentDelegate(
                 }
             }
 
-            if (name == "apply_view_layout") {
-                // 静默解析排版数据并缓存，绝不主动在画布中央弹窗打断（保留气泡按钮由用户显式点击）
-                aiLayout.checkAndExecuteLayoutTool(rawResponseJson, responseText, autoPromptDialog = false)
-                continue
-            }
-
-            if (name == "patch_view_elements") {
+            if (name == "edit_view_layout") {
                 val t0 = getCurrentTimeMillis()
-                val patchResult = aiLayout.executePatchViewElements(enrichedArgs)
+                val editResult = aiLayout.executeEditViewLayout(enrichedArgs)
                 val dur = getCurrentTimeMillis() - t0
                 val record = toolDispatcher.buildToolCallRecord(
                     id = "tool_${getCurrentTimeMillis()}_$name",
                     toolName = name,
                     arguments = enrichedArgs,
-                    result = if (patchResult.isSuccess) {
-                        ToolResult.success(patchResult.summary)
+                    result = if (editResult.isSuccess) {
+                        ToolResult.success(editResult.summary)
                     } else {
-                        ToolResult.error(patchResult.errorMessage ?: "局部补丁执行失败")
+                        ToolResult.error(editResult.errorMessage ?: "排版执行失败")
                     },
                     durationMs = dur,
                     callId = fc.callId
@@ -453,12 +451,20 @@ class AiAgentDelegate(
     /**
      * 删除单条对话记录或一整轮对话。
      * 若删除的是用户提问，连带其后直接紧随的 AI 回答一并移除。
+     * 同步在后台异步注销云端对应 Interactions 实体，并回退会话的 latestInteractionId。
      */
     fun deleteChatMessage(messageId: String) {
         val activeSession = state.currentChatSession ?: return
         val targetIndex = activeSession.messages.indexOfFirst { it.id == messageId }
         if (targetIndex < 0) return
         val targetMsg = activeSession.messages[targetIndex]
+
+        val deletedMessages = if (targetMsg.role == "user") {
+            val nextMsg = activeSession.messages.getOrNull(targetIndex + 1)
+            if (nextMsg?.role == "model") listOf(targetMsg, nextMsg) else listOf(targetMsg)
+        } else {
+            listOf(targetMsg)
+        }
 
         val updatedMessages = if (targetMsg.role == "user") {
             activeSession.messages.filterIndexed { index, _ ->
@@ -467,7 +473,31 @@ class AiAgentDelegate(
         } else {
             activeSession.messages.filterIndexed { index, _ -> index != targetIndex }
         }
-        val updatedSession = activeSession.copy(messages = updatedMessages, updatedAt = getCurrentTimeMillis())
+
+        // 提取被移除消息的 interactionId 并异步注销云端节点
+        val removedInteractionIds = deletedMessages.mapNotNull { it.interactionId }.filter { it.isNotBlank() }
+        if (removedInteractionIds.isNotEmpty()) {
+            scope.launch(Dispatchers.Default) {
+                removedInteractionIds.forEach { id ->
+                    try {
+                        chatEngine.deleteInteraction(id)
+                    } catch (e: Exception) {
+                        AppLogger.w("AiAgentDelegate", "撤销对话时注销云端交互失败: $id", e)
+                    }
+                }
+            }
+        }
+
+        // 重新对齐最新生效的 interactionId（取剩余消息中最后一条有效的 interactionId）
+        val recalculatedLatestInteractionId = updatedMessages
+            .lastOrNull { !it.interactionId.isNullOrBlank() }
+            ?.interactionId
+
+        val updatedSession = activeSession.copy(
+            messages = updatedMessages,
+            latestInteractionId = recalculatedLatestInteractionId,
+            updatedAt = getCurrentTimeMillis()
+        )
         val updatedSessions = state.chatSessions.map { if (it.id == updatedSession.id) updatedSession else it }
         state = state.copy(chatSessions = updatedSessions)
         chatSession.saveSession(updatedSession)
@@ -815,7 +845,7 @@ class AiAgentDelegate(
                     round++
                     val currentRound = round
                     var currentStreamingThoughtThisRound = ""
-                    val result = try {
+                    var actualResult = try {
                         chatEngine.executeChat(
                             request = currentChatRequest,
                             onChunk = { chunk ->
@@ -888,6 +918,97 @@ class AiAgentDelegate(
                         state = state.copy(streamingAiText = "", streamingAiThought = "")
                     }
 
+                    // 【过期自愈机制】：若首轮遭遇云端交互 ID 失效/过期（404/not found/expired），自动将本地历史打包无缝重试
+                    if (currentRound == 1 && !actualResult.isSuccess && isInteractionExpiredOrNotFound(actualResult.errorMessage, actualResult.rawResponseJson, currentChatRequest.previousInteractionId)) {
+                        AppLogger.w("AiAgentDelegate", "🔄 检测到云端 previous_interaction_id (${currentChatRequest.previousInteractionId}) 已失效或过期，正在将本地历史打包执行无缝自愈重试...")
+                        state = state.copy(
+                            streamingAiThought = "🔄 检测到云端交互节点已过期，正在自动打包本地历史会话无缝续接...",
+                            streamingAiText = ""
+                        )
+                        val contextXmlBuilder = StringBuilder()
+                        if (historyItems.isNotEmpty()) {
+                            contextXmlBuilder.append("<conversation_history>\n")
+                            historyItems.takeLast(10).forEach { item ->
+                                val roleTag = if (item.role == "user") "user" else "assistant"
+                                val cleanText = item.text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                                contextXmlBuilder.append("  <$roleTag>${cleanText.take(1500)}</$roleTag>\n")
+                            }
+                            contextXmlBuilder.append("</conversation_history>\n\n")
+                        }
+                        val fallbackPrompt = contextXmlBuilder.toString() + currentChatRequest.prompt
+                        currentChatRequest = currentChatRequest.copy(
+                            previousInteractionId = null,
+                            prompt = fallbackPrompt
+                        )
+                        actualResult = try {
+                            chatEngine.executeChat(
+                                request = currentChatRequest,
+                                onChunk = { chunk ->
+                                    val updatedPrompt = liveAssistantMsg.prompt + chunk
+                                    liveAssistantMsg = liveAssistantMsg.copy(
+                                        prompt = updatedPrompt,
+                                        variants = listOf(updatedPrompt)
+                                    )
+                                    currentLiveSession = currentLiveSession.copy(
+                                        messages = currentLiveSession.messages.map { if (it.id == liveMsgId) liveAssistantMsg else it }
+                                    )
+                                    state = state.copy(
+                                        chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it },
+                                        streamingAiText = updatedPrompt
+                                    )
+                                },
+                                onThought = { thought: String, _ ->
+                                    if (thought.isNotBlank()) {
+                                        currentStreamingThoughtThisRound = thought
+                                        val fullThought = if (previousRoundsThoughts.isEmpty()) {
+                                            thought
+                                        } else {
+                                            "${previousRoundsThoughts.joinToString("\n\n---\n\n")}\n\n---\n\n[第 $currentRound 轮思考]\n$thought"
+                                        }
+                                        liveAssistantMsg = liveAssistantMsg.copy(thought = fullThought)
+                                        currentLiveSession = currentLiveSession.copy(
+                                            messages = currentLiveSession.messages.map { if (it.id == liveMsgId) liveAssistantMsg else it }
+                                        )
+                                        state = state.copy(
+                                            chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it },
+                                            streamingAiThought = thought
+                                        )
+                                    }
+                                },
+                                onRawTraffic = { direction, rawUrl, body ->
+                                    scope.launch(Dispatchers.Default) {
+                                        val isReq = direction == TrafficDirection.REQ
+                                        val stageTag = if (isReq) "第 1 轮 (自愈重试) · 意图与历史输入" else "第 1 轮 (自愈重试) · 模型推理"
+                                        val summary = "[自愈重试] 模型: ${requestModel.displayName} | 方向: $direction"
+                                        val record = TrafficRecord(
+                                            seq = 0,
+                                            direction = direction,
+                                            timestamp = getCurrentTimeMillis(),
+                                            url = rawUrl,
+                                            model = requestModel.modelName,
+                                            body = body,
+                                            stageTag = stageTag,
+                                            summary = summary
+                                        )
+                                        trafficStore.append(record, trafficScopeId, activeSession.id)
+                                    }
+                                }
+                            )
+                        } catch (e: Exception) {
+                            AppLogger.e("AiAgentDelegate", "自愈重试调用异常", e)
+                            GeminiChatResult(
+                                text = "",
+                                rawResponseJson = e.message ?: "",
+                                isSuccess = false,
+                                errorMessage = e.message?.ifBlank { null } ?: "${e::class.simpleName ?: "Exception"}: 网络通信异常"
+                            )
+                        } finally {
+                            state = state.copy(streamingAiText = "", streamingAiThought = "")
+                        }
+                    }
+
+                    val result = actualResult
+
                     lastResult = result
 
                     // 沉淀本轮思考过程，保证多轮交互后完整呈现
@@ -923,11 +1044,20 @@ class AiAgentDelegate(
                         chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it }
                     )
 
-                    val isLayoutTriggered = executedToolRecords.any { it.toolName == "apply_view_layout" } ||
-                        result.rawResponseJson.contains("apply_view_layout")
+                    // 如果没有工具调用，跳出循环（模型已完成工具决策，收口输出文本）
+                    if (executedToolRecords.isEmpty()) {
+                        break
+                    }
 
-                    // 如果没有工具调用，或者已经触发了排版装配，跳出循环
-                    if (executedToolRecords.isEmpty() || isLayoutTriggered) {
+                    // 若用户在问询弹窗中明确选择了「结束任务」或问询被取消，立即物理阻断多轮工具循环，绝不继续自动往后执行
+                    val isUserTerminated = executedToolRecords.any { rec ->
+                        rec.toolName in setOf("ask_user_question", "ask_user_choice", "ask_user_confirmation") &&
+                            (rec.rawOutput?.contains("\"user_terminated\"") == true ||
+                                rec.rawOutput?.contains("\"user_cancelled_or_timeout\"") == true ||
+                                rec.rawOutput?.contains("\"user_cancelled\"") == true)
+                    }
+                    if (isUserTerminated) {
+                        AppLogger.i("AiAgentDelegate", "🛑 用户在问询弹窗中选择结束任务或取消，已物理中止多轮工具循环")
                         break
                     }
 
@@ -1120,7 +1250,34 @@ class AiAgentDelegate(
             return
         }
 
-        state = state.copy(isAiChatSending = true, streamingAiText = "")
+        val liveMsgId = modelMsg?.id ?: "msg_${getCurrentTimeMillis()}_assistant"
+        var liveAssistantMsg = modelMsg?.copy(
+            isError = false,
+            errorMessage = null,
+            isCancelled = false,
+            toolCalls = emptyList()
+        ) ?: VisualChatMessage(
+            id = liveMsgId,
+            role = "model",
+            prompt = "",
+            variants = emptyList(),
+            activeVariantIndex = 0,
+            timestamp = getCurrentTimeMillis()
+        )
+
+        var currentLiveSession = activeSession.copy(
+            messages = if (modelMsg != null) {
+                activeSession.messages.map { if (it.id == modelMsg.id) liveAssistantMsg else it }
+            } else {
+                activeSession.messages + liveAssistantMsg
+            }
+        )
+
+        state = state.copy(
+            chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it },
+            isAiChatSending = true,
+            streamingAiText = ""
+        )
 
         activeChatJob = scope.launch(Dispatchers.Default) {
             val effectiveApiKey = configManager.loadKey("GEMINI_API_KEY") ?: configManager.loadGlobalGeminiKey() ?: ""
@@ -1194,65 +1351,265 @@ class AiAgentDelegate(
                     )
                 )
 
-                // 【生图执行引擎合一】生图轮跳过 chat 直连，统一经 generate_image 工具管道执行（界面交互保持现状）
-                val result: GeminiChatResult
+                val toolRoundStep = configManager.loadKey("AI_AGENT_MAX_TOOL_ROUNDS")?.toIntOrNull()?.coerceIn(5, 500) ?: 50
+                var maxToolRounds = toolRoundStep
+                var round = 0
+                var currentChatRequest = chatRequest
+                val allExecutedToolRecords = mutableListOf<ChatToolCallRecord>()
+                var lastResult: GeminiChatResult? = null
+                val previousRoundsThoughts = mutableListOf<String>()
                 var imageGenTurnRecords: List<ChatToolCallRecord> = emptyList()
                 var imageGenToolDiskPath: String? = null
+
                 if (isImageGenTurn) {
                     val (synthResult, diskPath, records) = executeImageGenTurnViaUnifiedTool(requestModel, userMsg.prompt)
-                    result = synthResult
+                    lastResult = synthResult
                     imageGenTurnRecords = records
                     imageGenToolDiskPath = diskPath
+                    allExecutedToolRecords.addAll(records)
                 } else {
-                    result = chatEngine.executeChat(
-                        request = chatRequest,
-                        onChunk = { chunk ->
-                            state = state.copy(streamingAiText = state.streamingAiText + chunk)
-                        },
-                        onThought = { thought: String, _ ->
-                            if (state.streamingAiText.isBlank() && thought.isNotBlank()) {
-                                state = state.copy(streamingAiText = "🧠 " + thought.takeLast(120))
-                            }
-                        },
-                        onRawTraffic = { direction, rawUrl, body ->
-                            scope.launch(Dispatchers.Default) {
-                                val record = TrafficRecord(
-                                    seq = 0,
-                                    direction = direction,
-                                    timestamp = getCurrentTimeMillis(),
-                                    url = rawUrl,
-                                    model = requestModel.modelName,
-                                    body = body
-                                )
-                                trafficStore.append(record, trafficScopeId, activeSession.id)
-                            }
+                    while (round < maxToolRounds) {
+                        round++
+                        val currentRound = round
+                        var currentStreamingThoughtThisRound = ""
+
+                        val actualResult = try {
+                            chatEngine.executeChat(
+                                request = currentChatRequest,
+                                onChunk = { chunk ->
+                                    val currentPrompt = liveAssistantMsg.prompt
+                                    val updatedPrompt = if (currentRound <= 1) currentPrompt + chunk else currentPrompt + chunk
+                                    liveAssistantMsg = liveAssistantMsg.copy(prompt = updatedPrompt)
+                                    currentLiveSession = currentLiveSession.copy(
+                                        messages = currentLiveSession.messages.map { if (it.id == liveMsgId) liveAssistantMsg else it }
+                                    )
+                                    state = state.copy(
+                                        chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it },
+                                        streamingAiText = updatedPrompt
+                                    )
+                                },
+                                onThought = { thought: String, _ ->
+                                    if (thought.isNotBlank()) {
+                                        currentStreamingThoughtThisRound = thought
+                                        val fullThought = if (previousRoundsThoughts.isEmpty()) {
+                                            thought
+                                        } else {
+                                            "${previousRoundsThoughts.joinToString("\n\n---\n\n")}\n\n---\n\n[第 $currentRound 轮思考]\n$thought"
+                                        }
+                                        liveAssistantMsg = liveAssistantMsg.copy(thought = fullThought)
+                                        currentLiveSession = currentLiveSession.copy(
+                                            messages = currentLiveSession.messages.map { if (it.id == liveMsgId) liveAssistantMsg else it }
+                                        )
+                                        state = state.copy(
+                                            chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it },
+                                            streamingAiThought = thought
+                                        )
+                                    }
+                                },
+                                onRawTraffic = { direction, rawUrl, body ->
+                                    scope.launch(Dispatchers.Default) {
+                                        val isReq = direction == TrafficDirection.REQ
+                                        val stageTag = if (currentRound <= 1 && isReq) {
+                                            "第 1 轮 (重新生成) · 意图输入"
+                                        } else if (isReq) {
+                                            "第 $currentRound 轮 (重新生成) · 工具结果反哺"
+                                        } else {
+                                            "第 $currentRound 轮 (重新生成) · 模型推理与工具决策"
+                                        }
+                                        val summary = TrafficSummaryExtractor.extractSummary(direction.name, body)
+                                        val record = TrafficRecord(
+                                            seq = 0,
+                                            direction = direction,
+                                            timestamp = getCurrentTimeMillis(),
+                                            url = rawUrl,
+                                            model = requestModel.modelName,
+                                            body = body,
+                                            roundIndex = currentRound,
+                                            stageTag = stageTag,
+                                            summary = summary
+                                        )
+                                        trafficStore.append(record, trafficScopeId, activeSession.id)
+                                    }
+                                }
+                            )
+                        } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException) throw e
+                            AppLogger.e("AiAgentDelegate", "重新生成调用异常", e)
+                            GeminiChatResult(
+                                text = "",
+                                rawResponseJson = e.message ?: "",
+                                isSuccess = false,
+                                errorMessage = e.message?.ifBlank { null } ?: "${e::class.simpleName ?: "Exception"}: 网络通信异常"
+                            )
+                        } finally {
+                            state = state.copy(streamingAiText = "", streamingAiThought = "")
                         }
-                    )
+
+                        // 【过期自愈机制】：若首轮遭遇云端交互 ID 失效/过期，自动打包本地历史重试
+                        val result = if (currentRound == 1 && !actualResult.isSuccess && isInteractionExpiredOrNotFound(actualResult.errorMessage, actualResult.rawResponseJson, currentChatRequest.previousInteractionId)) {
+                            AppLogger.w("AiAgentDelegate", "🔄 [重新生成] 检测到云端 previous_interaction_id (${currentChatRequest.previousInteractionId}) 已失效或过期，正在自动打包本地历史重试...")
+                            state = state.copy(
+                                streamingAiThought = "🔄 检测到云端交互节点已过期，正在自动打包本地历史会话无缝续接...",
+                                streamingAiText = ""
+                            )
+                            val contextXmlBuilder = StringBuilder()
+                            if (historyItems.isNotEmpty()) {
+                                contextXmlBuilder.append("<conversation_history>\n")
+                                historyItems.takeLast(10).forEach { item ->
+                                    val roleTag = if (item.role == "user") "user" else "assistant"
+                                    val cleanText = item.text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                                    contextXmlBuilder.append("  <$roleTag>${cleanText.take(1500)}</$roleTag>\n")
+                                }
+                                contextXmlBuilder.append("</conversation_history>\n\n")
+                            }
+                            val fallbackPrompt = contextXmlBuilder.toString() + currentChatRequest.prompt
+                            currentChatRequest = currentChatRequest.copy(
+                                previousInteractionId = null,
+                                prompt = fallbackPrompt
+                            )
+                            try {
+                                chatEngine.executeChat(
+                                    request = currentChatRequest,
+                                    onChunk = { chunk ->
+                                        val current = if (state.streamingAiText.startsWith("🔄")) "" else state.streamingAiText
+                                        state = state.copy(streamingAiText = current + chunk)
+                                    },
+                                    onThought = { thought: String, _ ->
+                                        if (thought.isNotBlank()) {
+                                            state = state.copy(streamingAiThought = thought)
+                                        }
+                                    },
+                                    onRawTraffic = { direction, rawUrl, body ->
+                                        scope.launch(Dispatchers.Default) {
+                                            val record = TrafficRecord(
+                                                seq = 0,
+                                                direction = direction,
+                                                timestamp = getCurrentTimeMillis(),
+                                                url = rawUrl,
+                                                model = requestModel.modelName,
+                                                body = body,
+                                                stageTag = "第 1 轮 (重新生成自愈重试)",
+                                                summary = "[自愈重试] 模型: ${requestModel.displayName}"
+                                            )
+                                            trafficStore.append(record, trafficScopeId, activeSession.id)
+                                        }
+                                    }
+                                )
+                            } catch (e: Exception) {
+                                if (e is kotlinx.coroutines.CancellationException) throw e
+                                GeminiChatResult(text = "", rawResponseJson = e.message ?: "", isSuccess = false, errorMessage = e.message)
+                            }
+                        } else {
+                            actualResult
+                        }
+
+                        lastResult = result
+
+                        val resolvedThoughtText = result.thoughtText?.ifBlank { null } ?: currentStreamingThoughtThisRound.ifBlank { null }
+                        if (resolvedThoughtText != null) {
+                            val labeledThought = if (currentRound <= 1) resolvedThoughtText else "[第 $currentRound 轮思考]\n$resolvedThoughtText"
+                            previousRoundsThoughts.add(labeledThought)
+                            liveAssistantMsg = liveAssistantMsg.copy(thought = previousRoundsThoughts.joinToString("\n\n---\n\n"))
+                        }
+
+                        if (!result.isSuccess) {
+                            break
+                        }
+
+                        val executedToolRecords = if (result.isSuccess) {
+                            state = state.copy(streamingAiThought = "🛠️ 正在执行系统工具...")
+                            try {
+                                executeDetectedAiTools(result.rawResponseJson, result.text, result.functionCalls)
+                            } finally {
+                                state = state.copy(streamingAiThought = "")
+                            }
+                        } else emptyList()
+
+                        allExecutedToolRecords.addAll(executedToolRecords)
+
+                        liveAssistantMsg = liveAssistantMsg.copy(toolCalls = allExecutedToolRecords.toList())
+                        currentLiveSession = currentLiveSession.copy(
+                            messages = currentLiveSession.messages.map { if (it.id == liveMsgId) liveAssistantMsg else it }
+                        )
+                        state = state.copy(
+                            chatSessions = state.chatSessions.map { if (it.id == currentLiveSession.id) currentLiveSession else it }
+                        )
+
+                        if (executedToolRecords.isEmpty()) {
+                            break
+                        }
+
+                        val isUserTerminated = executedToolRecords.any { rec ->
+                            rec.toolName in setOf("ask_user_question", "ask_user_choice", "ask_user_confirmation") &&
+                                (rec.rawOutput?.contains("\"user_terminated\"") == true ||
+                                    rec.rawOutput?.contains("\"user_cancelled_or_timeout\"") == true ||
+                                    rec.rawOutput?.contains("\"user_cancelled\"") == true)
+                        }
+                        if (isUserTerminated) {
+                            AppLogger.i("AiAgentDelegate", "🛑 [重新生成] 用户在问询弹窗中选择结束任务或取消，已物理中止多轮工具循环")
+                            break
+                        }
+
+                        val functionResponses = executedToolRecords.map { rec ->
+                            val raw = rec.rawOutput?.ifBlank { null } ?: rec.resultSummary ?: "{}"
+                            val finalRespJson = if (rec.isSuccess) {
+                                raw
+                            } else {
+                                "{\"error\":${Json.encodeToString(raw)}}"
+                            }
+                            GeminiFunctionResponse(
+                                name = rec.toolName,
+                                callId = rec.callId,
+                                responseJson = finalRespJson
+                            )
+                        }
+
+                        val modelFunctionCalls = executedToolRecords.map {
+                            GeminiFunctionCallRecord(
+                                name = it.toolName,
+                                argsJson = it.argumentsJson,
+                                callId = it.callId
+                            )
+                        }
+
+                        val updatedHistory = currentChatRequest.history.toMutableList().apply {
+                            add(
+                                GeminiChatHistoryItem(
+                                    role = "model",
+                                    text = result.text,
+                                    functionCalls = modelFunctionCalls
+                                )
+                            )
+                            add(
+                                GeminiChatHistoryItem(
+                                    role = "user",
+                                    text = "",
+                                    functionResults = functionResponses
+                                )
+                            )
+                        }
+
+                        currentChatRequest = currentChatRequest.copy(
+                            history = updatedHistory,
+                            prompt = "",
+                            userPrompt = "",
+                            functionResults = functionResponses,
+                            previousInteractionId = result.interactionId ?: currentChatRequest.previousInteractionId
+                        )
+                    }
                 }
 
-                val executedToolRecords = if (isImageGenTurn) {
-                    // 生图轮：工具记录已由统一引擎产出，直接复用
-                    imageGenTurnRecords
-                } else if (result.isSuccess) {
-                    state = state.copy(streamingAiThought = "🛠️ 正在执行系统工具 [generate_image] 生成并落盘素材...")
-                    try {
-                        executeDetectedAiTools(result.rawResponseJson, result.text, result.functionCalls)
-                    } finally {
-                        state = state.copy(streamingAiThought = "")
-                    }
-                } else emptyList()
-
-                // 生图轮图像已由统一引擎落盘；普通轮维持原直连提取逻辑
                 val directGeneratedImageUri = imageGenToolDiskPath
-                    ?: result.generatedImageData?.let { persistGeneratedChatImage(it) }
-                val generatedImgPath = directGeneratedImageUri ?: extractGeneratedImageUri(executedToolRecords)
+                    ?: lastResult?.generatedImageData?.let { persistGeneratedChatImage(it) }
+                val generatedImgPath = directGeneratedImageUri ?: extractGeneratedImageUri(allExecutedToolRecords)
                 if (generatedImgPath != null) {
                     state.project?.projectId?.let { assetLibrary.loadAssetLibrary(it) }
                 }
 
+                val result = lastResult ?: GeminiChatResult(text = "", rawResponseJson = "", isSuccess = false, errorMessage = "未收到有效响应")
                 val finalResultText = if (result.text.isNotBlank()) {
                     result.text
-                } else if (executedToolRecords.isNotEmpty()) {
+                } else if (allExecutedToolRecords.isNotEmpty()) {
                     "" // 工具执行状态由卡片呈现，不拼接机械废话
                 } else if (generatedImgPath != null) {
                     "" // 图像已成功生成并挂载卡片，保持界面纯净
@@ -1262,58 +1619,44 @@ class AiAgentDelegate(
                     "（未收到有效文本内容）"
                 }
 
-                val updatedModelMsg = if (modelMsg != null) {
-                    val currentVariants = if (modelMsg.variants.isEmpty()) listOf(modelMsg.prompt) else modelMsg.variants
-                    val newVariants = currentVariants + finalResultText
-                    modelMsg.copy(
-                        prompt = finalResultText,
-                        variants = newVariants,
-                        activeVariantIndex = newVariants.lastIndex,
-                        thought = result.thoughtText,
-                        thoughtSignature = result.thoughtSignature,
-                        interactionId = result.interactionId,
-                        modelName = result.modelName ?: requestModel.modelName,
-                        durationMs = result.durationMs,
-                        promptTokens = result.promptTokens,
-                        candidatesTokens = result.candidatesTokens,
-                        totalTokens = result.totalTokens,
-                        timestamp = getCurrentTimeMillis(),
-                        isError = !result.isSuccess,
-                        errorMessage = if (!result.isSuccess) result.errorMessage else null,
-                        toolCalls = executedToolRecords,
-                        generatedImageUri = generatedImgPath ?: modelMsg.generatedImageUri
-                    )
+                // 核心铁律：仅在重新生成成功且有非空正文时，才向 variants 追加新版本；
+                // 若生成失败或未产出正文，绝不追加空白版本污染多版本树！
+                val currentValidVariants = modelMsg?.variants?.filter { it.isNotBlank() } ?: emptyList()
+                val newVariants = if (result.isSuccess && finalResultText.isNotBlank()) {
+                    val baseList = if (currentValidVariants.isEmpty() && modelMsg != null && modelMsg.prompt.isNotBlank()) {
+                        listOf(modelMsg.prompt)
+                    } else {
+                        currentValidVariants
+                    }
+                    baseList + finalResultText
                 } else {
-                    VisualChatMessage(
-                        id = "msg_${getCurrentTimeMillis()}_assistant",
-                        role = "model",
-                        prompt = finalResultText,
-                        variants = if (finalResultText.isNotBlank()) listOf(finalResultText) else emptyList(),
-                        activeVariantIndex = 0,
-                        thought = result.thoughtText,
-                        thoughtSignature = result.thoughtSignature,
-                        interactionId = result.interactionId,
-                        modelName = result.modelName ?: requestModel.modelName,
-                        durationMs = result.durationMs,
-                        promptTokens = result.promptTokens,
-                        candidatesTokens = result.candidatesTokens,
-                        totalTokens = result.totalTokens,
-                        timestamp = getCurrentTimeMillis(),
-                        isError = !result.isSuccess,
-                        errorMessage = if (!result.isSuccess) result.errorMessage else null,
-                        toolCalls = executedToolRecords,
-                        generatedImageUri = generatedImgPath
-                    )
+                    if (currentValidVariants.isNotEmpty()) currentValidVariants else if (modelMsg != null && modelMsg.prompt.isNotBlank()) listOf(modelMsg.prompt) else emptyList()
                 }
+                val activeIdx = if (newVariants.isNotEmpty()) newVariants.lastIndex else 0
 
-                val updatedMessages = if (modelMsg != null) {
-                    activeSession.messages.map { if (it.id == modelMsg.id) updatedModelMsg else it }
-                } else {
-                    activeSession.messages + updatedModelMsg
-                }
+                val finalModelMsg = liveAssistantMsg.copy(
+                    prompt = if (finalResultText.isNotBlank()) finalResultText else liveAssistantMsg.prompt,
+                    variants = newVariants,
+                    activeVariantIndex = activeIdx,
+                    thought = liveAssistantMsg.thought ?: result.thoughtText,
+                    thoughtSignature = result.thoughtSignature,
+                    interactionId = result.interactionId ?: liveAssistantMsg.interactionId,
+                    modelName = result.modelName ?: requestModel.modelName,
+                    durationMs = result.durationMs,
+                    promptTokens = result.promptTokens,
+                    candidatesTokens = result.candidatesTokens,
+                    totalTokens = result.totalTokens,
+                    timestamp = getCurrentTimeMillis(),
+                    isError = !result.isSuccess,
+                    errorMessage = if (!result.isSuccess) result.errorMessage else null,
+                    isCancelled = false,
+                    toolCalls = allExecutedToolRecords.toList(),
+                    generatedImageUri = generatedImgPath ?: modelMsg?.generatedImageUri
+                )
 
+                val finalMessages = activeSession.messages.map { if (it.id == liveMsgId) finalModelMsg else it }
                 val updatedSession = activeSession.copy(
-                    messages = updatedMessages,
+                    messages = finalMessages,
                     latestInteractionId = result.interactionId ?: activeSession.latestInteractionId,
                     updatedAt = getCurrentTimeMillis()
                 )
@@ -1321,13 +1664,53 @@ class AiAgentDelegate(
                 state = state.copy(chatSessions = updatedSessions, isAiChatSending = false)
                 chatSession.saveSession(updatedSession)
             } catch (e: Exception) {
-                AppLogger.e("AiAgentDelegate", "重新生成失败", e)
-                Toast.show("重新生成失败: ${e.message}", ToastType.ERROR)
-                state = state.copy(isAiChatSending = false)
+                if (e is kotlinx.coroutines.CancellationException) {
+                    AppLogger.i("AiAgentDelegate", "重新生成已由用户主动中止")
+                    val cancelledMsg = liveAssistantMsg.copy(
+                        isCancelled = true,
+                        isError = false,
+                        errorMessage = null
+                    )
+                    val updatedMessages = activeSession.messages.map { if (it.id == liveMsgId) cancelledMsg else it }
+                    val updatedSession = activeSession.copy(messages = updatedMessages, updatedAt = getCurrentTimeMillis())
+                    val updatedSessions = state.chatSessions.map { if (it.id == updatedSession.id) updatedSession else it }
+                    state = state.copy(chatSessions = updatedSessions, isAiChatSending = false)
+                    chatSession.saveSession(updatedSession)
+                } else {
+                    AppLogger.e("AiAgentDelegate", "重新生成失败", e)
+                    val errorMsg = liveAssistantMsg.copy(
+                        isError = true,
+                        errorMessage = e.message ?: "未知异常",
+                        isCancelled = false
+                    )
+                    val updatedMessages = activeSession.messages.map { if (it.id == liveMsgId) errorMsg else it }
+                    val updatedSession = activeSession.copy(messages = updatedMessages, updatedAt = getCurrentTimeMillis())
+                    val updatedSessions = state.chatSessions.map { if (it.id == updatedSession.id) updatedSession else it }
+                    state = state.copy(chatSessions = updatedSessions, isAiChatSending = false)
+                    chatSession.saveSession(updatedSession)
+                }
             } finally {
                 activeChatJob = null
-                state = state.copy(streamingAiText = "")
+                state = state.copy(streamingAiText = "", streamingAiThought = "")
             }
         }
+    }
+
+    /**
+     * 判断是否为云端 Interaction 节点已失效、过期或被淘汰（404 / expired / not found）
+     */
+    private fun isInteractionExpiredOrNotFound(
+        errorMessage: String?,
+        rawResponseJson: String?,
+        previousInteractionId: String?
+    ): Boolean {
+        if (previousInteractionId.isNullOrBlank()) return false
+        val combined = "${errorMessage ?: ""} ${rawResponseJson ?: ""}".lowercase()
+        return combined.contains("404") ||
+                combined.contains("not_found") ||
+                combined.contains("not found") ||
+                combined.contains("expired") ||
+                combined.contains("interaction does not exist") ||
+                (combined.contains("invalid_argument") && combined.contains("interaction"))
     }
 }

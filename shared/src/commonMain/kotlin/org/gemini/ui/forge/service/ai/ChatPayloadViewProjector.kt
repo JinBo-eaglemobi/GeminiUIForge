@@ -63,18 +63,26 @@ object ChatPayloadViewProjector {
         }
 
         // 优先拦截排版布局数据报文：提取纯净排版数据并使用标准 Markdown ```json 代码框包裹呈现
-        // 门禁铁律：必须严格验证确实包含有效的 blocks 数组图元数据，严禁仅凭 apply_view_layout 字符串匹配误伤普通自然语言对话
-        val layoutArgsObj = if (rawPayload.contains("apply_view_layout") || (rawPayload.contains("assetFileName") && rawPayload.contains("viewName"))) {
+        // 门禁铁律：必须严格验证确实包含有效的 operations / blocks / elements 数组图元数据，严禁仅凭名称误伤普通自然语言对话
+        val layoutArgsObj = if (rawPayload.contains("edit_view_layout") || rawPayload.contains("apply_view_layout") || (rawPayload.contains("assetFileName") && (rawPayload.contains("viewName") || rawPayload.contains("operations")))) {
             extractLayoutToolArgs(rawPayload)
         } else {
             null
         }
 
-        if (layoutArgsObj != null && layoutArgsObj["blocks"]?.jsonArray?.isNotEmpty() == true) {
+        val hasValidLayoutData = layoutArgsObj != null && (
+            layoutArgsObj["operations"]?.jsonArray?.isNotEmpty() == true ||
+            layoutArgsObj["blocks"]?.jsonArray?.isNotEmpty() == true ||
+            layoutArgsObj["elements"]?.jsonArray?.isNotEmpty() == true
+        )
+
+        if (hasValidLayoutData && layoutArgsObj != null) {
             val viewNameMatch = layoutArgsObj["viewName"]?.jsonPrimitive?.contentOrNull
+                ?: layoutArgsObj["operations"]?.jsonArray?.firstOrNull()?.jsonObject?.get("viewName")?.jsonPrimitive?.contentOrNull
                 ?: Regex("""(?:\\?"|")viewName(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
                 ?: "Main"
             val descMatch = layoutArgsObj["description"]?.jsonPrimitive?.contentOrNull
+                ?: layoutArgsObj["operations"]?.jsonArray?.firstOrNull()?.jsonObject?.get("description")?.jsonPrimitive?.contentOrNull
                 ?: Regex("""(?:\\?"|")description(?:\\?"|")\s*:\s*(?:\\?"|")([^"\\]+)""").find(rawPayload)?.groupValues?.get(1)
                 ?: "已完成界面结构规划与图元排版。"
 
@@ -290,20 +298,20 @@ object ChatPayloadViewProjector {
     }
 
     /**
-     * 从原始报文中反序列化提取 apply_view_layout 工具调用的原生 arguments 参数对象 (保持 100% 真实入参，杜绝硬编码篡改)
+     * 从原始报文中反序列化提取 edit_view_layout / apply_view_layout 工具调用的原生 arguments 参数对象 (保持 100% 真实入参，杜绝硬编码篡改)
      */
     fun extractLayoutToolArgs(rawPayload: String): JsonObject? {
-        if (!rawPayload.contains("apply_view_layout") && !rawPayload.contains("blocks")) {
+        if (!rawPayload.contains("edit_view_layout") && !rawPayload.contains("apply_view_layout") && !rawPayload.contains("operations") && !rawPayload.contains("blocks")) {
             return null
         }
 
         // 0. 优先使用统一工具分发器精准组装的官方 Interactions 流式/非流式入参
         try {
-            val fc = AiToolExecutionDispatcher.extractFunctionCallRecords(rawPayload, "")
-                .firstOrNull { it.name == "apply_view_layout" }
+            val fcs = AiToolExecutionDispatcher.extractFunctionCallRecords(rawPayload, "")
+            val fc = fcs.firstOrNull { it.name == "edit_view_layout" || it.name == "apply_view_layout" }
             if (fc != null && fc.argsJson.isNotBlank()) {
                 val parsed = org.gemini.ui.forge.utils.looseJson.parseToJsonElement(fc.argsJson)
-                if (parsed is JsonObject && parsed.containsKey("blocks")) {
+                if (parsed is JsonObject && (parsed.containsKey("operations") || parsed.containsKey("blocks") || parsed.containsKey("elements"))) {
                     return parsed
                 }
             }
@@ -321,12 +329,12 @@ object ChatPayloadViewProjector {
             val codeBlockRegex = Regex("```(?:json)?\\s*([\\s\\S]*?)```", RegexOption.IGNORE_CASE)
             for (match in codeBlockRegex.findAll(rawPayload)) {
                 val snippet = match.groupValues[1].trim()
-                if (snippet.startsWith("{") && snippet.contains("blocks")) {
+                if (snippet.startsWith("{") && (snippet.contains("operations") || snippet.contains("blocks") || snippet.contains("elements"))) {
                     val parsed = org.gemini.ui.forge.utils.looseJson.parseToJsonElement(snippet)
                     if (parsed is JsonObject) {
-                        if (parsed.containsKey("blocks")) return parsed
+                        if (parsed.containsKey("operations") || parsed.containsKey("blocks") || parsed.containsKey("elements")) return parsed
                         val inner = parsed["arguments"]?.jsonObject ?: parsed["args"]?.jsonObject
-                        if (inner != null && inner.containsKey("blocks")) return inner
+                        if (inner != null && (inner.containsKey("operations") || inner.containsKey("blocks") || inner.containsKey("elements"))) return inner
                     }
                 }
             }
@@ -342,7 +350,7 @@ object ChatPayloadViewProjector {
                     .replace("\\\\", "\\")
                     .replace("\\n", "\n")
                 val parsed = org.gemini.ui.forge.utils.looseJson.parseToJsonElement(unescaped)
-                if (parsed is JsonObject && parsed.containsKey("blocks")) {
+                if (parsed is JsonObject && (parsed.containsKey("operations") || parsed.containsKey("blocks") || parsed.containsKey("elements"))) {
                     return parsed
                 }
             }
@@ -354,7 +362,8 @@ object ChatPayloadViewProjector {
     private fun findLayoutArgsRecursive(element: JsonElement): JsonObject? {
         if (element is JsonObject) {
             // 直接检查是否是 arguments 载体本身
-            if (element.containsKey("blocks") && (element.containsKey("viewName") || element.containsKey("width"))) {
+            if ((element.containsKey("operations") || element.containsKey("blocks") || element.containsKey("elements")) &&
+                (element.containsKey("viewName") || element.containsKey("width") || element.containsKey("mode"))) {
                 return element
             }
             // 检查 call / tool_call / function_call
@@ -364,14 +373,14 @@ object ChatPayloadViewProjector {
                 ?: element["functionCall"]?.jsonObject
             if (callObj != null) {
                 val name = callObj["name"]?.jsonPrimitive?.contentOrNull
-                if (name == "apply_view_layout" || name.isNullOrBlank()) {
+                if (name == "edit_view_layout" || name == "apply_view_layout" || name.isNullOrBlank()) {
                     val args = callObj["arguments"] ?: callObj["args"] ?: callObj["parameters"]
-                    if (args is JsonObject && args.containsKey("blocks")) {
+                    if (args is JsonObject && (args.containsKey("operations") || args.containsKey("blocks") || args.containsKey("elements"))) {
                         return args
                     } else if (args is JsonPrimitive && args.isString) {
                         try {
                             val parsed = org.gemini.ui.forge.utils.looseJson.parseToJsonElement(args.content)
-                            if (parsed is JsonObject && parsed.containsKey("blocks")) return parsed
+                            if (parsed is JsonObject && (parsed.containsKey("operations") || parsed.containsKey("blocks") || parsed.containsKey("elements"))) return parsed
                         } catch (_: Exception) {}
                     }
                 }

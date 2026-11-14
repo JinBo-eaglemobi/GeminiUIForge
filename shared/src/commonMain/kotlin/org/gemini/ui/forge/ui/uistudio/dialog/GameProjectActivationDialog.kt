@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.extend.rememberClipboardAction
+import org.gemini.ui.forge.model.gameproject.GameProjectInspection
+import org.gemini.ui.forge.model.gameproject.GameProjectKind
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.AppIconButton
 import org.gemini.ui.forge.ui.component.AppIconButtonTier
@@ -58,7 +60,7 @@ fun GameProjectActivationDialog(
             val parent = existingPath.substringBeforeLast('/', "")
             if (parent.isNotBlank()) parent else existingPath
         } else {
-            "D:/WorkSpace/LayaBox"
+            ""
         }
         mutableStateOf(defaultParent)
     }
@@ -88,6 +90,23 @@ fun GameProjectActivationDialog(
         }
     }
     val isPathValid = pathErrorMsg == null
+
+    // 智能探测当前路径下是否已有成熟工程或源码
+    val inspection = remember(finalProjectDirectory, isPathValid) {
+        if (isPathValid && finalProjectDirectory.isNotBlank()) {
+            viewModel.scaffoldBridge.inspectGameProject(finalProjectDirectory)
+        } else {
+            null
+        }
+    }
+
+    // 若检测到已有成熟工程的 package.json 中有工程名，且用户未修改过初始名称，智能同步填入
+    LaunchedEffect(inspection?.detectedName) {
+        val detected = inspection?.detectedName
+        if (!detected.isNullOrBlank() && inputProjectName == initialProjectName) {
+            inputProjectName = detected
+        }
+    }
 
     val isActivating = state.isGameActivating
     val canConfirm = isPathValid && inputProjectName.isNotBlank() && !isActivating
@@ -211,7 +230,7 @@ fun GameProjectActivationDialog(
                             value = inputParentPath,
                             onValueChange = { inputParentPath = it },
                             label = { Text(stringResource(Res.string.game_activation_field_project_path)) },
-                            placeholder = { Text("例如 D:/WorkSpace/LayaBox") },
+                            placeholder = { Text("请选择或输入项目保存父目录") },
                             singleLine = true,
                             isError = !isPathValid,
                             enabled = !isActivating,
@@ -282,6 +301,112 @@ fun GameProjectActivationDialog(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
+                            }
+                        }
+
+                        // 智能工程特征检测结果卡片展示
+                        if (inspection != null && !isConsoleFullscreen) {
+                            when (inspection.kind) {
+                                GameProjectKind.COMPLETE_PROJECT -> {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF1B3B2B),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.6f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(spacing.small),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(spacing.small)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.VerifiedUser,
+                                                contentDescription = null,
+                                                tint = Color(0xFF81C784),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = stringResource(Res.string.game_activation_kind_complete),
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = Color(0xFFE8F5E9)
+                                                )
+                                                Text(
+                                                    text = inspection.summaryText,
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 15.sp),
+                                                    color = Color(0xFFA5D6A7)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                GameProjectKind.PARTIAL_SOURCE_PROJECT -> {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF1B2E4A),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2196F3).copy(alpha = 0.6f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(spacing.small),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(spacing.small)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Inventory2,
+                                                contentDescription = null,
+                                                tint = Color(0xFF64B5F6),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = stringResource(Res.string.game_activation_kind_source),
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = Color(0xFFE3F2FD)
+                                                )
+                                                Text(
+                                                    text = inspection.summaryText,
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 15.sp),
+                                                    color = Color(0xFF90CAF9)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                GameProjectKind.EMPTY_OR_NEW -> {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(spacing.small),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(spacing.small)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.AutoAwesome,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = stringResource(Res.string.game_activation_kind_new),
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    text = inspection.summaryText,
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 15.sp),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                GameProjectKind.ALREADY_ACTIVATED -> {}
                             }
                         }
 
@@ -500,15 +625,34 @@ fun GameProjectActivationDialog(
             }
         },
         confirmButton = {
+            val isCompleteProject = inspection?.kind == GameProjectKind.COMPLETE_PROJECT
+            val isSourceProject = inspection?.kind == GameProjectKind.PARTIAL_SOURCE_PROJECT
+
             Button(
                 onClick = {
-                    viewModel.activateGameProject(
-                        repo = templateRepo,
-                        gameProjectName = inputProjectName.trim(),
-                        targetDir = finalProjectDirectory
-                    )
+                    if (isCompleteProject) {
+                        viewModel.bindExistingGameProject(
+                            repo = templateRepo,
+                            gameProjectName = inputProjectName.trim(),
+                            targetDir = finalProjectDirectory
+                        )
+                    } else {
+                        viewModel.activateGameProject(
+                            repo = templateRepo,
+                            gameProjectName = inputProjectName.trim(),
+                            targetDir = finalProjectDirectory
+                        )
+                    }
                 },
-                enabled = canConfirm
+                enabled = canConfirm,
+                colors = if (isCompleteProject) {
+                    ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF2E7D32),
+                        contentColor = Color.White
+                    )
+                } else {
+                    ButtonDefaults.buttonColors()
+                }
             ) {
                 if (isActivating) {
                     CircularProgressIndicator(
@@ -518,6 +662,14 @@ fun GameProjectActivationDialog(
                     )
                     Spacer(Modifier.width(spacing.small))
                     Text(stringResource(Res.string.game_activation_step_installing_deps))
+                } else if (isCompleteProject) {
+                    Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(spacing.extraSmall))
+                    Text(stringResource(Res.string.game_activation_btn_bind_existing))
+                } else if (isSourceProject) {
+                    Icon(Icons.Default.Build, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(spacing.extraSmall))
+                    Text(stringResource(Res.string.game_activation_btn_build_existing))
                 } else {
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(spacing.extraSmall))
@@ -527,8 +679,23 @@ fun GameProjectActivationDialog(
         },
         dismissButton = {
             if (!isActivating) {
-                OutlinedButton(onClick = { viewModel.dismissGameActivationDialog() }) {
-                    Text(stringResource(Res.string.game_activation_btn_cancel))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(spacing.small),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!currentProject?.gameProjectPath.isNullOrBlank()) {
+                        OutlinedButton(
+                            onClick = { viewModel.clearGameProjectPath(templateRepo) },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("清除配置")
+                        }
+                    }
+                    OutlinedButton(onClick = { viewModel.dismissGameActivationDialog() }) {
+                        Text(stringResource(Res.string.game_activation_btn_cancel))
+                    }
                 }
             }
         }

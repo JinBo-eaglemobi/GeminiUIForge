@@ -52,6 +52,10 @@ object McpToolRegistry {
             ManageAssetLibraryTool(),
             GetAssetsTool(),
 
+            // 视图排版与数据诊断共享工具
+            EditViewLayoutTool(),
+            DiagnoseViewDataTool(),
+
             // 图像生成与资产处理共享工具
             GenerateImageTool(),
             QueryImageJobTool(),

@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.service.tool.mcp.exclusive
+package org.gemini.ui.forge.service.tool.shared
 
 import org.gemini.ui.forge.service.tool.ToolAnnotations
 import org.gemini.ui.forge.service.tool.ToolContent
@@ -76,4 +76,3 @@ class NotifyUserTool : ToolDefinition {
         return ToolResult.success(responseJson.toString())
     }
 }
-

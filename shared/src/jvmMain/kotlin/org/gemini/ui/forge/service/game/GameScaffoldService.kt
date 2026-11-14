@@ -4,6 +4,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import org.gemini.ui.forge.model.gameproject.ForgeGameProjectConfig
+import org.gemini.ui.forge.model.gameproject.GameProjectInspection
+import org.gemini.ui.forge.model.gameproject.GameProjectKind
 import org.gemini.ui.forge.utils.AppLogger
 import org.gemini.ui.forge.utils.looseJson
 import org.jetbrains.skiko.hostOs
@@ -71,6 +73,132 @@ object GameScaffoldService {
     }
 
     /**
+     * 智能探测目标目录的游戏工程多维特征。
+     * 识别是否为已激活工程、完整成熟已有工程、半成品源码工程或空白目录。
+     */
+    fun inspectGameProject(gameRootDir: File): GameProjectInspection {
+        val pathStr = gameRootDir.absolutePath.replace("\\", "/")
+        if (!gameRootDir.exists() || !gameRootDir.isDirectory) {
+            return GameProjectInspection(
+                targetPath = pathStr,
+                kind = GameProjectKind.EMPTY_OR_NEW,
+                summaryText = "目标目录尚不存在或为空，将全新创建游戏脚手架工程。"
+            )
+        }
+
+        if (isGameProjectActivated(gameRootDir)) {
+            val cfg = readForgeGameConfig(gameRootDir)
+            return GameProjectInspection(
+                targetPath = pathStr,
+                kind = GameProjectKind.ALREADY_ACTIVATED,
+                hasPackageJson = File(gameRootDir, "package.json").exists(),
+                hasSourceDir = File(gameRootDir, "game/src").isDirectory || File(gameRootDir, "src").isDirectory,
+                hasBuildArtifacts = true,
+                hasNodeModules = File(gameRootDir, "node_modules").isDirectory,
+                detectedName = cfg?.gameProjectName,
+                summaryText = "当前工程已完成激活并生成完整运行产物，可直接运行预览！"
+            )
+        }
+
+        val pkgFile = File(gameRootDir, "package.json")
+        val hasPackageJson = pkgFile.exists() && pkgFile.isFile
+        var detectedName: String? = null
+        if (hasPackageJson) {
+            try {
+                val pkgContent = pkgFile.readText(Charsets.UTF_8)
+                val match = Regex("\"name\"\\s*:\\s*\"([^\"]+)\"").find(pkgContent)
+                detectedName = match?.groupValues?.get(1)
+            } catch (_: Exception) {
+            }
+        }
+
+        val hasSourceDir = File(gameRootDir, "game/src").isDirectory || File(gameRootDir, "src").isDirectory
+        val runDir = File(gameRootDir, "build")
+        val hasIndexHtml = File(runDir, "index.html").exists()
+        val hasEntryJs = File(runDir, "index.js").exists() || File(runDir, "main.min.js").exists() || File(runDir, "main.js").exists()
+        val hasBuildArtifacts = hasIndexHtml && hasEntryJs
+        val hasNodeModules = File(gameRootDir, "node_modules").isDirectory
+
+        val kind = if (hasPackageJson && hasBuildArtifacts && (hasSourceDir || hasNodeModules)) {
+            GameProjectKind.COMPLETE_PROJECT
+        } else if (hasPackageJson || hasSourceDir) {
+            GameProjectKind.PARTIAL_SOURCE_PROJECT
+        } else {
+            GameProjectKind.EMPTY_OR_NEW
+        }
+
+        val summary = when (kind) {
+            GameProjectKind.COMPLETE_PROJECT ->
+                "检测到完整成熟游戏工程（具备 package.json、源码与运行产物）。将保留所有既有代码与依赖，无需重复初始化，可直接秒级关联！"
+            GameProjectKind.PARTIAL_SOURCE_PROJECT ->
+                "检测到已有游戏源码工程。将保护现有代码与配置，仅按需安装依赖并生成运行产物。"
+            GameProjectKind.EMPTY_OR_NEW ->
+                "目标目录为空或全新工程，将创建全套游戏脚手架并执行初次构建。"
+            GameProjectKind.ALREADY_ACTIVATED ->
+                "当前工程已激活，可直接运行！"
+        }
+
+        return GameProjectInspection(
+            targetPath = pathStr,
+            kind = kind,
+            hasPackageJson = hasPackageJson,
+            hasSourceDir = hasSourceDir,
+            hasBuildArtifacts = hasBuildArtifacts,
+            hasNodeModules = hasNodeModules,
+            detectedName = detectedName,
+            summaryText = summary
+        )
+    }
+
+    /**
+     * 将目标成熟游戏工程直接无损关联接入（绝对保护现有代码与依赖，无需重复初始化）。
+     * 仅在根目录写入/同步 forge-game.json，毫秒级就绪。
+     */
+    suspend fun bindExistingGameProject(
+        gameRootDir: File,
+        projectName: String,
+        canvasWidth: Int,
+        canvasHeight: Int
+    ): Result<ForgeGameProjectConfig> = withContext(Dispatchers.IO) {
+        val pathError = validateGamePath(gameRootDir.absolutePath)
+        if (pathError != null) {
+            return@withContext Result.failure(IllegalArgumentException(pathError))
+        }
+
+        val runDir = "build"
+        val entryHtml = "index.html"
+        val entryJs = if (File(gameRootDir, "build/index.js").exists()) "index.js" else "main.min.js"
+        val sourceDir = if (File(gameRootDir, "game/src").exists()) "game/src" else "src"
+        val mainBundle = if (File(gameRootDir, "build/main.min.js").exists()) "build/main.min.js" else "build/index.js"
+
+        val finalConfig = ForgeGameProjectConfig(
+            forgeGameVersion = "1.0.0",
+            gameProjectName = projectName,
+            gameRootPath = gameRootDir.absolutePath.replace("\\", "/"),
+            runDir = runDir,
+            sourceDir = sourceDir,
+            entryHtml = entryHtml,
+            entryJs = entryJs,
+            mainBundle = mainBundle,
+            isActivated = true,
+            canvasWidth = canvasWidth,
+            canvasHeight = canvasHeight,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
+
+        try {
+            val configFile = File(gameRootDir, FORGE_GAME_CONFIG_FILE)
+            configFile.writeText(looseJson.encodeToString(finalConfig), Charsets.UTF_8)
+            AppLogger.i(TAG, "Successfully bound existing game project at ${gameRootDir.absolutePath}")
+            Result.success(finalConfig)
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Failed to bind existing game project at ${gameRootDir.absolutePath}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
      * 执行完整的脚手架初始化与构建流水线。
      * 流程：
      * 1. 环境自检与自愈 (Node.js & pnpm)
@@ -125,25 +253,31 @@ object GameScaffoldService {
         }
 
         // Step 4: 执行 pnpm install
-        onProgress(3, 6, "执行 pnpm install (安装 game-lib 依赖)...")
-        onLog("\n[步骤 3/6] 执行 pnpm install (安装 game-lib 依赖)...")
-        val pnpmInstallCmd = if (hostOs.isWindows) {
-            listOf("cmd", "/c", "pnpm", "install")
+        val nodeModulesDir = File(gameRootDir, "node_modules")
+        if (nodeModulesDir.isDirectory && nodeModulesDir.listFiles()?.isNotEmpty() == true) {
+            onProgress(3, 6, "检测到已存在 node_modules，跳过重复依赖安装...")
+            onLog("\n[步骤 3/6] ✅ 检测到已有 node_modules 目录，跳过重复依赖安装")
         } else {
-            listOf("pnpm", "install")
+            onProgress(3, 6, "执行 pnpm install (安装 game-lib 依赖)...")
+            onLog("\n[步骤 3/6] 执行 pnpm install (安装 game-lib 依赖)...")
+            val pnpmInstallCmd = if (hostOs.isWindows) {
+                listOf("cmd", "/c", "pnpm", "install")
+            } else {
+                listOf("pnpm", "install")
+            }
+            val (pnpmOk, pnpmMsg) = GameEnvironmentManager.runProcess(
+                workDir = gameRootDir,
+                command = pnpmInstallCmd,
+                timeoutMinutes = 15,
+                onLog = onLog
+            )
+            if (!pnpmOk) {
+                val msg = "pnpm install 执行失败"
+                onLog("❌ $msg: $pnpmMsg")
+                return@withContext Result.failure(IllegalStateException(msg))
+            }
+            onLog("✅ pnpm install 依赖安装完成")
         }
-        val (pnpmOk, pnpmMsg) = GameEnvironmentManager.runProcess(
-            workDir = gameRootDir,
-            command = pnpmInstallCmd,
-            timeoutMinutes = 15,
-            onLog = onLog
-        )
-        if (!pnpmOk) {
-            val msg = "pnpm install 执行失败"
-            onLog("❌ $msg: $pnpmMsg")
-            return@withContext Result.failure(IllegalStateException(msg))
-        }
-        onLog("✅ pnpm install 依赖安装完成")
 
         // Step 5: 执行 node copyFiles.js
         onProgress(4, 6, "执行 node copyFiles.js (分发核心库与资源)...")
@@ -255,7 +389,8 @@ object GameScaffoldService {
     }
 
     /**
-     * 写入全套脚手架文件与嵌入式模板（从资源目录动态读取与变量注入）
+     * 写入全套脚手架文件与嵌入式模板（从资源目录动态读取与变量注入）。
+     * 铁律：对目标目录下已存在的任何文件执行绝对保护，严禁覆写用户既有代码与配置！
      */
     private fun writeScaffoldFiles(
         gameRootDir: File,
@@ -268,54 +403,61 @@ object GameScaffoldService {
         val gameSrcUiDir = File(gameSrcDir, "ui").apply { mkdirs() }
         val buildDir = File(gameRootDir, "build").apply { mkdirs() }
 
+        fun safeWrite(file: File, tplName: String, transform: (String) -> String = { it }) {
+            if (file.exists()) return // 严禁覆写用户既有文件
+            val content = transform(loadTemplate(tplName))
+            file.writeText(content, Charsets.UTF_8)
+        }
+
+        fun safeCopy(relPath: String, targetFile: File) {
+            if (targetFile.exists()) return // 严禁覆写
+            copyTemplateBinary(relPath, targetFile)
+        }
+
         // 1. package.json
-        val packageJson = loadTemplate("package.json.tpl")
-            .replace("{{PROJECT_NAME}}", projectName)
-        File(gameRootDir, "package.json").writeText(packageJson, Charsets.UTF_8)
+        safeWrite(File(gameRootDir, "package.json"), "package.json.tpl") {
+            it.replace("{{PROJECT_NAME}}", projectName)
+        }
 
         // 2. tsconfig.json
-        val tsconfigJson = loadTemplate("tsconfig.json.tpl")
-        File(gameRootDir, "tsconfig.json").writeText(tsconfigJson, Charsets.UTF_8)
+        safeWrite(File(gameRootDir, "tsconfig.json"), "tsconfig.json.tpl")
 
         // 3. copyFiles.js
-        val copyFilesJs = loadTemplate("copyFiles.js.tpl")
-        File(gameRootDir, "copyFiles.js").writeText(copyFilesJs, Charsets.UTF_8)
+        safeWrite(File(gameRootDir, "copyFiles.js"), "copyFiles.js.tpl")
 
         // 4. game/build.js
-        val buildJs = loadTemplate("game/build.js.tpl")
-        File(gameDir, "build.js").writeText(buildJs, Charsets.UTF_8)
+        safeWrite(File(gameDir, "build.js"), "game/build.js.tpl")
 
         // 5. game/src/Main.ts
-        val mainTs = loadTemplate("game/src/Main.ts.tpl")
-            .replace("{{CANVAS_WIDTH}}", canvasWidth.toString())
-            .replace("{{CANVAS_HEIGHT}}", canvasHeight.toString())
-        File(gameSrcDir, "Main.ts").writeText(mainTs, Charsets.UTF_8)
+        safeWrite(File(gameSrcDir, "Main.ts"), "game/src/Main.ts.tpl") {
+            it.replace("{{CANVAS_WIDTH}}", canvasWidth.toString())
+                .replace("{{CANVAS_HEIGHT}}", canvasHeight.toString())
+        }
 
         // 6. game/src/ui/layoutConfig.ts
-        val layoutConfigTs = loadTemplate("game/src/ui/layoutConfig.ts.tpl")
-            .replace("{{CANVAS_WIDTH}}", canvasWidth.toString())
-            .replace("{{CANVAS_HEIGHT}}", canvasHeight.toString())
-        File(gameSrcUiDir, "layoutConfig.ts").writeText(layoutConfigTs, Charsets.UTF_8)
+        safeWrite(File(gameSrcUiDir, "layoutConfig.ts"), "game/src/ui/layoutConfig.ts.tpl") {
+            it.replace("{{CANVAS_WIDTH}}", canvasWidth.toString())
+                .replace("{{CANVAS_HEIGHT}}", canvasHeight.toString())
+        }
 
         // 7. game/libs/common.d.ts (类型定义)
-        copyTemplateBinary("game/libs/common.d.ts", File(gameDir, "libs/common.d.ts"))
+        safeCopy("game/libs/common.d.ts", File(gameDir, "libs/common.d.ts"))
 
         // 8. build/index.html
-        val indexHtml = loadTemplate("build/index.html.tpl")
-            .replace("{{PROJECT_NAME}}", projectName)
-        File(buildDir, "index.html").writeText(indexHtml, Charsets.UTF_8)
+        safeWrite(File(buildDir, "index.html"), "build/index.html.tpl") {
+            it.replace("{{PROJECT_NAME}}", projectName)
+        }
 
         // 9. build/config.js
-        val configJs = loadTemplate("build/config.js.tpl")
-            .replace("{{CANVAS_WIDTH}}", canvasWidth.toString())
-            .replace("{{CANVAS_HEIGHT}}", canvasHeight.toString())
-        File(buildDir, "config.js").writeText(configJs, Charsets.UTF_8)
+        safeWrite(File(buildDir, "config.js"), "build/config.js.tpl") {
+            it.replace("{{CANVAS_WIDTH}}", canvasWidth.toString())
+                .replace("{{CANVAS_HEIGHT}}", canvasHeight.toString())
+        }
 
         // 10. build/index.js (动态脚本批加载流水线)
-        val indexJs = loadTemplate("build/index.js.tpl")
-        File(buildDir, "index.js").writeText(indexJs, Charsets.UTF_8)
+        safeWrite(File(buildDir, "index.js"), "build/index.js.tpl")
 
         // 11. build/common.min.js (通用业务基础库)
-        copyTemplateBinary("build/common.min.js", File(buildDir, "common.min.js"))
+        safeCopy("build/common.min.js", File(buildDir, "common.min.js"))
     }
 }

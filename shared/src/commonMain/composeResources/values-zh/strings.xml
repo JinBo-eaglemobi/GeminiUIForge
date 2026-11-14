@@ -774,6 +774,11 @@
     <string name="game_activation_console_copy_success">已复制全部终端日志到剪贴板</string>
     <string name="game_activation_console_fullscreen">全屏查看控制台</string>
     <string name="game_activation_console_exit_fullscreen">退出全屏</string>
+    <string name="game_activation_btn_bind_existing">直接关联接入 (无需初始化)</string>
+    <string name="game_activation_btn_build_existing">补齐构建并激活</string>
+    <string name="game_activation_kind_complete">⚡ 检测到完整成熟游戏工程</string>
+    <string name="game_activation_kind_source">📦 检测到已有游戏源码</string>
+    <string name="game_activation_kind_new">✨ 全新游戏脚手架工程</string>
 
     <!-- AI Chat Image Save & Mount to View -->
     <string name="chat_image_ready_hint">图片已生成 (待保存)</string>

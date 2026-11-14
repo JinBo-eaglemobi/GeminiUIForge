@@ -268,10 +268,15 @@ class AiToolExecutionDispatcher {
             }
 
             AppLogger.i(TAG, "🚀 开始执行 AI 工具: $toolName, 参数: $effectiveArguments")
-            withTimeout(tool.timeoutMs) {
+            if (tool.timeoutMs <= 0L || tool.timeoutMs == Long.MAX_VALUE) {
                 tool.execute(effectiveArguments, onProgress)
+            } else {
+                withTimeout(tool.timeoutMs) {
+                    tool.execute(effectiveArguments, onProgress)
+                }
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             AppLogger.e(TAG, "工具 $toolName 执行异常", e)
             ToolResult.error("工具执行发生异常: ${e.message}")
         }

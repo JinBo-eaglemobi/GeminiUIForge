@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.service.game
 
 import org.gemini.ui.forge.model.gameproject.ForgeGameProjectConfig
+import org.gemini.ui.forge.model.gameproject.GameProjectInspection
 import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
 import java.io.File
@@ -19,6 +20,22 @@ class JvmGameScaffoldBridge : GameScaffoldBridge {
 
     override fun isGameProjectActivated(gameRootDirPath: String): Boolean =
         GameScaffoldService.isGameProjectActivated(File(gameRootDirPath))
+
+    override fun inspectGameProject(gameRootDirPath: String): GameProjectInspection =
+        GameScaffoldService.inspectGameProject(File(gameRootDirPath))
+
+    override suspend fun bindExistingGameProject(
+        gameRootDirPath: String,
+        projectName: String,
+        canvasWidth: Int,
+        canvasHeight: Int
+    ): Result<ForgeGameProjectConfig> =
+        GameScaffoldService.bindExistingGameProject(
+            gameRootDir = File(gameRootDirPath),
+            projectName = projectName,
+            canvasWidth = canvasWidth,
+            canvasHeight = canvasHeight
+        )
 
     override suspend fun activateGameProject(
         gameRootDirPath: String,

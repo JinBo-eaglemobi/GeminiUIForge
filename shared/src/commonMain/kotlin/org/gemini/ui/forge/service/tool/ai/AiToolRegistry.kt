@@ -89,7 +89,19 @@ object AiToolRegistry {
             SavePromptTool(),
             ResetPromptTool(),
             ListMattingPresetsTool(),
-            InvokeGeminiTextTool()
+            InvokeGeminiTextTool(),
+
+            // 交互问询与桌面通知共享工具
+            AskUserQuestionTool(),
+            AskUserChoiceTool(),
+            AskUserConfirmationTool(),
+            NotifyUserTool(),
+
+            // 万能视图排版共享工具
+            EditViewLayoutTool(),
+
+            // 视图数据异常诊断工具
+            DiagnoseViewDataTool()
         ).filter { ToolExposurePolicy.isExposedToAi(it.name) }
 
         val builtinNames = builtinAiTools.map { it.name }.toSet()

@@ -26,7 +26,7 @@ dependencyResolutionManagement {
             }
             url = uri("https://packages.jetbrains.team/maven/p/cmp/dev")
         }
-        maven { url = uri("https://maven.aliyun.com/repository/central") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
         google {
             mavenContent {
                 includeGroupAndSubgroups("androidx")

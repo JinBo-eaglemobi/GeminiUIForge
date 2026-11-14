@@ -83,16 +83,27 @@ data class VisualChatMessage(
     val isError: Boolean = false,
     /** 错误详细描述信息 (用于错误卡片展示) */
     val errorMessage: String? = null,
+    /** 是否属于用户主动中止/取消状态 (取消状态不展示错误红框，而在数据下方居中呈现 -- 取消 --) */
+    val isCancelled: Boolean = false,
     /** 本轮提问所附带引用的 @ 工程上下文实体列表 (用于在用户气泡中直观呈现) */
     val attachedMentions: List<ChatMentionTag> = emptyList(),
     /** 本轮 AI 执行的工具调用清单与结果记录 */
     val toolCalls: List<ChatToolCallRecord> = emptyList()
 ) {
+    /** 自愈清洗后的有效非空变体列表 (自动剔除无意义空版本，防止翻页出现空白重复) */
+    val effectiveVariants: List<String>
+        get() {
+            val nonBlank = variants.filter { it.isNotBlank() }
+            return if (nonBlank.isNotEmpty()) nonBlank else if (prompt.isNotBlank()) listOf(prompt) else emptyList()
+        }
+
     /** 获取当前生效的有效展示文本 (优先取激活分支变体，并通过视图投影器提取人类可读内容，绝不倾倒纯 JSON) */
     val effectiveText: String
         get() {
-            val raw = if (variants.isNotEmpty() && activeVariantIndex in variants.indices) {
-                variants[activeVariantIndex]
+            val validVariants = effectiveVariants
+            val raw = if (validVariants.isNotEmpty()) {
+                val clampedIdx = activeVariantIndex.coerceIn(0, validVariants.lastIndex)
+                validVariants[clampedIdx]
             } else {
                 prompt.ifBlank { textZh.ifBlank { textEn } }
             }
@@ -103,8 +114,10 @@ data class VisualChatMessage(
     val effectiveThought: String?
         get() {
             if (!thought.isNullOrBlank()) return thought
-            val raw = if (variants.isNotEmpty() && activeVariantIndex in variants.indices) {
-                variants[activeVariantIndex]
+            val validVariants = effectiveVariants
+            val raw = if (validVariants.isNotEmpty()) {
+                val clampedIdx = activeVariantIndex.coerceIn(0, validVariants.lastIndex)
+                validVariants[clampedIdx]
             } else {
                 prompt.ifBlank { textZh.ifBlank { textEn } }
             }

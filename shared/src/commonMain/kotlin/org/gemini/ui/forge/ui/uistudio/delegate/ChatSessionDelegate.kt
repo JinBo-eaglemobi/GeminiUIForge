@@ -271,6 +271,12 @@ class ChatSessionDelegate(
         val proj = state.project ?: return
         val sanitized = proj.projectId.trim().replace(" ", "_")
         val path = "templates/$sanitized/sessions/$sessionId.json"
+        val targetSession = state.chatSessions.firstOrNull { it.id == sessionId }
+        val interactionIds = (targetSession?.messages?.mapNotNull { it.interactionId } ?: emptyList())
+            .plus(listOfNotNull(targetSession?.latestInteractionId))
+            .filter { it.isNotBlank() }
+            .distinct()
+
         scope.launch(Dispatchers.Default) {
             try {
                 TemplateFile(path).delete()
@@ -278,6 +284,14 @@ class ChatSessionDelegate(
                 trafficStore.deleteAll(trafficScopeId, sessionId)
             } catch (e: Exception) {
                 AppLogger.w("UIStudioViewModel", "删除会话文件失败: $sessionId", e)
+            }
+            // 同步异步注销 Google 云端 Interactions 实体
+            interactionIds.forEach { id ->
+                try {
+                    chatEngine.deleteInteraction(id)
+                } catch (e: Exception) {
+                    AppLogger.w("UIStudioViewModel", "注销云端交互失败: $id", e)
+                }
             }
         }
 
@@ -305,7 +319,26 @@ class ChatSessionDelegate(
 
     fun clearCurrentChatSessionMessages() {
         val activeSession = state.currentChatSession ?: return
-        val updated = activeSession.copy(messages = emptyList(), updatedAt = getCurrentTimeMillis())
+        val interactionIds = activeSession.messages.mapNotNull { it.interactionId }
+            .plus(listOfNotNull(activeSession.latestInteractionId))
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        scope.launch(Dispatchers.Default) {
+            interactionIds.forEach { id ->
+                try {
+                    chatEngine.deleteInteraction(id)
+                } catch (e: Exception) {
+                    AppLogger.w("UIStudioViewModel", "注销云端交互失败: $id", e)
+                }
+            }
+        }
+
+        val updated = activeSession.copy(
+            messages = emptyList(),
+            latestInteractionId = null,
+            updatedAt = getCurrentTimeMillis()
+        )
         val updatedSessions = state.chatSessions.map { if (it.id == updated.id) updated else it }
         state = state.copy(chatSessions = updatedSessions)
         saveSession(updated)

@@ -1,7 +1,11 @@
 package org.gemini.ui.forge.service.ai
 
+import io.ktor.client.request.delete
+import io.ktor.client.request.headers
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
+import org.gemini.ui.forge.data.remote.NetworkClient
 import org.gemini.ui.forge.manager.CloudAssetManager
 import org.gemini.ui.forge.manager.ConfigManager
 import org.gemini.ui.forge.model.app.ApiFlavor
@@ -58,6 +62,48 @@ class GeminiChatEngine(
     suspend fun resolveEffectiveMaxRetryCount(): Int {
         val raw = configManager.loadKey("AI_MAX_RETRY_COUNT")
         return raw?.toIntOrNull()?.coerceAtLeast(0) ?: 10
+    }
+
+    /**
+     * 向 Google 官方 Interactions API 发送物理注销请求 (DELETE /v1beta/interactions/{id})
+     * 用于单轮撤销或会话删除时同步销毁云端状态与上下文分支。
+     *
+     * @param interactionId 待销毁的交互实体 ID
+     * @param explicitKey 可选显式 API Key
+     * @param explicitBaseUrl 可选 Base URL
+     * @return 是否成功注销（远端返回 200/204/空实体或 404 已不存在均视为注销成功）
+     */
+    suspend fun deleteInteraction(
+        interactionId: String,
+        explicitKey: String? = null,
+        explicitBaseUrl: String? = null
+    ): Boolean {
+        if (interactionId.isBlank()) return true
+        val apiKey = resolveEffectiveApiKey(explicitKey)
+        if (apiKey.isBlank()) return false
+        val baseUrl = resolveEffectiveBaseUrl(explicitBaseUrl)
+        val normalizedId = if (interactionId.startsWith("interactions/")) {
+            interactionId.removePrefix("interactions/")
+        } else {
+            interactionId
+        }
+        val url = "$baseUrl/v1beta/interactions/$normalizedId?key=$apiKey"
+        return try {
+            val response = NetworkClient.shared.delete(url) {
+                headers.append("x-goog-api-key", apiKey)
+            }
+            // 200..299 成功，404 说明远端早已淘汰或已被删除，均视为清理完成
+            val isSuccess = response.status.isSuccess() || response.status.value == 404
+            if (isSuccess) {
+                AppLogger.d(TAG, "🗑️ 云端交互实体注销成功: $normalizedId (Status: ${response.status})")
+            } else {
+                AppLogger.w(TAG, "⚠️ 云端交互实体注销返回非预期状态: $normalizedId -> ${response.status}")
+            }
+            isSuccess
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "⚠️ 调用 deleteInteraction 异常: $normalizedId -> ${e.message}")
+            false
+        }
     }
 
     /**

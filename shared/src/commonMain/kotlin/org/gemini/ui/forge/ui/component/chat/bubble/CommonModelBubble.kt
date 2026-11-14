@@ -71,7 +71,7 @@ fun CommonModelBubble(
 
     val modelText = message.effectiveText
     val effectiveDisplayText = if (modelText.isNotBlank()) modelText else if (isGenerating) streamingText else ""
-    val variants = message.variants
+    val variants = message.effectiveVariants
     val hasVariants = variants.size > 1
     val currentVariantIdx = message.activeVariantIndex.coerceIn(0, (variants.size - 1).coerceAtLeast(0))
 
@@ -168,9 +168,10 @@ fun CommonModelBubble(
                         // 2. 模型核心正文 或 专属错误卡片
                         // 核心防误判铁律：
                         // ① 严禁在消息处于初始占位或流式推演未完成阶段 (isGenerating == true) 误报为服务响应异常；
-                        // ② 生成结束后，只要被明确标记为异常 (message.isError || errorMessage != null)，即使此前执行过部分工具，
-                        //    也必须完整呈现 ChatErrorActionCard，杜绝异常被工具记录静默吞没；
-                        val isCurrentVariantFailed = !isGenerating && (
+                        // ② 生成结束后，只要被明确标记为异常且非用户主动取消 (message.isError || errorMessage != null)，即使此前执行过部分工具，
+                        //    也必须完整呈现 ChatErrorActionCard，杜绝异常被工具记录静默吞没；用户主动中止则仅呈现取消提示，绝不弹出错误红框；
+                        val isCancelled = message.isCancelled || effectiveDisplayText.contains("用户已主动中止本次生成")
+                        val isCurrentVariantFailed = !isGenerating && !isCancelled && (
                             message.isError ||
                             (!message.errorMessage.isNullOrBlank()) ||
                             modelText.startsWith("⚠️")
@@ -178,7 +179,7 @@ fun CommonModelBubble(
                         if (isCurrentVariantFailed) {
                             val errDetail = message.errorMessage?.ifBlank { null }
                                 ?: modelText.ifBlank { null }
-                                ?: "未捕获到服务正文（可点击顶部工具栏查看网络通信档案核验原始响应）"
+                                ?: "未捕获到服务正文（可点击顶部工具栏核验原始响应）"
                             val classified = remember(errDetail) { ChatErrorClassifier.classify(errDetail) }
                             ChatErrorActionCard(
                                 classifiedError = classified,
@@ -235,7 +236,23 @@ fun CommonModelBubble(
                             }
                         }
 
-                        // 3. 模型生成的图片兜底展示（仅当未被工具调用卡片就地内联呈现时展示，杜绝重复渲染）
+                        // 3. 用户主动中止/取消的专属视觉标记 (在数据下方居中呈现，低饱和度克制优雅，杜绝刺眼红框)
+                        if (isCancelled) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = spacing.small),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "-- 取消 --",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                )
+                            }
+                        }
+
+                        // 4. 模型生成的图片兜底展示（仅当未被工具调用卡片就地内联呈现时展示，杜绝重复渲染）
                         val hasInlinedToolImage = message.toolCalls.any { !it.imageUri.isNullOrBlank() && it.imageUri == message.generatedImageUri }
                         if (!hasInlinedToolImage) {
                             message.generatedImageUri?.takeIf { it.isNotBlank() }?.let { imgUri ->

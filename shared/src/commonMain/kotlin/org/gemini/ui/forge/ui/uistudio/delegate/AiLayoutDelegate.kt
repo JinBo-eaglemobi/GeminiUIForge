@@ -76,9 +76,14 @@ class AiLayoutDelegate(
     }
 
     /**
-     * 从给定的消息或文本中重新提取排版方案并弹出应用决策弹窗（用户主动点击气泡按钮时触发）
+     * 从给定的消息或文本中重新提取排版方案并执行应用或弹出决策弹窗（用户主动点击气泡按钮时触发）
      */
     fun reapplyLayoutFromText(rawText: String) {
+        val editArgs = extractEditViewLayoutArgs(rawText, rawText)
+        if (editArgs != null) {
+            executeEditViewLayout(editArgs)
+            return
+        }
         checkAndExecuteLayoutTool(rawText, rawText, autoPromptDialog = true)
     }
 
@@ -211,94 +216,132 @@ class AiLayoutDelegate(
     }
 
     /**
-     * 执行大模型派发的局部图元补丁 (patch_view_elements)。
-     * 具备 All-or-Nothing 事务性、单页面独立原子保存，并自动联动所有引用该页面的图元实例。
+     * 执行大模型派发的万能视图排版与局部微调流水线 (edit_view_layout)。
+     * 具备多操作组合事务性、整页/容器局部/节点微调统一调度、单页面独立原子保存，并自动联动所有引用该页面的图元实例。
      */
-    fun executePatchViewElements(args: JsonObject): UiStudioLayoutService.PatchElementsResult {
-        val proj = state.project ?: return UiStudioLayoutService.PatchElementsResult(false, errorMessage = "当前未加载工程项目")
-        val viewName = args["viewName"]?.jsonPrimitive?.contentOrNull
-        val targetPage = if (!viewName.isNullOrBlank()) {
-            proj.studioPages.find { it.nameStr.equals(viewName, ignoreCase = true) || it.id == viewName }
-                ?: return UiStudioLayoutService.PatchElementsResult(false, errorMessage = "未找到目标视图页面: $viewName")
-        } else {
-            state.currentView ?: proj.studioPages.firstOrNull()
-                ?: return UiStudioLayoutService.PatchElementsResult(false, errorMessage = "当前工作区无可用视图页面")
-        }
+    fun executeEditViewLayout(args: JsonObject): UiStudioLayoutService.EditLayoutResult {
+        val proj = state.project ?: return UiStudioLayoutService.EditLayoutResult(false, errorMessage = "当前未加载工程项目")
+        val currentView = state.currentView ?: proj.studioPages.firstOrNull()
+            ?: return UiStudioLayoutService.EditLayoutResult(false, errorMessage = "当前工作区无可用视图页面")
 
-        val patchResult = UiStudioLayoutService.patchViewElements(
-            targetPage = targetPage,
+        val editResult = UiStudioLayoutService.editViewLayout(
+            projectId = proj.projectId,
             assetLibrary = state.assetLibrary,
             args = args,
-            availablePages = proj.studioPages
+            availablePages = proj.studioPages,
+            currentView = currentView
         )
-        if (!patchResult.isSuccess || patchResult.updatedPage == null) {
-            val errorMsg = patchResult.errorMessage ?: "AI 补丁数据格式审核失败"
-            AppLogger.w(TAG, "执行 executePatchViewElements 失败: $errorMsg")
+
+        if (!editResult.isSuccess) {
+            val errorMsg = editResult.errorMessage ?: "AI 排版数据执行失败"
+            AppLogger.w(TAG, "执行 executeEditViewLayout 失败: $errorMsg")
             scope.launch(Dispatchers.Main) {
                 Toast.show(errorMsg, ToastType.ERROR)
             }
-            return patchResult
+            return editResult
         }
 
-        val updatedPage = patchResult.updatedPage
+        val updatedPages = editResult.updatedPages
         val repo = TemplateRepository(storage)
 
-        // 1. 更新 studioPages：合并当前更新页面与所有被自动路由修改的关联子页面
-        val routedMap = patchResult.routedPages.associateBy { it.id }
-        var updatedPages = proj.studioPages.map { p ->
-            when {
-                p.id == updatedPage.id -> updatedPage
-                routedMap.containsKey(p.id) -> routedMap[p.id]!!
-                else -> p
-            }
-        }
-
-        // 2. 跨页面多重引用镜像同步：将更新后的 blocks 递归同步到所有引用该平级页面的图元内部
-        val pagesToSync = listOf(updatedPage) + patchResult.routedPages
-        for (syncedPage in pagesToSync) {
-            updatedPages = updatedPages.map { p ->
-                if (p.id != syncedPage.id) {
-                    val syncedBlocks = syncReferencedChildren(p.blocks, syncedPage.id, syncedPage.blocks)
-                    if (syncedBlocks != p.blocks) p.copy(blocks = syncedBlocks) else p
-                } else p
-            }
-        }
+        // 记录撤销快照
+        val oldBlocks = currentView.blocks
+        val targetActiveId = editResult.activeViewId ?: state.currentViewId
+        val activePage = updatedPages.find { it.id == targetActiveId } ?: currentView
+        val diffResult = LayoutDiffCalculator.calculateDiff(oldBlocks, activePage.blocks)
+        val undoSnapshot = LayoutUndoSnapshot(
+            viewId = activePage.id,
+            viewName = activePage.nameStr,
+            isReplaced = editResult.isPageReplacedOrCreated,
+            oldBlocks = oldBlocks,
+            newBlocks = activePage.blocks,
+            diff = diffResult
+        )
 
         val updatedProj = proj.copy(studioPages = updatedPages)
-        state = state.copy(project = updatedProj, isDirty = true)
+        state = state.copy(
+            project = updatedProj,
+            currentViewId = targetActiveId,
+            openViewIds = (state.openViewIds + listOfNotNull(targetActiveId)).distinct(),
+            lastLayoutUndoSnapshot = undoSnapshot,
+            isDirty = true,
+            isFitToViewport = editResult.isPageReplacedOrCreated,
+            leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
+        )
 
-        // 3. 独立单页面原子刷盘：保存当前修改页面以及所有被路由修改的关联子页面
+        // 独立单页面原子刷盘：保存所有被影响的页面
         scope.launch {
-            repo.saveStudioPage(proj.projectId, updatedPage)
-            for (routed in patchResult.routedPages) {
-                repo.saveStudioPage(proj.projectId, routed)
+            for (viewId in editResult.affectedViewIds) {
+                val pageToSave = updatedPages.find { it.id == viewId }
+                if (pageToSave != null) {
+                    repo.saveStudioPage(proj.projectId, pageToSave)
+                }
             }
         }
 
         scope.launch(Dispatchers.Main) {
-            Toast.show(patchResult.summary, ToastType.SUCCESS)
+            Toast.show(editResult.summary, ToastType.SUCCESS)
         }
 
-        return patchResult
+        return editResult
     }
 
-    private fun syncReferencedChildren(
-        blocks: List<UIStudioBlock>,
-        targetPageId: String,
-        syncedChildren: List<UIStudioBlock>
-    ): List<UIStudioBlock> {
-        return blocks.map { block ->
-            val updatedBlock = if (block.targetPageId == targetPageId) {
-                block.copy(children = syncedChildren)
-            } else {
-                block
+    /**
+     * 从返回报文或正文代码块中鲁棒提取 edit_view_layout 参数
+     */
+    fun extractEditViewLayoutArgs(rawJson: String, responseText: String): JsonObject? {
+        // 通道 1: 官方 Function Call 协议检查
+        try {
+            if (rawJson.contains("edit_view_layout")) {
+                val element = jsonHelper.parseToJsonElement(rawJson)
+                val fcObj = findFunctionCallRecursive(element, "edit_view_layout")
+                if (fcObj != null) {
+                    val args = fcObj["args"]?.jsonObject
+                    if (args != null && (args.containsKey("operations") || args.containsKey("elements") || args.containsKey("mode"))) {
+                        return args
+                    }
+                }
             }
-            if (updatedBlock.children.isNotEmpty() && updatedBlock.targetPageId != targetPageId) {
-                updatedBlock.copy(children = syncReferencedChildren(updatedBlock.children, targetPageId, syncedChildren))
-            } else {
-                updatedBlock
+        } catch (_: Exception) {}
+
+        // 通道 2: 文本 Markdown 代码块中嵌入的 JSON 参数检查
+        try {
+            val codeBlockRegex = Regex("```(?:json)?\\s*([\\s\\S]*?)```", RegexOption.IGNORE_CASE)
+            val matches = codeBlockRegex.findAll(responseText)
+            for (match in matches) {
+                val jsonSnippet = match.groupValues[1].trim()
+                if (jsonSnippet.startsWith("{") && (jsonSnippet.contains("operations") || jsonSnippet.contains("edit_view_layout"))) {
+                    val parsed = jsonHelper.parseToJsonElement(jsonSnippet).jsonObject
+                    if (parsed.containsKey("operations") || (parsed.containsKey("mode") && parsed.containsKey("elements"))) {
+                        return parsed
+                    }
+                    if (parsed.containsKey("args")) {
+                        val inner = parsed["args"]?.jsonObject
+                        if (inner != null && (inner.containsKey("operations") || inner.containsKey("elements"))) return inner
+                    }
+                }
             }
-        }.bindParents()
+        } catch (_: Exception) {}
+
+        // 通道 3: 提取裸输出中包含的 arguments 结构
+        try {
+            val targetKey = "edit_view_layout"
+            val idx = responseText.indexOf(targetKey)
+            if (idx >= 0) {
+                val braceStart = responseText.indexOf('{', idx)
+                if (braceStart >= 0) {
+                    val snippet = extractBalancedJsonObject(responseText, braceStart)
+                    if (snippet != null) {
+                        val parsed = jsonHelper.parseToJsonElement(snippet).jsonObject
+                        if (parsed.containsKey("operations") || parsed.containsKey("elements")) return parsed
+                        val args = parsed["arguments"]?.jsonObject ?: parsed["args"]?.jsonObject
+                        if (args != null && (args.containsKey("operations") || args.containsKey("elements"))) return args
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        return null
     }
 
     /**

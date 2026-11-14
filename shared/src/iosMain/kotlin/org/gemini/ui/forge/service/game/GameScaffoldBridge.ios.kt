@@ -11,6 +11,20 @@ private object IosGameScaffoldBridge : GameScaffoldBridge {
 
     override fun isGameProjectActivated(gameRootDirPath: String): Boolean = false
 
+    override fun inspectGameProject(gameRootDirPath: String): org.gemini.ui.forge.model.gameproject.GameProjectInspection =
+        org.gemini.ui.forge.model.gameproject.GameProjectInspection(
+            targetPath = gameRootDirPath,
+            kind = org.gemini.ui.forge.model.gameproject.GameProjectKind.EMPTY_OR_NEW
+        )
+
+    override suspend fun bindExistingGameProject(
+        gameRootDirPath: String,
+        projectName: String,
+        canvasWidth: Int,
+        canvasHeight: Int
+    ): Result<ForgeGameProjectConfig> =
+        Result.failure(UnsupportedOperationException("iOS does not support game scaffold binding"))
+
     override suspend fun activateGameProject(
         gameRootDirPath: String,
         projectName: String,

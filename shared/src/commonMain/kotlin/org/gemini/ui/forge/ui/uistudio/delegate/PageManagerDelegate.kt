@@ -89,99 +89,17 @@ class PageManagerDelegate(
     }
 
     /**
-     * 自动扫描并自愈工程中的组件与视图页面绑定关系 (UIStudioPage & Component 1:1 Invariant)。
-     * 若图元含有子元素或被标记为复合组件，但尚未绑定独立子页面，自动为其在 studioPages 中注册对应子页面。
+     * 架构原则：严禁程序自动隐式切割生成新页面。
+     * 页面的生命周期完全由用户显式新建或由 AI 明确调用 REPLACE_PAGE 规划，底层保持数据原生态。
      */
     fun healStudioPagesAndComponents(proj: ProjectState): ProjectState {
-        val originalPages = proj.studioPages.toList()
-        var hasChanges = false
-        val pageIds = originalPages.map { it.id }.toMutableSet()
-        val newGeneratedPages = mutableListOf<UIStudioPage>()
-
-        fun processBlock(block: UIStudioBlock): UIStudioBlock {
-            val hasChildren = block.children.isNotEmpty()
-            if (hasChildren) {
-                val matchedPage = originalPages.find { it.id == block.targetPageId }
-                    ?: newGeneratedPages.find { it.id == block.targetPageId }
-                val targetPageId = if (matchedPage != null) {
-                    matchedPage.id
-                } else {
-                    var newPageId = "page_${block.id}"
-                    var counter = 1
-                    while (pageIds.contains(newPageId)) {
-                        newPageId = "page_${block.id}_$counter"
-                        counter++
-                    }
-                    pageIds.add(newPageId)
-                    val newPage = UIStudioPage(
-                        id = newPageId,
-                        nameStr = "组件_${block.id}",
-                        width = block.bounds.width.coerceAtLeast(100f),
-                        height = block.bounds.height.coerceAtLeast(100f),
-                        blocks = block.children
-                    )
-                    newGeneratedPages.add(newPage)
-                    hasChanges = true
-                    newPageId
-                }
-
-                val updatedChildren = block.children.map { processBlock(it) }
-                return block.copy(
-                    targetPageId = targetPageId,
-                    children = updatedChildren
-                )
-            }
-            return block
-        }
-
-        val updatedOriginalPages = originalPages.map { page ->
-            val updatedBlocks = page.blocks.map { processBlock(it) }
-            if (updatedBlocks != page.blocks) {
-                hasChanges = true
-                page.copy(blocks = updatedBlocks)
-            } else {
-                page
-            }
-        }
-
-        return if (hasChanges || newGeneratedPages.isNotEmpty()) {
-            proj.copy(studioPages = updatedOriginalPages + newGeneratedPages)
-        } else {
-            proj
-        }
-    }
-
-    /**
-     * 为指定复合图元确保存在一个引用的独立视图页面 (UIStudioPage)。
-     * 如果已有引用页面则直接返回；否则自动在 studioPages 中新建平级页面并绑定引用。
-     */
-    fun ensurePageForBlock(block: UIStudioBlock, parentPage: UIStudioPage, repo: TemplateRepository = TemplateRepository()): UIStudioPage {
-        val proj = state.project ?: return parentPage
-        val existing = proj.studioPages.find { it.id == block.targetPageId }
-        if (existing != null) {
-            return existing
-        }
-
-        val newPageId = "page_${block.id}_${getCurrentTimeMillis().toString().takeLast(4)}"
-        val newPage = UIStudioPage(
-            id = newPageId,
-            nameStr = "组件_${block.id}",
-            width = block.bounds.width.coerceAtLeast(100f),
-            height = block.bounds.height.coerceAtLeast(100f),
-            blocks = block.children
-        )
-        val updatedBlocks = parentPage.blocks.map { if (it.id == block.id) it.copy(targetPageId = newPageId) else it }
-        val updatedParent = parentPage.copy(blocks = updatedBlocks)
-        val updatedPages = proj.studioPages.map { if (it.id == parentPage.id) updatedParent else it } + newPage
-        val updatedProj = proj.copy(studioPages = updatedPages)
-        state = state.copy(project = updatedProj, isDirty = true)
-        scope.launch { repo.saveTemplate(updatedProj.projectId, updatedProj) }
-        return newPage
+        return proj
     }
 
     /**
      * 打开父容器/复合组件引用的独立编辑视图标签页。
-     * 架构统一：直接以一等公民 UIStudioPage 打开并激活对应平级页面！
+     * 若该图元绑定了 targetPageId，直接激活对应平级页面；
+     * 若未绑定独立页面，则作为普通就地容器打开编辑视口，绝不私自自动切割生成新页面。
      */
     fun openContainerTab(containerId: String) {
         val proj = state.project
@@ -193,13 +111,6 @@ class PageManagerDelegate(
             if (matchedPage != null) {
                 openViewTab(matchedPage.id)
                 Toast.show("已打开平级视图: ${matchedPage.nameStr}", ToastType.INFO)
-                return
-            }
-
-            if (targetBlock != null && currentView != null) {
-                val page = ensurePageForBlock(targetBlock, currentView)
-                openViewTab(page.id)
-                Toast.show("已打开平级视图: ${page.nameStr}", ToastType.INFO)
                 return
             }
         }

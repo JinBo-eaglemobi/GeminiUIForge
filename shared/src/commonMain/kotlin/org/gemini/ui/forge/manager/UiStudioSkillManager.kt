@@ -26,10 +26,7 @@ import org.gemini.ui.forge.utils.LocalFileStorage
 object UiStudioSkillManager {
     private const val TAG = "UiStudioSkillManager"
     private const val SKILLS_DIR = "skills"
-
-    /** 核心技能 ID 标识常量 */
-    const val SPEC_TO_VIEW_SKILL_ID = "spec_to_view"
-    const val TRANSPARENT_IMAGE_SKILL_ID = "transparent_image_generation"
+    private const val BUILTIN_SKILLS_MANIFEST = "builtin_skills.json"
 
     private val storage = LocalFileStorage()
     val resourceLoader = ExternalResourceLoader(storage)
@@ -39,44 +36,45 @@ object UiStudioSkillManager {
     private var cachedSkills: List<UiStudioSkill>? = null
 
     /**
-     * 按需获取已注册的全部技能列表（标准 Markdown 优先 + 出厂自愈释放 + 外部扫描）
-     * 【自愈铁律】：若外部磁盘不存在实体文件，自动触发强制释放落盘建立外部目录
+     * 按需获取已注册的全部技能列表（纯动态外部目录扫描 + 数据驱动出厂自愈）
+     * 【架构铁律】：代码中 0 技能名称硬编码，技能清单与元数据 100% 由外部 Markdown 自描述驱动
      */
     suspend fun getRegisteredSkills(bypassCache: Boolean = false): List<UiStudioSkill> {
-        val hasExternalFile = storage.exists("$SKILLS_DIR/$SPEC_TO_VIEW_SKILL_ID.md")
-        if (!bypassCache && cachedSkills != null && hasExternalFile) {
+        if (!bypassCache && cachedSkills != null) {
             return cachedSkills!!
         }
 
-        // 清理旧版历史残留的 spec_to_view.json（如有）
-        try {
-            if (storage.exists("$SKILLS_DIR/$SPEC_TO_VIEW_SKILL_ID.json")) {
-                storage.deleteFile("$SKILLS_DIR/$SPEC_TO_VIEW_SKILL_ID.json")
-                AppLogger.i(TAG, "已安全清理旧版非标 JSON 技能文件: $SPEC_TO_VIEW_SKILL_ID.json")
-            }
-        } catch (_: Exception) {}
-
         val loadedMap = LinkedHashMap<String, UiStudioSkill>()
 
-        // 1. 加载内置核心 Markdown 技能
-        val builtinSkillIds = listOf(SPEC_TO_VIEW_SKILL_ID, TRANSPARENT_IMAGE_SKILL_ID)
-        for (skillId in builtinSkillIds) {
-            try {
-                val hasFile = storage.exists("$SKILLS_DIR/$skillId.md")
-                val mdContent = resourceLoader.loadText(SKILLS_DIR, "$skillId.md", bypassCache = !hasFile)
-                val skill = SkillMarkdownParser.parse(mdContent, defaultId = skillId)
-                loadedMap[skill.id] = skill
-            } catch (e: Exception) {
-                AppLogger.e(TAG, "加载内置技能 [$skillId.md] 失败", e)
+        // 1. 出厂内置技能自愈释放（纯数据驱动：读取 skills/builtin_skills.json 配置清单）
+        try {
+            val manifestContent = resourceLoader.loadDefaultResourceText(SKILLS_DIR, BUILTIN_SKILLS_MANIFEST)
+            val builtinFiles = json.decodeFromString<List<String>>(manifestContent)
+            for (fileName in builtinFiles) {
+                try {
+                    val relativePath = "$SKILLS_DIR/$fileName"
+                    if (!storage.exists(relativePath)) {
+                        // 外部缺失时，通过 resourceLoader 自动从内置出厂资源释放到本地磁盘
+                        resourceLoader.loadText(SKILLS_DIR, fileName, bypassCache = true)
+                        AppLogger.i(TAG, "🌱 成功自愈释放出厂技能至本地: $relativePath")
+                    }
+                } catch (e: Exception) {
+                    AppLogger.w(TAG, "自愈释放出厂技能 [$fileName] 失败: ${e.message}")
+                }
             }
+        } catch (e: Exception) {
+            AppLogger.d(TAG, "未配置或读取出厂技能清单失败: ${e.message}")
         }
 
-        // 2. 扫描外部 skills/ 目录下的所有 *.md 与 *.json 自定义技能
+        // 2. 纯动态扫描外部 skills/ 目录下的所有 *.md 与 *.json 技能（单一事实源自包含自解析）
         try {
             val files = storage.listFiles(SKILLS_DIR)
             for (fileName in files) {
-                if (builtinSkillIds.any { fileName.equals("$it.md", ignoreCase = true) }) continue
-                if (fileName.equals("disabled_skills.json", ignoreCase = true) || fileName.startsWith(".")) continue
+                if (fileName.startsWith(".") ||
+                    fileName.equals("disabled_skills.json", ignoreCase = true) ||
+                    fileName.equals(BUILTIN_SKILLS_MANIFEST, ignoreCase = true)
+                ) continue
+
                 val relativePath = "$SKILLS_DIR/$fileName"
                 try {
                     val content = storage.readFromFile(relativePath)
@@ -90,7 +88,7 @@ object UiStudioSkillManager {
 
                         if (skill != null && !loadedMap.containsKey(skill.id)) {
                             loadedMap[skill.id] = skill
-                            AppLogger.i(TAG, "✨ 成功动态加载外部技能: ${skill.name} (${skill.id}) [来自 $fileName]")
+                            AppLogger.i(TAG, "✨ 成功动态加载技能: ${skill.name} (${skill.id}) [来自 $fileName]")
                         }
                     }
                 } catch (e: Exception) {
@@ -221,12 +219,7 @@ object UiStudioSkillManager {
         )
         val declarations = mutableListOf<JsonObject>()
 
-        // 注入 apply_view_layout 专有视图排版工具
-        declarations.add(buildApplyViewLayoutDeclaration())
-        // 注入 patch_view_elements 专有视图局部精确补丁工具
-        declarations.add(buildPatchViewElementsDeclaration())
-
-        // 注入精炼核心工作区工具与 4 个探索元工具
+        // 注入精炼核心工作区工具与探索元工具（单一事实源统一由 AiToolRegistry 驱动，严禁手动重复追加）
         coreConfigs.forEach { config ->
             config.functionDeclarations?.let { declarations.addAll(it) }
         }
@@ -237,129 +230,5 @@ object UiStudioSkillManager {
                 googleSearch = if (enableGoogleSearch) buildJsonObject {} else null
             )
         )
-    }
-
-    /**
-     * 构建 apply_view_layout 函数声明的官方标准 JSON Schema
-     */
-    private fun buildApplyViewLayoutDeclaration(): JsonObject {
-        return buildJsonObject {
-            put("name", "apply_view_layout")
-            put("description", "在 UI Studio 中创建或更新一个视图界面，并将解析后的图元树（UIBlock Tree）自动装配到该页面中，直接在当前工作区画布呈现。【执行前红线约束】：若创建全新页面或对既有页面全量重构排版，严禁直接盲目调用！必须先通过 ask_user_question 明确向用户汇报拟建页面大纲（名称/分辨率/核心模块清单）并获得授权同意后，方允许调用本工具完成装配；排版完成后必须立即调用 save_project 落盘。")
-            put("parameters", buildJsonObject {
-                put("type", "OBJECT")
-                put("properties", buildJsonObject {
-                    put("viewName", buildJsonObject {
-                        put("type", "STRING")
-                        put("description", "创建或更新的视图界面唯一名称。必须且仅能使用纯英文标识符（如 'FootballSlotMain'、'GameHUD' 或 'Settings_Dialog'，仅允许英文、数字和下划线），严禁包含任何中文字符！")
-                    })
-                    put("width", buildJsonObject {
-                        put("type", "INTEGER")
-                        put("description", "视图页面分辨率宽度，默认 1280 或 1920")
-                    })
-                    put("height", buildJsonObject {
-                        put("type", "INTEGER")
-                        put("description", "视图页面分辨率高度，默认 720 或 1080")
-                    })
-                    put("description", buildJsonObject {
-                        put("type", "STRING")
-                        put("description", "简短阐述当前界面的设计布局构思与核心模块划分")
-                    })
-                    put("overrideConfirmed", buildJsonObject {
-                        put("type", "BOOLEAN")
-                        put("description", "当目标 viewName 已存在且包含已有组件时，全量覆盖将彻底抹除该页面全部既有图元。若已获得用户明确授权重构覆盖，请传入 true；若未传或传 false，系统将触发安全拦截防冲垮保护。")
-                    })
-                    put("blocks", buildJsonObject {
-                        put("type", "ARRAY")
-                        put("description", "页面的顶层图元列表。遵循局部相对坐标系，纯容器可递归包含 children。")
-                        put("items", buildJsonObject {
-                            put("type", "OBJECT")
-                            put("properties", buildJsonObject {
-                                put("id", buildJsonObject { put("type", "STRING"); put("description", "图元唯一ID") })
-                                put("type", buildJsonObject { put("type", "STRING"); put("description", "模块类型: BACKGROUND, BUTTON, VIEW, TEXT, IMAGE, SLOTS_WINDOW 等") })
-                                put("x", buildJsonObject { put("type", "NUMBER"); put("description", "相对直接父容器左上角的局部 X 坐标") })
-                                put("y", buildJsonObject { put("type", "NUMBER"); put("description", "相对直接父容器左上角的局部 Y 坐标") })
-                                put("width", buildJsonObject { put("type", "NUMBER"); put("description", "物理宽度") })
-                                put("height", buildJsonObject { put("type", "NUMBER"); put("description", "物理高度") })
-                                put("isPureContainer", buildJsonObject { put("type", "BOOLEAN"); put("description", "是否为纯布局排版占位容器（不生成独立图片）") })
-                                put("assetHash", buildJsonObject { put("type", "STRING"); put("description", "绑定的素材库切片唯一Hash（最高优先级精确装配主键）") })
-                                put("assetFileName", buildJsonObject { put("type", "STRING"); put("description", "绑定的素材库切片文件名，如 'Back_Button.png'") })
-                                put("targetPageId", buildJsonObject { put("type", "STRING"); put("description", "引用的平级子页面 ID（若该图元为组件实例，如 slots_window，指向对应子页面，此时严禁传入 children）") })
-                                put("slotRole", buildJsonObject { put("type", "STRING"); put("description", "插槽语义角色(用于全自动装配): BACKGROUND, SPIN_BUTTON, REEL_SYMBOL, BUTTON, HUD_FRAME, TITLE_LOGO, BET_CONTROL") })
-                                put("children", buildJsonObject {
-                                    put("type", "ARRAY")
-                                    put("description", "嵌套子图元列表（注意：当设置了 targetPageId 时，严禁包含任何 children）")
-                                    put("items", buildJsonObject { put("type", "OBJECT") })
-                                })
-                            })
-                            put("required", buildJsonArray {
-                                add("id")
-                                add("type")
-                                add("x")
-                                add("y")
-                                add("width")
-                                add("height")
-                            })
-                        })
-                    })
-                })
-                put("required", buildJsonArray {
-                    add("viewName")
-                    add("width")
-                    add("height")
-                    add("blocks")
-                })
-            })
-        }
-    }
-
-    /**
-     * 构建 patch_view_elements 函数声明的官方标准 JSON Schema (符合 RFC 6902 局部补丁规范)
-     */
-    private fun buildPatchViewElementsDeclaration(): JsonObject {
-        return buildJsonObject {
-            put("name", "patch_view_elements")
-            put("description", "对 UI Studio 当前或指定视图页面中的个别图元进行精确的局部增删改 (Patch)，无需全量重新输出整张页面的全部 blocks。修改仅局限在参与的指定字段上，响应极速且零丢数据隐患。【严格数据审核与分级确认红线】：1. 结构变更（新增图元 ADD、删除图元 DELETE 或跨容器迁移）：严禁私自调用，必须先审查图元树向用户提呈 5 维全景方案（模式/父容器/层深/坐标/语义）并通过 ask_user_question 确认同意后方可执行；2. 微观属性微调（用户已明确指定具体坐标/尺寸/文本/透明度等参数）：豁免弹窗，直接执行并在回复中汇报变更；3. width/height必须>0；4. 禁止使用废弃的 CONTAINER 类型；5. 引用组件（持有 targetPageId）严禁内联塞 children；6. 修改后必须调用 save_project 落盘。")
-            put("parameters", buildJsonObject {
-                put("type", "OBJECT")
-                put("properties", buildJsonObject {
-                    put("viewName", buildJsonObject {
-                        put("type", "STRING")
-                        put("description", "目标视图页面名称（可选，缺省时默认为当前画布正在编辑的活动视图）")
-                    })
-                    put("patches", buildJsonObject {
-                        put("type", "ARRAY")
-                        put("description", "局部微调操作列表 (声明式补丁)")
-                        put("items", buildJsonObject {
-                            put("type", "OBJECT")
-                            put("properties", buildJsonObject {
-                                put("op", buildJsonObject {
-                                    put("type", "STRING")
-                                    put("description", "操作原语动词: UPDATE (局部修改指定字段), ADD (追加新图元), REMOVE (删除图元)")
-                                })
-                                put("blockId", buildJsonObject {
-                                    put("type", "STRING")
-                                    put("description", "被修改或被删除的目标图元唯一 ID (UPDATE 或 REMOVE 时必填)")
-                                })
-                                put("parentBlockId", buildJsonObject {
-                                    put("type", "STRING")
-                                    put("description", "ADD 追加图元时的目标父容器 ID（可空，缺省时追加到页面顶层；若目标父图元为引用组件，将自动路由追加到对应独立子页面）")
-                                })
-                                put("properties", buildJsonObject {
-                                    put("type", "OBJECT")
-                                    put("description", "需要修改或添加的图元属性字典 (仅需传入发生变化的字段: x, y, width, height, assetFileName, assetHash, isPureContainer, type, targetPageId)")
-                                })
-                            })
-                            put("required", buildJsonArray {
-                                add("op")
-                            })
-                        })
-                    })
-                })
-                put("required", buildJsonArray {
-                    add("patches")
-                })
-            })
-        }
     }
 }

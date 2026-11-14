@@ -24,7 +24,7 @@ class SaveProjectTool(
     override val name: String = "save_project"
 
     override val description: String =
-        "将当前活跃的 UI 工程（包括全部视图页面、图元布局树、引用拓扑与工作区状态）立即完整原子持久化保存到本地磁盘。在执行图元补丁 (patch_view_elements)、排版微调或批量修改后，必须显式调用此工具确保所有修改 100% 落盘防丢失。"
+        "将当前活跃的 UI 工程（包括全部视图页面、图元布局树、引用拓扑与工作区状态）立即完整原子持久化保存到本地磁盘。在执行视图排版 (edit_view_layout)、图元微调或批量修改后，必须显式调用此工具确保所有修改 100% 落盘防丢失。"
 
     override val annotations: ToolAnnotations = ToolAnnotations(
         readOnlyHint = false,

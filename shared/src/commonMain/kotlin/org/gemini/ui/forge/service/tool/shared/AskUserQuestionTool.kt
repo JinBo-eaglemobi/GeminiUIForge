@@ -1,4 +1,4 @@
-package org.gemini.ui.forge.service.tool.mcp.exclusive
+package org.gemini.ui.forge.service.tool.shared
 
 import org.gemini.ui.forge.service.tool.ToolAnnotations
 import org.gemini.ui.forge.service.tool.ToolContent
@@ -9,23 +9,24 @@ import kotlinx.serialization.json.*
 import org.gemini.ui.forge.service.mcp.*
 
 /**
- * 结构化问询弹窗工具（对齐 OpenCode question 风格）：向用户展示带描述的选项卡片、推荐置顶、自定义输入并等待作答
+ * 结构化决策问询弹窗工具：向用户展示带详细描述的方案选项卡片、推荐置顶、自定义输入并同步等待作答
  */
 class AskUserQuestionTool : ToolDefinition {
 
     override val name: String = "ask_user_question"
 
     override val description: String =
-        "向真实用户展示结构化问询弹窗（对齐 OpenCode question 风格）并挂起等待作答。" +
-        "支持多个问题顺序轮播、每个选项带 label 与 description 双行卡片、推荐选项置顶徽章、" +
-        "单选/多选模式，以及用户自由输入自定义答案。适用于方案抉择、风格确认、破坏性操作前的意向收集。"
+        "向真实用户展示结构化决策问询弹窗并同步挂起等待用户作答。" +
+        "支持长篇技术方案大纲展示、多个选项带 label 与 description 双行卡片、推荐选项置顶徽章、" +
+        "单选/多选模式、自定义输入答案，并在底部内置安全退出通道（结束任务）。" +
+        "适用于方案提呈、重大排版授权、风格抉择与破坏性操作前的意向收集。"
 
     override val annotations: ToolAnnotations = ToolAnnotations(
         readOnlyHint = true,
         idempotentHint = true
     )
 
-    override val timeoutMs: Long = 300_000L
+    override val timeoutMs: Long = Long.MAX_VALUE
 
     override val inputSchema: JsonObject = buildJsonObject {
         put("type", "object")
@@ -89,7 +90,7 @@ class AskUserQuestionTool : ToolDefinition {
             })
             put("async", buildJsonObject {
                 put("type", "boolean")
-                put("description", "可选：是否采用异步任务模式执行。默认为 true（立即返回 jobId 并通过 get_job_status 长轮询进度，彻底免疫客户端超时）。传入 false 则保持同步阻塞等待。")
+                put("description", "可选：是否采用异步任务模式执行。默认为 false（保持同步阻塞挂起协程，等待真实用户在界面卡片中做出选择并确认后方可返回结果）。仅当外部客户端有极短超时限制时方可传入 true。")
             })
         })
         put("required", buildJsonArray {
@@ -101,7 +102,7 @@ class AskUserQuestionTool : ToolDefinition {
         arguments: JsonObject,
         onProgress: ((progress: Float, message: String?) -> Unit)?
     ): ToolResult {
-        val isAsync = arguments["async"]?.jsonPrimitive?.booleanOrNull ?: true
+        val isAsync = arguments["async"]?.jsonPrimitive?.booleanOrNull ?: false
         if (isAsync) {
             val jobId = McpJobManager.submitJob(name) { progressReporter ->
                 executeInternal(arguments, progressReporter)
@@ -127,8 +128,8 @@ class AskUserQuestionTool : ToolDefinition {
             return ToolResult.error("questions 至少需要 1 个问题")
         }
 
-        val timeoutSeconds = arguments["timeoutSeconds"]?.jsonPrimitive?.intOrNull ?: 240
-        val timeoutMs = timeoutSeconds.coerceIn(5, 300) * 1000L
+        // 遵循人机决策阻塞铁律：默认无限挂起等待真实用户在界面卡片上做出决断，绝不因 240 秒超时而擅自跳过用户授权
+        val timeoutMs = Long.MAX_VALUE
 
         val answers = mutableListOf<JsonObject>()
         for ((qIndex, qElement) in questionsArray.withIndex()) {
@@ -183,6 +184,17 @@ class AskUserQuestionTool : ToolDefinition {
                 )
             }
 
+            if (answer.isTerminated) {
+                return ToolResult.success(
+                    buildJsonObject {
+                        put("success", true)
+                        put("reason", "user_terminated")
+                        put("userMessage", "用户已明确拒绝当前方案并要求结束任务，中止后续所有活动，不要继续执行任何修改或排版。")
+                        put("terminated", true)
+                    }.toString()
+                )
+            }
+
             answers.add(
                 buildJsonObject {
                     put("questionIndex", qIndex)
@@ -216,4 +228,3 @@ class AskUserQuestionTool : ToolDefinition {
         )
     }
 }
-

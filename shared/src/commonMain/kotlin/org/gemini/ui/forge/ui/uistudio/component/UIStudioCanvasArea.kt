@@ -32,9 +32,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.model.UIStudioRightTab
+import org.gemini.ui.forge.ui.uistudio.utils.StudioDataDiagnostics
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 
 /**
@@ -309,11 +311,13 @@ fun UIStudioCanvasArea(
                                 spotColor = Color.Black.copy(alpha = 0.9f)
                             )
                     ) {
-                    val renderableBlocks = remember(currentView.blocks, activeContainer?.id, activeContainer?.opacity) {
+                    val availablePages = state.project?.studioPages ?: emptyList()
+                    val renderableBlocks = remember(currentView.blocks, activeContainer?.id, activeContainer?.opacity, availablePages) {
                         if (activeContainer != null) {
                             // 容器独立编辑视口模式：仅渲染容器内部子组件（局部坐标，继承容器透明度）
                             collectRenderableBlocks(
                                 blocks = activeContainer.children,
+                                availablePages = availablePages,
                                 parentOffsetX = 0f,
                                 parentOffsetY = 0f,
                                 parentLocked = activeContainer.isLocked,
@@ -321,8 +325,11 @@ fun UIStudioCanvasArea(
                                 parentOpacity = activeContainer.effectiveOpacity
                             )
                         } else {
-                            // 全局主视图模式：全层级递归展平
-                            collectRenderableBlocks(currentView.blocks)
+                            // 全局主视图模式：全层级递归展平（纯动态解析页面引用）
+                            collectRenderableBlocks(
+                                blocks = currentView.blocks,
+                                availablePages = availablePages
+                            )
                         }
                     }
                     if (renderableBlocks.isEmpty()) {
@@ -369,13 +376,7 @@ fun UIStudioCanvasArea(
                                     onClick = {
                                         if (activeContainer == null) {
                                             // 主视图模式层级门禁：严禁绕过父容器直接选中子组件，点击必须选中所属顶层根父容器
-                                            val rootParent = currentView.blocks.find { root ->
-                                                root.id == info.block.id || root.children.any { c ->
-                                                    c.id == info.block.id || c.children.any { cc -> cc.id == info.block.id }
-                                                }
-                                            }
-                                            val targetId = rootParent?.id ?: info.block.id
-                                            viewModel.canvasEditor.selectBlock(targetId)
+                                            viewModel.canvasEditor.selectBlock(info.rootBlockId)
                                         } else {
                                             // 容器专属独立编辑视口下：允许直接选中该容器内的子组件
                                             viewModel.canvasEditor.selectBlock(info.block.id)
@@ -383,15 +384,10 @@ fun UIStudioCanvasArea(
                                     },
                                     onDoubleTap = {
                                         if (activeContainer == null) {
-                                            // 主视图模式下：双击父容器，新开标签页面显示父组件内部布局
-                                            val rootParent = currentView.blocks.find { root ->
-                                                root.id == info.block.id || root.children.any { c ->
-                                                    c.id == info.block.id || c.children.any { cc -> cc.id == info.block.id }
-                                                }
-                                            }
-                                            val targetContainer = rootParent ?: info.block
-                                            if (targetContainer.isPureContainer || targetContainer.children.isNotEmpty() || targetContainer.targetPageId != null) {
-                                                viewModel.pageManager.openContainerTab(targetContainer.id)
+                                            // 主视图模式下：双击父容器或引用组件，新开标签页面显示内部布局
+                                            val rootBlock = currentView.blocks.find { it.id == info.rootBlockId } ?: info.block
+                                            if (rootBlock.targetPageId != null || rootBlock.isPureContainer || rootBlock.children.isNotEmpty()) {
+                                                viewModel.pageManager.openContainerTab(rootBlock.id)
                                             }
                                         }
                                     },
@@ -407,6 +403,26 @@ fun UIStudioCanvasArea(
                     }
                 }
                 }
+            }
+        }
+
+        // 独立覆盖层：顶部中央常驻数据完整性警示横幅
+        val dataErrors = remember(state.project) {
+            StudioDataDiagnostics.diagnoseProject(state.project)
+        }
+        if (dataErrors.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = spacing.small, start = spacing.medium, end = 260.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                UIStudioDataIntegrityBanner(
+                    errors = dataErrors,
+                    onNavigateToPage = { pageId ->
+                        viewModel.pageManager.openViewTab(pageId)
+                    }
+                )
             }
         }
 
@@ -506,26 +522,34 @@ fun UIStudioCanvasArea(
 private data class RenderableBlockInfo(
     val block: UIStudioBlock,
     val absBounds: SerialRect,
+    val rootBlockId: String,
     val inheritedOpacity: Float = 1.0f,
     val isInheritedLocked: Boolean = false
 )
 
 /**
  * 递归收集页面内所有可见的图元，并精准推导累加其绝对全局坐标矩形与继承锁定态及父级级联透明度。
+ * 遵循页面引用架构规范：若图元引用了独立页面 (targetPageId != null)，
+ * 渲染时【直接忽略自身 children】（即使其 children 含有历史数据也绝不渲染），
+ * 纯动态递归渲染目标平级页面中的图元树，数据零拷贝、零篡改。
  */
 private fun collectRenderableBlocks(
     blocks: List<UIStudioBlock>,
+    availablePages: List<UIStudioPage> = emptyList(),
     parentOffsetX: Float = 0f,
     parentOffsetY: Float = 0f,
     parentLocked: Boolean = false,
     parentVisible: Boolean = true,
-    parentOpacity: Float = 1.0f
+    parentOpacity: Float = 1.0f,
+    currentRootBlockId: String? = null,
+    visitedPageIds: Set<String> = emptySet()
 ): List<RenderableBlockInfo> {
     val result = mutableListOf<RenderableBlockInfo>()
     for (b in blocks) {
         val currentVisible = parentVisible && b.isVisible
         if (!currentVisible) continue
 
+        val effectiveRootId = currentRootBlockId ?: b.id
         val currentLocked = parentLocked || b.isLocked
         val absLeft = parentOffsetX + b.bounds.left
         val absTop = parentOffsetY + b.bounds.top
@@ -539,20 +563,42 @@ private fun collectRenderableBlocks(
             RenderableBlockInfo(
                 block = b.copy(isLocked = currentLocked),
                 absBounds = absRect,
+                rootBlockId = effectiveRootId,
                 inheritedOpacity = parentOpacity,
                 isInheritedLocked = currentLocked
             )
         )
 
-        if (b.children.isNotEmpty()) {
+        val targetId = b.targetPageId
+        if (!targetId.isNullOrBlank()) {
+            val refPage = availablePages.find { it.id == targetId }
+            if (refPage != null && !visitedPageIds.contains(targetId)) {
+                result.addAll(
+                    collectRenderableBlocks(
+                        blocks = refPage.blocks,
+                        availablePages = availablePages,
+                        parentOffsetX = absLeft,
+                        parentOffsetY = absTop,
+                        parentLocked = currentLocked,
+                        parentVisible = currentVisible,
+                        parentOpacity = currentCumulativeOpacity,
+                        currentRootBlockId = effectiveRootId,
+                        visitedPageIds = visitedPageIds + targetId
+                    )
+                )
+            }
+        } else if (b.children.isNotEmpty()) {
             result.addAll(
                 collectRenderableBlocks(
                     blocks = b.children,
+                    availablePages = availablePages,
                     parentOffsetX = absLeft,
                     parentOffsetY = absTop,
                     parentLocked = currentLocked,
                     parentVisible = currentVisible,
-                    parentOpacity = currentCumulativeOpacity
+                    parentOpacity = currentCumulativeOpacity,
+                    currentRootBlockId = effectiveRootId,
+                    visitedPageIds = visitedPageIds
                 )
             )
         }

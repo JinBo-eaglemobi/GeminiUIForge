@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -64,6 +65,18 @@ fun McpInteractionHost(
                 }
                 is McpInteractionRequest.Question -> {
                     pendingQuestion = req
+                }
+                is McpInteractionRequest.Dismiss -> {
+                    if (pendingConfirmation?.id == req.id) {
+                        pendingConfirmation = null
+                    }
+                    if (pendingChoice?.id == req.id) {
+                        pendingChoice = null
+                        selectedChoiceIndex = null
+                    }
+                    if (pendingQuestion?.id == req.id) {
+                        pendingQuestion = null
+                    }
                 }
             }
         }
@@ -150,7 +163,8 @@ fun McpInteractionHost(
                     pendingChoice = null
                 }
             },
-            modifier = Modifier.width(LocalAppSpacing.current.dialogConfigWidth),
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            modifier = Modifier.width(LocalAppSpacing.current.dialogMediumWidth),
             title = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

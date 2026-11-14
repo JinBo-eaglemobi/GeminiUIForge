@@ -6,6 +6,17 @@ class AndroidGameScaffoldBridge : GameScaffoldBridge {
     override fun validateGamePath(pathStr: String?): String? = null
     override fun readForgeGameConfig(gameRootDirPath: String): ForgeGameProjectConfig? = null
     override fun isGameProjectActivated(gameRootDirPath: String): Boolean = false
+    override fun inspectGameProject(gameRootDirPath: String): org.gemini.ui.forge.model.gameproject.GameProjectInspection =
+        org.gemini.ui.forge.model.gameproject.GameProjectInspection(
+            targetPath = gameRootDirPath,
+            kind = org.gemini.ui.forge.model.gameproject.GameProjectKind.EMPTY_OR_NEW
+        )
+    override suspend fun bindExistingGameProject(
+        gameRootDirPath: String,
+        projectName: String,
+        canvasWidth: Int,
+        canvasHeight: Int
+    ): Result<ForgeGameProjectConfig> = Result.failure(UnsupportedOperationException("Android 不支持直接构建游戏脚手架"))
     override suspend fun activateGameProject(
         gameRootDirPath: String,
         projectName: String,

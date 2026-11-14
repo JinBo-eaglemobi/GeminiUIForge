@@ -120,8 +120,14 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
   - 若尚未激活，单击秒级弹出【激活游戏项目】专属向导弹窗（`GameProjectActivationDialog`）。
 - **保存父目录设定与最终存放目录动态联动**：
   - 采用现代 IDE 架构：用户输入「游戏项目名称」，并通过原生目录手柄选择「游戏保存父目录」；
+  - **未配置严格为 null 与杜绝硬编码默认路径**：当前工程若未关联代码项目，其路径配置严格保持为 `null`，向导弹窗中保存父目录与最终存放目录默认保持为空白与破折号占位，绝对杜绝任何写死的默认路径（如 `D:/WorkSpace/LayaBox`），未明确选择保存目录时「初始化并激活」按钮强制保持禁用；
+  - **工程专属持久化与一键清除解绑**：关联的游戏代码工程路径（`gameProjectPath`）作为当前 UI Studio 工程的专有属性，在保存与加载时 100% 同步落盘于该工程私有目录下的 `template.json` 中，互不干扰；弹窗与业务层支持显式一键「清除配置」，将项目代码路径重置为 `null` 并即时原子刷盘；
   - 界面动态高亮展示「最终存放目录」（父目录 + 项目名），并随用户输入实时联动刷新，杜绝路径层级混乱；
   - **私有缓存物理拦截**：强校验拦截机制，对最终存放目录严格排查，严禁选在软件私有缓存目录（`~/.geminiuiforge` 及其子路径）下，确保项目代码的持久安全与独立归属。
+- **工程特征智能探测与无损接入机制 (Smart Inspection & Lossless Activation)**：
+  - **非侵入式四态特征探测**：在用户选定或输入路径时，系统自动对目标目录进行非侵入式特征排查，精准识别四种工程状态：已激活工程（`ALREADY_ACTIVATED`）、完整成熟工程（`COMPLETE_PROJECT`，已具备 `package.json`、源码与构建产物 `build/index.html`/`main.min.js`）、源码工程（`PARTIAL_SOURCE_PROJECT`，具备源码但缺少构建产物）以及空白/新目录（`EMPTY_OR_NEW`）；
+  - **既有工程文件与依赖绝对保护**：全面废除盲目覆写逻辑。脚手架写入时对目标工程中任何已存在的文件（`package.json`、`tsconfig.json`、源码等）严格执行物理只读保护，严禁覆写；检测到已存在 `node_modules` 依赖库时自动跳过耗时的全量安装，彻底保障既有代码与依赖的完整性；
+  - **自适应动态卡片与秒级无损接入**：弹窗实时呈现工程特征诊断卡片与安全盾牌，按钮根据工程分类自适应分流——成熟工程显示高亮【直接关联接入 (无需初始化)】，点击仅在根目录写入/同步 `forge-game.json` 标识并在当前工程 `template.json` 中持久化路径，零编译、零改动、耗时 < 50ms；源码工程展示【补齐构建并激活】；空白目录展示【初始化并激活】。
 - **运行环境自动检测与静默就绪 (Node.js & PNPM)**：
   - 初始化流水线第一步自动探测宿主机环境是否已安装 Node.js 与 pnpm；
   - 若缺失环境，全自动在后台执行静默安装与环境就绪，确保用户零配置即开即用。
@@ -169,12 +175,17 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
 3. **【视口状态无损切换】**：多标签页切换或退出进入容器视口时，原视口的缩放比例与平移偏移行程必须无损保留；
 4. **【排版应用显式授权触发红线】**：AI 生成的排版方案严禁在对话流式结束或生图工具收口时自动向画布中央强推全屏模态弹窗，必须严格遵循“气泡常驻操作胶囊 + 用户主动点击按需唤起确认”的无感原则，保障用户视觉审阅与排版探索的绝对掌控权；
 5. **【全平级页面与多重引用实例架构红线】**：UI Studio 内部所有页面（`UIStudioPage`）地位完全平级，无任何硬编码的“谁是谁的子页面”层级从属。页面间通过组件实例的 `targetPageId` 进行单向或多重随意引用；源页面修改时自动跨页面将内部元素镜像同步到所有引用实例中，而在宿主页面调整实例坐标与宽高仅影响其实例外观，确保任意组件可在全项目多页面中自由复用；
-6. **【页面引用落盘脱敏与加载注水守恒红线 (Strip on Save & Hydrate on Load)】**：
-   - **保存脱敏 (Strip on Save)**：在将平级独立页面物理落盘至 `pages/{pageId}.json` 时，系统必须执行脱敏清洗——对所有引用外部组件/页面的图元节点（`targetPageId != null`），强制将其内部 `children` 清空为 `emptyList()`，磁盘仅保存自身几何变换与目标页面引用 ID，绝对禁止将所引用页面的子图元物理深拷贝冗余持久化在宿主页面中，消除数据冗余与多源版本冲突隐患；
-   - **加载注水 (Hydrate on Load)**：在从磁盘加载反序列化各个独立页面时，统一通过 `hydratePageReferences` 根据各个图元节点的 `targetPageId` 动态注水装配对应页面的最新权威子图元树并重建父子指针（`.bindParents()`），同时内置有向无环防爆栈校验，确保运行时内存视图完整与磁盘单一事实源；
+6. **【页面引用零篡改存储与纯动态按引用渲染架构红线 (Zero-Interference Persistence & Dynamic Reference Rendering)】**：
+   - **保存零篡改与原样保留 (Zero-Interference Persistence)**：彻底废除历史遗留的保存自动脱敏（`stripPageReferences`）逻辑。在将平级独立页面物理落盘至 `pages/{pageId}.json` 时，系统执行 1:1 原样序列化。若历史或脏数据中存在 `children`，程序绝对不理会、不干预、不破坏，原封不动持久化保留，确保用户正在修改或暂存的数据永不被误删；
+   - **加载零注水 (Zero-Hydrate Loading)**：彻底废除历史遗留的加载注水（`hydratePageReferences`）逻辑。系统加载反序列化各个平级页面时，原样读取各自独立 JSON 并仅重建自身父子指针（`.bindParents()`），绝对严禁跨页面深拷贝图元树并强行塞入宿主容器的 `children` 中；
+   - **绝对禁止后台自动切割与隐式建页 (Ban Auto-Split)**：彻底废除 `ensurePageForBlock` 与后台自动拆分逻辑，坚决杜绝程序在加载或渲染时背着用户私自将带子图元的容器自动切割为独立子页面；
+   - **渲染层纯动态递归解析 (Pure Dynamic Reference Rendering)**：画布在收集渲染图元时，一旦图元持有 `targetPageId`（组件实例），无论其自身在持久化层是否存留历史 `children`，渲染引擎一律**直接忽略自身 children**，纯动态递归按引用实时解析并投影目标平级页面的最新图元树，实现数据零拷贝与界面 100% 动态实时联动；
+   - **常驻数据完整性诊断与定位 (Studio Data Diagnostics & Banner)**：在画布视口顶部居中挂载常驻数据完整性诊断横幅（`UIStudioDataIntegrityBanner`），长期、直观地提示哪个视图页面的哪个组件存在“既引用了页面又包含冗余 children”或“引用目标页面不存在”的异常，并提供一键直达与展开定位；
+   - **AI 工具契约硬拦截 (AI Tool Reference Invariant & Hard Rejection)**：万能排版工具 `edit_view_layout` 的 Schema 明确声明“设置 targetPageId 时绝对严禁传入 children”。在 `REPLACE_PAGE`、`REPLACE_CONTAINER` 与 `PATCH` 数据审核层执行 100% 刚性硬拦截：凡发现试图向引用组件注入 `children`、或在图元中同时传入 `targetPageId` 与 `children` 的操作，系统一律立即打回拒绝并明确指出具体违规组件与修复指引，从源头彻底杜绝新脏数据产生；
+   - **双通道异常诊断工具 (diagnose_view_data)**：封装独立的视图数据完整性诊断工具，100% 复用 `StudioDataDiagnostics` 逻辑，支持按 `viewName` / `viewId` 定向过滤或扫描全工程，向外部 MCP 客户端与内部 AI 架构师输出结构化 JSON 报告，详细列明问题分类（`REFERENCE_WITH_CHILDREN` / `TARGET_PAGE_NOT_FOUND`）与具体排版修复指引；
    - **废除 CONTAINER 实体类型**：UI Studio 中彻底清除历史残留的 `UIBlockType.CONTAINER` 概念，复合组件或页面实例统一使用 `UIBlockType.VIEW` 并以 `isPureContainer = true` / `targetPageId != null` 作为单一事实源；
 7. **【原图尺寸物理守恒与一键复位红线】**：属性面板必须提供「原图尺寸」一键复位能力，自动依据图元绑定的素材物理 Hash（或引用页面的源尺寸）秒级复位当前组件的宽 W 与高 H（保持左上角定位恒定），杜绝拉伸失真后无法还原初始比例的体验缺陷；
-8. **【项目公用配置文件与复合页面分包存储红线】**：UI Studio 项目工程存储严格遵循项目公用配置与复合页面分包架构（对齐 Figma / VSCode 工业级工程标准）。主配置文件 `template.json` 彻底纯净化为项目级公用配置文件（`UIStudioProjectConfig`，`formatVersion: "2.0"`），专职记录工程元信息（`projectId`、`projectName`、默认基准分辨率 `defaultCanvasWidth/Height`、活跃视图 `activeViewId`）以及 `pageIndex` 相对文件索引清单，绝对禁止包含任何界面专属私有信息；各个平级视图界面的独立宽高、背景色及完整图元树 100% 独立保存为 `templates/{projectName}/pages/{pageId}.json` 单文件；所有 JSON 文件的物理落盘必须通过 `saveToFileAtomic` 执行原子交换协议（Temporary Swap + 底层 `fsync` 硬件刷盘 + `ATOMIC_MOVE` 原子替换），彻底杜绝系统崩溃或断电导致配置坏损；系统加载时自适应优先解析新版公用配置并按索引组装，同时向后兼容存量老工程并执行无感自愈拆分。
+8. **【项目公用配置文件与复合页面分包存储红线】**：UI Studio 项目工程存储严格遵循项目公用配置与复合页面分包架构（对齐 Figma / VSCode 工业级工程标准）。主配置文件 `template.json` 彻底纯净化为项目级公用配置文件（`UIStudioProjectConfig`，`formatVersion: "2.0"`），专职记录工程元信息（`projectId`、`projectName`、`createdAt`、`updatedAt`、`gameProjectPath`）以及 `pageIndex` 相对文件索引清单，绝对禁止包含任何界面专属私有信息；各个平级视图界面的独立宽高、背景色及完整图元树 100% 独立保存为 `templates/{projectName}/pages/{pageId}.json` 单文件；所有 JSON 文件的物理落盘必须通过 `saveToFileAtomic` 执行原子交换协议（Temporary Swap + 底层 `fsync` 硬件刷盘 + `ATOMIC_MOVE` 原子替换），彻底杜绝系统崩溃或断电导致配置坏损；系统加载时自适应优先解析新版公用配置并按索引组装，同时向后兼容存量老工程并执行无感自愈拆分。
 
 9. **【AI 页面命名纯英文标识符红线】**：AI 架构师助手在通过工具（`apply_view_layout`）自动创建或重构视图界面时，其视图名称（`viewName`）必须且仅能使用合法的英文、数字与下划线标识符（如 `Game_HUD`, `Settings_Dialog`, `Reel_Column`），绝对严禁使用任何中文字符；后端装配层（`UiStudioLayoutService.assembleViewPage`）内置 ASCII 正则自愈清洗与英文时间戳兜底断言，彻底杜绝中文页面标识在多平台转译、文件导出与引用索引中的潜在隐患；同时，用户在客户端手动通过新建弹窗创建或重命名视图界面时完全不受此限制，继续享有完备的中英文多语言命名自由。
 

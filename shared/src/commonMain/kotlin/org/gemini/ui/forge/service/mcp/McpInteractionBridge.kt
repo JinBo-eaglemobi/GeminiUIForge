@@ -63,6 +63,13 @@ sealed interface McpInteractionRequest {
         val allowCustomAnswer: Boolean,
         val timeoutMs: Long
     ) : McpInteractionRequest
+
+    /**
+     * 关闭/销毁指定请求 ID 的弹窗事件：当后台等待协程因取消、中断或超时退出时，通知前台 UI 宿主立即关闭对应弹窗，杜绝残留僵尸弹窗
+     */
+    data class Dismiss(
+        override val id: Long
+    ) : McpInteractionRequest
 }
 
 /**
@@ -81,7 +88,8 @@ data class QuestionAnswer(
     val isCustom: Boolean,
     val selectedIndices: List<Int> = emptyList(),
     val selectedLabels: List<String> = emptyList(),
-    val customText: String? = null
+    val customText: String? = null,
+    val isTerminated: Boolean = false
 )
 
 /**
@@ -144,7 +152,7 @@ object McpInteractionBridge {
         confirmText: String = "允许执行",
         dismissText: String = "拒绝",
         isDestructive: Boolean = false,
-        timeoutMs: Long = 240_000L
+        timeoutMs: Long = Long.MAX_VALUE
     ): ConfirmationResult {
         if (!isHostActive) {
             return ConfirmationResult(approved = false, reason = "ui_unreachable")
@@ -175,8 +183,12 @@ object McpInteractionBridge {
         }
 
         return try {
-            val approved = withTimeoutOrNull(timeoutMs) {
+            val approved = if (timeoutMs <= 0L || timeoutMs == Long.MAX_VALUE) {
                 deferred.await()
+            } else {
+                withTimeoutOrNull(timeoutMs) {
+                    deferred.await()
+                }
             }
             if (approved == null) {
                 ConfirmationResult(approved = false, reason = "timeout")
@@ -186,8 +198,11 @@ object McpInteractionBridge {
                 ConfirmationResult(approved = false, reason = "user_rejected")
             }
         } finally {
-            mapMutex.withLock {
+            val removed = mapMutex.withLock {
                 confirmationDeferreds.remove(reqId)
+            }
+            if (removed != null) {
+                _requests.tryEmit(McpInteractionRequest.Dismiss(reqId))
             }
         }
     }
@@ -200,7 +215,7 @@ object McpInteractionBridge {
         message: String,
         options: List<String>,
         allowCancel: Boolean = true,
-        timeoutMs: Long = 240_000L
+        timeoutMs: Long = Long.MAX_VALUE
     ): ChoiceResult {
         if (!isHostActive) {
             return ChoiceResult(selectedIndex = null, selectedOption = null, reason = "ui_unreachable")
@@ -230,8 +245,12 @@ object McpInteractionBridge {
         }
 
         return try {
-            val selected = withTimeoutOrNull(timeoutMs) {
+            val selected = if (timeoutMs <= 0L || timeoutMs == Long.MAX_VALUE) {
                 deferred.await()
+            } else {
+                withTimeoutOrNull(timeoutMs) {
+                    deferred.await()
+                }
             }
             if (selected == null && !deferred.isCompleted) {
                 ChoiceResult(selectedIndex = null, selectedOption = null, reason = "timeout")
@@ -241,8 +260,11 @@ object McpInteractionBridge {
                 ChoiceResult(selectedIndex = null, selectedOption = null, reason = "user_cancelled")
             }
         } finally {
-            mapMutex.withLock {
+            val removed = mapMutex.withLock {
                 choiceDeferreds.remove(reqId)
+            }
+            if (removed != null) {
+                _requests.tryEmit(McpInteractionRequest.Dismiss(reqId))
             }
         }
     }
@@ -294,7 +316,7 @@ object McpInteractionBridge {
         options: List<QuestionOption>,
         multiple: Boolean = false,
         allowCustomAnswer: Boolean = true,
-        timeoutMs: Long = 240_000L
+        timeoutMs: Long = Long.MAX_VALUE
     ): QuestionAnswer? {
         if (!isHostActive) {
             return null
@@ -325,12 +347,19 @@ object McpInteractionBridge {
         }
 
         return try {
-            withTimeoutOrNull(timeoutMs) {
+            if (timeoutMs <= 0L || timeoutMs == Long.MAX_VALUE) {
                 deferred.await()
+            } else {
+                withTimeoutOrNull(timeoutMs) {
+                    deferred.await()
+                }
             }
         } finally {
-            mapMutex.withLock {
+            val removed = mapMutex.withLock {
                 questionDeferreds.remove(reqId)
+            }
+            if (removed != null) {
+                _requests.tryEmit(McpInteractionRequest.Dismiss(reqId))
             }
         }
     }

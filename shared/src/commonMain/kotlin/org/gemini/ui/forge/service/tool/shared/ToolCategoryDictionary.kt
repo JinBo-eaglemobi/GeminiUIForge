@@ -59,7 +59,7 @@ object ToolCategoryDictionary {
                 "compare_with_reference", "list_matting_presets"
             ) -> CATEGORY_ASSET
             in setOf(
-                "apply_view_layout", "calculate_geometry", "add_block",
+                "diagnose_view_data", "edit_view_layout", "apply_view_layout", "calculate_geometry", "add_block",
                 "update_block", "move_block", "delete_block",
                 "render_template_overlay"
             ) -> CATEGORY_VIEW

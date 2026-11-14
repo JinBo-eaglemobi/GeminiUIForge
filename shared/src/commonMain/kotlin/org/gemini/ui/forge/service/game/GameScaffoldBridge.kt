@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.service.game
 
 import org.gemini.ui.forge.model.gameproject.ForgeGameProjectConfig
+import org.gemini.ui.forge.model.gameproject.GameProjectInspection
 import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
 
@@ -17,6 +18,19 @@ interface GameScaffoldBridge {
 
     /** 判断项目是否已成功完成初次脚手架与构建激活 */
     fun isGameProjectActivated(gameRootDirPath: String): Boolean
+
+    /** 智能探测目标目录的游戏工程特征（是否为完整已有项目、半成品源码或空白目录） */
+    fun inspectGameProject(gameRootDirPath: String): GameProjectInspection
+
+    /**
+     * 将目标成熟游戏工程直接无损关联接入（绝对保护现有代码与依赖，无需重复初始化）
+     */
+    suspend fun bindExistingGameProject(
+        gameRootDirPath: String,
+        projectName: String,
+        canvasWidth: Int,
+        canvasHeight: Int
+    ): Result<ForgeGameProjectConfig>
 
     /** 执行全套环境自愈、脚手架写入、pnpm install 与 rollup 打包流水线 */
     suspend fun activateGameProject(

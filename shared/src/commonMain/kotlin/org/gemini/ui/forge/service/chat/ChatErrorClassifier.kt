@@ -67,7 +67,7 @@ object ChatErrorClassifier {
                 )
             }
             // 超时或 DNS/网络异常
-            lower.contains("timeout") || lower.contains("timed out") || lower.contains("sockettimeout") || lower.contains("connectexception") || lower.contains("unresolvedaddress") || lower.contains("dns") || lower.contains("network") || lower.contains("网络通信") -> {
+            lower.contains("timeout") || lower.contains("timed out") || lower.contains("sockettimeout") || lower.contains("connectexception") || lower.contains("unresolvedaddress") || lower.contains("dns") || lower.contains("network error") || lower.contains("network exception") || lower.contains("网络通信异常") || lower.contains("网络连接失败") -> {
                 ClassifiedChatError(
                     type = ChatErrorType.TIMEOUT,
                     friendlyTitle = "网络连接或域名解析异常 (Network / DNS Error)",
