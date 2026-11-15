@@ -3,6 +3,8 @@ package org.gemini.ui.forge.ui.uistudio.delegate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.gemini.ui.forge.ui.uistudio.model.TurnCheckpoint
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -100,25 +102,17 @@ class AiLayoutDelegate(
 
         val currentView = state.currentView ?: existingPages.firstOrNull()
         val finalPage = if (replaceCurrent) {
-            // 替换当前正在编辑的视图，继承当前视图的 id 与 name
+            // 替换当前正在编辑的视图，继承当前视图的 id
             val targetId = currentView?.id ?: rawPage.id
-            val targetNameStr = currentView?.nameStr ?: targetName.ifBlank { rawPage.nameStr }
-            rawPage.copy(
-                id = targetId,
-                nameStr = targetNameStr
-            )
+            rawPage.copy(id = targetId)
         } else {
             // 作为新视图创建
-            val cleanName = targetName.trim().ifBlank { rawPage.nameStr }
-            if (existingPages.any { it.nameStr.equals(cleanName, ignoreCase = true) }) {
+            val cleanName = targetName.trim().ifBlank { rawPage.id }
+            if (existingPages.any { it.id.equals(cleanName, ignoreCase = true) }) {
                 Toast.show("视图名称 \"$cleanName\" 已存在，请更换其他新名称", ToastType.ERROR)
                 return
             }
-            val newId = "page_${cleanName.replace(" ", "_")}_${getCurrentTimeMillis() % 10000}"
-            rawPage.copy(
-                id = newId,
-                nameStr = cleanName
-            )
+            rawPage.copy(id = cleanName)
         }
 
         val oldBlocks = if (replaceCurrent) currentView?.blocks ?: emptyList() else emptyList()
@@ -126,7 +120,7 @@ class AiLayoutDelegate(
         val diffResult = LayoutDiffCalculator.calculateDiff(oldBlocks, newBlocks)
         val undoSnapshot = LayoutUndoSnapshot(
             viewId = finalPage.id,
-            viewName = finalPage.nameStr,
+            viewName = finalPage.id,
             isReplaced = replaceCurrent,
             oldBlocks = oldBlocks,
             newBlocks = newBlocks,
@@ -153,9 +147,9 @@ class AiLayoutDelegate(
             )
             saveProject(TemplateRepository(storage))
             val toastMsg = if (replaceCurrent) {
-                "视图 [${finalPage.nameStr}] 已成功应用 AI 排版！"
+                "视图 [${finalPage.id}] 已成功应用 AI 排版！"
             } else {
-                "🎉 全新视图 [${finalPage.nameStr}] 已创建并在画布呈现！"
+                "🎉 全新视图 [${finalPage.id}] 已创建并在画布呈现！"
             }
             scope.launch(Dispatchers.Main) {
                 Toast.show(toastMsg, ToastType.SUCCESS)
@@ -166,9 +160,45 @@ class AiLayoutDelegate(
     }
 
     /**
-     * 撤销上一次 AI 应用的界面排版变更，无损还原图元树或新建的视图
+     * 撤销上一次 AI 应用的界面排版与资源变更：
+     * 优先使用轮次级全量检查点 (lastTurnCheckpoint) 将所有页面、磁盘配置及素材库增删改一次性原子还原；
+     * 若无轮次检查点则回退使用单页面快照 (lastLayoutUndoSnapshot)。
      */
     fun undoLastLayoutChanges() {
+        val turnCheckpoint = state.lastTurnCheckpoint
+        if (turnCheckpoint != null) {
+            scope.launch(Dispatchers.Default) {
+                org.gemini.ui.forge.service.studio.StudioAssetManagerService.restoreAssetLibrarySnapshot(
+                    projectName = turnCheckpoint.projectId,
+                    snapshotLib = turnCheckpoint.assetLibrarySnapshot,
+                    storage = storage,
+                    syncActiveWorkspace = true
+                )
+                val repo = TemplateRepository(storage)
+                repo.saveTemplate(turnCheckpoint.projectId, turnCheckpoint.projectSnapshot)
+                val restoredPage = turnCheckpoint.projectSnapshot.studioPages.find { it.id == turnCheckpoint.currentViewId }
+                    ?: turnCheckpoint.projectSnapshot.studioPages.firstOrNull()
+                withContext(Dispatchers.Main) {
+                    state = state.copy(
+                        project = turnCheckpoint.projectSnapshot,
+                        assetLibrary = turnCheckpoint.assetLibrarySnapshot,
+                        currentViewId = restoredPage?.id,
+                        openViewIds = turnCheckpoint.openViewIds.filter { openId ->
+                            turnCheckpoint.projectSnapshot.studioPages.any { it.id == openId }
+                        },
+                        canvasWidth = restoredPage?.width ?: state.canvasWidth,
+                        canvasHeight = restoredPage?.height ?: state.canvasHeight,
+                        lastLayoutUndoSnapshot = null,
+                        lastTurnCheckpoint = null,
+                        isDirty = false,
+                        isFitToViewport = true
+                    )
+                    Toast.show("↩️ 已将工程全部页面与素材库完整还原至本轮对话前状态", ToastType.SUCCESS)
+                }
+            }
+            return
+        }
+
         val snapshot = state.lastLayoutUndoSnapshot ?: run {
             Toast.show("当前没有可撤回的 AI 排版变更", ToastType.INFO)
             return
@@ -251,7 +281,7 @@ class AiLayoutDelegate(
         val diffResult = LayoutDiffCalculator.calculateDiff(oldBlocks, activePage.blocks)
         val undoSnapshot = LayoutUndoSnapshot(
             viewId = activePage.id,
-            viewName = activePage.nameStr,
+            viewName = activePage.id,
             isReplaced = editResult.isPageReplacedOrCreated,
             oldBlocks = oldBlocks,
             newBlocks = activePage.blocks,

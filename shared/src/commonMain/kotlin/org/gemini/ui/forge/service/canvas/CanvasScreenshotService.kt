@@ -43,7 +43,7 @@ class CanvasScreenshotService {
 
         val compactImage: CompactImage = when (mode) {
             CanvasSnapshotMode.OFFSCREEN_COMPOSITE -> {
-                renderOffscreenComposite(currentPage, assetPathResolver) ?: return@withContext null
+                renderPageToImage(currentPage, emptyList(), assetPathResolver) ?: return@withContext null
             }
             CanvasSnapshotMode.VIEWPORT_CLIP -> {
                 captureViewportPhysicalClip(windowBounds) ?: return@withContext null
@@ -59,7 +59,7 @@ class CanvasScreenshotService {
 
         val w = currentPage.width.toInt()
         val h = currentPage.height.toInt()
-        val displayName = "🎨 画布快照: ${currentPage.nameStr} (${w}×${h})"
+        val displayName = "🎨 画布快照: ${currentPage.id} (${w}×${h})"
 
         CommonChatAttachment(
             name = displayName,
@@ -71,10 +71,12 @@ class CanvasScreenshotService {
     }
 
     /**
-     * 模式 A：纯本地 Skia 离屏图元 1:1 拼装渲染（不受缩放和视口裁剪影响）
+     * 公用函数：纯本地 Skia 离屏图元 1:1 拼装渲染（支持递归解析 targetPageId 引用的子页面，不受缩放和视口裁剪影响）
+     * 供聊天框「截取画布」与外部工具 ComposePageScreenshotTool 共同调用。
      */
-    private suspend fun renderOffscreenComposite(
+    suspend fun renderPageToImage(
         page: UIStudioPage,
+        availablePages: List<UIStudioPage> = emptyList(),
         assetPathResolver: (String?) -> String?
     ): CompactImage? {
         val width = page.width.toInt().coerceAtLeast(100)
@@ -87,17 +89,35 @@ class CanvasScreenshotService {
         val bgPaint = Paint().apply { color = 0xFF0F172A.toInt() }
         canvas.drawRect(Rect.makeWH(width.toFloat(), height.toFloat()), bgPaint)
 
-        // 2. 收集所有图元
-        val allBlocks = mutableListOf<UIStudioBlock>()
-        fun collect(blocks: List<UIStudioBlock>) {
+        // 2. 收集所有可见图元及其绝对坐标（递归支持 targetPageId 子页面动态投影）
+        val allBlocksWithBounds = mutableListOf<Pair<UIStudioBlock, SerialRect>>()
+        fun collect(
+            blocks: List<UIStudioBlock>,
+            offsetX: Float,
+            offsetY: Float,
+            visitedPages: Set<String>
+        ) {
             for (b in blocks) {
-                if (b.isVisible) {
-                    allBlocks.add(b)
-                    collect(b.children)
+                if (!b.isVisible) continue
+                val absLeft = offsetX + b.bounds.left
+                val absTop = offsetY + b.bounds.top
+                val absRect = SerialRect(absLeft, absTop, absLeft + b.bounds.width, absTop + b.bounds.height)
+                allBlocksWithBounds.add(b to absRect)
+
+                val targetId = b.targetPageId
+                if (!targetId.isNullOrBlank()) {
+                    val refPage = availablePages.find { it.id == targetId }
+                    if (refPage != null && targetId !in visitedPages) {
+                        collect(refPage.blocks, absLeft, absTop, visitedPages + targetId)
+                    } else if (b.children.isNotEmpty()) {
+                        collect(b.children, absLeft, absTop, visitedPages)
+                    }
+                } else if (b.children.isNotEmpty()) {
+                    collect(b.children, absLeft, absTop, visitedPages)
                 }
             }
         }
-        collect(page.blocks)
+        collect(page.blocks, 0f, 0f, setOf(page.id))
 
         // 3. 按绝对坐标渲染图元贴图
         val imageCache = mutableMapOf<String, Image>()
@@ -107,9 +127,7 @@ class CanvasScreenshotService {
             strokeWidth = 2f
         }
 
-        for (block in allBlocks) {
-            val bounds = block.absoluteBounds
-            // 哈希引用模型：素材库解析相对路径后转绝对物理路径读取
+        for ((block, bounds) in allBlocksWithBounds) {
             val imgPath = assetPathResolver(block.assetHash)?.let { rel ->
                 TemplateFile(rel).getAbsolutePath()
             }

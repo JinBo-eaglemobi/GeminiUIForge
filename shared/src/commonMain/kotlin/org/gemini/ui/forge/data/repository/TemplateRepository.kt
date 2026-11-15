@@ -161,6 +161,7 @@ class TemplateRepository(
 
         if (projectState.isUiStudioProject) {
             val pagesDir = "$PROJECTS_DIR/$sanitizedName/pages"
+            val validFileNames = projectState.studioPages.map { "${it.id}.json" }.toSet()
             // 1. 各平级页面完整数据原封不动独立写入 pages/{page.id}.json（原子刷盘，数据零篡改、零破坏）
             projectState.studioPages.forEach { page ->
                 try {
@@ -169,6 +170,19 @@ class TemplateRepository(
                 } catch (e: Exception) {
                     AppLogger.e("TemplateRepository", "❌ 保存独立页面失败: ${page.id}", e)
                 }
+            }
+            // 自动清理 pages/ 目录下已被重命名或移除的残留旧页面文件
+            try {
+                if (fileStorage.exists(pagesDir)) {
+                    fileStorage.listFiles(pagesDir)
+                        .filter { it.endsWith(".json") && it !in validFileNames }
+                        .forEach { staleFile ->
+                            deleteLocalFile(fileStorage.getFilePath("$pagesDir/$staleFile"))
+                            AppLogger.i("TemplateRepository", "🧹 已自动清理旧页面文件: $staleFile")
+                        }
+                }
+            } catch (e: Exception) {
+                AppLogger.w("TemplateRepository", "⚠️ 清理旧页面文件异常: ${e.message}")
             }
 
             // 2. 主 template.json 写入纯净的项目级公用配置（仅含元数据与页面轻量文件索引，无任何页面私有信息）
@@ -180,11 +194,7 @@ class TemplateRepository(
                 updatedAt = org.gemini.ui.forge.getCurrentTimeMillis(),
                 gameProjectPath = projectState.gameProjectPath,
                 pageIndex = projectState.studioPages.map { page ->
-                    UIStudioPageIndexItem(
-                        id = page.id,
-                        nameStr = page.nameStr,
-                        fileRelPath = "pages/${page.id}.json"
-                    )
+                    UIStudioPageIndexItem(id = page.id)
                 }
             )
             val jsonRelPath = "$PROJECTS_DIR/$sanitizedName/template.json"
@@ -300,6 +310,43 @@ class TemplateRepository(
      * 规范化模板工程名称（消除首尾空格、将空格转换为下划线）
      */
     fun sanitizeName(name: String): String = name.trim().replace(" ", "_")
+
+    /**
+     * 项目级公用函数：创建标准 UI Studio 空白工程状态（可选立即原子持久化落盘）。
+     * 统一供新建工程界面表单 (StandaloneUIProjectForm)、工作台默认兜底 (UIStudioViewModel)
+     * 以及外部/AI 工具 (CreateTemplateTool) 共用，彻底消除多处手搓分裂。
+     *
+     * @param projectName 工程名称
+     * @param canvasWidth 初始主视图画布宽度（默认 1280f）
+     * @param canvasHeight 初始主视图画布高度（默认 720f）
+     * @param initialViewId 初始主视图唯一 ID（默认 "MainPage"，与 pages/MainPage.json 强绑定）
+     * @param persistToDisk 是否立即原子写入磁盘（默认 true）
+     */
+    suspend fun createStudioProject(
+        projectName: String,
+        canvasWidth: Float = 1280f,
+        canvasHeight: Float = 720f,
+        initialViewId: String = "MainPage",
+        persistToDisk: Boolean = true
+    ): ProjectState {
+        val sanitized = sanitizeName(projectName).ifBlank { "New_UI_Project" }
+        val cleanViewId = initialViewId.trim().ifBlank { "MainPage" }
+        val projectState = ProjectState(
+            projectId = sanitized,
+            studioPages = listOf(
+                UIStudioPage(
+                    id = cleanViewId,
+                    width = canvasWidth,
+                    height = canvasHeight,
+                    blocks = emptyList()
+                )
+            )
+        )
+        if (persistToDisk) {
+            saveTemplate(sanitized, projectState)
+        }
+        return projectState
+    }
 
     /**
      * 组装完整的 UIStudioPage 列表：
@@ -428,7 +475,7 @@ class TemplateRepository(
                 result.add(fullPage)
                 visitedIds.add(indexItem.id)
             } else {
-                val fallback = UIStudioPage(id = indexItem.id, nameStr = indexItem.nameStr)
+                val fallback = UIStudioPage(id = indexItem.id)
                 result.add(fallback)
                 visitedIds.add(indexItem.id)
             }
@@ -442,7 +489,7 @@ class TemplateRepository(
         }
 
         if (result.isEmpty()) {
-            result.add(UIStudioPage(id = "MainPage", nameStr = "MainPage"))
+            result.add(UIStudioPage(id = "MainPage"))
         }
 
         return result.map { it.copy(blocks = it.blocks.bindParents()) }

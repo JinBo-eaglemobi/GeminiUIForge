@@ -247,8 +247,8 @@ class AiToolExecutionDispatcher {
         arguments: JsonObject,
         onProgress: ((progress: Float, message: String?) -> Unit)? = null
     ): ToolResult {
-        val tool = ToolHub.findTool(toolName)
-            ?: return ToolResult.error("未找到对应工具: $toolName")
+        val tool = AiToolRegistry.findTool(toolName)
+            ?: return ToolResult.error("未找到对应 AI 工具或该工具已被隔离禁用: $toolName")
 
         return try {
             val effectiveArguments = if (toolName in setOf("generate_block_asset", "generate_all_assets", "generate_image")) {

@@ -118,7 +118,7 @@ fun UIStudioPageTabBar(
                                 modifier = Modifier.size(15.dp)
                             )
                             Text(
-                                text = page.nameStr,
+                                text = page.id,
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontSize = 12.sp,
                                     fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal

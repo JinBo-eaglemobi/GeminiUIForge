@@ -297,6 +297,9 @@ class AssetLibraryDelegate(
                 }
 
                 if (transparentBytes != null && transparentBytes.isNotEmpty()) {
+                    // 覆盖写入前先写时复制备份原图至 .turn_trash，支持轮次秒级还原
+                    val projName = state.project?.projectId ?: "default"
+                    org.gemini.ui.forge.service.studio.StudioAssetManagerService.backupAssetFileToTurnTrash(projName, asset)
                     // 原地覆盖写入透明 PNG
                     tFile.writeBytes(transparentBytes)
                     val now = getCurrentTimeMillis()
@@ -460,94 +463,29 @@ class AssetLibraryDelegate(
     }
 
     /**
-     * 在素材库中创建新的分类文件夹。
+     * 在素材库中创建新的分类文件夹（统一委托至公用服务 StudioAssetManagerService.createFolder）。
      */
     fun createAssetFolder(name: String, parentFolderId: String? = state.selectedFolderId) {
         if (name.isBlank()) return
-        val trimmed = name.trim()
-        val newFolder = UIAssetFolder(
-            id = "folder_${getCurrentTimeMillis()}",
-            name = trimmed,
-            parentFolderId = parentFolderId
-        )
-        val sanitizedProject = state.project?.projectId?.replace(" ", "_") ?: "default"
-        scope.launch(Dispatchers.Default) {
-            try {
-                val dirRel = "templates/$sanitizedProject/assets/image/$trimmed/placeholder.tmp"
-                TemplateFile(dirRel).createParentDirs()
-            } catch (_: Exception) {}
+        val proj = state.project?.projectId ?: "default"
+        scope.launch {
+            org.gemini.ui.forge.service.studio.StudioAssetManagerService.createFolder(
+                projectName = proj,
+                folderName = name,
+                parentFolderId = parentFolderId,
+                storage = storage,
+                syncActiveWorkspace = true,
+                showToast = true
+            )
         }
-
-        val updatedLib = state.assetLibrary.copy(
-            folders = state.assetLibrary.folders + newFolder
-        )
-        state = state.copy(
-            assetLibrary = updatedLib,
-            selectedFolderId = newFolder.id,
-            isNewFolderDialogVisible = false
-        )
-        saveAssetLibrary()
-        Toast.show("成功创建文件夹: $trimmed", ToastType.SUCCESS)
     }
 
     /**
      * 将素材文件移动到指定的文件夹（若 targetFolderId == null 则移动到根目录）。
-     * 同步物理移动磁盘文件并更新素材与项目图元引用。
+     * 统一委托至公用服务 StudioAssetManagerService.moveAssets。
      */
     fun moveAssetToFolder(assetHash: String, targetFolderId: String?, repo: TemplateRepository) {
-        val asset = state.assetLibrary.items.find { it.hash == assetHash } ?: return
-        if (asset.folderId == targetFolderId) return
-
-        val sanitizedProject = state.project?.projectId?.replace(" ", "_") ?: "default"
-        val targetFolder = state.assetLibrary.folders.find { it.id == targetFolderId }
-        val targetSubDir = if (targetFolder != null) "${targetFolder.name}/" else ""
-        val fileName = asset.relativePath.substringAfterLast("/")
-        val newRelPath = "templates/$sanitizedProject/assets/image/${targetSubDir}$fileName"
-
-        scope.launch(Dispatchers.Default) {
-            // 物理移动文件（具备旧路径失效智能探测自愈）
-            try {
-                var resolvedOldFile = TemplateFile(asset.relativePath)
-                if (!resolvedOldFile.exists()) {
-                    val candidate1 = TemplateFile("templates/$sanitizedProject/assets/image/$fileName")
-                    val candidate2 = TemplateFile("templates/$sanitizedProject/assets/$assetHash/$fileName")
-                    if (candidate1.exists()) {
-                        resolvedOldFile = candidate1
-                    } else if (candidate2.exists()) {
-                        resolvedOldFile = candidate2
-                    }
-                }
-                if (resolvedOldFile.exists()) {
-                    val bytes = resolvedOldFile.readBytes()
-                    if (bytes != null && bytes.isNotEmpty()) {
-                        val newFile = TemplateFile(newRelPath)
-                        newFile.createParentDirs()
-                        newFile.writeBytes(bytes)
-                        if (resolvedOldFile.getAbsolutePath() != newFile.getAbsolutePath()) {
-                            resolvedOldFile.delete()
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                AppLogger.w("UIStudioViewModel", "物理移动素材文件失败: ${e.message}")
-            }
-        }
-
-        // 更新素材库项
-        val updatedItems = state.assetLibrary.items.map {
-            if (it.hash == assetHash) {
-                it.copy(folderId = targetFolderId, relativePath = newRelPath)
-            } else it
-        }
-
-        // 哈希引用模型下：素材库内移动文件夹仅更新条目的当前路径账本（relativePath），
-        // 页面图元通过 assetHash 引用素材，与物理路径彻底解耦，无需任何图元联动更新
-        state = state.copy(
-            assetLibrary = state.assetLibrary.copy(items = updatedItems)
-        )
-        saveAssetLibrary()
-        val destDesc = targetFolder?.name ?: "根目录"
-        Toast.show("素材已移动至: $destDesc", ToastType.SUCCESS)
+        moveAssetsToFolder(setOf(assetHash), targetFolderId, repo)
     }
 
     /**
@@ -555,65 +493,17 @@ class AssetLibraryDelegate(
      */
     fun moveAssetsToFolder(assetHashes: Set<String>, targetFolderId: String?, repo: TemplateRepository) {
         if (assetHashes.isEmpty()) return
-        val targetFolder = state.assetLibrary.folders.find { it.id == targetFolderId }
-        val targetAssets = state.assetLibrary.items.filter { assetHashes.contains(it.hash) && it.folderId != targetFolderId }
-        if (targetAssets.isEmpty()) return
-
-        val sanitizedProject = state.project?.projectId?.replace(" ", "_") ?: "default"
-        val targetSubDir = if (targetFolder != null) "${targetFolder.name}/" else ""
-
-        val updatedMap = mutableMapOf<String, String>() // hash -> newRelPath
-        for (asset in targetAssets) {
-            val fileName = asset.relativePath.substringAfterLast("/")
-            val newRelPath = "templates/$sanitizedProject/assets/image/${targetSubDir}$fileName"
-            updatedMap[asset.hash] = newRelPath
+        val proj = state.project?.projectId ?: "default"
+        scope.launch {
+            org.gemini.ui.forge.service.studio.StudioAssetManagerService.moveAssets(
+                projectName = proj,
+                assetHashes = assetHashes,
+                targetFolderId = targetFolderId,
+                storage = storage,
+                syncActiveWorkspace = true,
+                showToast = true
+            )
         }
-
-        scope.launch(Dispatchers.Default) {
-            for (asset in targetAssets) {
-                val newRelPath = updatedMap[asset.hash] ?: continue
-                try {
-                    val fileName = asset.relativePath.substringAfterLast("/")
-                    var resolvedOldFile = TemplateFile(asset.relativePath)
-                    if (!resolvedOldFile.exists()) {
-                        val candidate1 = TemplateFile("templates/$sanitizedProject/assets/image/$fileName")
-                        val candidate2 = TemplateFile("templates/$sanitizedProject/assets/${asset.hash}/$fileName")
-                        if (candidate1.exists()) {
-                            resolvedOldFile = candidate1
-                        } else if (candidate2.exists()) {
-                            resolvedOldFile = candidate2
-                        }
-                    }
-                    if (resolvedOldFile.exists()) {
-                        val bytes = resolvedOldFile.readBytes()
-                        if (bytes != null && bytes.isNotEmpty()) {
-                            val newFile = TemplateFile(newRelPath)
-                            newFile.createParentDirs()
-                            newFile.writeBytes(bytes)
-                            if (resolvedOldFile.getAbsolutePath() != newFile.getAbsolutePath()) {
-                                resolvedOldFile.delete()
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    AppLogger.w("UIStudioViewModel", "批量物理移动素材文件失败: ${e.message}")
-                }
-            }
-        }
-
-        val updatedItems = state.assetLibrary.items.map { item ->
-            val newPath = updatedMap[item.hash]
-            if (newPath != null) {
-                item.copy(folderId = targetFolderId, relativePath = newPath)
-            } else item
-        }
-
-        state = state.copy(
-            assetLibrary = state.assetLibrary.copy(items = updatedItems)
-        )
-        saveAssetLibrary()
-        val destDesc = targetFolder?.name ?: "根目录"
-        Toast.show("已将 ${targetAssets.size} 个素材移动至: $destDesc", ToastType.SUCCESS)
     }
 
     /**
@@ -663,6 +553,10 @@ class AssetLibraryDelegate(
                 )
             },
             onDiskIo = {
+                // 0. 备份受影响素材至 .turn_trash，支持轮次还原
+                for (item in affectedItems) {
+                    org.gemini.ui.forge.service.studio.StudioAssetManagerService.backupAssetFileToTurnTrash(sanitized, item)
+                }
                 // 1. 递归物理删除文件夹磁盘目录
                 if (folderRelPath.isNotBlank()) {
                     try {
@@ -805,7 +699,9 @@ class AssetLibraryDelegate(
                 )
             },
             onDiskIo = {
+                val projName = state.project?.projectId ?: "default"
                 targets.forEach { target ->
+                    org.gemini.ui.forge.service.studio.StudioAssetManagerService.backupAssetFileToTurnTrash(projName, target)
                     try {
                         val tFile = TemplateFile(target.relativePath)
                         val deleted = tFile.delete(recursive = false)
@@ -1123,64 +1019,31 @@ class AssetLibraryDelegate(
     fun cancelRenameFolder() { state = state.copy(renamingFolder = null) }
     fun commitRenameFolder(folderId: String, newName: String) {
         if (newName.isBlank()) return
-        val updatedFolders = state.assetLibrary.folders.map {
-            if (it.id == folderId) it.copy(name = newName.trim()) else it
+        val proj = state.project?.projectId ?: "default"
+        scope.launch {
+            org.gemini.ui.forge.service.studio.StudioAssetManagerService.renameFolder(
+                projectName = proj,
+                folderId = folderId,
+                newName = newName,
+                storage = storage,
+                syncActiveWorkspace = true,
+                showToast = true
+            )
         }
-        state = state.copy(
-            assetLibrary = state.assetLibrary.copy(folders = updatedFolders),
-            renamingFolder = null
-        )
-        saveAssetLibrary()
-        Toast.show("文件夹已重命名为: $newName", ToastType.SUCCESS)
     }
 
     fun startRenameAsset(asset: UIAssetItem) { state = state.copy(renamingAsset = asset) }
     fun cancelRenameAsset() { state = state.copy(renamingAsset = null) }
     suspend fun commitRenameAsset(assetHash: String, newName: String): Boolean {
-        val target = state.assetLibrary.items.find { it.hash == assetHash } ?: return false
-        val clean = AssetFileNameGuard.sanitizeFileName(newName)
-        if (clean.isBlank()) {
-            Toast.show("名称不能为空", ToastType.ERROR)
-            return false
-        }
-        val oldFileName = target.relativePath.substringAfterLast('/').substringAfterLast('\\')
-        val ext = oldFileName.substringAfterLast('.', "png")
-        val newFileName = if (ext.isBlank()) clean else "$clean.$ext"
-        val dir = target.relativePath.substringBeforeLast('/', "")
-
-        // 不区分大小写重名守卫：排除自身原文件名（仅大小写微调亦放行）
-        if (AssetFileNameGuard.isFileNameTakenInDir(storage, dir, newFileName, excludeFileName = oldFileName)) {
-            Toast.show("当前目录已存在同名素材（不区分大小写）：$clean，请修改名称后重试", ToastType.ERROR)
-            return false
-        }
-
-        val newRelPath = if (dir.isNotBlank()) "$dir/$newFileName" else newFileName
-        if (newRelPath != target.relativePath) {
-            try {
-                val oldFile = TemplateFile(target.relativePath)
-                val newFile = TemplateFile(newRelPath)
-                if (oldFile.exists()) {
-                    val bytes = oldFile.readBytes()
-                    if (bytes != null) {
-                        newFile.writeBytes(bytes)
-                        oldFile.delete()
-                    }
-                }
-            } catch (e: Exception) {
-                AppLogger.e("UIStudioViewModel", "重命名素材物理文件失败: ${target.relativePath} -> $newRelPath", e)
-                return false
-            }
-        }
-        val updatedItems = state.assetLibrary.items.map {
-            if (it.hash == assetHash) it.copy(relativePath = newRelPath, updatedAt = getCurrentTimeMillis()) else it
-        }
-        state = state.copy(
-            assetLibrary = state.assetLibrary.copy(items = updatedItems),
-            renamingAsset = null
-        )
-        saveAssetLibrary()
-        Toast.show("素材已重命名为: $clean", ToastType.SUCCESS)
-        return true
+        val proj = state.project?.projectId ?: "default"
+        return org.gemini.ui.forge.service.studio.StudioAssetManagerService.renameAsset(
+            projectName = proj,
+            assetHash = assetHash,
+            newName = newName,
+            storage = storage,
+            syncActiveWorkspace = true,
+            showToast = true
+        ).isSuccess
     }
 
     fun revealAssetInExplorer(asset: UIAssetItem) {
@@ -1219,10 +1082,18 @@ class AssetLibraryDelegate(
 
     fun revealFolderInExplorer(folderId: String? = state.selectedFolderId) {
         val proj = state.project?.projectId ?: "default"
-        val folder = state.assetLibrary.folders.find { it.id == folderId }
-        val subPath = if (folder != null) "templates/$proj/assets/${folder.name}" else "templates/$proj/assets"
-        val path = TemplateFile(subPath).getAbsolutePath()
-        getPlatform().openInFileExplorer(path)
+        val relPath = org.gemini.ui.forge.service.studio.StudioAssetManagerService.resolveFolderPhysicalRelPath(
+            projectName = proj,
+            library = state.assetLibrary,
+            folderId = folderId
+        )
+        val tDir = TemplateFile(relPath)
+        scope.launch {
+            try {
+                TemplateFile("$relPath/placeholder.tmp").createParentDirs()
+            } catch (_: Exception) {}
+            getPlatform().openInFileExplorer(tDir.getAbsolutePath())
+        }
     }
 
     fun addAssetToCanvas(
@@ -1297,78 +1168,19 @@ class AssetLibraryDelegate(
         isPng: Boolean = true
     ): String? {
         val proj = state.project?.projectId?.ifBlank { null } ?: return null
-        val cleanSubPath = subPath.trim().trim('/', '\\')
-        val ext = if (isPng) "png" else "jpg"
-        val cleanName = fileName.trim().let {
-            if (it.endsWith(".$ext", ignoreCase = true)) it else "$it.$ext"
-        }
-        val targetRelDir = if (cleanSubPath.isBlank()) {
-            "templates/$proj/assets/image"
-        } else {
-            "templates/$proj/assets/image/$cleanSubPath"
-        }
-        val targetFullPath = "$targetRelDir/$cleanName"
-
-        val targetDir = targetFullPath.substringBeforeLast('/')
-        val targetFileName = targetFullPath.substringAfterLast('/')
-        if (AssetFileNameGuard.isFileNameTakenInDir(storage, targetDir, targetFileName)) {
-            Toast.show("保存被拒绝：当前目录已存在同名文件（不区分大小写）：$targetFileName，请修改文件名后重新保存", ToastType.ERROR)
-            return null
-        }
-
-        return try {
-            if (imageBytes.isEmpty()) {
-                AppLogger.w("UIStudioViewModel", "⚠️ 尝试保存 0 字节图片至素材库，已安全拦截: $targetFullPath")
-                Toast.show("保存失败: 图像数据为空", ToastType.ERROR)
-                return null
-            }
-            val savedPath = storage.saveBytesToFile(targetFullPath, imageBytes)
-            // 1. 同步在内存素材库中构建并登记该新素材，确保无论哈希如何均立即生效并高亮
-            val (w, h) = try {
-                val skiaImg = Image.makeFromEncoded(imageBytes)
-                skiaImg.width to skiaImg.height
-            } catch (_: Exception) {
-                100 to 100
-            }
-            val fileHash = calculateShortFileHash(targetFullPath) ?: targetFullPath.hashCode().toString(16)
-            val existingSameHash = state.assetLibrary.items.find { it.hash == fileHash }
-            if (existingSameHash != null) {
-                AppLogger.i("UIStudioViewModel", "♻️ 保存聊天图片发现已有相同内容资产: ${existingSameHash.name} (hash=$fileHash)，自动聚焦复用")
-                Toast.show("素材库已存在相同内容资产，已为您自动定位", ToastType.INFO)
-                refreshAssetLibrary(focusAssetPath = existingSameHash.relativePath)
-                return existingSameHash.relativePath
-            }
-            val targetFolder = if (cleanSubPath.isNotBlank()) {
-                state.assetLibrary.folders.find { it.name.equals(cleanSubPath, ignoreCase = true) }
-            } else null
-            val newAsset = UIAssetItem(
-                hash = fileHash,
-                relativePath = targetFullPath,
-                width = w,
-                height = h,
-                category = "image",
-                folderId = targetFolder?.id
-            )
-            val existingList = state.assetLibrary.items.filterNot { it.relativePath == targetFullPath }
-            val updatedItems = existingList + newAsset
-            val updatedFolders = state.expandedFolderIds.let {
-                if (targetFolder != null) it + targetFolder.id else it
-            }
-            state = state.copy(
-                assetLibrary = state.assetLibrary.copy(items = updatedItems),
-                selectedAssetHash = newAsset.hash,
-                expandedFolderIds = updatedFolders
-            )
-            saveAssetLibrary()
-            refreshAssetLibrary(focusAssetPath = targetFullPath)
-            Toast.show("已成功存入素材库: $cleanName", ToastType.SUCCESS)
-            AppLogger.i("UIStudioViewModel", "✅ AI 聊天图片已成功存入素材库并即时选中聚焦: $targetFullPath (Hash: ${newAsset.hash})")
-            savedPath
-        } catch (e: Exception) {
-            AppLogger.e("UIStudioViewModel", "保存 AI 聊天图片至素材库失败: $targetFullPath", e)
-            Toast.show("保存失败: ${e.message}", ToastType.ERROR)
-            null
-        }
+        val res = org.gemini.ui.forge.service.studio.StudioAssetManagerService.saveImageToLibrary(
+            projectName = proj,
+            imageBytes = imageBytes,
+            fileName = fileName,
+            folderPath = subPath,
+            isTransparent = isPng,
+            autoRemoveBg = false,
+            conflictPolicy = org.gemini.ui.forge.service.studio.NameConflictPolicy.REJECT,
+            storage = storage,
+            syncActiveWorkspace = true,
+            showToast = true
+        )
+        return res.getOrNull()?.relativePath
     }
 
     /**

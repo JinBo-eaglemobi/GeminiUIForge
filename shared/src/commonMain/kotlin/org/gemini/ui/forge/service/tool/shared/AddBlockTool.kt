@@ -1,22 +1,18 @@
 package org.gemini.ui.forge.service.tool.shared
 
-import org.gemini.ui.forge.service.tool.ToolAnnotations
-import org.gemini.ui.forge.service.tool.ToolContent
-import org.gemini.ui.forge.service.tool.ToolDefinition
-import org.gemini.ui.forge.service.tool.ToolResult
-
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.ui.SerialRect
-import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
-import org.gemini.ui.forge.service.TemplateOverlayRenderer
-import org.gemini.ui.forge.service.mcp.McpUiActionPipeline
-import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.service.studio.UiStudioLayoutService
+import org.gemini.ui.forge.service.tool.ToolAnnotations
+import org.gemini.ui.forge.service.tool.ToolDefinition
+import org.gemini.ui.forge.service.tool.ToolResult
 import org.gemini.ui.forge.utils.looseJson
 
 /**
- * 新增图元组件块工具
+ * 向指定 UI Studio 工程视图中新增图元组件块工具（100% 复用 UiStudioLayoutService.addStudioBlock 公用函数）
  */
 class AddBlockTool(
     private val repository: TemplateRepository = TemplateRepository()
@@ -25,11 +21,11 @@ class AddBlockTool(
     override val name: String = "add_block"
 
     override val description: String =
-        "向指定模板中新增图元组件块。支持指定父级容器 (parentId) 或追加到页面根层级，支持配置坐标 (bounds)、切片区域 (cropRect)、提示词及纯容器标识，自动离屏刷新标注图并同步活跃工作区。"
+        "向指定 UI Studio 工程视图中新增图元组件块。支持指定父级容器 (parentId) 或追加到页面根层级，支持配置坐标 (bounds)、素材哈希 (assetHash) 及纯容器标识，自动跨页同步并刷新活跃工作区。"
 
     override val annotations: ToolAnnotations = ToolAnnotations(
         readOnlyHint = false,
-        destructiveHint = true
+        destructiveHint = false
     )
 
     override val inputSchema: JsonObject = buildJsonObject {
@@ -37,84 +33,42 @@ class AddBlockTool(
         put("properties", buildJsonObject {
             put("projectName", buildJsonObject {
                 put("type", "string")
-                put("description", "模板工程名称")
+                put("description", "目标工程项目名称")
+            })
+            put("viewName", buildJsonObject {
+                put("type", "string")
+                put("description", "可选：目标视图 ID（如 'MainPage'），缺省时取首个视图")
             })
             put("parentId", buildJsonObject {
                 put("type", "string")
-                put("description", "可选：父级容器的 ID；为 null 或空时添加到页面根层级")
+                put("description", "可选：父容器图元 id；留空表示添加到页面根层级")
             })
-            put("blockId", buildJsonObject {
+            put("id", buildJsonObject {
                 put("type", "string")
-                put("description", "可选：新图元的唯一标识 ID（缺省时自动生成）")
+                put("description", "新图元的唯一标识 id")
             })
             put("type", buildJsonObject {
                 put("type", "string")
-                putJsonArray("enum") {
-                    add("VIEW")
-                    add("BUTTON")
-                    add("IMAGE")
-                    add("TEXT")
-                    add("INPUT")
-                    add("REEL")
-                    add("SPIN_BUTTON")
-                    add("WIN_DISPLAY")
-                    add("BACKGROUND")
-                    add("SYMBOL")
-                    add("HEADER")
-                    add("FOOTER")
-                    add("PROGRESS_BAR")
-                    add("POPUP_MENU")
-                    add("LOADER")
-                    add("SCROLL_BAR")
-                    add("SLIDER")
-                    add("COMBO_BOX")
-                }
-                put(
-                    "description",
-                    "可选：图元组件类型，默认 'IMAGE'。常用推荐：'VIEW'（视图/底板，组合层配合 isPureContainer=true）、'BUTTON'（可交互按键）、'IMAGE'（独立切片/贴图）、'TEXT'（文本框）。亦支持专用类型如 'INPUT', 'REEL', 'SPIN_BUTTON', 'WIN_DISPLAY', 'BACKGROUND', 'SYMBOL', 'HEADER', 'FOOTER', 'PROGRESS_BAR' 等。"
-                )
+                put("description", "图元类型，例如 VIEW, BUTTON, IMAGE, TEXT 等，默认 IMAGE")
             })
             put("bounds", buildJsonObject {
-                put("type", "object")
-                put("description", "必填：局部相对坐标与尺寸对象 { left, top, right, bottom }")
-                put("properties", buildJsonObject {
-                    put("left", buildJsonObject { put("type", "number") })
-                    put("top", buildJsonObject { put("type", "number") })
-                    put("right", buildJsonObject { put("type", "number") })
-                    put("bottom", buildJsonObject { put("type", "number") })
-                })
-                put("required", buildJsonArray {
-                    add("left")
-                    add("top")
-                    add("right")
-                    add("bottom")
-                })
+                put("description", "局部相对矩形区域，支持 [left, top, right, bottom] 数组或 { left, top, right, bottom } 对象")
             })
-            put("cropRect", buildJsonObject {
-                put("type", "object")
-                put("description", "可选：参考图局部裁切区域坐标 { left, top, right, bottom }（缺省时自动基于父容器绝对位移推导）")
-                put("properties", buildJsonObject {
-                    put("left", buildJsonObject { put("type", "number") })
-                    put("top", buildJsonObject { put("type", "number") })
-                    put("right", buildJsonObject { put("type", "number") })
-                    put("bottom", buildJsonObject { put("type", "number") })
-                })
+            put("assetHash", buildJsonObject {
+                put("type", "string")
+                put("description", "可选：绑定的素材切片哈希")
+            })
+            put("targetPageId", buildJsonObject {
+                put("type", "string")
+                put("description", "可选：引用的平级视图页面 ID")
             })
             put("isPureContainer", buildJsonObject {
                 put("type", "boolean")
-                put("description", "可选：是否为纯容器/占位层（true 表示仅用于排版，不参与任何 AI 图片资源生成，默认 false）")
-            })
-            put("userPromptZh", buildJsonObject {
-                put("type", "string")
-                put("description", "可选：中文 AI 生图提示词")
-            })
-            put("userPromptEn", buildJsonObject {
-                put("type", "string")
-                put("description", "可选：英文 AI 生图提示词")
+                put("description", "是否为纯布局容器，默认 false")
             })
             put("insertIndex", buildJsonObject {
                 put("type", "integer")
-                put("description", "可选：插入到目标容器子列表中的位置索引，默认追加到末尾")
+                put("description", "可选：插入位置索引，默认追加到末尾")
             })
         })
         put("required", buildJsonArray {
@@ -129,159 +83,70 @@ class AddBlockTool(
     ): ToolResult {
         val projectName = arguments["projectName"]?.jsonPrimitive?.contentOrNull
             ?: return ToolResult.error("参数 'projectName' 不能为空")
-
-        val boundsObj = arguments["bounds"]?.let { it as? JsonObject }
-            ?: return ToolResult.error("参数 'bounds' 必须是包含 left, top, right, bottom 的对象")
-
-        val bLeft = boundsObj["left"]?.jsonPrimitive?.floatOrNull
-            ?: return ToolResult.error("bounds.left 不能为空")
-        val bTop = boundsObj["top"]?.jsonPrimitive?.floatOrNull
-            ?: return ToolResult.error("bounds.top 不能为空")
-        val bRight = boundsObj["right"]?.jsonPrimitive?.floatOrNull
-            ?: return ToolResult.error("bounds.right 不能为空")
-        val bBottom = boundsObj["bottom"]?.jsonPrimitive?.floatOrNull
-            ?: return ToolResult.error("bounds.bottom 不能为空")
+        val viewName = arguments["viewName"]?.jsonPrimitive?.contentOrNull?.trim()
+        val localBounds = parseSerialRect(arguments["bounds"])
+            ?: return ToolResult.error("参数 'bounds' 必须是 [left, top, right, bottom] 数组或包含 left, top, right, bottom 的对象")
 
         val parentId = arguments["parentId"]?.jsonPrimitive?.contentOrNull?.ifBlank { null }
         val insertIndex = arguments["insertIndex"]?.jsonPrimitive?.intOrNull
-
         val typeStr = arguments["type"]?.jsonPrimitive?.contentOrNull ?: "IMAGE"
-        val blockType = try {
-            UIBlockType.valueOf(typeStr.uppercase())
-        } catch (_: Throwable) {
-            UIBlockType.IMAGE
-        }
+        val blockType = runCatching { UIBlockType.valueOf(typeStr.uppercase()) }.getOrDefault(UIBlockType.IMAGE)
 
-        val rawBlockId = arguments["blockId"]?.jsonPrimitive?.contentOrNull?.ifBlank { null }
-        val finalBlockId = rawBlockId ?: "${blockType.name.lowercase()}_${kotlin.random.Random.nextInt(1000, 9999)}"
+        val rawId = arguments["id"]?.jsonPrimitive?.contentOrNull?.ifBlank { null }
+        val finalId = rawId ?: "${blockType.name.lowercase()}_${kotlin.random.Random.nextInt(1000, 9999)}"
+        val assetHash = arguments["assetHash"]?.jsonPrimitive?.contentOrNull?.ifBlank { null }
+        val targetPageId = arguments["targetPageId"]?.jsonPrimitive?.contentOrNull?.ifBlank { null }
+        val isPureContainer = arguments["isPureContainer"]?.jsonPrimitive?.booleanOrNull ?: (targetPageId != null)
 
-        val isPureContainer = arguments["isPureContainer"]?.jsonPrimitive?.booleanOrNull ?: false
-        val userPromptZh = arguments["userPromptZh"]?.jsonPrimitive?.contentOrNull ?: ""
-        val userPromptEn = arguments["userPromptEn"]?.jsonPrimitive?.contentOrNull ?: ""
-
-        onProgress?.invoke(0.2f, "正在读取工程结构...")
-        val match = repository.findTemplatePair(projectName)
-            ?: return ToolResult.error("未找到工程 '$projectName'")
-
-        val state = match.second
-        val page = state.pages.firstOrNull()
-            ?: return ToolResult.error("工程未包含有效页面")
-
-        // 检查 ID 是否重复
-        fun checkIdExists(blocks: List<UIBlock>): Boolean {
-            for (b in blocks) {
-                if (b.id == finalBlockId) return true
-                if (checkIdExists(b.children)) return true
-            }
-            return false
-        }
-
-        if (checkIdExists(page.blocks)) {
-            return ToolResult.error("图元 ID '$finalBlockId' 在模板工程中已存在，请指定不同的 blockId")
-        }
-
-        // 计算父容器绝对偏移量
-        var foundParent = false
-        var parentOffsetX = 0f
-        var parentOffsetY = 0f
-
-        fun findParentOffset(blocks: List<UIBlock>, curX: Float, curY: Float): Boolean {
-            for (b in blocks) {
-                if (b.id == parentId) {
-                    parentOffsetX = curX + b.bounds.left
-                    parentOffsetY = curY + b.bounds.top
-                    foundParent = true
-                    return true
-                }
-                if (findParentOffset(b.children, curX + b.bounds.left, curY + b.bounds.top)) {
-                    return true
-                }
-            }
-            return false
-        }
-
-        if (parentId != null) {
-            findParentOffset(page.blocks, 0f, 0f)
-            if (!foundParent) {
-                return ToolResult.error("在模板工程中未找到指定的父容器 ID '$parentId'")
-            }
-        }
-
-        val localBounds = SerialRect(bLeft, bTop, bRight, bBottom)
-
-        // 若提供了自定义 cropRect 则使用，未提供则保持为 null（杜绝将 bounds 替用落盘）
-        val finalCropRect = arguments["cropRect"]?.let { it as? JsonObject }?.let { cObj ->
-            val cLeft = cObj["left"]?.jsonPrimitive?.floatOrNull ?: localBounds.left
-            val cTop = cObj["top"]?.jsonPrimitive?.floatOrNull ?: localBounds.top
-            val cRight = cObj["right"]?.jsonPrimitive?.floatOrNull ?: localBounds.right
-            val cBottom = cObj["bottom"]?.jsonPrimitive?.floatOrNull ?: localBounds.bottom
-            SerialRect(cLeft, cTop, cRight, cBottom)
-        }
-
-        val newBlock = UIBlock(
-            id = finalBlockId,
-            type = blockType,
+        val newBlock = UIStudioBlock(
+            id = finalId,
+            type = if (targetPageId != null) UIBlockType.VIEW else blockType,
             bounds = localBounds,
-            cropRect = finalCropRect,
             isPureContainer = isPureContainer,
-            userPromptZh = userPromptZh,
-            userPromptEn = userPromptEn
+            assetHash = assetHash,
+            targetPageId = targetPageId
         )
 
-        onProgress?.invoke(0.5f, "正在将新图元接入层级树...")
+        val res = UiStudioLayoutService.addStudioBlock(
+            projectName = projectName,
+            viewName = viewName,
+            parentId = parentId,
+            block = newBlock,
+            insertIndex = insertIndex,
+            repository = repository,
+            recordUndo = true,
+            syncActiveWorkspace = true
+        )
 
-        fun insertBlockRecursively(blocks: List<UIBlock>): List<UIBlock> {
-            if (parentId == null) {
-                val list = blocks.toMutableList()
-                val idx = (insertIndex ?: list.size).coerceIn(0, list.size)
-                list.add(idx, newBlock)
-                return list
-            }
-            return blocks.map { b ->
-                if (b.id == parentId) {
-                    val list = b.children.toMutableList()
-                    val idx = (insertIndex ?: list.size).coerceIn(0, list.size)
-                    list.add(idx, newBlock)
-                    b.copy(children = list)
-                } else {
-                    b.copy(children = insertBlockRecursively(b.children))
-                }
-            }
+        return res.fold(
+            onSuccess = { (viewId, added) ->
+                ToolResult.text(buildJsonObject {
+                    put("success", true)
+                    put("viewId", viewId)
+                    put("addedBlock", looseJson.encodeToJsonElement(added))
+                    put("parentId", parentId)
+                }.toString())
+            },
+            onFailure = { err -> ToolResult.error(err.message ?: "添加图元失败") }
+        )
+    }
+
+    private fun parseSerialRect(element: JsonElement?): SerialRect? {
+        if (element == null) return null
+        if (element is JsonArray && element.size >= 4) {
+            val l = element[0].jsonPrimitive.floatOrNull ?: return null
+            val t = element[1].jsonPrimitive.floatOrNull ?: return null
+            val r = element[2].jsonPrimitive.floatOrNull ?: return null
+            val b = element[3].jsonPrimitive.floatOrNull ?: return null
+            return SerialRect(l, t, r, b)
         }
-
-        val updatedPage = page.copy(blocks = insertBlockRecursively(page.blocks))
-        val updatedProject = state.copy(pages = listOf(updatedPage))
-
-        onProgress?.invoke(0.7f, "正在持久化工程...")
-        repository.saveTemplate(projectName, updatedProject)
-
-        // 离屏渲染更新最新标注图
-        try {
-            TemplateOverlayRenderer.renderAndSaveLatest(projectName, updatedProject)
-        } catch (e: Exception) {
-            AppLogger.w("AddBlockTool", "更新标注图异常", e)
+        if (element is JsonObject) {
+            val l = element["left"]?.jsonPrimitive?.floatOrNull ?: return null
+            val t = element["top"]?.jsonPrimitive?.floatOrNull ?: return null
+            val r = element["right"]?.jsonPrimitive?.floatOrNull ?: return null
+            val b = element["bottom"]?.jsonPrimitive?.floatOrNull ?: return null
+            return SerialRect(l, t, r, b)
         }
-
-        // 同步通知当前活跃工作区刷新内存状态与画布渲染
-        try {
-            val activeVm = McpUiActionPipeline.getActiveViewModel()
-            if (activeVm != null) {
-                activeVm.reload(updatedProject)
-            }
-        } catch (e: Throwable) {
-            AppLogger.w("AddBlockTool", "通知活跃工作区刷新失败", e)
-        }
-
-        onProgress?.invoke(1.0f, "新图元已成功添加")
-
-        val resultJson = buildJsonObject {
-            put("success", true)
-            put("addedBlock", looseJson.encodeToJsonElement(newBlock))
-            put("parentId", parentId)
-            put("projectName", projectName)
-        }.toString()
-
-        return ToolResult.text(resultJson)
+        return null
     }
 }
-

@@ -106,6 +106,13 @@ class EditViewLayoutTool : ToolDefinition {
         arguments: JsonObject,
         onProgress: ((progress: Float, message: String?) -> Unit)?
     ): ToolResult {
-        return ToolResult.success("edit_view_layout 工具已被调度，由 UI Studio 排版引擎原子执行。")
+        val studioVm = org.gemini.ui.forge.service.mcp.McpUiActionPipeline.getActiveUiStudioViewModel()
+            ?: return ToolResult.error("当前未打开 UI Studio 工作台")
+        val editResult = studioVm.aiLayout.executeEditViewLayout(arguments)
+        return if (editResult.isSuccess) {
+            ToolResult.success(editResult.summary)
+        } else {
+            ToolResult.error(editResult.errorMessage ?: "排版执行失败")
+        }
     }
 }

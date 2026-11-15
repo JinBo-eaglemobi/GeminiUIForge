@@ -1,43 +1,22 @@
 package org.gemini.ui.forge.service.tool.shared
 
-import org.gemini.ui.forge.service.tool.ToolAnnotations
-import org.gemini.ui.forge.service.tool.ToolContent
-import org.gemini.ui.forge.service.tool.ToolDefinition
-import org.gemini.ui.forge.service.tool.ToolResult
-
 import kotlinx.serialization.json.*
-import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.model.assetsheet.AssetSheetParseResult
-import org.gemini.ui.forge.model.ui.SerialRect
-import org.gemini.ui.forge.model.ui.UIBlock
-import org.gemini.ui.forge.model.ui.UIPage
-import org.gemini.ui.forge.service.TemplateOverlayRenderer
 import org.gemini.ui.forge.service.assetsheet.AssetSheetAiDetector
 import org.gemini.ui.forge.service.assetsheet.AssetSheetNormalizer
 import org.gemini.ui.forge.service.mcp.McpJobManager
-import org.gemini.ui.forge.state.ui.ProjectState
+import org.gemini.ui.forge.service.studio.StudioAssetManagerService
+import org.gemini.ui.forge.service.tool.ToolAnnotations
+import org.gemini.ui.forge.service.tool.ToolDefinition
+import org.gemini.ui.forge.service.tool.ToolResult
 import org.gemini.ui.forge.utils.AppLogger
-import org.gemini.ui.forge.utils.cropImage
+import org.gemini.ui.forge.utils.SmartEdgeSnapper
 import org.gemini.ui.forge.utils.readLocalFileBytes
-import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Image
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
 
 /**
- * AI 图集导入流水线 MCP 工具。
- *
- * 接收图集大图 (SpriteSheet) 与可选的坐标配置文件 (JSON)，
- * 自动执行规范自适应解析、智能微观吸附、Skia 透明物理切片落盘与 UI 项目模板生成。
- * 当未提供坐标 JSON 时，自动调用 Gemini 视觉多模态大模型逆向检测全景图元坐标。
- * 支持异步长轮询彻底免疫客户端超时。
+ * AI 图集导入流水线工具（统一复用 StudioAssetManagerService.importAssetSheetToStudioProject 公用函数）。
  */
 class ImportAssetSheetPipelineTool(
     private val repository: TemplateRepository = TemplateRepository()
@@ -46,7 +25,7 @@ class ImportAssetSheetPipelineTool(
     override val name: String = "import_asset_sheet_pipeline"
 
     override val description: String =
-        "【AI图集导入流水线核心工具】接收图集大图 (SpriteSheet) 与可选的坐标配置文件 (JSON)，自动执行规范自适应解析、智能微观吸附、Skia透明物理切片落盘与UI项目模板生成。当未提供坐标JSON时，自动调用Gemini视觉多模态大模型逆向检测全景图元坐标。支持异步长轮询彻底免疫客户端超时。"
+        "【AI图集导入流水线核心工具】接收图集大图 (SpriteSheet) 与可选的坐标配置文件 (JSON)，自动执行规范自适应解析、智能微观吸附、Skia透明物理切片落盘至素材库与 UI Studio 页面生成。当未提供坐标JSON时，自动调用Gemini视觉多模态大模型逆向检测全景图元坐标。"
 
     override val annotations: ToolAnnotations = ToolAnnotations(
         readOnlyHint = false,
@@ -54,22 +33,22 @@ class ImportAssetSheetPipelineTool(
         openWorldHint = true
     )
 
-    override val timeoutMs: Long = 180_000L // 3 分钟超时时限
+    override val timeoutMs: Long = 180_000L
 
     override val inputSchema: JsonObject = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
             put("projectName", buildJsonObject {
                 put("type", "string")
-                put("description", "目标工程模板名称 (小驼峰或下划线命名)")
+                put("description", "目标工程名称 (小驼峰或下划线命名)")
             })
             put("imagePath", buildJsonObject {
                 put("type", "string")
-                put("description", "图集大图文件绝对物理路径或网络URL (如 E:\\dir/img.png)")
+                put("description", "图集大图文件绝对物理路径 (如 E:\\dir/img.png)")
             })
             put("jsonPath", buildJsonObject {
                 put("type", "string")
-                put("description", "可选：坐标配置文件绝对物理路径 (如 E:\\dir/img_doc.json)；缺省时自动走纯图 AI 视觉目标检测分支")
+                put("description", "可选：坐标配置文件绝对物理路径；缺省时自动走纯图 AI 视觉目标检测分支")
             })
             put("jsonContent", buildJsonObject {
                 put("type", "string")
@@ -85,7 +64,7 @@ class ImportAssetSheetPipelineTool(
             })
             put("async", buildJsonObject {
                 put("type", "boolean")
-                put("description", "可选：是否采用异步任务模式执行，默认 true (立即返回 jobId 并通过 get_job_status 长轮询，免疫超时)")
+                put("description", "可选：是否采用异步任务模式执行，默认 true")
             })
         })
         put("required", buildJsonArray {
@@ -127,7 +106,7 @@ class ImportAssetSheetPipelineTool(
         val apiKey = arguments["apiKey"]?.jsonPrimitive?.contentOrNull
         val autoSnap = arguments["autoSnap"]?.jsonPrimitive?.booleanOrNull ?: true
 
-        val sanitizedName = projectName.trim().replace(" ", "_")
+        val sanitizedName = repository.sanitizeName(projectName)
 
         onProgress?.invoke(0.05f, "正在读取图集图像数据...")
         val imageBytes = readLocalFileBytes(imagePath)
@@ -142,7 +121,6 @@ class ImportAssetSheetPipelineTool(
         val imgWidth = skiaImage.width.toFloat()
         val imgHeight = skiaImage.height.toFloat()
 
-        // 1. 获取解析结果 (外部 JSON 或 AI 视觉逆向识别)
         val parseResult: AssetSheetParseResult = if (!jsonContent.isNullOrBlank()) {
             onProgress?.invoke(0.15f, "正在自适应解析直接传入的 JSON 文本...")
             AssetSheetNormalizer.normalizeJsonOffline(jsonContent)
@@ -168,15 +146,12 @@ class ImportAssetSheetPipelineTool(
             return ToolResult.error("未能从指定输入中识别出任何有效的图元坐标")
         }
 
-        onProgress?.invoke(0.65f, "成功解析出 ${parseResult.items.size} 个图元组件")
-
-        // 2. 智能微观吸附自愈校对 (可选)
         var finalItems = parseResult.items
         if (autoSnap) {
             onProgress?.invoke(0.7f, "正在执行多轮 Alpha 通道紧致外切微观吸附校对...")
             finalItems = finalItems.map { item ->
                 try {
-                    val snapRes = org.gemini.ui.forge.utils.SmartEdgeSnapper.snapBounds(
+                    val snapRes = SmartEdgeSnapper.snapBounds(
                         imageBytes = imageBytes,
                         logicalBounds = item.bounds,
                         canvasWidth = imgWidth,
@@ -190,112 +165,32 @@ class ImportAssetSheetPipelineTool(
             }
         }
 
-        // 3. 执行 Skia 物理透明切片落盘与构建 UIBlock (原图一次解码 + 多协程并发)
-        onProgress?.invoke(0.8f, "正在执行并发物理透明切片并落盘至资产库...")
-        val canvasW = parseResult.canvasWidth
-        val canvasH = parseResult.canvasHeight
-
-        // ★ 一次解码为不可变 Bitmap，避免每个切片都重复全图解码
-        val srcBitmap = Bitmap.makeFromImage(skiaImage).apply { setImmutable() }
-        val sliceSemaphore = Semaphore(8)
-        val progressMutex = Mutex()
-        var completedCount = 0
-
-        val (createdBlocks, savedAssetPaths) = coroutineScope {
-            val results = finalItems.mapIndexed { index, item ->
-                async(Dispatchers.Default) {
-                    sliceSemaphore.withPermit {
-                        val b = item.bounds
-                        val localCropRect = SerialRect(
-                            left = b.left.coerceIn(0f, imgWidth),
-                            top = b.top.coerceIn(0f, imgHeight),
-                            right = b.right.coerceIn(0f, imgWidth),
-                            bottom = b.bottom.coerceIn(0f, imgHeight)
-                        )
-
-                        val sliceBytes = cropImage(
-                            srcBitmap = srcBitmap,
-                            imageWidth = skiaImage.width,
-                            imageHeight = skiaImage.height,
-                            bounds = localCropRect,
-                            originalWidth = imgWidth,
-                            originalHeight = imgHeight,
-                            isPng = true
-                        )
-
-                        val relativeAssetPath = "templates/$sanitizedName/assets/${item.id}/${item.id}.png"
-                        var fileHandle: TemplateFile? = null
-                        if (sliceBytes != null && sliceBytes.isNotEmpty()) {
-                            val tFile = TemplateFile(relativeAssetPath)
-                            tFile.writeBytes(sliceBytes)
-                            fileHandle = tFile
-                        }
-
-                        val block = UIBlock(
-                            id = item.id,
-                            type = item.type,
-                            bounds = b,
-                            cropRect = b,
-                            currentImageUri = fileHandle,
-                            referenceImage = fileHandle,
-                            userPromptZh = item.name,
-                            userPromptEn = item.name
-                        )
-
-                        val done = progressMutex.withLock {
-                            completedCount++
-                            completedCount
-                        }
-                        onProgress?.invoke(0.8f + (done.toFloat() / finalItems.size) * 0.15f, "并发切片中 ($done/${finalItems.size}): ${item.name}")
-
-                        IndexedValue(index, Pair(block, if (fileHandle != null) relativeAssetPath else null))
-                    }
-                }
-            }.awaitAll().sortedBy { it.index }.map { it.value }
-
-            val blocks = results.map { it.first }
-            val paths = results.mapNotNull { it.second }
-            Pair(blocks, paths)
-        }
-
-        // 4. 构建并保存 ProjectState
-        val page = UIPage(
-            id = "page_main",
-            nameStr = "主页面",
-            width = canvasW,
-            height = canvasH,
-            blocks = createdBlocks
+        onProgress?.invoke(0.8f, "正在调用公用服务执行并发切片入库与页面装配...")
+        val (savedProject, savedLib) = StudioAssetManagerService.importAssetSheetToStudioProject(
+            projectName = sanitizedName,
+            skiaImage = skiaImage,
+            canvasWidth = parseResult.canvasWidth,
+            canvasHeight = parseResult.canvasHeight,
+            items = finalItems,
+            repository = repository,
+            syncActiveWorkspace = true,
+            onProgress = { p, msg ->
+                onProgress?.invoke(0.8f + p * 0.18f, msg)
+            }
         )
-
-        val project = ProjectState(
-            projectId = sanitizedName,
-            pages = listOf(page)
-        )
-
-        repository.saveTemplate(sanitizedName, project)
-        AppLogger.i("ImportAssetSheetPipelineTool", "💾 成功生成并持久化工程模板: $sanitizedName (${createdBlocks.size} 个图元)")
-
-        // 5. 渲染离屏标注图
-        try {
-            TemplateOverlayRenderer.renderAndSaveInitialAndLatest(sanitizedName, project)
-        } catch (e: Exception) {
-            AppLogger.w("ImportAssetSheetPipelineTool", "离屏全景标注图渲染警告: ${e.message}")
-        }
 
         onProgress?.invoke(1.0f, "🎉 AI 图集导入流水线执行完成！")
-
+        val mainPage = savedProject.studioPages.firstOrNull()
         val resultJson = buildJsonObject {
             put("success", true)
             put("projectName", sanitizedName)
-            put("blocksCount", createdBlocks.size)
-            put("canvasWidth", canvasW)
-            put("canvasHeight", canvasH)
-            put("savedAssetsCount", savedAssetPaths.size)
-            put("templatePath", "templates/$sanitizedName/template.json")
-            put("message", "AI 图集导入流水线已顺利完成，成功生成 $sanitizedName 工程并切片归档 ${createdBlocks.size} 个图元。")
+            put("viewId", mainPage?.id ?: "MainPage")
+            put("blocksCount", mainPage?.blocks?.size ?: 0)
+            put("assetsCount", savedLib.items.size)
+            put("canvasWidth", parseResult.canvasWidth)
+            put("canvasHeight", parseResult.canvasHeight)
         }.toString()
 
         return ToolResult.text(resultJson)
     }
 }
-

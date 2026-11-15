@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
 import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
@@ -76,7 +77,7 @@ fun AppMarkdown(
         colors = colors,
         typography = typography,
         components = components,
-        modifier = modifier
+        modifier = modifier.testTag("markdown_content_body")
     )
 }
 

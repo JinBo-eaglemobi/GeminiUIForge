@@ -35,11 +35,11 @@ object StudioDataDiagnostics {
                     errors.add(
                         UIStudioDataError(
                             pageId = page.id,
-                            pageName = page.nameStr,
+                            pageName = page.id,
                             blockId = block.id,
                             targetPageId = targetId,
                             errorType = UIStudioDataErrorType.TARGET_PAGE_NOT_FOUND,
-                            message = "视图「${page.nameStr}」中的组件「$currentPath」引用的目标页面「$targetId」在工程中不存在"
+                            message = "视图「${page.id}」中的组件「$currentPath」引用的目标页面「$targetId」在工程中不存在"
                         )
                     )
                 }
@@ -49,11 +49,11 @@ object StudioDataDiagnostics {
                     errors.add(
                         UIStudioDataError(
                             pageId = page.id,
-                            pageName = page.nameStr,
+                            pageName = page.id,
                             blockId = block.id,
                             targetPageId = targetId,
                             errorType = UIStudioDataErrorType.REFERENCE_WITH_CHILDREN,
-                            message = "视图「${page.nameStr}」中的组件「$currentPath」数据异常：已引用独立页面「$targetId」，但自身仍包含 ${block.children.size} 个历史子图元数据 (渲染时已自动忽略，数据已原样保留未破坏)"
+                            message = "视图「${page.id}」中的组件「$currentPath」数据异常：已引用独立页面「$targetId」，但自身仍包含 ${block.children.size} 个历史子图元数据 (渲染时已自动忽略，数据已原样保留未破坏)"
                         )
                     )
                 }

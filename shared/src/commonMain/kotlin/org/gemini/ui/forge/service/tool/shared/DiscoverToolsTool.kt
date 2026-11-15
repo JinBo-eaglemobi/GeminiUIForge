@@ -80,7 +80,9 @@ class DiscoverToolsTool : ToolDefinition {
             }
         }
 
-        val allTools = ToolHub.getAllTools()
+        val allTools = ToolHub.getAllTools().filter {
+            it.name !in org.gemini.ui.forge.service.tool.ToolExposurePolicy.EXCLUDED_AI_TOOL_NAMES
+        }
 
         val matchedTools = allTools.filter { tool ->
             val toolCat = ToolCategoryDictionary.getToolCategory(tool.name)

@@ -72,7 +72,7 @@ class SaveProjectTool(
 
                     val elapsed = getCurrentTimeMillis() - startTime
                     val pageCount = proj.studioPages.size
-                    val pageNames = proj.studioPages.joinToString(", ") { "${it.nameStr}(${it.id})" }
+                    val pageNames = proj.studioPages.joinToString(", ") { it.id }
 
                     val summary = buildString {
                         append("✅ 工程 '${proj.projectId}' 已成功原子持久化落盘至本地磁盘！\n")

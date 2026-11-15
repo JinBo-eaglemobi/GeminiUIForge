@@ -162,12 +162,12 @@ fun UIProjectAiStudioDialog(
                             viewModel.aiLayout.reapplyLayoutFromText(lastLayoutMsg.effectiveText)
                         } else {
                             val matchedPage = state.project?.studioPages?.find {
-                                it.nameStr.equals(viewName, ignoreCase = true) || it.id.equals(viewName, ignoreCase = true)
+                                it.id.equals(viewName, ignoreCase = true)
                             }
                             if (matchedPage != null) {
                                 viewModel.pageManager.selectView(matchedPage.id)
                                 onDismiss()
-                                Toast.show("已切换至视图 [${matchedPage.nameStr}]", ToastType.SUCCESS)
+                                Toast.show("已切换至视图 [${matchedPage.id}]", ToastType.SUCCESS)
                             } else {
                                 Toast.show("未找到视图: $viewName", ToastType.INFO)
                             }
@@ -207,7 +207,7 @@ fun UIProjectAiStudioDialog(
                         }
                     },
                     isCapturingCanvasSnapshot = viewModel.aiAgent.isCapturingCanvasSnapshot,
-                    viewName = state.currentView?.nameStr ?: "",
+                    viewName = state.currentView?.id ?: "",
                     viewSizeText = if (state.currentView != null) "${state.currentView?.width?.toInt() ?: 0} × ${state.currentView?.height?.toInt() ?: 0}" else "",
                     readyAssetCount = state.assetLibrary.items.size,
                     config = studioConfig,
@@ -227,7 +227,7 @@ fun UIProjectAiStudioDialog(
                             color = MaterialTheme.colorScheme.secondaryContainer
                         ) {
                             Text(
-                                text = "🖼️ 视图: ${state.currentView?.nameStr ?: "未选视图"}",
+                                text = "🖼️ 视图: ${state.currentView?.id ?: "未选视图"}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -425,8 +425,8 @@ fun UIProjectAiStudioDialog(
             if (pendingLayout != null) {
                 ApplyLayoutConfirmDialog(
                     layoutResult = pendingLayout,
-                    currentViewName = state.currentView?.nameStr ?: "当前视图",
-                    existingViewNames = state.project?.studioPages?.map { it.nameStr } ?: emptyList(),
+                    currentViewName = state.currentView?.id ?: "当前视图",
+                    existingViewNames = state.project?.studioPages?.map { it.id } ?: emptyList(),
                     onDismiss = { viewModel.aiLayout.cancelApplyLayout() },
                     onConfirm = { replaceCurrent, customName ->
                         viewModel.aiLayout.confirmApplyLayout(replaceCurrent, customName)

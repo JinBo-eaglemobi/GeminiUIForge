@@ -73,7 +73,6 @@ object AiToolRegistry {
             ScreenshotWindowTool(),
             RenderTemplateOverlayTool(),
             InspectBlockWithReferenceTool(),
-            ExecuteUiActionSequenceTool(),
 
             // 会话通信与运行状态感知共享工具
             ListChatSessionsTool(),
@@ -102,7 +101,7 @@ object AiToolRegistry {
 
             // 视图数据异常诊断工具
             DiagnoseViewDataTool()
-        ).filter { ToolExposurePolicy.isExposedToAi(it.name) }
+        ).filter { it.name !in ToolExposurePolicy.EXCLUDED_AI_TOOL_NAMES }
 
         val builtinNames = builtinAiTools.map { it.name }.toSet()
         val uniqueSharedTools = sharedTools.filter { it.name !in builtinNames }
@@ -110,9 +109,10 @@ object AiToolRegistry {
     }
 
     /**
-     * 根据工具名称查找对应实现
+     * 根据工具名称查找对应实现（仅限 AI 可用工具池，物理阻断跨界执行 MCP 专属工具）
      */
-    fun findTool(name: String): ToolDefinition? = ToolHub.findTool(name)
+    fun findTool(name: String): ToolDefinition? =
+        getAllAvailableTools().firstOrNull { it.name == name }
 
     /**
      * 将 [ToolDefinition] 转化为 Gemini 官方标准的 FunctionDeclaration JSON 对象

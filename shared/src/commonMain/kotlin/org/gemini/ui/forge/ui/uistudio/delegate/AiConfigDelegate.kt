@@ -355,13 +355,13 @@ class AiConfigDelegate(
             candidates.add(
                 MentionItem(
                     id = "view_${page.id}",
-                    title = page.nameStr,
+                    title = page.id,
                     subtitle = "${page.width.toInt()}x${page.height.toInt()} · ${page.blocks.size} 个图元",
                     category = MentionCategory.VIEW,
                     icon = Icons.Default.AspectRatio,
                     payload = MentionPayload.ViewPayload(
                         viewId = page.id,
-                        viewName = page.nameStr,
+                        viewName = page.id,
                         width = page.width.toInt(),
                         height = page.height.toInt(),
                         blockCount = page.blocks.size
@@ -405,7 +405,7 @@ class AiConfigDelegate(
             }
         }
         sortedPages.forEach { page ->
-            collectBlocks(page.id, page.nameStr, page.blocks)
+            collectBlocks(page.id, page.id, page.blocks)
         }
 
         if (tokens.isEmpty()) return candidates

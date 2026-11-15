@@ -56,7 +56,7 @@ fun UIStudioViewsPanel(
     val filteredPages = if (state.viewSearchQuery.isBlank()) {
         allPages
     } else {
-        allPages.filter { it.nameStr.contains(state.viewSearchQuery, ignoreCase = true) }
+        allPages.filter { it.id.contains(state.viewSearchQuery, ignoreCase = true) }
     }
 
     Surface(
@@ -201,9 +201,10 @@ fun UIStudioViewsPanel(
     state.renamingView?.let { page ->
         UIStudioRenameDialog(
             title = "重命名视图",
-            initialName = page.nameStr,
+            initialName = page.id,
             onConfirm = { newName ->
                 viewModel.canvasEditor.commitRenameView(page.id, newName, templateRepo)
+                viewModel.viewport.saveWorkspaceLayout()
             },
             onDismiss = { viewModel.canvasEditor.cancelRenameView() }
         )
@@ -213,7 +214,7 @@ fun UIStudioViewsPanel(
     state.deletingView?.let { page ->
         AppConfirmDialog(
             title = "删除视图",
-            message = "确定要删除视图「${page.nameStr}」吗？该视图下的所有图元将被物理移除且不可撤销。",
+            message = "确定要删除视图「${page.id}」吗？该视图下的所有图元将被物理移除且不可撤销。",
             confirmText = "删除",
             isDestructive = true,
             onConfirm = { viewModel.pageManager.confirmDeleteView(templateRepo) },

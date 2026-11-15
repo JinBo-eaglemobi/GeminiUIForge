@@ -72,7 +72,7 @@ class UIStudioViewModel {
 
     /** 界面响应式状态快照 */
     var state by mutableStateOf(UIStudioState())
-        private set
+        internal set
 
     /** 跨端游戏工程脚手架服务桥接 */
     val scaffoldBridge: GameScaffoldBridge = createGameScaffoldBridge()
@@ -510,8 +510,7 @@ class UIStudioViewModel {
             projectId = name,
             studioPages = listOf(
                 UIStudioPage(
-                    id = "page_main",
-                    nameStr = "MainPage",
+                    id = "MainPage",
                     width = width,
                     height = height,
                     blocks = emptyList()

@@ -1,19 +1,16 @@
 package org.gemini.ui.forge.service.tool.ai.exclusive
 
-import org.gemini.ui.forge.service.tool.ToolAnnotations
-import org.gemini.ui.forge.service.tool.ToolContent
-import org.gemini.ui.forge.service.tool.ToolDefinition
-import org.gemini.ui.forge.service.tool.ToolResult
-
 import kotlinx.serialization.json.*
 import org.gemini.ui.forge.manager.ConfigManager
-import org.gemini.ui.forge.ui.uistudio.model.UIAssetLibrary
-import org.gemini.ui.forge.utils.AppLogger
+import org.gemini.ui.forge.service.mcp.McpUiActionPipeline
+import org.gemini.ui.forge.service.studio.StudioAssetManagerService
+import org.gemini.ui.forge.service.tool.ToolAnnotations
+import org.gemini.ui.forge.service.tool.ToolDefinition
+import org.gemini.ui.forge.service.tool.ToolResult
 import org.gemini.ui.forge.utils.LocalFileStorage
 
 /**
- * 查询当前项目中用来拼接界面的素材资产清单工具。
- * 遵循纯哈希与文件名规范，绝不返回底层物理相对路径。
+ * 查询当前项目中用来拼接界面的素材资产清单工具（统一复用 StudioAssetManagerService.loadLibrary）。
  */
 class ListAssetsTool(
     private val fileStorage: LocalFileStorage = LocalFileStorage()
@@ -21,8 +18,8 @@ class ListAssetsTool(
     override val name: String = "list_assets"
     override val description: String =
         "查询当前项目中已准备好、用来拼接界面的素材资产清单（Asset Items / Visual Assets）。" +
-        "返回每个素材资产的文件名 (fileName)、尺寸规格 (width x height)、唯一哈希标识 (hash) 以及所属目录分类。" +
-        "在设计或拼接界面布局时，调用此工具即可精确获知哪些素材可用，并在 apply_view_layout 的图元节点中直接指定 assetHash 或 assetFileName 即可完成素材绑定。"
+            "返回每个素材资产的文件名 (fileName)、尺寸规格 (width x height)、唯一哈希标识 (hash) 以及所属目录分类。" +
+            "在设计或拼接界面布局时，调用此工具即可精确获知哪些素材可用，并在 edit_view_layout 的图元节点中直接指定 assetHash 或 assetFileName 即可完成素材绑定。"
 
     override val annotations: ToolAnnotations = ToolAnnotations(
         readOnlyHint = true,
@@ -46,7 +43,7 @@ class ListAssetsTool(
             })
             put("folder", buildJsonObject {
                 put("type", "string")
-                put("description", "可选按文件夹名称过滤（如 'image', 'buttons' 等）。")
+                put("description", "可选按文件夹名称或层级路径过滤（如 'game', 'ui/buttons' 等）。")
             })
         })
     }
@@ -55,7 +52,9 @@ class ListAssetsTool(
         arguments: JsonObject,
         onProgress: ((progress: Float, message: String?) -> Unit)?
     ): ToolResult {
+        val activeProj = McpUiActionPipeline.getActiveUiStudioViewModel()?.state?.project?.projectId
         val projName = arguments["projectName"]?.jsonPrimitive?.contentOrNull?.ifBlank { null }
+            ?: activeProj?.ifBlank { null }
             ?: ConfigManager().loadKey("CURRENT_ACTIVE_PROJECT")?.ifBlank { null }
             ?: "DefaultProject"
 
@@ -64,10 +63,8 @@ class ListAssetsTool(
         val folderFilter = arguments["folder"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase()
 
         onProgress?.invoke(0.2f, "正在检索项目 [$projName] 的素材资产清单...")
-
-        val assetLibPath = "templates/$projName/asset_library.json"
-        val rawJson = fileStorage.readFromFile(assetLibPath)
-        if (rawJson.isNullOrBlank()) {
+        val library = StudioAssetManagerService.loadLibrary(projName, fileStorage, preferActiveMemory = true)
+        if (library.items.isEmpty()) {
             return ToolResult.success(
                 buildJsonObject {
                     put("total", 0)
@@ -78,28 +75,21 @@ class ListAssetsTool(
             )
         }
 
-        val jsonParser = Json { ignoreUnknownKeys = true }
-        val library = runCatching { jsonParser.decodeFromString<UIAssetLibrary>(rawJson) }.getOrElse { e ->
-            AppLogger.w("ListAssetsTool", "解析素材库 JSON 失败: ${e.message}")
-            return ToolResult.error("解析素材库数据失败: ${e.message}")
-        }
-
-        val folderMap = library.folders.associate { it.id to it.name }
-
         val filteredItems = library.items.filter { item ->
             val fileName = item.relativePath.substringAfterLast("/").substringAfterLast("\\")
-            val folderName = item.folderId?.let { folderMap[it] } ?: ""
+            val folderPath = item.folderId?.let { library.getFolderDisplayPath(it) } ?: ""
 
             val matchQuery = query.isNullOrBlank() ||
-                    item.name.lowercase().contains(query) ||
-                    fileName.lowercase().contains(query) ||
-                    folderName.lowercase().contains(query)
+                item.name.lowercase().contains(query) ||
+                fileName.lowercase().contains(query) ||
+                folderPath.lowercase().contains(query)
 
             val matchCategory = categoryFilter.isNullOrBlank() ||
-                    item.category.lowercase() == categoryFilter
+                item.category.lowercase() == categoryFilter
 
             val matchFolder = folderFilter.isNullOrBlank() ||
-                    folderName.lowercase() == folderFilter
+                folderPath.lowercase() == folderFilter ||
+                folderPath.lowercase().endsWith("/$folderFilter")
 
             matchQuery && matchCategory && matchFolder
         }
@@ -109,46 +99,38 @@ class ListAssetsTool(
         val assetArray = buildJsonArray {
             filteredItems.forEach { item ->
                 val fileName = item.relativePath.substringAfterLast("/").substringAfterLast("\\")
-                val folderName = item.folderId?.let { folderMap[it] } ?: "default"
+                val folderPath = item.folderId?.let { library.getFolderDisplayPath(it) }?.ifBlank { "default" } ?: "default"
                 add(
                     buildJsonObject {
                         put("fileName", fileName)
                         put("name", item.name)
-                        put("hash", item.hash ?: "")
+                        put("hash", item.hash)
                         put("width", item.width)
                         put("height", item.height)
                         put("category", item.category)
-                        put("folder", folderName)
+                        put("folder", folderPath)
                     }
                 )
             }
         }
 
-        val summaryText = buildString {
-            append("项目 [").append(projName).append("] 共有 ")
-            append(filteredItems.size).append(" 个可用来拼接界面的素材资产：\n")
-            filteredItems.forEach { item ->
-                val fileName = item.relativePath.substringAfterLast("/").substringAfterLast("\\")
-                val folderName = item.folderId?.let { folderMap[it] } ?: "default"
-                append("- [").append(fileName).append("] (")
-                append(item.width).append("x").append(item.height).append(") ")
-                append("hash: ").append(item.hash ?: "none")
-                if (folderName.isNotBlank() && folderName != "default") {
-                    append(" | 目录: ").append(folderName)
-                }
-                append("\n")
-            }
-            append("\n提示：在 apply_view_layout 装配图元时，可通过 assetFileName=\"<文件名>\" 或 assetHash=\"<哈希>\" 直接绑定对应素材。")
+        val summaryLines = filteredItems.joinToString("\n") { item ->
+            val fileName = item.relativePath.substringAfterLast("/").substringAfterLast("\\")
+            val folderPath = item.folderId?.let { library.getFolderDisplayPath(it) }?.ifBlank { "root" } ?: "root"
+            "- [$fileName] (${item.width}x${item.height}) hash: ${item.hash} | 目录: $folderPath"
         }
 
-        val resultJson = buildJsonObject {
+        val responseJson = buildJsonObject {
             put("total", filteredItems.size)
             put("projectName", projName)
             put("assets", assetArray)
-            put("summary", summaryText)
+            put(
+                "summary",
+                "项目 [$projName] 共有 ${filteredItems.size} 个可用来拼接界面的素材资产：\n$summaryLines\n\n提示：在 edit_view_layout 装配图元时，可通过 assetFileName=\"<文件名>\" 或 assetHash=\"<哈希>\" 直接绑定对应素材。"
+            )
         }
 
-        return ToolResult.success(resultJson.toString())
+        onProgress?.invoke(1.0f, "素材清单查询完成")
+        return ToolResult.success(responseJson.toString())
     }
 }
-

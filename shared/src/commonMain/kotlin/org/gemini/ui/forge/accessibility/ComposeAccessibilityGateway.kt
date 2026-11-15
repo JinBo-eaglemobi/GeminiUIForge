@@ -33,6 +33,10 @@ object ComposeAccessibilityGateway {
 
     private fun collectNodesRecursive(node: SemanticsNode, outList: MutableList<SemanticsNode>) {
         outList.add(node)
+        val tag = node.config.getOrNull(SemanticsProperties.TestTag)
+        if (tag == "markdown_content_body") {
+            return
+        }
         for (child in node.children) {
             collectNodesRecursive(child, outList)
         }
@@ -147,13 +151,28 @@ object ComposeAccessibilityGateway {
 
         val jsonArray = buildJsonArray {
             for (root in roots) {
-                add(serializeNodeToJson(root))
+                serializeNodeToJson(root)?.let { add(it) }
             }
         }
         return jsonArray.toString()
     }
 
-    private fun serializeNodeToJson(node: SemanticsNode): JsonObject {
+    private fun serializeNodeToJson(node: SemanticsNode): JsonObject? {
+        val tag = node.config.getOrNull(SemanticsProperties.TestTag)
+        val bounds = node.boundsInWindow
+        val hasValidSize = bounds.width > 0f && bounds.height > 0f
+
+        val childJsonList = if (tag == "markdown_content_body") {
+            emptyList()
+        } else {
+            node.children.mapNotNull { serializeNodeToJson(it) }
+        }
+
+        // 过滤已滚出视口外且无任何可见子节点的 [0, 0, 0, 0] 离屏幽灵节点
+        if (!hasValidSize && childJsonList.isEmpty()) {
+            return null
+        }
+
         return buildJsonObject {
             put("id", node.id)
 
@@ -179,11 +198,10 @@ object ComposeAccessibilityGateway {
                 }
             }
 
-            node.config.getOrNull(SemanticsProperties.TestTag)?.let {
-                put("testTag", it)
+            if (tag != null) {
+                put("testTag", tag)
             }
 
-            val bounds = node.boundsInWindow
             putJsonObject("bounds") {
                 put("left", bounds.left)
                 put("top", bounds.top)
@@ -204,11 +222,9 @@ object ComposeAccessibilityGateway {
                 actions.forEach { add(it) }
             }
 
-            if (node.children.isNotEmpty()) {
+            if (childJsonList.isNotEmpty()) {
                 putJsonArray("children") {
-                    node.children.forEach { child ->
-                        add(serializeNodeToJson(child))
-                    }
+                    childJsonList.forEach { add(it) }
                 }
             }
         }

@@ -39,12 +39,18 @@ object ToolExposurePolicy {
     )
 
     /**
-     * AI 通道硬性排除的黑名单（防止递归自调用死循环或纯底层私有探测）。
+     * AI 通道硬性排除的黑名单（防止递归自调用死循环或纯底层 MCP 宿主窗口自动化探测）。
      * MCP 客户端不受此限制。
      */
     val EXCLUDED_AI_TOOL_NAMES: Set<String> = setOf(
         "invoke_gemini_text",
-        "trigger_initial_verification"
+        "trigger_initial_verification",
+        "get_semantic_tree",
+        "click_ui_node",
+        "set_ui_input_text",
+        "get_ui_roadmap",
+        "execute_ui_action_sequence",
+        "set_project_generating_status"
     )
 
     /**

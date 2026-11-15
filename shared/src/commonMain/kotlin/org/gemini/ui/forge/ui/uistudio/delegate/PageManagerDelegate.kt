@@ -110,7 +110,7 @@ class PageManagerDelegate(
             val matchedPage = proj.studioPages.find { it.id == targetPageId }
             if (matchedPage != null) {
                 openViewTab(matchedPage.id)
-                Toast.show("已打开平级视图: ${matchedPage.nameStr}", ToastType.INFO)
+                Toast.show("已打开平级视图: ${matchedPage.id}", ToastType.INFO)
                 return
             }
         }
@@ -278,10 +278,9 @@ class PageManagerDelegate(
      */
     fun createView(name: String, width: Float, height: Float, repo: TemplateRepository) {
         val proj = state.project ?: return
-        val viewName = name.trim().ifBlank { "View_${proj.studioPages.size + 1}" }
+        val viewId = name.trim().ifBlank { "View_${proj.studioPages.size + 1}" }
         val newPage = UIStudioPage(
-            id = "view_${getCurrentTimeMillis()}",
-            nameStr = viewName,
+            id = viewId,
             width = width,
             height = height,
             blocks = emptyList()
@@ -303,7 +302,7 @@ class PageManagerDelegate(
             repo.saveTemplate(updatedProject.projectId, updatedProject)
         }
         viewport.saveWorkspaceLayout()
-        Toast.show("成功创建视图: $viewName", ToastType.SUCCESS)
+        Toast.show("成功创建视图: $viewId", ToastType.SUCCESS)
     }
 
     /**
@@ -311,14 +310,13 @@ class PageManagerDelegate(
      */
     fun duplicateView(page: UIStudioPage, repo: TemplateRepository) {
         val proj = state.project ?: return
-        val newViewName = "${page.nameStr}_副本"
+        val newViewId = "${page.id}_副本"
         val timestamp = getCurrentTimeMillis()
         val clonedBlocks = page.blocks.map { block ->
             block.copy(id = "block_${timestamp}_${block.id.takeLast(6)}")
         }
         val duplicatedPage = UIStudioPage(
-            id = "view_$timestamp",
-            nameStr = newViewName,
+            id = newViewId,
             width = page.width,
             height = page.height,
             blocks = clonedBlocks
@@ -339,7 +337,7 @@ class PageManagerDelegate(
             repo.saveTemplate(updatedProject.projectId, updatedProject)
         }
         viewport.saveWorkspaceLayout()
-        Toast.show("已克隆视图: $newViewName", ToastType.SUCCESS)
+        Toast.show("已克隆视图: $newViewId", ToastType.SUCCESS)
     }
 
     /**

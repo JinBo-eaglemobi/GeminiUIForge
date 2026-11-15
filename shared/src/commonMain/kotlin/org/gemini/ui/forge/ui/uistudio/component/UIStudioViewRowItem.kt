@@ -84,7 +84,7 @@ fun UIStudioViewRowItem(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = page.nameStr,
+                            text = page.id,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,

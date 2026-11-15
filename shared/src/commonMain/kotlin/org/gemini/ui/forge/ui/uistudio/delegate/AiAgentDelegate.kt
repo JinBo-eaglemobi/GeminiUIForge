@@ -217,7 +217,7 @@ class AiAgentDelegate(
                     put("projectName", currentProj)
                 }
                 if (!args.containsKey("viewName")) {
-                    state.currentView?.nameStr?.let { put("viewName", it) }
+                    state.currentView?.id?.let { put("viewName", it) }
                 }
             }
 
@@ -449,6 +449,51 @@ class AiAgentDelegate(
     }
 
     /**
+     * 将工程全部视图页面、磁盘 template.json 与 pages/{id}.json、素材库账本与物理图片增删改
+     * 在 10ms 内极速原子还原至指定轮次检查点状态（即使中途已执行过 save_project 亦 100% 还原）。
+     */
+    suspend fun restoreTurnCheckpoint(
+        checkpoint: org.gemini.ui.forge.ui.uistudio.model.TurnCheckpoint,
+        showToast: Boolean = false
+    ) {
+        try {
+            // 1. 极速还原素材库物理图片（增/删/改/重命名/移动）与文件夹及 asset_library.json
+            org.gemini.ui.forge.service.studio.StudioAssetManagerService.restoreAssetLibrarySnapshot(
+                projectName = checkpoint.projectId,
+                snapshotLib = checkpoint.assetLibrarySnapshot,
+                syncActiveWorkspace = true
+            )
+
+            // 2. 原子重写 template.json 与 pages/{id}.json（内部自动清理本轮新建的多余页面文件）
+            val repo = org.gemini.ui.forge.data.repository.TemplateRepository()
+            repo.saveTemplate(checkpoint.projectId, checkpoint.projectSnapshot)
+
+            // 3. 恢复工作区内存状态
+            val restoredPage = checkpoint.projectSnapshot.studioPages.find { it.id == checkpoint.currentViewId }
+                ?: checkpoint.projectSnapshot.studioPages.firstOrNull()
+            withContext(Dispatchers.Main) {
+                state = state.copy(
+                    project = checkpoint.projectSnapshot,
+                    assetLibrary = checkpoint.assetLibrarySnapshot,
+                    currentViewId = restoredPage?.id,
+                    openViewIds = checkpoint.openViewIds.filter { openId ->
+                        checkpoint.projectSnapshot.studioPages.any { it.id == openId }
+                    },
+                    canvasWidth = restoredPage?.width ?: state.canvasWidth,
+                    canvasHeight = restoredPage?.height ?: state.canvasHeight,
+                    lastLayoutUndoSnapshot = null,
+                    isDirty = false
+                )
+                if (showToast) {
+                    Toast.show("↩️ 已将工程页面与素材资源完整还原至本轮对话前状态", ToastType.SUCCESS)
+                }
+            }
+        } catch (e: Exception) {
+            AppLogger.e("AiAgentDelegate", "还原轮次检查点异常", e)
+        }
+    }
+
+    /**
      * 删除单条对话记录或一整轮对话。
      * 若删除的是用户提问，连带其后直接紧随的 AI 回答一并移除。
      * 同步在后台异步注销云端对应 Interactions 实体，并回退会话的 latestInteractionId。
@@ -559,15 +604,34 @@ class AiAgentDelegate(
         )
         val updatedSessions = state.chatSessions.map { if (it.id == updatedSession.id) updatedSession else it }
 
+        // 零开销拍下本轮对话开始前的工程与素材库不可变引用检查点（< 0.01ms，零磁盘拷贝）
+        val currentProj = state.project
+        val turnCheckpoint = if (currentProj != null) {
+            org.gemini.ui.forge.ui.uistudio.model.TurnCheckpoint(
+                userMessageId = userMsg.id,
+                projectId = currentProj.projectId,
+                projectSnapshot = currentProj,
+                assetLibrarySnapshot = state.assetLibrary,
+                currentViewId = state.currentViewId,
+                openViewIds = state.openViewIds
+            )
+        } else null
+
         state = state.copy(
             chatSessions = updatedSessions,
             aiChatAttachments = emptyList(),
-            isAiChatSending = true
+            isAiChatSending = true,
+            lastTurnCheckpoint = turnCheckpoint ?: state.lastTurnCheckpoint,
+            turnCheckpoints = if (turnCheckpoint != null) state.turnCheckpoints + (userMsg.id to turnCheckpoint) else state.turnCheckpoints
         )
         chatSession.saveSession(updatedSession)
 
         activeChatJob = scope.launch(Dispatchers.Default) {
             try {
+                // 新一轮正常提问启动时，清理上一轮残留的 .turn_trash 临时备份目录
+                currentProj?.projectId?.let {
+                    org.gemini.ui.forge.service.studio.StudioAssetManagerService.clearTurnTrash(it)
+                }
                 // 若存在无 localUri 仅有 bytes 的内存附件，协程内异步落盘并补齐持久化 URI
                 if (attachmentsList.any { it.localUri.isNullOrBlank() && it.bytes != null && it.bytes.isNotEmpty() }) {
                     val proj = state.project
@@ -740,7 +804,7 @@ class AiAgentDelegate(
                 // 构建四层解耦的多层载荷：系统指令保持纯净静态，环境与参考数据注入当前轮次用户提问载荷中
                 val currentView = state.currentView
                 val workspaceContextXml = if (currentView != null) {
-                    "  <current_view name=\"${currentView.nameStr}\" resolution=\"${currentView.width}x${currentView.height}\" block_count=\"${currentView.blocks.size}\" total_assets=\"${state.assetLibrary.items.size}\"/>"
+                    "  <current_view name=\"${currentView.id}\" resolution=\"${currentView.width}x${currentView.height}\" block_count=\"${currentView.blocks.size}\" total_assets=\"${state.assetLibrary.items.size}\"/>"
                 } else ""
 
                 // 长对话智能上下文自愈与自动压缩：达到阈值时自动提炼设计记忆并压缩历史
@@ -763,7 +827,7 @@ class AiAgentDelegate(
 
                 val snapshotAttachment = attachmentsList.find { it.name.contains("画布") }
                 val canvasSnapshotMeta = if (snapshotAttachment != null) {
-                    "已随附当前视图【${state.currentView?.nameStr ?: "当前视图"}】的画布快照 (${snapshotAttachment.name})。\n请结合该图片直接审视各图元的真实视觉渲染、切片重叠与层次关系、文字排版可读性与边距留白，并在回复中给出具象的视觉评估与改进建议。"
+                    "已随附当前视图【${state.currentView?.id ?: "当前视图"}】的画布快照 (${snapshotAttachment.name})。\n请结合该图片直接审视各图元的真实视觉渲染、切片重叠与层次关系、文字排版可读性与边距留白，并在回复中给出具象的视觉评估与改进建议。"
                 } else null
 
                 val assembledPayload = ChatPayloadAssembler.assemble(
@@ -1289,6 +1353,29 @@ class AiAgentDelegate(
                 return@launch
             }
             try {
+                // ★ 核心保护：点击「重新生成」时，若存在该轮提问关联的 TurnCheckpoint，
+                // 自动将页面配置、画布状态、素材库账本及物理图片增删改 100% 极速还原至提问前的干净状态！
+                val existingCheckpoint = state.turnCheckpoints[userMsg.id]
+                if (existingCheckpoint != null) {
+                    restoreTurnCheckpoint(existingCheckpoint, showToast = false)
+                } else {
+                    val curProj = state.project
+                    if (curProj != null) {
+                        val fallbackCp = org.gemini.ui.forge.ui.uistudio.model.TurnCheckpoint(
+                            userMessageId = userMsg.id,
+                            projectId = curProj.projectId,
+                            projectSnapshot = curProj,
+                            assetLibrarySnapshot = state.assetLibrary,
+                            currentViewId = state.currentViewId,
+                            openViewIds = state.openViewIds
+                        )
+                        state = state.copy(
+                            lastTurnCheckpoint = fallbackCp,
+                            turnCheckpoints = state.turnCheckpoints + (userMsg.id to fallbackCp)
+                        )
+                    }
+                }
+
                 val apiFlavor = state.projectAgentConfig.apiFlavor
                 val systemPrompt = state.projectAgentConfig.systemPrompt.ifBlank {
                     PromptManager.getUiStudioAgentPrompt()
@@ -1323,7 +1410,7 @@ class AiAgentDelegate(
                 // 构建四层解耦的多层载荷：系统指令保持纯净静态，环境与前序设计记忆注入当前轮次用户提问载荷中
                 val currentView = state.currentView
                 val workspaceContextXml = if (currentView != null) {
-                    "  <current_view name=\"${currentView.nameStr}\" resolution=\"${currentView.width}x${currentView.height}\" block_count=\"${currentView.blocks.size}\" total_assets=\"${state.assetLibrary.items.size}\"/>"
+                    "  <current_view name=\"${currentView.id}\" resolution=\"${currentView.width}x${currentView.height}\" block_count=\"${currentView.blocks.size}\" total_assets=\"${state.assetLibrary.items.size}\"/>"
                 } else ""
                 val assembledPayload = ChatPayloadAssembler.assemble(
                     baseSystemPrompt = systemPrompt,

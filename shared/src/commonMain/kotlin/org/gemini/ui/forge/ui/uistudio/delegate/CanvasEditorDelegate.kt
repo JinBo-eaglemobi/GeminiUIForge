@@ -319,16 +319,41 @@ class CanvasEditorDelegate(
     fun startRenameView(view: UIStudioPage) { state = state.copy(renamingView = view) }
     fun cancelRenameView() { state = state.copy(renamingView = null) }
     fun commitRenameView(viewId: String, newName: String, repo: TemplateRepository = TemplateRepository()) {
-        if (newName.isBlank()) return
-        val updatedPages = state.project?.studioPages?.map {
-            if (it.id == viewId) it.copy(nameStr = newName.trim()) else it
-        } ?: return
-        val updatedProject = state.project?.copy(studioPages = updatedPages) ?: return
-        state = state.copy(project = updatedProject, renamingView = null, isDirty = true)
+        val newId = newName.trim()
+        if (newId.isBlank() || newId == viewId) {
+            state = state.copy(renamingView = null)
+            return
+        }
+        val proj = state.project ?: return
+        if (proj.studioPages.any { it.id.equals(newId, ignoreCase = true) }) {
+            Toast.show("视图名称 \"$newId\" 已存在", ToastType.ERROR)
+            return
+        }
+        fun updateTargetPageIdRecursively(blocks: List<UIStudioBlock>): List<UIStudioBlock> =
+            blocks.map { b ->
+                val updatedTarget = if (b.targetPageId == viewId) newId else b.targetPageId
+                val updatedChildren = if (b.children.isNotEmpty()) updateTargetPageIdRecursively(b.children) else b.children
+                b.copy(targetPageId = updatedTarget, children = updatedChildren)
+            }
+        val updatedPages = proj.studioPages.map { p ->
+            val renamedId = if (p.id == viewId) newId else p.id
+            p.copy(id = renamedId, blocks = updateTargetPageIdRecursively(p.blocks).bindParents())
+        }
+        val updatedProject = proj.copy(studioPages = updatedPages)
+        val updatedOpenIds = state.openViewIds.map { if (it == viewId) newId else it }
+        val updatedCurrentId = if (state.currentViewId == viewId) newId else state.currentViewId
+        state = state.copy(
+            project = updatedProject,
+            openViewIds = updatedOpenIds,
+            currentViewId = updatedCurrentId,
+            renamingView = null,
+            isDirty = true
+        )
         scope.launch {
+            repo.deleteStudioPage(updatedProject.projectId, viewId)
             repo.saveTemplate(updatedProject.projectId, updatedProject)
         }
-        Toast.show("视图已重命名为: $newName", ToastType.SUCCESS)
+        Toast.show("视图已重命名为: $newId", ToastType.SUCCESS)
     }
 
     fun updateBlockBounds(blockId: String, left: Float, top: Float, width: Float, height: Float, repo: TemplateRepository = TemplateRepository()) {
@@ -728,10 +753,8 @@ class CanvasEditorDelegate(
         val localB = blockB.copy(bounds = SerialRect(boundsB.left - unionLeft, boundsB.top - unionTop, boundsB.right - unionLeft, boundsB.bottom - unionTop))
 
         val containerId = "Container_${getCurrentTimeMillis() % 10000}"
-        val newPageId = "page_$containerId"
         val newPage = UIStudioPage(
-            id = newPageId,
-            nameStr = containerId,
+            id = containerId,
             width = unionRect.width.coerceAtLeast(100f),
             height = unionRect.height.coerceAtLeast(100f),
             blocks = listOf(localB, localA)
@@ -743,7 +766,7 @@ class CanvasEditorDelegate(
             isPureContainer = true,
             bounds = unionRect,
             children = listOf(localB, localA),
-            targetPageId = newPageId
+            targetPageId = containerId
         )
 
         val remaining = removeBlockFromTree(removeBlockFromTree(view.blocks, draggedId), targetId)
@@ -890,7 +913,7 @@ class CanvasEditorDelegate(
         // 居中放置在当前视图中
         val posX = ((currentView.width - targetPage.width) / 2f).coerceAtLeast(20f)
         val posY = ((currentView.height - targetPage.height) / 2f).coerceAtLeast(20f)
-        val instanceId = "${targetPage.nameStr}_instance_${(getCurrentTimeMillis() % 10000)}"
+        val instanceId = "${targetPage.id}_instance_${(getCurrentTimeMillis() % 10000)}"
 
         val instanceBlock = UIStudioBlock(
             id = instanceId,
@@ -904,7 +927,7 @@ class CanvasEditorDelegate(
         val updatedBlocks = (currentView.blocks + instanceBlock).bindParents()
         updateViewBlocksAndSave(currentView.id, updatedBlocks, repo)
         state = state.copy(selectedBlockId = instanceId)
-        Toast.show("已将页面 [${targetPage.nameStr}] 作为组件实例插入当前视图", ToastType.SUCCESS)
+        Toast.show("已将页面 [${targetPage.id}] 作为组件实例插入当前视图", ToastType.SUCCESS)
     }
 
     /**
@@ -927,7 +950,7 @@ class CanvasEditorDelegate(
         }.bindParents()
 
         updateViewBlocksAndSave(currentView.id, updatedBlocks, repo)
-        val msg = if (targetPage != null) "已绑定引用页面: ${targetPage.nameStr}" else "已解除页面引用"
+        val msg = if (targetPage != null) "已绑定引用页面: ${targetPage.id}" else "已解除页面引用"
         Toast.show(msg, ToastType.INFO)
     }
 

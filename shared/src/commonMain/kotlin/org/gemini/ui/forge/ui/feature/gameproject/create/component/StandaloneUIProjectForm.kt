@@ -380,23 +380,16 @@ fun StandaloneUIProjectForm(
                                 duplicateProjectName = effectiveName
                                 showDuplicateDialog = true
                             } else {
-                                // 不存在同名项目：正常创建并持久化，直接进入 UI Studio
-                                val newProject = ProjectState(
-                                    projectId = effectiveName,
-                                    pages = listOf(
-                                        UIPage(
-                                            id = "page_main",
-                                            nameStr = "MainPage",
-                                            width = finalWidth,
-                                            height = finalHeight,
-                                            blocks = emptyList()
-                                        )
-                                    )
+                                // 不存在同名项目：统一调用公用函数创建 UI Studio 工程并持久化，直接进入 UI Studio
+                                val newProject = templateRepo.createStudioProject(
+                                    projectName = effectiveName,
+                                    canvasWidth = finalWidth,
+                                    canvasHeight = finalHeight,
+                                    initialViewId = "MainPage",
+                                    persistToDisk = true
                                 )
 
-                                // 1. 物理持久化落盘至本地磁盘 (~/.geminiuiforge/templates/<effectiveName>/template.json)
-                                appViewModel.saveProject(effectiveName, newProject)
-                                // 2. 将新建工程绑定至内存并直接路由导航进入 UI Studio
+                                // 将新建工程绑定至内存并直接路由导航进入 UI Studio
                                 appViewModel.loadProject(effectiveName, newProject)
                                 appViewModel.navigateTo(AppScreen.UI_STUDIO)
                                 Toast.show("成功创建、持久化并进入 UI Studio", type = ToastType.SUCCESS)

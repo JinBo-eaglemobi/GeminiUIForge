@@ -500,8 +500,8 @@ fun UIStudioScreen(
         if (pendingLayout != null && !state.isAiChatDialogVisible) {
             ApplyLayoutConfirmDialog(
                 layoutResult = pendingLayout,
-                currentViewName = state.currentView?.nameStr ?: "当前视图",
-                existingViewNames = state.project?.studioPages?.map { it.nameStr } ?: emptyList(),
+                currentViewName = state.currentView?.id ?: "当前视图",
+                existingViewNames = state.project?.studioPages?.map { it.id } ?: emptyList(),
                 onDismiss = { viewModel.aiLayout.cancelApplyLayout() },
                 onConfirm = { replaceCurrent, customName ->
                     viewModel.aiLayout.confirmApplyLayout(replaceCurrent, customName)

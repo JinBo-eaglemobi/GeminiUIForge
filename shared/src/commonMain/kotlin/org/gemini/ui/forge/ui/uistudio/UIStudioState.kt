@@ -165,6 +165,8 @@ data class UIStudioState(
     val clipboardBlock: UIStudioBlock? = null,
     val pendingLayoutResult: org.gemini.ui.forge.service.studio.UiStudioLayoutService.ApplyLayoutResult? = null,
     val lastLayoutUndoSnapshot: LayoutUndoSnapshot? = null,
+    val lastTurnCheckpoint: org.gemini.ui.forge.ui.uistudio.model.TurnCheckpoint? = null,
+    val turnCheckpoints: Map<String, org.gemini.ui.forge.ui.uistudio.model.TurnCheckpoint> = emptyMap(),
     val showMaxToolRoundsContinueDialog: Boolean = false,
     val currentToolLoopRound: Int = 0,
     val maxToolLoopRoundLimit: Int = 50,

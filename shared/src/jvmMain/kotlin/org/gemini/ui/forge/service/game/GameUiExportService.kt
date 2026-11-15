@@ -26,7 +26,7 @@ object GameUiExportService {
             error("游戏项目根目录不存在: ${gameRootDir.absolutePath}")
         }
 
-        onLog("🚀 开始将 UI Studio 页面 [${page.nameStr}] 导出至游戏工程...")
+        onLog("🚀 开始将 UI Studio 页面 [${page.id}] 导出至游戏工程...")
 
         // 1. 确保切片输出目录 build/res/gameui/ 存在
         val resGameUiDir = File(gameRootDir, "build/res/gameui").apply { mkdirs() }
@@ -82,13 +82,13 @@ object GameUiExportService {
         val layoutConfigTs = buildString {
             appendLine("/**")
             appendLine(" * 由 GeminiUIForge UI Studio 全自动导出的纯代码 UIFactory 页面布局配置。")
-            appendLine(" * 页面名称: ${page.nameStr}")
+            appendLine(" * 页面名称: ${page.id}")
             appendLine(" * 设计基准分辨率: ${canvasWidth}x${canvasHeight}")
             appendLine(" * 遵循规范: tsCore.UIFactory")
             appendLine(" */")
             appendLine("export const layoutConfig: any = {")
             appendLine("    type: 'panel',")
-            appendLine("    name: '${page.nameStr.ifBlank { "MainView" }}',")
+            appendLine("    name: '${page.id.ifBlank { "MainView" }}',")
             appendLine("    x: 0,")
             appendLine("    y: 0,")
             appendLine("    width: $canvasWidth,")

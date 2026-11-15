@@ -350,7 +350,7 @@ fun UIStudioCanvasArea(
                                 )
                                 Spacer(modifier = Modifier.height(spacing.small))
                                 Text(
-                                    text = "「${currentView.nameStr}」视图暂无图元",
+                                    text = "「${currentView.id}」视图暂无图元",
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )

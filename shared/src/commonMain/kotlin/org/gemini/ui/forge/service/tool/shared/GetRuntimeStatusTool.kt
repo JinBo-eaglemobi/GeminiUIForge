@@ -131,7 +131,7 @@ class GetRuntimeStatusTool(
                     put("mode", "UI_STUDIO")
                     put("projectName", st.project?.projectId ?: "")
                     put("currentViewId", st.currentView?.id ?: "")
-                    put("currentViewName", st.currentView?.nameStr ?: "")
+                    put("currentViewName", st.currentView?.id ?: "")
                     put("currentViewWidth", st.currentView?.width ?: st.canvasWidth.toInt())
                     put("currentViewHeight", st.currentView?.height ?: st.canvasHeight.toInt())
                     put("selectedBlockId", st.selectedBlockId)

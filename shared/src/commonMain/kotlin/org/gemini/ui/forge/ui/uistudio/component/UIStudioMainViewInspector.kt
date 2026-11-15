@@ -109,7 +109,7 @@ fun UIStudioMainViewInspector(
                 }
 
                 Text(
-                    text = view.nameStr,
+                    text = view.id,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )

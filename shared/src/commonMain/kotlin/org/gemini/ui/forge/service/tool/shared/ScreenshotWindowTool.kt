@@ -36,7 +36,7 @@ class ScreenshotWindowTool : ToolDefinition {
     override val name: String = "screenshot_window"
 
     override val description: String =
-        "获取应用程序自身窗口的实时画面截图 (ImageContent，离屏渲染，窗口最小化或后台运行同样有效，绝不截取系统桌面)。可选 targetNodeId (原生语义选择器，如画布模块 block_xxx / 按钮文本 / testTag / 数字ID，先经 get_semantic_tree 查询) 或 region {left,top,right,bottom} (屏幕绝对像素区域) 精准截取某个模块/组件/程序区域 (主窗与弹窗内容均支持)。"
+        "获取应用程序自身窗口的实时画面截图 (ImageContent，离屏渲染，窗口最小化或后台运行同样有效，绝不截取系统桌面)。可选 targetNodeId (如画布图元 ID 或组件标识) 或 region {left,top,right,bottom} (屏幕绝对像素区域) 精准截取某个模块/组件/程序区域 (主窗与弹窗内容均支持)。"
 
     override val annotations: ToolAnnotations = ToolAnnotations(
         readOnlyHint = true,
@@ -86,7 +86,7 @@ class ScreenshotWindowTool : ToolDefinition {
                 blockFilePrefix = "node_$cleanId"
                 ComposeAccessibilityGateway.getNodeBounds(id)?.let { bounds ->
                     IntRect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()) to "语义节点 [$id] 区域 (${bounds.width.toInt()}x${bounds.height.toInt()}px)"
-                } ?: return ToolResult.error("未找到语义节点或图元: $id (可先调用 get_semantic_tree 查询有效节点清单)")
+                } ?: return ToolResult.error("未找到目标节点或图元: $id")
             }
         }
         val pixelRegion = (arguments["region"] as? JsonObject)?.let { jo ->

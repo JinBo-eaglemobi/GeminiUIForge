@@ -127,11 +127,11 @@ fun UIStudioEmbeddedChatPanel(
                     viewModel.aiLayout.reapplyLayoutFromText(lastLayoutMsg.effectiveText)
                 } else {
                     val matchedPage = state.project?.studioPages?.find {
-                        it.nameStr.equals(viewName, ignoreCase = true) || it.id.equals(viewName, ignoreCase = true)
+                        it.id.equals(viewName, ignoreCase = true)
                     }
                     if (matchedPage != null) {
                         viewModel.pageManager.selectView(matchedPage.id)
-                        Toast.show("已切换至视图 [${matchedPage.nameStr}]", ToastType.SUCCESS)
+                        Toast.show("已切换至视图 [${matchedPage.id}]", ToastType.SUCCESS)
                     } else {
                         Toast.show("未找到视图: $viewName", ToastType.INFO)
                     }
@@ -171,7 +171,7 @@ fun UIStudioEmbeddedChatPanel(
                 }
             },
             isCapturingCanvasSnapshot = viewModel.aiAgent.isCapturingCanvasSnapshot,
-            viewName = state.currentView?.nameStr ?: "",
+            viewName = state.currentView?.id ?: "",
             viewSizeText = if (state.currentView != null) "${state.currentView?.width?.toInt() ?: 0} × ${state.currentView?.height?.toInt() ?: 0}" else "",
             readyAssetCount = state.assetLibrary.items.size,
             config = studioConfig,

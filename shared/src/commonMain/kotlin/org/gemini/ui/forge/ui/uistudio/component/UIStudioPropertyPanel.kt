@@ -658,7 +658,7 @@ fun UIStudioPropertyPanel(
                             ) {
                                 Icon(Icons.Default.Layers, contentDescription = "Open Bound Page", modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(spacing.extraSmall))
-                                Text("进入引用视图 (${boundPage.nameStr})")
+                                Text("进入引用视图 (${boundPage.id})")
                             }
                         }
 

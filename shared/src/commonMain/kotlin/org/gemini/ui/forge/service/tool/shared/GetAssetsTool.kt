@@ -94,21 +94,15 @@ class GetAssetsTool(
 
         onProgress?.invoke(0.2f, "正在检索工程 [$sanitized] 的素材库账本...")
 
-        val assetLibPath = "templates/$sanitized/asset_library.json"
-        val rawJson = fileStorage.readFromFile(assetLibPath)
-        if (rawJson.isNullOrBlank()) {
+        val library = org.gemini.ui.forge.service.studio.StudioAssetManagerService.loadLibrary(
+            projectName = sanitized,
+            storage = fileStorage,
+            preferActiveMemory = true
+        )
+        if (library.items.isEmpty()) {
             return@withContext ToolResult(
                 isError = true,
-                content = listOf(ToolContent.Text(text = "❌ 工程 [$sanitized] 未找到 asset_library.json 素材库账本。"))
-            )
-        }
-
-        val jsonParser = Json { ignoreUnknownKeys = true }
-        val library = runCatching { jsonParser.decodeFromString<UIAssetLibrary>(rawJson) }.getOrElse { e ->
-            AppLogger.w("GetAssetsTool", "解析素材库失败: ${e.message}")
-            return@withContext ToolResult(
-                isError = true,
-                content = listOf(ToolContent.Text(text = "❌ 解析素材库数据失败: ${e.message}"))
+                content = listOf(ToolContent.Text(text = "❌ 工程 [$sanitized] 素材库为空或未找到 asset_library.json 素材库账本。"))
             )
         }
 
@@ -125,9 +119,8 @@ class GetAssetsTool(
                 if (!blockHash.isNullOrBlank() && blockHash in targetHashSet) {
                     val list = usageMap.getOrPut(blockHash) { mutableListOf() }
                     list.add(buildJsonObject {
-                        put("viewName", page.nameStr)
                         put("viewId", page.id)
-                        put("blockId", block.id)
+                        put("id", block.id)
                     })
                 }
                 block.children.forEach { scanBlock(it) }
