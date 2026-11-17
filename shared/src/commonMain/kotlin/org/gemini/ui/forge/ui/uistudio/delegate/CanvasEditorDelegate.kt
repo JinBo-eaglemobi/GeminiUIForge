@@ -367,14 +367,6 @@ class CanvasEditorDelegate(
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         }
 
-        // 自动将当前视图变动后的 blocks 镜像同步到所有引用了当前页面的图元实例 (targetPageId == view.id) 中
-        updatedPages = updatedPages.map { p ->
-            if (p.id != view.id) {
-                val synced = syncReferencedPageChildren(p.blocks, view.id, updatedBlocks)
-                if (synced != p.blocks) p.copy(blocks = synced) else p
-            } else p
-        }
-
         // 若当前修改的 block 本身绑定了平级页面，同步更新该目标平级页面的画布宽高
         val targetBlock = view.blocks.findBlockById(blockId) as? UIStudioBlock
         val targetPageId = targetBlock?.targetPageId
@@ -461,16 +453,8 @@ class CanvasEditorDelegate(
             block.copy(bounds = SerialRect(newLeft, newTop, newLeft + w, newTop + h))
         }.bindParents()
         val proj = state.project ?: return
-        var updatedPages = proj.studioPages.map {
+        val updatedPages = proj.studioPages.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
-        }
-
-        // 自动将当前视图变动后的 blocks 镜像同步到所有引用了当前页面的图元实例 (targetPageId == view.id) 中
-        updatedPages = updatedPages.map { p ->
-            if (p.id != view.id) {
-                val synced = syncReferencedPageChildren(p.blocks, view.id, updatedBlocks)
-                if (synced != p.blocks) p.copy(blocks = synced) else p
-            } else p
         }
 
         state = state.copy(project = proj.copy(studioPages = updatedPages), isDirty = true)
@@ -488,17 +472,6 @@ class CanvasEditorDelegate(
         val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
             it.copy(type = newType)
         }.bindParents()
-        val updatedPages = state.project?.studioPages?.map {
-            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
-        } ?: return
-        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
-    }
-
-    fun updateBlockPureContainer(blockId: String, isPure: Boolean, repo: TemplateRepository = TemplateRepository()) {
-        val view = state.currentView ?: return
-        val updatedBlocks = view.blocks.map {
-            if (it.id == blockId) it.copy(isPureContainer = isPure) else it
-        }
         val updatedPages = state.project?.studioPages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
         } ?: return
@@ -644,8 +617,8 @@ class CanvasEditorDelegate(
 
         if (position == DropPosition.INSIDE) {
             // 移入目标成组逻辑判定：
-            // 1. 若目标本身就是纯容器或页面组件实例
-            if (targetBlock.isPureContainer || targetBlock.targetPageId != null) {
+            // 1. 若目标本身就是容器类型或页面组件实例
+            if (targetBlock.type == UIBlockType.COMPONENT || targetBlock.type == UIBlockType.LIST || targetBlock.children.isNotEmpty() || targetBlock.targetPageId != null) {
                 val targetAbsBounds = view.blocks.calculateBlockAbsoluteBounds(targetId) ?: targetBlock.bounds
                 val draggedAbsBounds = view.blocks.calculateBlockAbsoluteBounds(draggedId) ?: draggedBlock.bounds
                 val localBounds = SerialRect(
@@ -762,10 +735,9 @@ class CanvasEditorDelegate(
 
         val container = UIStudioBlock(
             id = containerId,
-            type = UIBlockType.VIEW,
-            isPureContainer = true,
+            type = UIBlockType.COMPONENT,
             bounds = unionRect,
-            children = listOf(localB, localA),
+            children = emptyList(),
             targetPageId = containerId
         )
 
@@ -917,11 +889,10 @@ class CanvasEditorDelegate(
 
         val instanceBlock = UIStudioBlock(
             id = instanceId,
-            type = UIBlockType.VIEW,
-            isPureContainer = true,
+            type = UIBlockType.COMPONENT,
             bounds = SerialRect(posX, posY, posX + targetPage.width, posY + targetPage.height),
             targetPageId = targetPage.id,
-            children = targetPage.blocks
+            children = emptyList()
         )
 
         val updatedBlocks = (currentView.blocks + instanceBlock).bindParents()
@@ -941,8 +912,9 @@ class CanvasEditorDelegate(
         val updatedBlocks = updateBlockInTreeRecursively(currentView.blocks, blockId) { block ->
             if (targetPage != null) {
                 block.copy(
+                    type = UIBlockType.COMPONENT,
                     targetPageId = targetPage.id,
-                    children = targetPage.blocks
+                    children = emptyList()
                 )
             } else {
                 block.copy(targetPageId = null)
@@ -979,16 +951,8 @@ class CanvasEditorDelegate(
     /** 将指定视图的图元树整体替换并标记脏状态（internal 供宿主素材挂载等跨域流程复用） */
     internal fun updateViewBlocksAndSave(viewId: String, newBlocks: List<UIStudioBlock>, repo: TemplateRepository = TemplateRepository()) {
         val proj = state.project ?: return
-        var updatedPages = proj.studioPages.map {
+        val updatedPages = proj.studioPages.map {
             if (it.id == viewId) it.copy(blocks = newBlocks) else it
-        }
-
-        // 自动将当前视图变动后的 blocks 镜像同步到所有引用了当前页面的图元实例 (targetPageId == viewId) 中
-        updatedPages = updatedPages.map { p ->
-            if (p.id != viewId) {
-                val synced = syncReferencedPageChildren(p.blocks, viewId, newBlocks)
-                if (synced != p.blocks) p.copy(blocks = synced) else p
-            } else p
         }
 
         state = state.copy(

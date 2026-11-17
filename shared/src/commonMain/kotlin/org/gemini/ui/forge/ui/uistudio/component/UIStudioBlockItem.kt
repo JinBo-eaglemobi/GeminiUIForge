@@ -96,12 +96,13 @@ fun UIStudioBlockItem(
     val width = (b.right - b.left).coerceAtLeast(1f)
     val height = (b.bottom - b.top).coerceAtLeast(1f)
     val displayName = block.id
-    val isPureContainer = block.isPureContainer || block.targetPageId != null
+    val isPureContainer = block.targetPageId != null || (block.assetHash == null && (block.type == UIBlockType.COMPONENT || block.type == UIBlockType.LIST || block.children.isNotEmpty()))
 
     val typeColor = when (block.type) {
-        UIBlockType.BUTTON, UIBlockType.SPIN_BUTTON -> Color(0xFFF59E0B) // 琥珀金橙
-        UIBlockType.BACKGROUND -> Color(0xFF3B82F6) // 沉稳星空蓝
+        UIBlockType.BUTTON -> Color(0xFFF59E0B) // 琥珀金橙
         UIBlockType.TEXT -> Color(0xFF10B981) // 清爽薄荷绿
+        UIBlockType.LIST -> Color(0xFF8B5CF6) // 紫罗兰列表
+        UIBlockType.SPINE -> Color(0xFFEC4899) // 灵动品红骨骼动画
         else -> Color(0xFF06B6D4) // 科技青蓝
     }
 

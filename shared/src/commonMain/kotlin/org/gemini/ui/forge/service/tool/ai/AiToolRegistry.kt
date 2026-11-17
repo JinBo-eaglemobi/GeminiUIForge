@@ -52,7 +52,6 @@ object AiToolRegistry {
             MoveBlockTool(),
             DeleteBlockTool(),
             SetBlockReferenceImageTool(),
-            AnalyzeReferenceGenerateTemplateTool(),
             ImportAssetSheetPipelineTool(),
             ManageAssetLibraryTool(),
             GetAssetsTool(),

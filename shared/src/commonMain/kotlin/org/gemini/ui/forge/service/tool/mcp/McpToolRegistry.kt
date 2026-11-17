@@ -47,7 +47,6 @@ object McpToolRegistry {
             MoveBlockTool(),
             DeleteBlockTool(),
             SetBlockReferenceImageTool(),
-            AnalyzeReferenceGenerateTemplateTool(),
             ImportAssetSheetPipelineTool(),
             ManageAssetLibraryTool(),
             GetAssetsTool(),

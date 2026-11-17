@@ -442,16 +442,7 @@ class ProjectWorkspaceViewModel(
             val updatedPages = currentState.project.pages.map { page ->
                 if (page.id == currentState.selectedPageId) {
                     page.copy(blocks = page.blocks.updateBlockInList(blockId) { block ->
-                        if (type == UIBlockType.BACKGROUND && block.parent == null && currentPage != null) {
-                            // ★ 当根模块切换为背景类型时，自动将尺寸贴合为全屏画布大小
-                            block.copy(
-                                type = type,
-                                bounds = SerialRect(0f, 0f, currentPage.width, currentPage.height),
-                                cropRect = block.cropRect ?: SerialRect(0f, 0f, currentPage.width, currentPage.height)
-                            )
-                        } else {
-                            block.copy(type = type)
-                        }
+                        block.copy(type = type)
                     })
                 } else page
             }
@@ -771,7 +762,7 @@ class ProjectWorkspaceViewModel(
                 }
 
                 // 2. 顶层背景模块自愈：恒等于全屏画布尺寸
-                if (blockWithCalibratedChildren.type == org.gemini.ui.forge.model.ui.UIBlockType.BACKGROUND && block.parent == null) {
+                if (org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.isBackgroundBlock(blockWithCalibratedChildren) && block.parent == null) {
                     val fullCanvasBounds = org.gemini.ui.forge.model.ui.SerialRect(0f, 0f, pageW, pageH)
                     val isChanged = blockWithCalibratedChildren.bounds != fullCanvasBounds
                     if (isChanged) {
@@ -790,7 +781,7 @@ class ProjectWorkspaceViewModel(
                 if (blockWithCalibratedChildren.children.isNotEmpty()) {
                     val normalizedGroup = org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.normalizeContainerAndChildren(blockWithCalibratedChildren)
                     calibratedCount++
-                    org.gemini.ui.forge.utils.AppLogger.i("Calibrate", "🧩 复合模块组【${block.id}】完成子组件深层物理吸附与容器原点贴合归零 (纯容器状态: ${normalizedGroup.isPureContainer})")
+                    org.gemini.ui.forge.utils.AppLogger.i("Calibrate", "🧩 复合模块组【${block.id}】完成子组件深层物理吸附与容器原点贴合归零")
                     return normalizedGroup
                 }
 

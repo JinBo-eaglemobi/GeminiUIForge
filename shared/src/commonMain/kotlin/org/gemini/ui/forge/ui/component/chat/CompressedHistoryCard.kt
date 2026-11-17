@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -174,15 +175,12 @@ fun CompressedHistoryCard(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         SelectionContainer {
-                            Text(
-                                text = summaryMarkdown.ifBlank { "（暂无详细设计记忆内容）" },
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    lineHeight = 19.sp,
-                                    fontSize = 12.5.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(spacing.small)
-                            )
+                            Box(modifier = Modifier.padding(spacing.small)) {
+                                AppMarkdown(
+                                    content = summaryMarkdown.ifBlank { "（暂无详细设计记忆内容）" },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }

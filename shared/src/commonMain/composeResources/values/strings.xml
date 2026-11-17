@@ -14,7 +14,8 @@
     <string name="block_background">Background</string>
     <string name="block_symbol">Symbol</string>
     <string name="block_button">Button</string>
-    <string name="block_view">View</string>
+    <string name="block_component">Component</string>
+    <string name="uistudio_component_type">Component Type</string>
     <string name="block_container">Container</string>
     <string name="prop_pure_container">Pure Container / Layout Group</string>
     <string name="prop_pure_container_desc">Layout placeholder only, generates no asset</string>
@@ -31,6 +32,8 @@
     <string name="block_scroll_bar">Scroll Bar</string>
     <string name="block_slider">Slider</string>
     <string name="block_input">Input Field</string>
+    <string name="block_list">List Container</string>
+    <string name="block_spine">Spine Animation</string>
 
     <string name="menu_file">File</string>
     <string name="menu_settings">Settings</string>
@@ -56,14 +59,7 @@
     <!-- UI Pages -->
     <string name="page_main">Main Game</string>
     <string name="page_bonus">Bonus Game</string>
-
-    <string name="menu_generate_template">Generate Template</string>
-    <string name="template_gen_title">Generate Template via Gemini</string>
-    <string name="template_gen_input_hint">Enter image paths/URLs (comma separated)</string>
-    <string name="template_gen_analyze">Analyze &amp; Generate</string>
-    <string name="template_gen_save">Save Template</string>
     <string name="template_name_hint">Template Name</string>
-    <string name="template_gen_pick_local">Pick Local Images</string>
 
     <string name="settings_gemini_key">Gemini API Key</string>
     <string name="settings_gemini_key_hint">Leave blank to use system global key</string>
@@ -139,7 +135,6 @@
     <string name="hierarchy_expand_all">Expand All</string>
     <string name="hierarchy_collapse_all">Collapse All</string>
     <string name="screen_home">Home</string>
-    <string name="screen_template_generator">AI Analysis</string>
     <string name="dialog_add_layer_title">Add New Layer</string>
     <string name="dialog_rename_layer_title">Rename Layer</string>
     <string name="label_layer_name">Layer Name/ID (Optional)</string>
@@ -842,4 +837,16 @@
     <string name="preview_open_lightbox">View Full Size Image</string>
     <string name="preview_relative_path">Relative Path</string>
     <string name="preview_path_copied">Relative path copied to clipboard</string>
+
+    <!-- Markdown Code Block & Code Viewer -->
+    <string name="code_block_copied_toast">Code copied to clipboard</string>
+    <string name="code_block_copied_tip">Copied</string>
+    <string name="code_block_copy_tip">Copy code</string>
+    <string name="code_block_collapsed_lines_hint">(%1$d lines collapsed)</string>
+    <string name="code_block_expand_tip">Expand code block</string>
+    <string name="code_block_collapse_tip">Collapse code block</string>
+    <string name="code_block_fold_all_scopes_tip">Fold all methods/nodes</string>
+    <string name="code_block_unfold_all_scopes_tip">Unfold all methods/nodes</string>
+    <string name="code_block_fold_line_tip">Fold code scope (%1$d lines)</string>
+    <string name="code_block_unfold_line_tip">Unfold code scope (%1$d lines)</string>
 </resources>

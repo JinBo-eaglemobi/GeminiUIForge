@@ -64,9 +64,9 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
   - UI Studio 彻底废除传统易割裂的独立 `CONTAINER` 类型概念，实行“组件即页面”的一体化架构；
   - 凡是由多切片组合而成、或包含内部子图元的复合组件（例如老虎机滚轴 `slots_window`、控制底栏 `bottom_control_hud`），系统均自动在工程中为其生成并绑定对应的独立子页面（`UIStudioPage`），具有独立的视口分辨率、背景色与子图元列表；
   - 左侧「视图界面」面板采用层次化树状渲染，根页面下方紧随并缩进展示其所绑定的子页面（带有 `↳` 箭头与专属「组件」徽章）；
-- **组件页面视口新开与聚焦**：
-  - 双击画布中的复合组件、或在左侧「视图界面」单击子页面条目，系统自动以一等公民 Page 形式在顶部标签栏新开以该组件命名的专属标签页（`openViewTab`）；
-  - 画布视口自动 Fit 聚焦到该组件子页面，中间画布渲染并接收该组件直接子图元的手势选中、拖拽与拉伸，彻底杜绝多层嵌套选不中的痛点；
+- **组件页面视口新开与聚焦（仅限独立页面 VIEW 打开 Tab 铁律）**：
+  - **能用顶部 Tab 打开的只能是单独页面的 `VIEW`**：仅当组件为绑定了独立页面（`targetPageId != null` 且在 `studioPages` 中真实存在）的 `VIEW` 组件时，双击画布或图层树中的该组件（或在左侧「视图界面」单击该页面条目），系统才会在顶部标签栏新开或激活对应的独立页面标签页（`openViewTab`）；
+  - **严禁非独立页面容器打开临时 Tab**：普通的非独立页面内联容器（`targetPageId == null`）双击或右键不再打开临时容器 Tab，顶部标签栏（`UIStudioPageTabBar`）100% 纯粹承载真实存在的独立页面（`UIStudioPage`）；
 - **父子页面双向联动与独立性守恒**：
   - **主界面调整不影响子组件**：在主页面（如 MainPage）调整该复合组件整体的 X/Y 或宽高时，仅改变其在主页面的承载形态，子组件内部的相对坐标与排版保持独立守恒；
   - **子界面修改实时镜像回显**：在组件子页面内部选中子图元修改 X、Y、宽 W、高 H 时，不仅当前子页面画布与微缩预览图即时变化，主页面中的对应复合组件也会实时镜像更新；
@@ -99,7 +99,11 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
 - **双模态智能预览感知**：
   - **素材模式 (AssetPreviewView)**：当左侧素材库选中特定切片资产时，自适应呈现切片原画与素材规格详情（名称、物理尺寸、文件哈希）；
   - **图元模式 (BlockPreviewView)**：当画布选中切片图元时，动态加载所绑定切片原画并展示图元尺寸与坐标；
-  - **容器模式 (ContainerPreviewView)**：选中复合组件时呈现内部微缩布局排版；
+  - **容器与引用页面穿透模式 (ContainerPreviewView)**：
+    - **自动穿透平级引用页面 (`targetPageId`)**：当选中的复合容器或子组件引用了独立平级页面时（如转轴容器包含 5 列 `reel_col_0 ~ reel_col_4` 子页面），实时预览对标主画布渲染引擎，自动从工程 `studioPages` 列表中递归定位目标页面并穿透展开其内部所有子图元，彻底告别空蓝色线框占位；
+    - **多层嵌套相对坐标累加与透明度继承**：逐层累加局部相对偏移量 `(relX, relY)` 与级联透明度 `effectiveOpacity`，将深层嵌套的叶子切片图元（如转轴容器 $\rightarrow$ 单列滚动页面 $\rightarrow$ 符号槽位 $\rightarrow$ 真实切片图标）按精确网格相对坐标微缩排布；
+    - **1:1 真实画面最终渲染**：直接异步加载内部所有切片的本地物理图片，在右下角微缩视口中 100% 完整呈现该容器所代表的最终视觉切片全貌；
+    - **信息卡片智能感知**：清晰呈现当前组件 ID、关联的引用页面 ID、微缩容器实际几何尺寸及所包含渲染图元的总数量。
 - **沉浸式原寸灯箱大图查看 (CommonImageLightbox)**：
   - 预览视口右上角挂载半透明毛玻璃放大镜快捷按键（`Icons.Default.ZoomIn`），且预览视口画面主体均支持点击直接唤起灯箱；
   - 基于真实磁盘绝对物理路径（`TemplateFile(path).getAbsolutePath()`）无损加载，支持鼠标滚轮以光标为中心 0.1x~8.0x 平滑缩放、1:1 原寸还原、拖拽平移与 ESC 一键关闭，彻底解决微观细节无法放大审阅的痛点；
@@ -183,7 +187,7 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
    - **常驻数据完整性诊断与定位 (Studio Data Diagnostics & Banner)**：在画布视口顶部居中挂载常驻数据完整性诊断横幅（`UIStudioDataIntegrityBanner`），长期、直观地提示哪个视图页面的哪个组件存在“既引用了页面又包含冗余 children”或“引用目标页面不存在”的异常，并提供一键直达与展开定位；
    - **AI 工具契约硬拦截 (AI Tool Reference Invariant & Hard Rejection)**：万能排版工具 `edit_view_layout` 的 Schema 明确声明“设置 targetPageId 时绝对严禁传入 children”。在 `REPLACE_PAGE`、`REPLACE_CONTAINER` 与 `PATCH` 数据审核层执行 100% 刚性硬拦截：凡发现试图向引用组件注入 `children`、或在图元中同时传入 `targetPageId` 与 `children` 的操作，系统一律立即打回拒绝并明确指出具体违规组件与修复指引，从源头彻底杜绝新脏数据产生；
    - **双通道异常诊断工具 (diagnose_view_data)**：封装独立的视图数据完整性诊断工具，100% 复用 `StudioDataDiagnostics` 逻辑，支持按 `viewName` / `viewId` 定向过滤或扫描全工程，向外部 MCP 客户端与内部 AI 架构师输出结构化 JSON 报告，详细列明问题分类（`REFERENCE_WITH_CHILDREN` / `TARGET_PAGE_NOT_FOUND`）与具体排版修复指引；
-   - **废除 CONTAINER 实体类型**：UI Studio 中彻底清除历史残留的 `UIBlockType.CONTAINER` 概念，复合组件或页面实例统一使用 `UIBlockType.VIEW` 并以 `isPureContainer = true` / `targetPageId != null` 作为单一事实源；
+   - **纯粹基础组件体系与废除冗余字段**：全系统 `UIBlockType` 收敛为 13 个纯粹基础 UI 组件枚举（`BUTTON, VIEW, TEXT, IMAGE, LIST, SPINE, COMBO_BOX, PROGRESS_BAR, POPUP_MENU, LOADER, SCROLL_BAR, SLIDER, INPUT`），彻底删除 `REEL, SPIN_BUTTON, WIN_DISPLAY, BACKGROUND, SYMBOL, HEADER, FOOTER, CONTAINER` 等业务耦合枚举，并彻底移除 `BaseBlock` / `UIStudioBlock` / `UIBlock` 中冗余的 `isPureContainer` 字段（复合容器或页面实例统一使用 `UIBlockType.VIEW` / `UIBlockType.LIST`）；
 7. **【原图尺寸物理守恒与一键复位红线】**：属性面板必须提供「原图尺寸」一键复位能力，自动依据图元绑定的素材物理 Hash（或引用页面的源尺寸）秒级复位当前组件的宽 W 与高 H（保持左上角定位恒定），杜绝拉伸失真后无法还原初始比例的体验缺陷；
 8. **【项目公用配置文件、单一页面 ID 契约与复合页面分包存储红线】**：UI Studio 项目工程存储严格遵循项目公用配置与复合页面分包架构（对齐 Figma / VSCode 工业级工程标准）。主配置文件 `template.json` 彻底纯净化为项目级公用配置文件（`UIStudioProjectConfig`，`formatVersion: "2.0"`），专职记录工程元信息（`projectId`、`projectName`、`createdAt`、`updatedAt`、`gameProjectPath`）以及仅含唯一标识 `id` 的 `pageIndex` 页面索引清单，绝对禁止包含任何界面专属私有信息；`UIStudioPage` 彻底废除 `nameStr` 字段，**全系统仅保留唯一的 `id` 属性，且物理文件名 `templates/{projectName}/pages/{id}.json` 与 `page.id` 100% 强绑定**（重命名视图即同步更新 `page.id`、关联图元的 `targetPageId` 并自动删除旧文件名）；所有 JSON 文件的物理落盘必须通过 `saveToFileAtomic` 执行原子交换协议（Temporary Swap + 底层 `fsync` 硬件刷盘 + `ATOMIC_MOVE` 原子替换），彻底杜绝系统崩溃或断电导致配置坏损。
 
@@ -191,7 +195,8 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
 
 10. **【AI 排版数据格式刚性审核准入与引用智能路由红线 (AI Layout Rigorous Validation & Reference Auto-Routing)】**：
     - **数据格式刚性准入审核**：系统在接收到 AI 返回的视图排版数据（`apply_view_layout`）或图元增量补丁（`patch_view_elements`）时，必须执行前置的数据完整性与合法性刚性审核。凡出现：图元缺失必填 `id`、同一视图内 `id` 冲突、图元宽或高 $\le 0$、引用了已废弃的 `CONTAINER` 类型、图元声明的 `targetPageId` 在工程中不存在、或在页面引用实例节点（`targetPageId != null`）的 `children` 中内联塞入子图元等违规情况，系统一律立即拒绝执行并阻断，直接反馈执行失败，并通过 Toast 气泡与执行结果明确告知具体的违规字段与错误原因；
-    - **页面引用实例智能自动路由**：在执行 `ADD` 增量补丁时，若目标父节点（`parentBlockId`）为页面引用组件（`targetPageId != null`），系统严禁将其直接追加到当前宿主页面的 children 中，而是智能拦截并自动路由重定向追加至对应的目标独立子页面（`targetSubPage`）顶层；同时自动同步内存镜像并调度协程对被修改的子页面独立执行原子持久化落盘，确保各独立界面的物理单一事实源与跨页面引用关系的绝对纯洁。
+    - **页面引用实例智能自动路由与零反向污染**：在执行 `ADD` 增量补丁时，若目标父节点（`parentBlockId`）为页面引用组件（`targetPageId != null`），系统严禁将其直接追加到当前宿主页面的 children 中，而是智能拦截并自动路由重定向追加至对应的目标独立子页面（`targetSubPage`）顶层；同时在任何子页面更新或保存时，**绝对禁止调用 `syncReferencedPageRecursively` 将子页面的图元反向复制塞回宿主引用节点的 `children` 中**；当外部通过 `REPLACE_PAGE` 重建页面、或通过 `PATCH` (`op = "UPDATE"`) 显式传入 `children: []` / 绑定 `targetPageId` 清理了该节点的 `children` 时，其 `children` 彻底清空为 `emptyList()` 并落盘，不再保存任何历史 `children`（而对于未经外部触碰处理的历史本地文件节点，仍原样保留磁盘原有的 `children` 供后续新建页面提取）；
+    - **纯容器/引用节点免误绑与切片槽位内切等比适配 (Contain Fit)**：`autoFitAssetsToSlots` 严格跳过 `isPureContainer == true` 与 `targetPageId != null` 的节点，杜绝容器被自动绑上贴图或篡改尺寸；当绑定切片的图元顯式指定了槽位框 `[x, y, w, h]` 且与切片原生宽高比存在偏差（$> 5\%$）时，采用框内等比内切居中（`scale = minOf(w / assetW, h / assetH)`），确保切片既保持原生纵横比不变形，又绝不超出或撑破父容器底边。
 
 11. **【游戏项目独立保存目录与防缓存污染红线】**：游戏项目的源码、依赖库与运行编译产物必须保存在用户显式指定的外部独立物理目录中，**绝对严禁**存放在程序自身私有缓存目录（如 `~/.geminiuiforge/templates/...`）下，从底层杜绝因程序缓存清理导致用户代码被误删的严重隐患；
 12. **【专属配置文件单一事实源红线 (forge-game.json)】**：未包含有效专属识别配置文件 `forge-game.json` 的目录，系统坚决不认定为有效游戏工程；运行预览时若项目已激活则直接浏览器极速拉起，未激活则强制弹出向导弹窗完成环境就绪、脚手架写入与完整构建流水线校验；

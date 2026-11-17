@@ -42,9 +42,6 @@ abstract class BaseBlock {
     /** 不同组件分类的专属附加属性（如 ButtonProperties, SpinProperties 等） */
     abstract val properties: BlockProperties?
 
-    /** 纯容器/占位层标记：true 表示该模块仅用于排版或组合，不参与任何 AI 图片资源生成 */
-    abstract val isPureContainer: Boolean
-
     /** 是否裁剪超出范围的子内容（overflow: hidden），默认 false 为可见 */
     abstract val clipOverflow: Boolean
 

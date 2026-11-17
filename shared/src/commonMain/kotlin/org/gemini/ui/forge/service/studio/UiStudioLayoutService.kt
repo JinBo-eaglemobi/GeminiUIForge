@@ -281,13 +281,16 @@ object UiStudioLayoutService {
                         }
 
                         val updatedPage = patchResult.updatedPage
+                        val routedMap = patchResult.routedPages.associateBy { it.id }
                         workingPages = workingPages.map { p ->
-                            when (p.id) {
-                                updatedPage.id -> updatedPage
+                            when {
+                                p.id == updatedPage.id -> updatedPage
+                                routedMap.containsKey(p.id) -> routedMap.getValue(p.id)
                                 else -> p
                             }
                         }.toMutableList()
                         affectedIds.add(updatedPage.id)
+                        patchResult.routedPages.forEach { affectedIds.add(it.id) }
                         finalActiveViewId = updatedPage.id
                         stepSummaries.add("局部微调页面 [${page.id}] (${patchList.size} 项补丁)")
                     }
@@ -302,17 +305,10 @@ object UiStudioLayoutService {
                 }
             }
 
-            // 3. 跨页面多重引用镜像同步：将所有更新页面的 blocks 递归同步到引用该平级页面的图元内部
-            var fullySyncedPages = workingPages.toList()
-            for (affectedId in affectedIds) {
-                val sourcePage = fullySyncedPages.find { it.id == affectedId } ?: continue
-                fullySyncedPages = fullySyncedPages.map { p ->
-                    if (p.id != sourcePage.id) {
-                        val syncedBlocks = syncReferencedPageRecursively(p.blocks, sourcePage.id, sourcePage.blocks)
-                        if (syncedBlocks !== p.blocks) p.copy(blocks = syncedBlocks) else p
-                    } else p
-                }
-            }
+            // 注意：独立页面引用（targetPageId != null）的子组件仅在目标独立页面中维护，
+            // 严禁在此处调用 syncReferencedPageRecursively 将子页面 blocks 反向塞回宿主引用节点的 children，
+            // 同时对本次未显式修改的节点保持原样无损。
+            val fullySyncedPages = workingPages.toList()
 
             val finalSummary = "已成功执行 ${operations.size} 项视图排版操作: " + stepSummaries.joinToString("; ")
             AppLogger.i(TAG, finalSummary)
@@ -468,7 +464,7 @@ object UiStudioLayoutService {
         outList: MutableList<UIStudioBlock>
     ) {
         val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: "block_${outList.size + 1}"
-        val typeStr = obj["type"]?.jsonPrimitive?.contentOrNull ?: "VIEW"
+        val typeStr = obj["type"]?.jsonPrimitive?.contentOrNull ?: "COMPONENT"
         val type = parseBlockType(typeStr)
 
         val x = obj["x"]?.jsonPrimitive?.floatOrNull ?: 0f
@@ -494,34 +490,34 @@ object UiStudioLayoutService {
                 ?: assetMap[assetFileName.substringBeforeLast('.').lowercase()]
         }
 
-        // 若为页面引用组件，强制为纯容器且类型为 VIEW；若成功绑定切片素材，强制不能为纯容器
-        val isPureContainer = when {
-            targetPageId != null -> true
-            matchedAsset != null -> false
-            else -> obj["isPureContainer"]?.jsonPrimitive?.booleanOrNull ?: false
-        }
-        val finalType = if (targetPageId != null) UIBlockType.VIEW else type
+        // 若为页面引用组件，强制类型为 VIEW
+        val finalType = if (targetPageId != null) UIBlockType.COMPONENT else type
 
-        // 若绑定了切片素材，保证宽高严格守恒真实切片的纵横比（Aspect Ratio），彻底杜绝拉伸变形
-        val (finalW, finalH) = if (matchedAsset != null && matchedAsset.width > 0 && matchedAsset.height > 0) {
+        // 若绑定了切片素材，保证宽高严格守恒真实切片的纵横比（Aspect Ratio），并在目标槽位框 [x, y, w, h] 内等比内切居中（Contain Fit），彻底杜绝拉伸变形或撑破父容器底边
+        val bounds = if (matchedAsset != null && matchedAsset.width > 0 && matchedAsset.height > 0) {
             val assetW = matchedAsset.width.toFloat()
             val assetH = matchedAsset.height.toFloat()
             val assetRatio = assetW / assetH
             if (w <= 0f || h <= 0f || (w == 100f && h == 100f)) {
-                assetW to assetH
+                SerialRect(x, y, x + assetW, y + assetH)
             } else {
                 val modelRatio = w / h
                 if (kotlin.math.abs(modelRatio - assetRatio) > 0.05f) {
-                    w to (w / assetRatio)
+                    val scale = minOf(w / assetW, h / assetH)
+                    val fitW = assetW * scale
+                    val fitH = assetH * scale
+                    val fitX = x + (w - fitW) / 2f
+                    val fitY = y + (h - fitH) / 2f
+                    SerialRect(fitX, fitY, fitX + fitW, fitY + fitH)
                 } else {
-                    w to h
+                    SerialRect(x, y, x + w, y + h)
                 }
             }
         } else {
-            (if (w <= 0f) 100f else w) to (if (h <= 0f) 100f else h)
+            val finalW = if (w <= 0f) 100f else w
+            val finalH = if (h <= 0f) 100f else h
+            SerialRect(x, y, x + finalW, y + finalH)
         }
-
-        val bounds = SerialRect(x, y, x + finalW, y + finalH)
 
         // 解析嵌套子组件：若声明了 targetPageId，页面引用图元严禁内联 children
         val childBlocks = mutableListOf<UIStudioBlock>()
@@ -539,7 +535,6 @@ object UiStudioLayoutService {
             id = id,
             type = finalType,
             bounds = bounds,
-            isPureContainer = isPureContainer,
             assetHash = matchedAsset?.hash,
             children = childBlocks,
             targetPageId = targetPageId
@@ -592,22 +587,26 @@ object UiStudioLayoutService {
 
         fun fitRecursive(blockList: List<UIStudioBlock>, parentId: String = ""): List<UIStudioBlock> {
             return blockList.map { block ->
-                // 如果当前节点已有切片绑定，仅递归处理子组件
-                if (block.assetHash != null) {
+                // 如果当前节点为独立页面引用实例，绝对禁止为其自动绑定切片或篡改容器尺寸
+                if (!block.targetPageId.isNullOrBlank()) {
+                    return@map block
+                }
+                val explicitRole = slotRoleMap[block.id]
+                // 如果当前节点已有切片绑定，或属于无顯式插槽角色的 VIEW / LIST / TEXT / SPINE 容器，仅递归处理子组件，严禁强绑切片贴图
+                if (block.assetHash != null || (explicitRole.isNullOrBlank() && (block.type == UIBlockType.COMPONENT || block.type == UIBlockType.LIST || block.type == UIBlockType.TEXT || block.type == UIBlockType.SPINE || block.children.isNotEmpty()))) {
                     return@map block.copy(children = fitRecursive(block.children, block.id))
                 }
 
-                val explicitRole = slotRoleMap[block.id]
                 val idLower = block.id.lowercase()
                 val parentLower = parentId.lowercase()
 
                 // 推断该插槽的最佳语义角色
                 val targetCategory: AssetSemanticCategory? = when {
-                    explicitRole.equals("BACKGROUND", true) || block.type == UIBlockType.BACKGROUND || idLower.contains("bg") ->
+                    explicitRole.equals("BACKGROUND", true) || idLower.contains("bg") || idLower.contains("background") ->
                         AssetSemanticCategory.BACKGROUND
-                    explicitRole.equals("SPIN_BUTTON", true) || block.type == UIBlockType.SPIN_BUTTON || idLower.contains("spin") ->
+                    explicitRole.equals("SPIN_BUTTON", true) || idLower.contains("spin") ->
                         AssetSemanticCategory.SPIN_BUTTON
-                    explicitRole.equals("REEL_SYMBOL", true) || idLower.contains("sym") || idLower.contains("slot_") || parentLower.contains("col_") || parentLower.contains("reel_") ->
+                    explicitRole.equals("REEL_SYMBOL", true) || idLower.contains("sym") || idLower.contains("icon") || idLower.contains("slot_") || parentLower.contains("col_") || parentLower.contains("reel_") ->
                         AssetSemanticCategory.REEL_SYMBOL
                     explicitRole.equals("BUTTON", true) || explicitRole.equals("BET_CONTROL", true) || block.type == UIBlockType.BUTTON || idLower.contains("btn") ->
                         AssetSemanticCategory.BUTTON
@@ -663,33 +662,37 @@ object UiStudioLayoutService {
                 if (candidateAsset != null) {
                     usedAssetNames.add(candidateAsset.name.lowercase())
 
-                    // 保持素材原生纵横比，纠偏大模型失真的长宽比
+                    // 保持素材原生纵横比，在目标槽位框内等比内切居中（Contain Fit），防止撑破父容器
                     val newBounds = if (candidateAsset.width > 0 && candidateAsset.height > 0) {
                         val assetW = candidateAsset.width.toFloat()
                         val assetH = candidateAsset.height.toFloat()
                         val assetRatio = assetW / assetH
+                        val curX = block.bounds.left
+                        val curY = block.bounds.top
                         val curW = block.bounds.width
                         val curH = block.bounds.height
 
-                        val finalW = if (curW <= 0f || (curW == 100f && curH == 100f)) assetW else curW
-                        val finalH = if (curW <= 0f || curH <= 0f || (curW == 100f && curH == 100f)) {
-                            assetH
+                        if (curW <= 0f || curH <= 0f || (curW == 100f && curH == 100f)) {
+                            SerialRect(curX, curY, curX + assetW, curY + assetH)
                         } else {
                             val curRatio = curW / curH
                             if (kotlin.math.abs(curRatio - assetRatio) > 0.05f) {
-                                curW / assetRatio
+                                val scale = minOf(curW / assetW, curH / assetH)
+                                val fitW = assetW * scale
+                                val fitH = assetH * scale
+                                val fitX = curX + (curW - fitW) / 2f
+                                val fitY = curY + (curH - fitH) / 2f
+                                SerialRect(fitX, fitY, fitX + fitW, fitY + fitH)
                             } else {
-                                curH
+                                block.bounds
                             }
                         }
-                        SerialRect(block.bounds.left, block.bounds.top, block.bounds.left + finalW, block.bounds.top + finalH)
                     } else {
                         block.bounds
                     }
 
                     block.copy(
                         assetHash = candidateAsset.hash,
-                        isPureContainer = false,
                         bounds = newBounds,
                         children = fitRecursive(block.children, block.id)
                     )
@@ -711,12 +714,13 @@ object UiStudioLayoutService {
             UIBlockType.valueOf(upper)
         } catch (_: Exception) {
             when {
-                upper.contains("BG") || upper.contains("BACK") -> UIBlockType.BACKGROUND
-                upper.contains("BTN") || upper.contains("BUTTON") -> UIBlockType.BUTTON
+                upper == "LIST" || upper == "GLIST" || upper == "ROLL_LIST" || upper == "REEL" -> UIBlockType.LIST
+                upper == "SPINE" || upper == "SKELETON" || upper == "MOVIE_CLIP" -> UIBlockType.SPINE
+                upper == "LOADER" || upper == "GLOADER" -> UIBlockType.LOADER
+                upper.contains("BG") || upper.contains("BACK") || upper == "ICON" || upper == "SYMBOL" -> UIBlockType.IMAGE
+                upper.contains("BTN") || upper.contains("BUTTON") || upper.contains("SPIN") -> UIBlockType.BUTTON
                 upper.contains("TEXT") || upper.contains("LABEL") -> UIBlockType.TEXT
-                upper.contains("SLOT") || upper.contains("REEL") -> UIBlockType.REEL
-                upper.contains("SPIN") -> UIBlockType.SPIN_BUTTON
-                else -> UIBlockType.VIEW
+                else -> UIBlockType.COMPONENT
             }
         }
     }
@@ -789,7 +793,7 @@ object UiStudioLayoutService {
                     }
                     val typeStr = patch["type"]?.jsonPrimitive?.contentOrNull?.uppercase()?.trim()
                     if (typeStr == "CONTAINER") {
-                        return "$step: 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 并配合 isPureContainer 或 targetPageId"
+                        return "$step: 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 或 'LIST'"
                     }
                     val reqAssetHash = patch["assetHash"]?.jsonPrimitive?.contentOrNull?.trim()
                     if (!reqAssetHash.isNullOrBlank() && validAssetHashes.isNotEmpty() && reqAssetHash.lowercase() !in validAssetHashes) {
@@ -816,7 +820,7 @@ object UiStudioLayoutService {
                     }
                     val newType = patch["type"]?.jsonPrimitive?.contentOrNull?.uppercase()?.trim()
                     if (newType == "CONTAINER") {
-                        return "$step: 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 并配合 isPureContainer"
+                        return "$step: 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 或 'LIST'"
                     }
                     val parentBlockId = patch["parentBlockId"]?.jsonPrimitive?.contentOrNull
                     if (!parentBlockId.isNullOrBlank() && parentBlockId !in existingBlockIds) {
@@ -864,7 +868,7 @@ object UiStudioLayoutService {
 
             val typeStr = obj["type"]?.jsonPrimitive?.contentOrNull?.uppercase()?.trim()
             if (typeStr == "CONTAINER") {
-                return "$path (图元 '$id'): 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 并配合 isPureContainer 或 targetPageId"
+                return "$path (图元 '$id'): 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 或 'LIST'"
             }
 
             obj["width"]?.jsonPrimitive?.floatOrNull?.let { w ->
@@ -1018,27 +1022,49 @@ object UiStudioLayoutService {
 
                         var type = existing.type
                         patch["type"]?.jsonPrimitive?.contentOrNull?.let {
-                            try { type = UIBlockType.valueOf(it.uppercase()) } catch (_: Exception) {}
+                            type = parseBlockType(it)
                         }
-
-                        var isPureContainer = existing.isPureContainer
-                        patch["isPureContainer"]?.jsonPrimitive?.booleanOrNull?.let { isPureContainer = it }
 
                         var targetPageId = existing.targetPageId
                         if (patch.containsKey("targetPageId")) {
                             targetPageId = patch["targetPageId"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
                         }
+
+                        // 外部显式处理 children 规则：
+                        // 1. 若未在 patch 中触碰 children 且未新设 targetPageId，则保持 existing.children 原样不变；
+                        // 2. 若外部在 patch 中显式传入了 "children"（如 children: [] 清理冗余子图元）或显式设置了 "targetPageId"，则彻底清空或更新 children，不再保留历史冗余子图元。
+                        var updatedChildren = existing.children
+                        if (patch.containsKey("children")) {
+                            val rawChildArr = patch["children"]?.jsonArray
+                            if (rawChildArr == null || rawChildArr.isEmpty() || targetPageId != null) {
+                                updatedChildren = emptyList()
+                            } else {
+                                val parsedChildren = mutableListOf<UIStudioBlock>()
+                                for (childEl in rawChildArr) {
+                                    val childObj = childEl as? JsonObject ?: continue
+                                    parseBlockRecursive(childObj, assetMap, mutableMapOf(), parsedChildren)
+                                }
+                                updatedChildren = parsedChildren
+                            }
+                        } else if (patch.containsKey("targetPageId") && targetPageId != null) {
+                            updatedChildren = emptyList()
+                        }
+
                         if (targetPageId != null) {
-                            type = UIBlockType.VIEW
-                            isPureContainer = true
+                            type = UIBlockType.COMPONENT
+                            if (!patch.containsKey("assetHash") && fileName.isNullOrBlank()) {
+                                assetHash = null
+                            }
+                        } else if (patch.containsKey("assetHash") && patch["assetHash"] is JsonNull) {
+                            assetHash = null
                         }
 
                         existing.copy(
                             type = type,
                             bounds = SerialRect(x, y, x + w, y + h),
-                            isPureContainer = isPureContainer,
                             assetHash = assetHash,
-                            targetPageId = targetPageId
+                            targetPageId = targetPageId,
+                            children = updatedChildren
                         )
                     }
                     appliedCount++
@@ -1064,10 +1090,7 @@ object UiStudioLayoutService {
                                     val updatedSubBlocks = (currentSubPage.blocks + created).bindParents()
                                     val updatedSubPage = currentSubPage.copy(blocks = updatedSubBlocks)
                                     routedPagesMap[targetSubPageId] = updatedSubPage
-
-                                    currentBlocks = updateBlockRecursively(currentBlocks, parentBlockId) { parent ->
-                                        parent.copy(children = parent.children + created)
-                                    }
+                                    // 仅路由至目标独立子页面，严禁同时往宿主引用节点 parent.children 塞入副本
                                     appliedCount++
                                 } else {
                                     return PatchElementsResult(
@@ -1160,18 +1183,11 @@ object UiStudioLayoutService {
             activeVm.canvasEditor.saveSnapshot(recordUndoLabel)
         }
 
-        var workingPages = project.studioPages.toMutableList().apply {
+        val workingPages = project.studioPages.toMutableList().apply {
             set(pageIndex, updatedPage)
         }.toList()
 
-        // 跨页面多重引用镜像同步
-        workingPages = workingPages.map { p ->
-            if (p.id != updatedPage.id) {
-                val synced = syncReferencedPageRecursively(p.blocks, updatedPage.id, updatedPage.blocks)
-                if (synced !== p.blocks) p.copy(blocks = synced) else p
-            } else p
-        }
-
+        // 注意：独立子页面更新时，严禁通过 syncReferencedPageRecursively 将 blocks 反向塞入宿主页面引用节点的 children 中
         val updatedProject = project.copy(studioPages = workingPages)
         repository.saveTemplate(sanitizedName, updatedProject)
 

@@ -18,6 +18,7 @@ import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.service.mcp.QuestionAnswer
 import org.gemini.ui.forge.service.mcp.QuestionOption
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
 import org.gemini.ui.forge.ui.dialog.system.component.CustomAnswerOptionCard
 import org.gemini.ui.forge.ui.dialog.system.component.QuestionOptionCard
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -108,6 +109,7 @@ fun AskUserQuestionDialog(
                     // 2. 彻底取消写死高度上限！采用纯 weight(1f, fill = false)：短文案紧凑贴合，长方案大纲自动自然拉伸撑满屏幕剩余的全部纵向空间。
                     if (question.isNotBlank()) {
                         val descScrollState = rememberScrollState()
+                        val canScrollVertically = descScrollState.maxValue > 0
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -118,29 +120,31 @@ fun AskUserQuestionDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .verticalScroll(descScrollState)
-                                        .padding(end = 14.dp)
+                                        .padding(end = if (canScrollVertically) 14.dp else 0.dp)
                                 ) {
                                     Surface(
                                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                                         shape = MaterialTheme.shapes.medium,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text(
-                                            text = question,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier.padding(spacing.large)
-                                        )
+                                        Box(modifier = Modifier.padding(spacing.large)) {
+                                            AppMarkdown(
+                                                content = question,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
                                     }
                                 }
                             }
 
-                            VerticalScrollbarAdapter(
-                                scrollState = descScrollState,
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .fillMaxHeight()
-                            )
+                            if (canScrollVertically) {
+                                VerticalScrollbarAdapter(
+                                    scrollState = descScrollState,
+                                    modifier = Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .fillMaxHeight()
+                                )
+                            }
                         }
 
                         Spacer(Modifier.height(spacing.medium))

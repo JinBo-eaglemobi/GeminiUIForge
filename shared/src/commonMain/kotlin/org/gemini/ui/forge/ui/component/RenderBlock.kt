@@ -203,7 +203,7 @@ fun RenderBlock(
     val absHeight = absBounds.height
 
     // 5. 是否有可用参考图切片（第三级：仅在无成品图且无专属参考图且未开启全局切片隐藏时，由合规类型从底图按全局绝对坐标现场截取呈现）
-    val isPureContainer = block.isPureContainer
+    val isPureContainer = org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.shouldBePureContainer(block)
     val hasRefSlice = !isPureContainer &&
             !state.isHideReferenceSlices &&
             block.type.supportsReferenceSlice &&
@@ -218,7 +218,7 @@ fun RenderBlock(
     val selectionColor = Color(0xFF00E5FF) // 高亮鲜明电光蓝，深浅背景均 100% 夺目
 
     // 解析 VIEW 类型的自定义背景色
-    val viewBgColor = if (block.type == UIBlockType.VIEW) {
+    val viewBgColor = if (block.type == UIBlockType.COMPONENT) {
         val vp = block.properties as? BlockProperties.ViewProperties
         if (!vp?.backgroundColor.isNullOrEmpty()) parseHexColor(vp.backgroundColor) else null
     } else null
@@ -260,7 +260,7 @@ fun RenderBlock(
             ),
         contentAlignment = Alignment.Center
     ) {
-        val reelProps = if (block.type == UIBlockType.REEL) block.properties as? BlockProperties.ReelProperties else null
+        val reelProps = if (block.type == UIBlockType.LIST) block.properties as? BlockProperties.ReelProperties else null
         val showReelBg = reelProps?.showBackground != false
 
         if (!isPureContainer && imageBitmap != null && showReelBg) {
@@ -325,19 +325,6 @@ fun RenderBlock(
             }
         } else if (!isPureContainer && block.currentImageUri != null && showReelBg) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.dp)
-        } else if (block.type == UIBlockType.SYMBOL) {
-            val fallbackText = block.userPromptZh.ifBlank { block.userPromptEn }.ifBlank { "Symbol" }
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = fallbackText,
-                    modifier = Modifier.fillMaxWidth().padding(4.dp),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 3,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                )
-            }
         }
 
         // 渲染文本组件内容
@@ -368,7 +355,7 @@ fun RenderBlock(
                     )
                 }
             }
-        } else if (block.type == UIBlockType.REEL) {
+        } else if (block.type == UIBlockType.LIST) {
             val reelProperties = block.properties as? BlockProperties.ReelProperties
             if (reelProperties != null) {
                 val rows = reelProperties.rows.coerceAtLeast(1)
@@ -467,8 +454,8 @@ fun RenderBlock(
 
         // 7. 显示模块占位文本：仅在无切片、无生成图且未自定义内容时显示
         val hasCustomContent = (block.type == UIBlockType.TEXT && (block.properties as? BlockProperties.TextProperties)?.text?.isNotEmpty() == true) ||
-                (block.type == UIBlockType.VIEW && viewBgColor != null) ||
-                (block.type == UIBlockType.REEL) || hasRefSlice
+                (block.type == UIBlockType.COMPONENT && viewBgColor != null) ||
+                (block.type == UIBlockType.LIST) || hasRefSlice
 
         if (!hidePlaceholder && imageBitmap == null && block.currentImageUri == null && !hasCustomContent) {
             Text(

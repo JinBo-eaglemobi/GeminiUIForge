@@ -45,7 +45,6 @@ object McpCommandDictionary {
     /** 业务工具的高质感中文简注兜底（若工具自身的 description 包含详细 schema 说明，可优先融合） */
     private val toolShortNotes: Map<String, String> = mapOf(
         "discover_tools" to "【统一工具发现】被动按需检索或分类浏览全部可用的业务工具定义与参数契约",
-        "analyze_reference_generate_template" to "【UI模板生成核心】调用 Gemini 视觉多模态大模型分析设计参考图，提取页面架构、图元相对坐标与双语提示词，并直接生成完整工程模板",
         "create_template" to "在工程库中新建一个 UI 模板工程，初始化画布基准尺寸 (宽/高) 与根容器图元",
         "get_template" to "获取指定模板的完整 ProjectState 架构树（包含所有页面、图元坐标、属性及资源路径）",
         "list_templates" to "列出本地工程库中的所有 UI 模板及其创建时间、页面规模与基础元数据",
@@ -112,7 +111,7 @@ object McpCommandDictionary {
     fun categorizeCommand(name: String): McpCommandCategory {
         return when {
             protocolCommands.containsKey(name) -> McpCommandCategory.PROTOCOL
-            name in setOf("create_template", "get_template", "list_templates", "update_block", "move_block", "delete_block", "analyze_reference_generate_template", "set_block_reference_image") -> McpCommandCategory.TEMPLATE
+            name in setOf("create_template", "get_template", "list_templates", "update_block", "move_block", "delete_block", "set_block_reference_image") -> McpCommandCategory.TEMPLATE
             name in setOf("generate_block_asset", "generate_all_assets", "chat_refine_image", "remove_background", "bake_nine_patch", "compose_page_screenshot", "compare_with_reference", "screenshot_window", "list_matting_presets") -> McpCommandCategory.ASSET
             name in setOf("ask_user_confirmation", "ask_user_choice", "notify_user") -> McpCommandCategory.INTERACTION
             name in setOf("invoke_gemini_text", "list_prompts", "get_prompt", "save_prompt", "reset_prompt") -> McpCommandCategory.AI_PROMPT

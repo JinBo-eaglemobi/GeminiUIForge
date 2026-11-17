@@ -165,7 +165,7 @@ fun CommonSkillSelectionMenu(
                     color = colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "技能配置文件位于 skills/ 目录",
+                    text = "技能规范目录位于 skills/<技能名>/SKILL.md",
                     style = MaterialTheme.typography.bodySmall,
                     color = colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )

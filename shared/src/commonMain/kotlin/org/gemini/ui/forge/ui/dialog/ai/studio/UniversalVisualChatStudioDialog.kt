@@ -291,7 +291,7 @@ fun UniversalVisualChatStudioDialog(
                                          val actualH = size.second
 
                                          // 背景模块特殊保护：若是背景模块且比例近似或尺寸匹配，直接应用；或者尺寸完全一致时直接应用
-                                         val isBackground = block?.type == org.gemini.ui.forge.model.ui.UIBlockType.BACKGROUND
+                                         val isBackground = block != null && org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.isBackgroundBlock(block)
                                          val isSizeMatch = actualW == targetW && actualH == targetH
                                          val isRatioMatch = isBackground && targetW > 0 && targetH > 0 && 
                                                  kotlin.math.abs((actualW.toFloat() / actualH) - (targetW.toFloat() / targetH)) < 0.05f

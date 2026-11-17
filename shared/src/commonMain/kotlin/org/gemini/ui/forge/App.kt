@@ -41,7 +41,6 @@ import org.gemini.ui.forge.ui.dialog.ai.*
 import org.gemini.ui.forge.ui.dialog.layer.*
 import org.gemini.ui.forge.ui.feature.HomeScreen
 import org.gemini.ui.forge.ui.feature.ProjectWorkspaceScreen
-import org.gemini.ui.forge.ui.feature.TemplateGeneratorScreen
 import org.gemini.ui.forge.ui.feature.gameproject.GameProjectCreateScreen
 import org.gemini.ui.forge.ui.feature.gameproject.GameProjectWorkspaceScreen
 import org.gemini.ui.forge.ui.theme.AppShapes
@@ -147,7 +146,6 @@ fun App(typography: Typography? = null) {
                     AppScreen.HOME -> org.gemini.ui.forge.service.mcp.ScreenType.TEMPLATE_LIST
                     AppScreen.PROJECT_WORKSPACE -> org.gemini.ui.forge.service.mcp.ScreenType.PROJECT_WORKSPACE
                     AppScreen.UI_STUDIO -> org.gemini.ui.forge.service.mcp.ScreenType.PROJECT_WORKSPACE
-                    AppScreen.TEMPLATE_GENERATOR -> org.gemini.ui.forge.service.mcp.ScreenType.VISUAL_CHAT_STUDIO
                     else -> org.gemini.ui.forge.service.mcp.ScreenType.TEMPLATE_LIST
                 }
                 org.gemini.ui.forge.service.mcp.UiRoadmapRegistry.updateCurrentScreen(screenType, appState.projectName)
@@ -523,10 +521,10 @@ fun App(typography: Typography? = null) {
                                     }
                                 },
                                 onCloudAssetManagerClicked = { showCloudAssetDialog = true },
-                                 onCompileClicked = { showCompileDialog = true },
-                                 onGlobalStyleClicked = { appViewModel.dispatchGlobalStyleEvent() },
-                                 onLiveOverlayPreviewClicked = { showOverlayPreviewDialog = true },
-                                 onSettingsClicked = {
+                                onCompileClicked = { showCompileDialog = true },
+                                onGlobalStyleClicked = { appViewModel.dispatchGlobalStyleEvent() },
+                                onLiveOverlayPreviewClicked = { showOverlayPreviewDialog = true },
+                                onSettingsClicked = {
                                     settingsInitialCategory = SettingCategory.GENERAL
                                     showSettingsDialog = true
                                 },
@@ -655,14 +653,6 @@ fun App(typography: Typography? = null) {
                                         globalState = globalState,
                                         templateRepo = templateRepo,
                                         configManager = configManager
-                                    )
-                                }
-
-                                AppScreen.TEMPLATE_GENERATOR -> {
-                                    TemplateGeneratorScreen(
-                                        appViewModel = appViewModel,
-                                        globalState = globalState,
-                                        templateRepo = templateRepo
                                     )
                                 }
 

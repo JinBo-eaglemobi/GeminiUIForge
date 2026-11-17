@@ -97,35 +97,23 @@ class PageManagerDelegate(
     }
 
     /**
-     * 打开父容器/复合组件引用的独立编辑视图标签页。
-     * 若该图元绑定了 targetPageId，直接激活对应平级页面；
-     * 若未绑定独立页面，则作为普通就地容器打开编辑视口，绝不私自自动切割生成新页面。
+     * 打开复合组件引用的独立视图页面标签页。
+     * 【架构铁律】：能用顶部 Tab 打开的只能是绑定了独立页面 (targetPageId 非空且在 studioPages 中存在) 的 VIEW 组件！
+     * 普通非独立页面的内联容器绝对禁止打开为 Tab。
      */
     fun openContainerTab(containerId: String) {
-        val proj = state.project
-        if (proj != null) {
-            val currentView = state.currentView
-            val targetBlock = currentView?.blocks?.findBlockById(containerId) as? UIStudioBlock
-            val targetPageId = targetBlock?.targetPageId ?: containerId
-            val matchedPage = proj.studioPages.find { it.id == targetPageId }
-            if (matchedPage != null) {
-                openViewTab(matchedPage.id)
-                Toast.show("已打开平级视图: ${matchedPage.id}", ToastType.INFO)
-                return
-            }
-        }
+        val proj = state.project ?: return
+        val currentView = state.currentView
+        val targetBlock = currentView?.blocks?.findBlockById(containerId) as? UIStudioBlock
+        val targetPageId = if (targetBlock != null) {
+            targetBlock.targetPageId?.takeIf { it.isNotBlank() }
+        } else {
+            containerId.takeIf { id -> proj.studioPages.any { it.id == id } }
+        } ?: return
 
-        viewport.cacheCurrentViewport()
-        val currentTabs = state.openContainerTabs
-        val updatedTabs = if (currentTabs.contains(containerId)) currentTabs else currentTabs + containerId
-        state = state.copy(
-            openContainerTabs = updatedTabs,
-            activeContainerId = containerId,
-            selectedBlockId = containerId,
-            leftBottomTab = UIStudioLeftBottomTab.HIERARCHY
-        )
-        viewport.restoreViewportOrDefault(containerId)
-        Toast.show("已打开容器独立布局视图", ToastType.INFO)
+        val matchedPage = proj.studioPages.find { it.id == targetPageId } ?: return
+        openViewTab(matchedPage.id)
+        Toast.show("已打开独立页面视图: ${matchedPage.id}", ToastType.INFO)
     }
 
     /**

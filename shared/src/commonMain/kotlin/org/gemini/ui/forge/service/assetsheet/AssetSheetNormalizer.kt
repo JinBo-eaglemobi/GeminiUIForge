@@ -176,8 +176,6 @@ object AssetSheetNormalizer {
 
             val bounds = parseBounds(itemObj, warnings, id)
             val type = inferUIBlockType(name, category, desc)
-            val isPure = (itemObj.findBoolean("isPureContainer", "isPure") ?: false) ||
-                (type == UIBlockType.VIEW && (name.contains("container", ignoreCase = true) || category.contains("container", ignoreCase = true)))
 
             normalizedItems.add(
                 NormalizedAssetItem(
@@ -186,8 +184,7 @@ object AssetSheetNormalizer {
                     category = category,
                     type = type,
                     bounds = bounds,
-                    description = desc,
-                    isPureContainer = isPure
+                    description = desc
                 )
             )
         }
@@ -337,45 +334,33 @@ object AssetSheetNormalizer {
         val combined = "${name.lowercase()} ${category?.lowercase().orEmpty()} ${description?.lowercase().orEmpty()}"
 
         return when {
-            // 1. 优先识别主按键 Spin
-            combined.contains("spin") -> UIBlockType.SPIN_BUTTON
-
-            // 2. 交互按键
-            combined.contains("button") || combined.contains("btn") ||
+            // 1. 交互按键 (含 Spin 主按键)
+            combined.contains("spin") || combined.contains("button") || combined.contains("btn") ||
                 combined.contains("toggle") || combined.contains("switch") ||
                 combined.contains("tab") || combined.contains("nav_") -> UIBlockType.BUTTON
 
-            // 3. 特殊符号、队徽与卡牌标志
-            combined.contains("symbol") || combined.contains("scatter") ||
-                combined.contains("wild") || combined.contains("trophy") ||
-                combined.contains("badge") || combined.contains("club") ||
-                combined.contains("card") || combined.contains("icon") -> UIBlockType.SYMBOL
+            // 2. 骨骼动画
+            combined.contains("spine") || combined.contains("skeleton") -> UIBlockType.SPINE
 
-            // 4. 背景与底板横幅
-            combined.contains("background") || combined.contains("bg") ||
-                combined.contains("backdrop") -> UIBlockType.BACKGROUND
+            // 3. 列表与转轴网格
+            combined.contains("list") || combined.contains("reel") || combined.contains("slot_matrix") -> UIBlockType.LIST
 
-            // 5. 顶部/底部导航容器
-            combined.contains("header") || combined.contains("top_bar") ||
-                combined.contains("top navigation") -> UIBlockType.HEADER
-            combined.contains("footer") || combined.contains("bottom_bar") -> UIBlockType.FOOTER
-
-            // 6. 进度条与滑块
+            // 4. 进度条与滑块
             combined.contains("progress") || combined.contains("loading_bar") -> UIBlockType.PROGRESS_BAR
             combined.contains("slider") -> UIBlockType.SLIDER
 
-            // 7. 文本
+            // 5. 文本
             combined.contains("text") || combined.contains("label") ||
                 combined.contains("title") || combined.contains("amount") -> UIBlockType.TEXT
 
-            // 8. 视图/纯容器占位
+            // 6. 视图/导航容器占位
             combined.contains("container") || combined.contains("layout") ||
-                combined.contains("group") || combined.contains("wrapper") -> UIBlockType.VIEW
+                combined.contains("group") || combined.contains("wrapper") ||
+                combined.contains("header") || combined.contains("top_bar") ||
+                combined.contains("top navigation") || combined.contains("footer") ||
+                combined.contains("bottom_bar") -> UIBlockType.COMPONENT
 
-            // 9. 转轴
-            combined.contains("reel") || combined.contains("slot_matrix") -> UIBlockType.REEL
-
-            // 10. 默认为独立图片/装饰物
+            // 7. 默认为独立图片/符号/背景/装饰物
             else -> UIBlockType.IMAGE
         }
     }

@@ -128,14 +128,14 @@ fun UIStudioCanvasArea(
                             val logicalY = (tapOffset.y - state.panOffset.y) / state.scale
 
                             if (state.activeContainerId == null) {
-                                // 主视图视口下：双击父组件，新开一个标签页面显示父组件内的布局
+                                // 主视图视口下：仅当双击绑定了独立页面 (targetPageId != null) 的 VIEW 组件时，才打开其独立页面 Tab
                                 val hitRoot = currentV.blocks.findLast { b ->
                                     if (!b.isVisible || b.isLocked) return@findLast false
                                     val r = b.bounds
                                     logicalX >= r.left && logicalX <= r.right &&
                                     logicalY >= r.top && logicalY <= r.bottom
                                 }
-                                if (hitRoot != null && (hitRoot.isPureContainer || hitRoot.children.isNotEmpty())) {
+                                if (hitRoot != null && !hitRoot.targetPageId.isNullOrBlank()) {
                                     viewModel.pageManager.openContainerTab(hitRoot.id)
                                 }
                             }
@@ -384,9 +384,9 @@ fun UIStudioCanvasArea(
                                     },
                                     onDoubleTap = {
                                         if (activeContainer == null) {
-                                            // 主视图模式下：双击父容器或引用组件，新开标签页面显示内部布局
+                                            // 主视图模式下：仅当双击绑定了独立页面 (targetPageId != null) 的 VIEW 组件时，才打开其独立页面标签
                                             val rootBlock = currentView.blocks.find { it.id == info.rootBlockId } ?: info.block
-                                            if (rootBlock.targetPageId != null || rootBlock.isPureContainer || rootBlock.children.isNotEmpty()) {
+                                            if (!rootBlock.targetPageId.isNullOrBlank()) {
                                                 viewModel.pageManager.openContainerTab(rootBlock.id)
                                             }
                                         }

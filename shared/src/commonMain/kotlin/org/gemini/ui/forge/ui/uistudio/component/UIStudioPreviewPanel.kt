@@ -33,7 +33,9 @@ import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.data.TemplateFile
 import org.gemini.ui.forge.extend.copyOnClick
 import org.gemini.ui.forge.model.ui.UIBlockType
+import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.ui.component.AppIconButton
 import org.gemini.ui.forge.ui.component.AppIconButtonTier
 import org.gemini.ui.forge.ui.component.AppIconButtonVariant
@@ -75,6 +77,7 @@ fun UIStudioPreviewPanel(
     val selectedBlock = remember(state.selectedBlockId, currentView?.blocks) {
         state.selectedBlockId?.let { id -> currentView?.blocks?.findBlockById(id) as? UIStudioBlock }
     }
+    val studioPages = state.project?.studioPages ?: emptyList()
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -126,7 +129,7 @@ fun UIStudioPreviewPanel(
                                 )
                             }
                         }
-                        selectedBlock != null && (selectedBlock.isPureContainer || selectedBlock.children.isNotEmpty() || selectedBlock.targetPageId != null) -> {
+                        selectedBlock != null && (selectedBlock.type == org.gemini.ui.forge.model.ui.UIBlockType.COMPONENT || selectedBlock.type == org.gemini.ui.forge.model.ui.UIBlockType.LIST || selectedBlock.children.isNotEmpty() || selectedBlock.targetPageId != null) -> {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = MaterialTheme.colorScheme.secondaryContainer
@@ -174,10 +177,11 @@ fun UIStudioPreviewPanel(
                         // 1. 预览选中的素材图片与详细尺寸
                         AssetPreviewView(asset = selectedAsset)
                     }
-                    selectedBlock != null && (selectedBlock.isPureContainer || selectedBlock.children.isNotEmpty() || selectedBlock.targetPageId != null) -> {
-                        // 2. 预览选中的父组件渲染效果（渲染内部子布局）
+                    selectedBlock != null && (selectedBlock.type == org.gemini.ui.forge.model.ui.UIBlockType.COMPONENT || selectedBlock.type == org.gemini.ui.forge.model.ui.UIBlockType.LIST || selectedBlock.children.isNotEmpty() || selectedBlock.targetPageId != null) -> {
+                        // 2. 预览选中的父组件渲染效果（递归穿透平级页面引用与嵌套子布局，渲染真实切片）
                         ContainerPreviewView(
                             container = selectedBlock,
+                            studioPages = studioPages,
                             assetPathResolver = assetPathResolver,
                             assetUpdatedAtResolver = assetUpdatedAtResolver
                         )
@@ -369,16 +373,112 @@ private fun AssetPreviewView(asset: UIAssetItem) {
 }
 
 /**
- * 父组件整体渲染效果预览视图（支持内部子组件微缩排版）。
+ * 递归收集容器内所有可渲染的切片图元（自动穿透平级页面引用 targetPageId 与嵌套容器 children）。
+ * 计算每个图元相对于根容器左上角 (0, 0) 的绝对偏移量 (relLeft, relTop)。
+ */
+private fun collectRenderablePreviewBlocks(
+    blocks: List<UIStudioBlock>,
+    availablePages: List<UIStudioPage>,
+    parentOffsetX: Float = 0f,
+    parentOffsetY: Float = 0f,
+    parentOpacity: Float = 1.0f,
+    visitedPageIds: Set<String> = emptySet()
+): List<UIStudioBlock> {
+    val result = mutableListOf<UIStudioBlock>()
+    for (b in blocks) {
+        if (!b.isVisible) continue
+
+        val relLeft = parentOffsetX + b.bounds.left
+        val relTop = parentOffsetY + b.bounds.top
+        val relW = (b.bounds.right - b.bounds.left).coerceAtLeast(1f)
+        val relH = (b.bounds.bottom - b.bounds.top).coerceAtLeast(1f)
+        val relBounds = SerialRect(relLeft, relTop, relLeft + relW, relTop + relH)
+        val cumulativeOpacity = (parentOpacity * b.effectiveOpacity).coerceIn(0.0f, 1.0f)
+
+        val targetId = b.targetPageId
+        if (!targetId.isNullOrBlank()) {
+            val refPage = availablePages.find { it.id == targetId }
+            if (refPage != null && !visitedPageIds.contains(targetId)) {
+                // 递归穿透引用页面内部的 blocks
+                result.addAll(
+                    collectRenderablePreviewBlocks(
+                        blocks = refPage.blocks,
+                        availablePages = availablePages,
+                        parentOffsetX = relLeft,
+                        parentOffsetY = relTop,
+                        parentOpacity = cumulativeOpacity,
+                        visitedPageIds = visitedPageIds + targetId
+                    )
+                )
+            } else {
+                // 若找不到引用页面，保留当前占位
+                result.add(
+                    b.copy(
+                        bounds = relBounds,
+                        opacity = cumulativeOpacity
+                    )
+                )
+            }
+        } else if (b.children.isNotEmpty()) {
+            // 嵌套容器继续递归
+            result.addAll(
+                collectRenderablePreviewBlocks(
+                    blocks = b.children,
+                    availablePages = availablePages,
+                    parentOffsetX = relLeft,
+                    parentOffsetY = relTop,
+                    parentOpacity = cumulativeOpacity,
+                    visitedPageIds = visitedPageIds
+                )
+            )
+        } else {
+            // 真实叶子图元（持有 assetHash 或具体组件）
+            result.add(
+                b.copy(
+                    bounds = relBounds,
+                    opacity = cumulativeOpacity
+                )
+            )
+        }
+    }
+    return result
+}
+
+/**
+ * 父组件整体渲染效果预览视图（支持内部子组件微缩排版，遇到平级引用页面时自动递归穿透渲染最终切片效果）。
  */
 @Composable
 private fun ContainerPreviewView(
     container: UIStudioBlock,
+    studioPages: List<UIStudioPage>,
     assetPathResolver: (String?) -> String?,
     assetUpdatedAtResolver: (String?) -> Long? = { null }
 ) {
-    val containerW = container.bounds.width.coerceAtLeast(1f)
-    val containerH = container.bounds.height.coerceAtLeast(1f)
+    val boundPage = remember(container.targetPageId, studioPages) {
+        container.targetPageId?.let { pageId -> studioPages.find { it.id == pageId } }
+    }
+    val rawW = if (container.bounds.width > 0f) container.bounds.width else (boundPage?.width ?: 100f)
+    val rawH = if (container.bounds.height > 0f) container.bounds.height else (boundPage?.height ?: 100f)
+    val containerW = rawW.coerceAtLeast(1f)
+    val containerH = rawH.coerceAtLeast(1f)
+
+    val initialBlocks = remember(container.id, container.targetPageId, container.children, studioPages) {
+        if (!container.targetPageId.isNullOrBlank()) {
+            boundPage?.blocks ?: container.children
+        } else {
+            container.children
+        }
+    }
+
+    val renderableChildren = remember(initialBlocks, studioPages, container.effectiveOpacity) {
+        collectRenderablePreviewBlocks(
+            blocks = initialBlocks,
+            availablePages = studioPages,
+            parentOffsetX = 0f,
+            parentOffsetY = 0f,
+            parentOpacity = container.effectiveOpacity
+        )
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -410,13 +510,13 @@ private fun ContainerPreviewView(
                         .background(Color(0xFF0F172A).copy(alpha = 0.6f))
                         .border(1.dp, Color(0xFF818CF8).copy(alpha = 0.4f), RoundedCornerShape(2.dp))
                 ) {
-                    // 渲染父容器内部的所有子组件（异步加载真实切片图片，级联继承父容器透明度）
-                    container.children.forEach { child ->
+                    // 渲染容器内部递归展开的所有真实子图元（异步加载切片图片，级联继承透明度）
+                    renderableChildren.forEach { child ->
                         if (child.isVisible) {
                             UIStudioChildPreviewThumbnail(
                                 child = child,
                                 scale = scale,
-                                inheritedOpacity = container.effectiveOpacity,
+                                inheritedOpacity = 1.0f,
                                 assetPathResolver = assetPathResolver,
                                 assetUpdatedAtResolver = assetUpdatedAtResolver
                             )
@@ -426,7 +526,7 @@ private fun ContainerPreviewView(
             }
         }
 
-        // 下方父容器信息卡片
+        // 下方容器信息卡片
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
             shape = RoundedCornerShape(6.dp),
@@ -442,14 +542,14 @@ private fun ContainerPreviewView(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "父容器: ${container.id}",
+                        text = if (!container.targetPageId.isNullOrBlank()) "组件: ${container.id} (${container.targetPageId})" else "组件: ${container.id}",
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "包含 ${container.children.size} 个子组件",
+                        text = if (!container.targetPageId.isNullOrBlank()) "引用页面 · 渲染 ${renderableChildren.size} 个图元" else "包含 ${container.children.size} 个子组件 · 渲染 ${renderableChildren.size} 个图元",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = MaterialTheme.colorScheme.outline
                     )

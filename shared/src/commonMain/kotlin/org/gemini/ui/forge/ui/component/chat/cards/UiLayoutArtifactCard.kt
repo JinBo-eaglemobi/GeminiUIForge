@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.extend.rememberClipboardAction
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdownCodeBlock
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
@@ -285,22 +286,14 @@ fun UiLayoutArtifactCard(
                 }
             }
 
-            // 6. 折叠的原始 JSON 数据区
+            // 6. 折叠的原始 JSON 数据区（统一接入 AppMarkdownCodeBlock，提供行号与节点折叠）
             AnimatedVisibility(visible = isRawJsonExpanded) {
                 Column(modifier = Modifier.padding(top = 10.dp)) {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = Color(0xFF1E1E24),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)
-                    ) {
-                        Text(
-                            text = artifact.rawJsonSnippet,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFFE0E0E0),
-                            modifier = Modifier.padding(8.dp)
-                        )
-                    }
+                    AppMarkdownCodeBlock(
+                        code = artifact.rawJsonSnippet,
+                        language = "json",
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }

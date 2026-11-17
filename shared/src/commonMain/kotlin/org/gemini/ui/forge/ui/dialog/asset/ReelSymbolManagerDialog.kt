@@ -473,7 +473,7 @@ fun ReelSymbolManagerDialog(
                         } else {
                             UIBlock(
                                 id = "sym_${getCurrentTimeMillis()}",
-                                type = UIBlockType.SYMBOL,
+                                type = UIBlockType.IMAGE,
                                 bounds = SerialRect(0f, 0f, finalW, finalH),
                                 userPromptZh = newItemPromptZh,
                                 userPromptEn = newItemPromptEn
@@ -526,7 +526,7 @@ fun ReelSymbolManagerDialog(
                 } else {
                     UIBlock(
                         id = "sym_${getCurrentTimeMillis()}",
-                        type = UIBlockType.SYMBOL,
+                        type = UIBlockType.IMAGE,
                         bounds = SerialRect(0f, 0f, finalW, finalH),
                         userPromptZh = newItemPromptZh,
                         userPromptEn = newItemPromptEn
@@ -546,7 +546,7 @@ fun ReelSymbolManagerDialog(
                 val safePrompt = finalPromptText.ifBlank { targetItem.fullPrompt }
 
                 viewModel.assetManager.selectReelItem(targetItem.id)
-                viewModel.assetGen.onRequestGeneration(apiKey, "${UIBlockType.SYMBOL.defaultPrompt}, $safePrompt")
+                viewModel.assetGen.onRequestGeneration(apiKey, "${UIBlockType.IMAGE.defaultPrompt}, $safePrompt")
 
                 showGenConfirmDialog = false
                 showAddItemDialog = false

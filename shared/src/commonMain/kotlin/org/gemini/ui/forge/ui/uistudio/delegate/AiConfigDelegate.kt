@@ -395,7 +395,7 @@ class AiConfigDelegate(
                             bounds = "",
                             width = w,
                             height = h,
-                            isContainer = block.isPureContainer,
+                            isContainer = block.type == org.gemini.ui.forge.model.ui.UIBlockType.COMPONENT || block.type == org.gemini.ui.forge.model.ui.UIBlockType.LIST || block.children.isNotEmpty() || block.targetPageId != null,
                             viewId = pageId,
                             viewName = pageName
                         )
@@ -451,13 +451,15 @@ class AiConfigDelegate(
 
     private suspend fun computeSkillsDirectoryFingerprint(): String {
         return try {
-            val fileNames = storage.listFiles("skills").sorted()
-            if (fileNames.isEmpty()) return "empty"
+            val skillDirs = storage.listDirectories("skills").sorted()
             val sb = StringBuilder()
-            for (name in fileNames) {
-                val hash = storage.readFromFile("skills/$name")?.hashCode() ?: 0
-                sb.append(name).append(':').append(hash).append(';')
+            for (dirName in skillDirs) {
+                if (dirName.startsWith(".")) continue
+                val hash = storage.readFromFile("skills/$dirName/SKILL.md")?.hashCode() ?: 0
+                sb.append(dirName).append(':').append(hash).append(';')
             }
+            val disabledHash = storage.readFromFile("skills/disabled_skills.json")?.hashCode() ?: 0
+            sb.append("disabled:").append(disabledHash).append(';')
             sb.toString()
         } catch (_: Exception) {
             "error"

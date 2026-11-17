@@ -40,7 +40,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun AddLayerDialog(onDismiss: () -> Unit, onConfirm: (String, UIBlockType, Float, Float) -> Unit) {
     var name by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(UIBlockType.VIEW) }
+    var selectedType by remember { mutableStateOf(UIBlockType.COMPONENT) }
     var widthStr by remember { mutableStateOf("200") }
     var heightStr by remember { mutableStateOf("200") }
     var expandedType by remember { mutableStateOf(false) }

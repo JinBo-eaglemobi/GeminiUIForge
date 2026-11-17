@@ -65,7 +65,7 @@ object ToolCategoryDictionary {
             ) -> CATEGORY_VIEW
             in setOf(
                 "list_templates", "get_template", "create_template", "save_project",
-                "import_asset_sheet_pipeline", "analyze_reference_generate_template"
+                "import_asset_sheet_pipeline"
             ) -> CATEGORY_TEMPLATE
             in setOf(
                 "discover_tools", "search_skills",

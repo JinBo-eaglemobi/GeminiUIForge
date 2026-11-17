@@ -107,7 +107,6 @@ fun AppTopBar(
 
                 // 当前模式标识
                 val modeNameRes = when (currentScreen) {
-                    AppScreen.TEMPLATE_GENERATOR -> Res.string.screen_template_generator
                     AppScreen.PROJECT_WORKSPACE -> Res.string.screen_project_workspace
                     AppScreen.GAME_PROJECT_MANAGER -> Res.string.screen_game_project_manager
                     AppScreen.GAME_PROJECT_WORKSPACE -> Res.string.screen_game_project_workspace
@@ -143,17 +142,6 @@ fun AppTopBar(
                             contentDescription = stringResource(Res.string.home_refresh_tip),
                             modifier = Modifier.size(20.dp)
                         )
-                    }
-
-                    TextButton(
-                        onClick = { viewModel.navigateTo(AppScreen.TEMPLATE_GENERATOR) },
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                        shape = AppShapes.medium,
-                        modifier = Modifier.tip("通过 AI 分析生图并创建新模板")
-                    ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(Res.string.menu_generate_template), style = MaterialTheme.typography.labelLarge)
                     }
 
                     TextButton(

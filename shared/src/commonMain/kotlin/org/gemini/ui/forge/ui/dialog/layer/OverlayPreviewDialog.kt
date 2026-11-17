@@ -372,10 +372,11 @@ fun OverlayPreviewDialog(
                             ) {
                                 items(flatBlocks, key = { it.id }) { block ->
                                     val isHidden = block.id in hiddenBlockIds
-                                    val isBusiness = !block.isPureContainer && block.type != UIBlockType.BACKGROUND
-                                    val isContainer = block.isPureContainer
+                                    val isBg = org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.isBackgroundBlock(block)
+                                    val isContainer = org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.shouldBePureContainer(block)
+                                    val isBusiness = !isContainer && !isBg
                                     val indicatorColor = when {
-                                        block.type == UIBlockType.BACKGROUND -> Color(0xFF9C27B0)
+                                        isBg -> Color(0xFF9C27B0)
                                         isContainer -> Color(0xFFFF7A00)
                                         else -> Color(0xFF00FFFF)
                                     }

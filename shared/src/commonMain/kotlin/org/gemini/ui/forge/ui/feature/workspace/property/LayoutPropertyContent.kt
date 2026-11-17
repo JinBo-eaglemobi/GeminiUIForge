@@ -527,41 +527,8 @@ fun LayoutPropertyContent(
                     }
                 }
 
-                // 纯容器/占位层标记开关
-                val isPureContainer = selectedBlock.isPureContainer
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(AppShapes.medium)
-                        .clickable {
-                            viewModel.assetManager.updateBlock(selectedBlock.copy(isPureContainer = !selectedBlock.isPureContainer))
-                        }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(Res.string.prop_pure_container),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = stringResource(Res.string.prop_pure_container_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = isPureContainer,
-                        onCheckedChange = { checked ->
-                            viewModel.assetManager.updateBlock(selectedBlock.copy(isPureContainer = checked))
-                        }
-                    )
-                }
-
                 // 若包含子图元且非 VIEW 模块，提供通用的内容溢出隐藏开关
-                if (selectedBlock.children.isNotEmpty() && selectedBlock.type != UIBlockType.VIEW) {
+                if (selectedBlock.children.isNotEmpty() && selectedBlock.type != UIBlockType.COMPONENT) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -595,8 +562,8 @@ fun LayoutPropertyContent(
                 }
             }
 
-            // 独立图片资产展示与操作板块（纯容器模式下自适应隐藏）
-            val isPureContainer = selectedBlock.isPureContainer
+            // 独立图片资产展示与操作板块（纯布局容器模式下自适应隐藏）
+            val isPureContainer = org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.shouldBePureContainer(selectedBlock)
             val currentBoundFile = selectedBlock.currentImageUri
             if (!isPureContainer) {
                 CollapsibleSection(

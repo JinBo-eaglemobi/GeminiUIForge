@@ -57,7 +57,15 @@
      - **标准动作**：调用 `reload()` 热更完成后，必须紧跟调用 `tools["compose-hot-reload"].reset_ui()`，在毫秒级内丢弃全部记忆树并以新代码初次构造型挂载！
   3. **【多语言与 XML 资源代码生成耗时惩罚感知】**：
      - 凡修改 `strings.xml` 或资源文件，会强制触发 Gradle `:shared:generateComposeResClass` 与跨模块重打包（耗时 10~15s），属正常代码生成流水线，严禁误判为卡死！
-  4. **【孤儿僵尸 `.run` 注册文件定点清理与选举自杀预防】**：
+  4. **【阶段 B 编译就绪探针与适度原生极速重启逃生规范 (Stage-B Probe & Controlled Restart Fast-Path)】**：
+     - **底层机理认知**：认清“变动代码 `.class` 与增量编译账本已物理落盘（阶段 B，耗时仅 2~3s）”与“漫长的下游全量依赖扫描、Jar 封包校验与内存 HotSwap 比对（阶段 C，极易耗时 20~40s）”的时间差；
+     - **严苛三要素事实探针（严禁盲目硬编码定时）**：仅当同时满足以下三项事实铁证时，方可判定阶段 B 达成：
+       ① **物理产物落盘铁证**：目标变动文件的 `build/classes/kotlin/jvm/main/.../<Target>.class` 修改时间必须晚于 `.kt` 源码修改时间，且文件大小正常；
+       ② **0 语法与编译错误断言**：`status().lastError == null` 且编译器日志无报错；
+       ③ **稳定期挂起反差探测**：阶段 B 产物落盘已持续稳定 $\ge 3$ 秒，但总状态 `reloadState` 依然卡在 `"reloading"`；
+     - **适度触发极速重启收口**：满足上述条件后，**坚决杜绝被动死等下游任务收口，直接果断调用官方原生重启 `tools["compose-hot-reload"].restart({ timeout_seconds: 60 })`**，由 Hot Reload Runner 以既有 Classpath 在 3~5 秒内秒级拉起新进程并自动重连；
+     - **冷启动零债务保证（Zero Cold-Start Penalty）**：严禁在阶段 A（未落盘）提前重启；必须在阶段 B（增量账本与最新 `.class` 均已落盘）后触发，确保下次使用 Gradle 冷启动时直接命中 `UP-TO-DATE`（0 秒），彻底杜绝把未完成编译债务留给下次冷启动。
+  5. **【孤儿僵尸 `.run` 注册文件定点清理与选举自杀预防】**：
      - 每次发起热更若耗时异常（> 20s），必须巡检 `%LOCALAPPDATA%\kotlin\daemon\*.run`。若对应 PID 进程已死亡，必须立刻定点清除该孤儿 `.run` 文件，杜绝新守护进程误判选举而每次“编译完就自杀退出”，保障健康守护进程秒级增量编译！
 
 - **功能说明文档生命周期与先锁后更铁律 (Feature Documentation Lifecycle & Pre-Post Redline)**: **【红线规则】**

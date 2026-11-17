@@ -152,8 +152,9 @@ class CanvasScreenshotService {
                 }
             }
 
-            // 占位线框
-            if (!block.isPureContainer) {
+            // 占位线框（仅针对非空容器的业务图元）
+            val isContainerOnly = block.targetPageId != null || (block.assetHash == null && (block.type == org.gemini.ui.forge.model.ui.UIBlockType.COMPONENT || block.type == org.gemini.ui.forge.model.ui.UIBlockType.LIST || block.children.isNotEmpty()))
+            if (!isContainerOnly) {
                 val dst = Rect.makeXYWH(bounds.left, bounds.top, bounds.width, bounds.height)
                 canvas.drawRect(dst, placeholderPaint)
             }

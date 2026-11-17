@@ -22,10 +22,7 @@ enum class DetectionEngineMode(val displayName: String, val shortName: String, v
     BASELINE_SNAPPER("经典微观吸附", "微观吸附", "纯像素矩阵梯度山脊微调，专精 0 误差像素级严丝合缝对齐"),
 
     /** 传统 CV 几何轮廓拓扑 (基于多尺度形态学与闭合边界几何拟合，零模型依赖) */
-    CLASSIC_CV("传统 CV 几何轮廓", "传统 CV", "零外部模型依赖，基于多尺度形态学切分与空间拓扑建树，开箱即用"),
-
-    /** 端侧轻量 AI 目标检测 (基于 ONNX Runtime JVM 与端侧神经网络) */
-    ONNX_AI("端侧 AI 目标检测", "端侧 AI", "基于本地轻量神经网络，自动识别常见 UI 控件并回归语义包围盒")
+    CLASSIC_CV("传统 CV 几何轮廓", "传统 CV", "零外部模型依赖，基于多尺度形态学切分与空间拓扑建树，开箱即用")
 }
 
 /**

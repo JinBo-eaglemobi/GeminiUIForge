@@ -108,7 +108,7 @@ class GenerateAllAssetsTool(
 
         // 严格过滤纯容器与占位层
         val eligibleBlocks = allBlocks.filter { block ->
-            !block.isPureContainer
+            !org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.shouldBePureContainer(block)
         }
 
         val targetBlocks = if (onlyMissing) {

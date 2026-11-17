@@ -22,7 +22,6 @@ import androidx.compose.runtime.Stable
  * @property isVisible 图层当前是否在画布和预览中可见
  * @property isLocked 图层是否锁定（锁定后在画布上禁止选中和拖动）
  * @property properties 不同类型图元的专属附加属性
- * @property isPureContainer 纯容器/占位层标记：true 表示该图元仅用于排版或组合
  * @property clipOverflow 是否裁剪超出范围的子内容（overflow: hidden）
  * @property scaleX 独立水平缩放变换因数
  * @property scaleY 独立垂直缩放变换因数
@@ -41,7 +40,6 @@ data class UIStudioBlock(
     override val isVisible: Boolean = true,
     override val isLocked: Boolean = false,
     override val properties: BlockProperties? = null,
-    override val isPureContainer: Boolean = false,
     override val clipOverflow: Boolean = false,
     override val scaleX: Float = 1.0f,
     override val scaleY: Float = 1.0f,

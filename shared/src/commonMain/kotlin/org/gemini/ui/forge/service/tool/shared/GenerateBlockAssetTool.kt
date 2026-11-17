@@ -237,8 +237,8 @@ class GenerateBlockAssetTool(
                 ?: return Pair(currentState, BlockAssetGenerationResult(false, blockId, errorMessage = "未找到图元 '$blockId'"))
 
             // 1. 过滤纯容器与占位层
-            if (block.isPureContainer) {
-                return Pair(currentState, BlockAssetGenerationResult(false, blockId, errorMessage = "图元 [$blockId] 为纯容器/占位层，禁止参与 AI 生图"))
+            if (UIBlockLayoutNormalizer.shouldBePureContainer(block)) {
+                return Pair(currentState, BlockAssetGenerationResult(false, blockId, errorMessage = "图元 [$blockId] 为布局容器层，禁止参与 AI 生图"))
             }
 
             // 2. 检查专属参考图，若缺失则自动从设计原图切片兜底
@@ -296,7 +296,7 @@ class GenerateBlockAssetTool(
             // 2. 检查专属参考图，若缺失则自动从设计原图切片兜底；无参考原图时自适应降级为纯文生图
             val refBytesToUse = effectiveRefFile?.getAbsolutePath()?.let { readLocalFileBytes(it) }
             val isTextToImage = refBytesToUse == null || refBytesToUse.isEmpty()
-            val isBackground = block.type == UIBlockType.BACKGROUND
+            val isBackground = UIBlockLayoutNormalizer.isBackgroundBlock(block)
 
             // 3. 向 Gemini 发起生图请求
             onProgress?.invoke(0.3f, if (isTextToImage) "正在向 Gemini 发起纯文本生图请求 ($modelName)..." else "正在向 Gemini 发起生图请求 ($modelName)...")

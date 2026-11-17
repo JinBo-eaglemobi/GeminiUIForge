@@ -97,7 +97,7 @@ fun UIStudioHierarchyItem(
     val isSelected = state.selectedBlockId == block.id
     var showContextMenu by remember { mutableStateOf(false) }
     val hasChildren = block.children.isNotEmpty()
-    val isContainer = block.isPureContainer || hasChildren || block.targetPageId != null
+    val isContainer = block.type == UIBlockType.COMPONENT || block.type == UIBlockType.LIST || hasChildren || block.targetPageId != null
     val isEffectiveHidden = isAncestorHidden || !block.isVisible
     val isDragged = draggedBlockId == block.id
     val isHovered = hoveredBlockId == block.id
@@ -173,7 +173,7 @@ fun UIStudioHierarchyItem(
                         }
                     }
                     // 2. 整行整块即刻拖拽与单击/双击融合手势 (无需对准细小手柄或长按，任意位置按下移动 >6px 即拖动)
-                    .pointerInput(block.id, hasChildren, block.isPureContainer) {
+                    .pointerInput(block.id, hasChildren, block.type, block.targetPageId) {
                         var lastClickTime = 0L
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
@@ -203,7 +203,8 @@ fun UIStudioHierarchyItem(
                             } else if (totalDistance <= 6f) {
                                 val currentTime = getCurrentTimeMillis()
                                 if (currentTime - lastClickTime < 300L) {
-                                    if (block.isPureContainer || hasChildren || block.targetPageId != null) {
+                                    // 仅绑定了独立页面 (targetPageId != null) 的 VIEW 组件才允许双击打开 Tab
+                                    if (!block.targetPageId.isNullOrBlank()) {
                                         viewModel.pageManager.openContainerTab(block.id)
                                     }
                                     lastClickTime = 0L
@@ -410,17 +411,19 @@ fun UIStudioHierarchyItem(
                     }
                 )
 
-                // 容器操作：移入移出纯拖拽化，彻底移除移出父容器选项
-                if (isContainer) {
+                // 容器操作：仅绑定了独立页面的 VIEW 组件允许通过 Tab 打开独立视图
+                if (!block.targetPageId.isNullOrBlank()) {
                     DropdownMenuItem(
-                        text = { Text("打开容器独立视图", fontSize = 13.sp) },
+                        text = { Text("打开独立页面视图", fontSize = 13.sp) },
                         leadingIcon = { Icon(Icons.Default.Layers, null, modifier = Modifier.size(16.dp)) },
                         onClick = {
                             viewModel.pageManager.openContainerTab(block.id)
                             showContextMenu = false
                         }
                     )
+                }
 
+                if (isContainer && block.targetPageId.isNullOrBlank()) {
                     DropdownMenuItem(
                         text = { Text("解散父容器", fontSize = 13.sp) },
                         leadingIcon = { Icon(Icons.Default.LayersClear, null, modifier = Modifier.size(16.dp)) },

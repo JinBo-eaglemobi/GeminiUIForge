@@ -51,7 +51,6 @@ class PromptManager(
 
     /** 全案注册的核心提示词与规范模板清单（用于设置界面与系统自检展示） */
     val promptMetas = listOf(
-        PromptMeta("analyze_template", "整页 UI 识别与结构化分析", "用于 Gemini 视觉大模型首次分析参考图并自动推断页面所有 UI 模块结构与坐标"),
         PromptMeta("refine_template", "局部区域重构与结构微调", "用于对页面局部区域进行二次重塑与结构化调整"),
         PromptMeta("IMAGE_TO_UI_SPEC", "UI 模块规范与组件字典 (公用方案)", "定义图元层级、转轴容器与符号集解耦标准（全图识别与局部重构自动附带）", isMarkdown = true),
         PromptMeta("ai_optimize_prompt", "AI 提示词一键精炼优化", "用于将简短描述扩充为包含材质、光影、细节的高质量生图提示词"),

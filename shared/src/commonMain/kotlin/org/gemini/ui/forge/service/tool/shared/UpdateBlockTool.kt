@@ -68,10 +68,6 @@ class UpdateBlockTool(
                 put("type", "number")
                 put("description", "可选：独立不透明度 (0.0 ~ 1.0)")
             })
-            put("isPureContainer", buildJsonObject {
-                put("type", "boolean")
-                put("description", "可选：是否为纯容器")
-            })
             put("bounds", buildJsonObject {
                 put("description", "可选：局部相对坐标与尺寸，支持 [left, top, right, bottom] 或 { left, top, right, bottom }")
             })
@@ -95,7 +91,6 @@ class UpdateBlockTool(
             ?: return ToolResult.error("参数 'id' 不能为空")
         val viewNameArg = arguments["viewName"]?.jsonPrimitive?.contentOrNull?.trim()
 
-        val isPureContainerArg = arguments["isPureContainer"]?.jsonPrimitive?.booleanOrNull
         val assetHashArg = arguments["assetHash"]?.jsonPrimitive?.contentOrNull
         val assetFileNameArg = arguments["assetFileName"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
         val parentIdArg = arguments["parentId"]?.jsonPrimitive?.contentOrNull
@@ -149,7 +144,6 @@ class UpdateBlockTool(
             if (shouldUpdateAssetHash) updated = updated.copy(assetHash = resolvedAssetHash)
             isVisibleArg?.let { updated = updated.copy(isVisible = it) }
             opacityArg?.let { updated = updated.copy(opacity = it) }
-            isPureContainerArg?.let { updated = updated.copy(isPureContainer = it) }
             targetType?.let { updated = updated.copy(type = it) }
             parsedBounds?.let { updated = updated.copy(bounds = it) }
             parsedCropRect?.let { updated = updated.copy(cropRect = it) }

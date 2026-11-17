@@ -18,18 +18,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.Res
-import geminiuiforge.composeapp.generated.resources.traffic_show_all_lines
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.formatTimestamp
 import org.gemini.ui.forge.model.chat.TrafficDirection
 import org.gemini.ui.forge.model.chat.TrafficRecord
-import org.gemini.ui.forge.utils.TrafficSummaryExtractor
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdownCodeBlock
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
-import org.jetbrains.compose.resources.stringResource
+import org.gemini.ui.forge.utils.unwrapJsonStringsForDisplay
 
 private val prettyJsonParser = Json {
     prettyPrint = true
@@ -45,7 +44,8 @@ private fun formatJsonPretty(raw: String): String {
     }
     return try {
         val element = prettyJsonParser.parseToJsonElement(trimmed)
-        prettyJsonParser.encodeToString(JsonElement.serializer(), element)
+        val unwrapped = unwrapJsonStringsForDisplay(element)
+        prettyJsonParser.encodeToString(JsonElement.serializer(), unwrapped)
     } catch (_: Throwable) {
         raw
     }
@@ -407,63 +407,20 @@ fun TrafficRecordCard(
                     previewButtonsRow(false)
                 }
 
-                // 3. 渐进式超长正文渲染控制（首屏 400 行）
-                var isShowAllLines by remember { mutableStateOf(false) }
-                val allLines = remember(displayBodyText) { displayBodyText.lines() }
-                val isOversized = allLines.size > 400
-                val renderedText = remember(displayBodyText, isShowAllLines) {
-                    if (isOversized && !isShowAllLines) {
-                        allLines.take(400).joinToString("\n")
-                    } else {
-                        displayBodyText
-                    }
-                }
+                // 3. 统一接入高性能 AppMarkdownCodeBlock（提供行号、JSON 节点作用域折叠与一键复制）
+                AppMarkdownCodeBlock(
+                    code = displayBodyText,
+                    language = "json",
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-                // 报文等宽文本区
-                Surface(
-                    shape = AppShapes.small,
-                    color = MaterialTheme.colorScheme.surface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                    modifier = Modifier.fillMaxWidth().wrapContentHeight()
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(spacing.medium)) {
-                        SelectionContainer(
-                            modifier = Modifier.fillMaxWidth().wrapContentHeight()
-                        ) {
-                            Text(
-                                text = renderedText,
-                                fontFamily = FontFamily.Monospace,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                softWrap = true
-                            )
-                        }
-
-                        if (isOversized && !isShowAllLines) {
-                            Spacer(Modifier.height(spacing.small))
-                            val remainingLines = allLines.size - 400
-                            TextButton(
-                                onClick = { isShowAllLines = true },
-                                modifier = Modifier.align(Alignment.CenterHorizontally)
-                            ) {
-                                Icon(Icons.Default.UnfoldMore, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(spacing.extraSmall))
-                                Text(
-                                    text = stringResource(Res.string.traffic_show_all_lines, remainingLines),
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                        }
-
-                        // 底部快捷预览按钮条（解决长报文向下滚动后顶部按钮脱出视口的体验死角）
-                        if (foldedPayloadList.isNotEmpty()) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(top = spacing.small),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
-                            )
-                            previewButtonsRow(true)
-                        }
-                    }
+                // 底部快捷预览按钮条（解决长报文向下滚动后顶部按钮脱出视口的体验死角）
+                if (foldedPayloadList.isNotEmpty()) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(top = spacing.small),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                    )
+                    previewButtonsRow(true)
                 }
             }
         }

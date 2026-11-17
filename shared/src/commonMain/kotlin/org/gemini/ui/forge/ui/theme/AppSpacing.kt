@@ -103,7 +103,17 @@ data class AppSpacing(
 
     /** 4. Large 显著阶梯 (36dp 容器 / 20dp 图标)：适用于应用全局 TopBar 返回键、大厅全局操作、主工作区核心切换操作 */
     val iconButtonLargeSize: Dp = 36.dp,
-    val iconLargeSize: Dp = 20.dp
+    val iconLargeSize: Dp = 20.dp,
+
+    /** Markdown 代码块与代码审查器专属语义化尺寸 Tokens */
+    val codeBlockCornerRadius: Dp = 8.dp,
+    val codeBlockBadgeCornerRadius: Dp = 4.dp,
+    val codeBlockHeaderOverlaySpace: Dp = 40.dp,
+    val codeBlockTallMinHeight: Dp = 260.dp,
+    val codeBlockTallMaxHeight: Dp = 560.dp,
+    val codeBlockShortMinHeight: Dp = 160.dp,
+    val codeBlockShortMaxHeight: Dp = 360.dp,
+    val codeLineNumberWidth: Dp = 36.dp
 )
 
 /**

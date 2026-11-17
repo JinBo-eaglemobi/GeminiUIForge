@@ -19,13 +19,14 @@ import org.gemini.ui.forge.utils.LocalFileStorage
  * 【核心架构原则】：
  * 1. 技能配置文件与人设指令 100% 外部 Markdown 文件化（YAML Frontmatter + Markdown Instructions），代码中 0 技能数据硬编码；
  * 2. 复用通用 ExternalResourceLoader 基础加载器，外部优先 -> 内置出厂预设兜底，Cache Miss 时自动释放落盘到磁盘；
- * 3. 动态扫描支持：自动感知 ~/.geminiuiforge/skills/ 目录下新增的 *.md 技能并动态挂载；
+ * 3. 动态扫描支持：自动感知 ~/.geminiuiforge/skills/<skill_id>/SKILL.md 子目录下新增的标准技能并动态挂载；
  * 4. 严格遵循完全按需懒加载原则（On-Demand Loading），使用时异步加载并进入内存缓存，启动期零 I/O；
  * 5. 独立于 PromptManager，专职于技能结构反序列化与运行时工具调度。
  */
 object UiStudioSkillManager {
     private const val TAG = "UiStudioSkillManager"
     private const val SKILLS_DIR = "skills"
+    private const val SKILL_ENTRY_FILE = "SKILL.md"
     private const val BUILTIN_SKILLS_MANIFEST = "builtin_skills.json"
 
     private val storage = LocalFileStorage()
@@ -49,50 +50,41 @@ object UiStudioSkillManager {
         // 1. 出厂内置技能自愈释放（纯数据驱动：读取 skills/builtin_skills.json 配置清单）
         try {
             val manifestContent = resourceLoader.loadDefaultResourceText(SKILLS_DIR, BUILTIN_SKILLS_MANIFEST)
-            val builtinFiles = json.decodeFromString<List<String>>(manifestContent)
-            for (fileName in builtinFiles) {
+            val builtinSkillDirs = json.decodeFromString<List<String>>(manifestContent)
+            for (dirName in builtinSkillDirs) {
                 try {
-                    val relativePath = "$SKILLS_DIR/$fileName"
+                    val relativePath = "$SKILLS_DIR/$dirName/$SKILL_ENTRY_FILE"
                     if (!storage.exists(relativePath)) {
-                        // 外部缺失时，通过 resourceLoader 自动从内置出厂资源释放到本地磁盘
-                        resourceLoader.loadText(SKILLS_DIR, fileName, bypassCache = true)
+                        // 外部缺失时，通过 resourceLoader 自动从内置出厂资源释放到本地磁盘对应子目录
+                        resourceLoader.loadText(SKILLS_DIR, "$dirName/$SKILL_ENTRY_FILE", bypassCache = true)
                         AppLogger.i(TAG, "🌱 成功自愈释放出厂技能至本地: $relativePath")
                     }
                 } catch (e: Exception) {
-                    AppLogger.w(TAG, "自愈释放出厂技能 [$fileName] 失败: ${e.message}")
+                    AppLogger.w(TAG, "自愈释放出厂技能 [$dirName/$SKILL_ENTRY_FILE] 失败: ${e.message}")
                 }
             }
         } catch (e: Exception) {
             AppLogger.d(TAG, "未配置或读取出厂技能清单失败: ${e.message}")
         }
 
-        // 2. 纯动态扫描外部 skills/ 目录下的所有 *.md 与 *.json 技能（单一事实源自包含自解析）
+        // 2. 纯动态扫描外部 skills/ 目录下的所有独立技能子目录（Folder-per-Skill 业界标准架构）
         try {
-            val files = storage.listFiles(SKILLS_DIR)
-            for (fileName in files) {
-                if (fileName.startsWith(".") ||
-                    fileName.equals("disabled_skills.json", ignoreCase = true) ||
-                    fileName.equals(BUILTIN_SKILLS_MANIFEST, ignoreCase = true)
-                ) continue
+            val skillDirs = storage.listDirectories(SKILLS_DIR)
+            for (dirName in skillDirs) {
+                if (dirName.startsWith(".")) continue
 
-                val relativePath = "$SKILLS_DIR/$fileName"
+                val entryRelativePath = "$SKILLS_DIR/$dirName/$SKILL_ENTRY_FILE"
                 try {
-                    val content = storage.readFromFile(relativePath)
+                    val content = storage.readFromFile(entryRelativePath)
                     if (!content.isNullOrBlank()) {
-                        val skill = if (fileName.endsWith(".md", ignoreCase = true)) {
-                            val defaultId = fileName.substringBeforeLast(".")
-                            SkillMarkdownParser.parse(content, defaultId = defaultId)
-                        } else if (fileName.endsWith(".json", ignoreCase = true)) {
-                            json.decodeFromString<UiStudioSkill>(content)
-                        } else null
-
-                        if (skill != null && !loadedMap.containsKey(skill.id)) {
+                        val skill = SkillMarkdownParser.parse(content, defaultId = dirName)
+                        if (!loadedMap.containsKey(skill.id)) {
                             loadedMap[skill.id] = skill
-                            AppLogger.i(TAG, "✨ 成功动态加载技能: ${skill.name} (${skill.id}) [来自 $fileName]")
+                            AppLogger.i(TAG, "✨ 成功动态加载技能: ${skill.name} (${skill.id}) [来自 $entryRelativePath]")
                         }
                     }
                 } catch (e: Exception) {
-                    AppLogger.w(TAG, "解析外部技能 [$fileName] 失败: ${e.message}")
+                    AppLogger.w(TAG, "解析外部技能目录 [$dirName] 失败: ${e.message}")
                 }
             }
         } catch (e: Exception) {

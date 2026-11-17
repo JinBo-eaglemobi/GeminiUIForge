@@ -56,7 +56,7 @@ fun MentionHoverPreviewCard(
                 MentionCategory.BLOCK -> {
                     val blockPayload = item.payload as? MentionPayload.BlockPayload
                     val block = blockPayload?.let { config.resolveBlockById(it.blockId) }
-                    if (block != null && (block.isPureContainer || block.children.isNotEmpty())) {
+                    if (block != null && (block.type == org.gemini.ui.forge.model.ui.UIBlockType.COMPONENT || block.type == org.gemini.ui.forge.model.ui.UIBlockType.LIST || block.children.isNotEmpty() || block.targetPageId != null)) {
                         MentionHoverCanvasPreview(
                             title = item.title,
                             subtitle = item.subtitle,

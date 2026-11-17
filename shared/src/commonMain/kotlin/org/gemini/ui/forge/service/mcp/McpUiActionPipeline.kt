@@ -289,7 +289,6 @@ object McpUiActionPipeline {
                     "TRIGGER_CALIBRATE" -> {
                         val engine = when (action.engineMode?.uppercase()) {
                             "CV", "CLASSIC_CV" -> DetectionEngineMode.CLASSIC_CV
-                            "AI", "ONNX_AI" -> DetectionEngineMode.ONNX_AI
                             else -> DetectionEngineMode.BASELINE_SNAPPER
                         }
                         // 后处理选项裁决：显式 true → 同步+切图 (旧全量语义)；显式 false → 纯校验；未指定(null) → 读全局缓存选项

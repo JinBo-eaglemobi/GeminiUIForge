@@ -30,12 +30,17 @@ fun BlockSpecificProperties(
         viewModel.assetManager.updateBlockProperties(selectedBlock.id, props)
     }
     when (blockType) {
-        UIBlockType.BUTTON -> ButtonPropertiesPanel(viewModel, state, selectedBlock, onPropertiesChanged)
-        UIBlockType.VIEW -> ViewPropertiesPanel(selectedBlock, onPropertiesChanged)
+        UIBlockType.BUTTON -> {
+            if (selectedBlock.properties is BlockProperties.SpinButtonProperties) {
+                SpinButtonPropertiesPanel(viewModel, state, apiKey, selectedBlock)
+            } else {
+                ButtonPropertiesPanel(viewModel, state, selectedBlock, onPropertiesChanged)
+            }
+        }
+        UIBlockType.COMPONENT -> ViewPropertiesPanel(selectedBlock, onPropertiesChanged)
         UIBlockType.TEXT -> TextPropertiesPanel(selectedBlock, onPropertiesChanged)
         UIBlockType.INPUT -> InputPropertiesPanel(selectedBlock, onPropertiesChanged)
-        UIBlockType.REEL -> ReelPropertiesPanel(viewModel, state, apiKey, selectedBlock, onPropertiesChanged)
-        UIBlockType.SPIN_BUTTON -> SpinButtonPropertiesPanel(viewModel, state, apiKey, selectedBlock)
+        UIBlockType.LIST -> ReelPropertiesPanel(viewModel, state, apiKey, selectedBlock, onPropertiesChanged)
         else -> {
             // 其他类型保持原样
         }

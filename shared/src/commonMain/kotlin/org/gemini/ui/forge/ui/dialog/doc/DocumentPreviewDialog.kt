@@ -35,6 +35,7 @@ import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.ui.common.ScrollEdgeNavConfig
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.markdown.AppMarkdown
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdownCodeBlock
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -278,32 +279,61 @@ fun DocumentPreviewDialog(
                             }
                         }
                         displayContent != null -> {
-                            val scrollState = rememberScrollState()
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                SelectionContainer(modifier = Modifier.fillMaxSize()) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .verticalScroll(scrollState)
-                                            .padding(spacing.small)
-                                    ) {
-                                        AppMarkdown(
-                                            content = displayContent.orEmpty(),
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
+                            val rawText = displayContent.orEmpty()
+                            val detectedCodeLang = remember(title, resolvedAbsolutePath, rawText) {
+                                val ext = resolvedAbsolutePath.substringAfterLast('.', "")
+                                    .ifBlank { title.substringAfterLast('.', "") }
+                                    .lowercase()
+                                val codeExts = setOf(
+                                    "json", "js", "ts", "tsx", "jsx", "xml", "html", "svg",
+                                    "py", "yaml", "yml", "kt", "kts", "java", "css", "sh", "ps1"
+                                )
+                                if (ext in codeExts) {
+                                    ext
+                                } else {
+                                    val t = rawText.trim()
+                                    if (!t.startsWith("```") && ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]")))) {
+                                        "json"
+                                    } else {
+                                        null
                                     }
                                 }
-                                VerticalScrollbarAdapter(
-                                    scrollState = scrollState,
-                                    modifier = Modifier
-                                        .align(Alignment.CenterEnd)
-                                        .fillMaxHeight()
-                                        .padding(vertical = 4.dp, horizontal = 2.dp),
-                                    edgeNav = ScrollEdgeNavConfig(
-                                        alignment = Alignment.BottomEnd,
-                                        modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
-                                    )
+                            }
+
+                            if (detectedCodeLang != null) {
+                                AppMarkdownCodeBlock(
+                                    code = rawText,
+                                    language = detectedCodeLang,
+                                    modifier = Modifier.fillMaxSize()
                                 )
+                            } else {
+                                val scrollState = rememberScrollState()
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    SelectionContainer(modifier = Modifier.fillMaxSize()) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .verticalScroll(scrollState)
+                                                .padding(spacing.small)
+                                        ) {
+                                            AppMarkdown(
+                                                content = rawText,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+                                    VerticalScrollbarAdapter(
+                                        scrollState = scrollState,
+                                        modifier = Modifier
+                                            .align(Alignment.CenterEnd)
+                                            .fillMaxHeight()
+                                            .padding(vertical = 4.dp, horizontal = 2.dp),
+                                        edgeNav = ScrollEdgeNavConfig(
+                                            alignment = Alignment.BottomEnd,
+                                            modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
+                                        )
+                                    )
+                                }
                             }
                         }
                     }

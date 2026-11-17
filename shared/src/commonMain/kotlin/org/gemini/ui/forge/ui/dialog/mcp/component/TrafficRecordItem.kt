@@ -43,6 +43,7 @@ import org.gemini.ui.forge.extend.copyOnClick
 import org.gemini.ui.forge.service.mcp.McpCommandDictionary
 import org.gemini.ui.forge.service.mcp.McpTrafficDirection
 import org.gemini.ui.forge.service.mcp.McpTrafficRecord
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdownCodeBlock
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.looseJson
@@ -291,82 +292,12 @@ fun TrafficRecordItem(
 
                     Spacer(Modifier.height(8.dp))
 
-                    // JSON 代码块标题行
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Payload (格式化 JSON · ${lineCount} 行)",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-
-                        OutlinedButton(
-                            onClick = onCopy,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.height(24.dp).tip("复制格式化后的完整 JSON 报文")
-                        ) {
-                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(11.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("复制 JSON", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
-                        }
-                    }
-
-                    Spacer(Modifier.height(6.dp))
-
-                    // 格式化后的代码块内容 (左侧行号条 + 右侧自由划词选择代码区，零手势冒泡)
-                    Surface(
-                        shape = AppShapes.small,
-                        color = Color(0xFF1E1E1E), // 专用高对比深色代码底板
+                    // 统一接入 AppMarkdownCodeBlock（自带行号、JSON 节点作用域折叠、一键折叠全部节点与复制按钮）
+                    AppMarkdownCodeBlock(
+                        code = prettyJson,
+                        language = "json",
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 10.dp)
-                        ) {
-                            // 1. 左侧独立行号列 (Gutter)
-                            Text(
-                                text = lineNumbersText,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                lineHeight = 18.sp,
-                                color = Color(0xFF6E7681), // 优雅暗灰行号
-                                modifier = Modifier
-                                    .width(lineNumWidth)
-                                    .padding(end = 8.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.End
-                            )
-
-                            // 2. 行号与代码垂直分隔线
-                            Box(
-                                modifier = Modifier
-                                    .width(1.dp)
-                                    .fillMaxHeight()
-                                    .background(Color(0xFF333333))
-                            )
-
-                            // 3. 右侧正文代码区 (纯净 SelectionContainer，单机/双击/拖拽绝不冒泡折叠)
-                            SelectionContainer(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(start = 10.dp, end = 12.dp)
-                            ) {
-                                Text(
-                                    text = prettyJson,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.sp,
-                                    lineHeight = 18.sp,
-                                    color = Color(0xFFD4D4D4)
-                                )
-                            }
-                        }
-                    }
+                    )
                 }
             }
         }

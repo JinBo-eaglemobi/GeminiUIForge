@@ -32,7 +32,13 @@ import org.gemini.ui.forge.extend.copyOnClick
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
+import org.gemini.ui.forge.ui.component.AppMenuItemRow
 import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
+import org.gemini.ui.forge.ui.component.getDisplayNameRes
+import org.gemini.ui.forge.ui.component.getIcon
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -615,7 +621,11 @@ fun UIStudioPropertyPanel(
                         }
 
                         // 3. 组件类型动态切换 (UIBlockType)
-                        Text("组件类型", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.outline)
+                        Text(
+                            text = stringResource(Res.string.uistudio_component_type),
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.outline
+                        )
                         var typeExpanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
                             expanded = typeExpanded,
@@ -623,19 +633,30 @@ fun UIStudioPropertyPanel(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             SelectAllOutlinedTextField(
-                                value = selectedBlock.type.name,
+                                value = stringResource(selectedBlock.type.getDisplayNameRes()),
                                 onValueChange = {},
                                 readOnly = true,
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = selectedBlock.type.getIcon(),
+                                        contentDescription = null,
+                                        modifier = Modifier.padding(start = spacing.small).size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded) },
                                 modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                             )
                             ExposedDropdownMenu(
                                 expanded = typeExpanded,
-                                onDismissRequest = { typeExpanded = false }
+                                onDismissRequest = { typeExpanded = false },
+                                modifier = Modifier.padding(horizontal = spacing.extraSmall, vertical = spacing.extraSmall)
                             ) {
                                 UIBlockType.entries.forEach { blockType ->
-                                    DropdownMenuItem(
-                                        text = { Text(blockType.name) },
+                                    AppMenuItemRow(
+                                        title = stringResource(blockType.getDisplayNameRes()),
+                                        icon = blockType.getIcon(),
+                                        isSelected = blockType == selectedBlock.type,
                                         onClick = {
                                             viewModel.canvasEditor.updateBlockType(selectedBlock.id, blockType, templateRepo)
                                             typeExpanded = false

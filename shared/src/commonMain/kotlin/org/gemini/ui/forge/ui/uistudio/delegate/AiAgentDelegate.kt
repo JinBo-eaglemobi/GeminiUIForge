@@ -758,9 +758,13 @@ class AiAgentDelegate(
                     aiConfig.mentionState.clearMentions()
                 }
 
-                // 智能判定激活的技能并注入工具与系统指令补丁
+                // 智能判定激活的技能并注入工具与系统指令补丁（同时感知当前会话历史上下文，防止多轮短指令丢失已激活规范）
+                val sessionContextText = buildString {
+                    updatedSession.messages.forEach { appendLine(it.prompt) }
+                    appendLine(userText)
+                }
                 val triggeredSkills = UiStudioSkillManager.resolveActiveSkills(
-                    prompt = userText,
+                    prompt = sessionContextText,
                     attachedMentions = attachedMentionsList,
                     mode = aiConfig.skillMode,
                     enabledSkillIds = aiConfig.enabledSkillIds
@@ -1407,19 +1411,36 @@ class AiAgentDelegate(
                     .lastOrNull { !it.interactionId.isNullOrBlank() }
                     ?.interactionId ?: activeSession.latestInteractionId
 
+                // 智能判定激活的技能并注入工具与系统指令补丁（感知会话历史上下文，确保重新生成不丢失技能规范）
+                val sessionContextText = buildString {
+                    activeSession.messages.take(targetIndex + 1).forEach { appendLine(it.prompt) }
+                }
+                val triggeredSkills = UiStudioSkillManager.resolveActiveSkills(
+                    prompt = sessionContextText,
+                    attachedMentions = emptyList(),
+                    mode = aiConfig.skillMode,
+                    enabledSkillIds = aiConfig.enabledSkillIds
+                )
+                val skillPromptAddition = triggeredSkills.joinToString("\n\n") { it.effectiveInstructions }
+                val effectiveSystemPrompt = if (skillPromptAddition.isNotBlank()) {
+                    "$systemPrompt\n\n$skillPromptAddition".trim()
+                } else {
+                    systemPrompt
+                }
+
                 // 构建四层解耦的多层载荷：系统指令保持纯净静态，环境与前序设计记忆注入当前轮次用户提问载荷中
                 val currentView = state.currentView
                 val workspaceContextXml = if (currentView != null) {
                     "  <current_view name=\"${currentView.id}\" resolution=\"${currentView.width}x${currentView.height}\" block_count=\"${currentView.blocks.size}\" total_assets=\"${state.assetLibrary.items.size}\"/>"
                 } else ""
                 val assembledPayload = ChatPayloadAssembler.assemble(
-                    baseSystemPrompt = systemPrompt,
+                    baseSystemPrompt = effectiveSystemPrompt,
                     userRawText = userMsg.prompt,
                     workspaceContextXml = workspaceContextXml,
                     priorDesignMemoryXml = activeSession.designMemoryContext
                 )
 
-                val toolConfigs = UiStudioSkillManager.buildToolConfigs(enableGoogleSearch = true)
+                val toolConfigs = UiStudioSkillManager.buildToolConfigs(triggeredSkills, enableGoogleSearch = true)
 
                 val chatRequest = GeminiChatRequest(
                     apiKey = effectiveApiKey,

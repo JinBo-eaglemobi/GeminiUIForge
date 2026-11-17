@@ -65,7 +65,8 @@ object GeometricHealthValidator {
         val allBlocks = flatten(blocks)
         // 筛选出参与实体审查的业务图元（排除全屏背景和纯占位容器）
         val businessBlocks = allBlocks.filter {
-            it.type != UIBlockType.BACKGROUND && !it.isPureContainer
+            !org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.isBackgroundBlock(it) &&
+                !org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.shouldBePureContainer(it)
         }
 
         // 1. 尺寸有效性与完全飞脱视口核查 (Blocker)

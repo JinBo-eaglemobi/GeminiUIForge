@@ -12,7 +12,6 @@ enum class PromptKey(
     val isMarkdown: Boolean = false,
     val isJson: Boolean = false
 ) {
-    ANALYZE_TEMPLATE("analyze_template"),
     REFINE_TEMPLATE("refine_template"),
     IMAGE_TO_UI_SPEC("IMAGE_TO_UI_SPEC", isMarkdown = true),
     AI_OPTIMIZE_PROMPT("ai_optimize_prompt"),

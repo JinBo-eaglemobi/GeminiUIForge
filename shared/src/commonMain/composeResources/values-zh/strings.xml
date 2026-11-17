@@ -14,7 +14,8 @@
     <string name="block_background">游戏背景</string>
     <string name="block_symbol">高光符号</string>
     <string name="block_button">按钮</string>
-    <string name="block_view">视图</string>
+    <string name="block_component">组件</string>
+    <string name="uistudio_component_type">组件类型</string>
     <string name="block_container">纯容器</string>
     <string name="prop_pure_container">纯容器 / 组合占位层</string>
     <string name="prop_pure_container_desc">仅作为组合占位，不参与任何图片资源生成</string>
@@ -31,6 +32,8 @@
     <string name="block_scroll_bar">滚动条</string>
     <string name="block_slider">滑块控件</string>
     <string name="block_input">输入框</string>
+    <string name="block_list">列表容器</string>
+    <string name="block_spine">骨骼动画 (Spine)</string>
 
     <string name="menu_file">文件</string>
     <string name="menu_settings">设置</string>
@@ -56,14 +59,7 @@
     <!-- UI Pages -->
     <string name="page_main">主游戏界面</string>
     <string name="page_bonus">奖励游戏界面</string>
-
-    <string name="menu_generate_template">生成模板</string>
-    <string name="template_gen_title">通过 Gemini 生成模板</string>
-    <string name="template_gen_input_hint">输入图片路径/URL（逗号分隔）</string>
-    <string name="template_gen_analyze">发送给 Gemini 分析</string>
-    <string name="template_gen_save">保存模板</string>
     <string name="template_name_hint">模板名称</string>
-    <string name="template_gen_pick_local">选择本地图片</string>
 
     <string name="settings_gemini_key">Gemini API 密钥</string>
     <string name="settings_gemini_key_hint">留空则尝试使用全局密钥 (.gemini/.env)</string>
@@ -149,7 +145,6 @@
     <string name="hierarchy_expand_all">一键展开</string>
     <string name="hierarchy_collapse_all">一键折叠</string>
     <string name="screen_home">首页</string>
-    <string name="screen_template_generator">AI 模板分析模式</string>
     <string name="dialog_add_layer_title">添加新图层</string>
     <string name="dialog_rename_layer_title">重命名图层</string>
     <string name="label_layer_name">图层名称/ID (可选)</string>
@@ -852,4 +847,16 @@
     <string name="preview_open_lightbox">查看原寸大图</string>
     <string name="preview_relative_path">相对路径</string>
     <string name="preview_path_copied">相对路径已复制到剪贴板</string>
+
+    <!-- Markdown Code Block & Code Viewer -->
+    <string name="code_block_copied_toast">代码已复制到剪贴板</string>
+    <string name="code_block_copied_tip">已复制</string>
+    <string name="code_block_copy_tip">复制代码</string>
+    <string name="code_block_collapsed_lines_hint">(%1$d 行代码已折叠)</string>
+    <string name="code_block_expand_tip">展开代码块</string>
+    <string name="code_block_collapse_tip">折叠代码块</string>
+    <string name="code_block_fold_all_scopes_tip">折叠全部方法/节点</string>
+    <string name="code_block_unfold_all_scopes_tip">展开全部方法/节点</string>
+    <string name="code_block_fold_line_tip">折叠此代码段 (%1$d 行)</string>
+    <string name="code_block_unfold_line_tip">展开此代码段 (%1$d 行)</string>
 </resources>

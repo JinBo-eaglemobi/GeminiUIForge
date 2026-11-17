@@ -195,7 +195,7 @@ object GameUiExportService {
                     appendLine("$indent    ]")
                 }
 
-                UIBlockType.VIEW -> {
+                UIBlockType.COMPONENT -> {
                     // 纯视图容器层，构建为 panel 并递归嵌套子图元
                     appendLine("$indent    type: 'panel',")
                     appendLine("$indent    name: '${block.id}',")

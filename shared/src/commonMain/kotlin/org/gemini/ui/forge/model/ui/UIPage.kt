@@ -35,7 +35,7 @@ data class UIPage(
         return copy(
             blocks = blocks.map { block ->
                 val processed = block.postProcess()
-                if (processed.type == UIBlockType.BACKGROUND && processed.parent == null) {
+                if (org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.isBackgroundBlock(processed) && processed.parent == null) {
                     // ★ 规则铁律：背景模块作为全屏背景底图，其大小与坐标恒与屏幕画布大小一致
                     processed.copy(
                         bounds = SerialRect(0f, 0f, width, height),

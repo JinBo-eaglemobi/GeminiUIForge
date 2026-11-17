@@ -86,8 +86,8 @@ class AssetManagerDelegate(
                 if (page.id == pageId) page.copy(blocks = page.blocks.updateBlockInList(blockId) { block ->
                     var updatedBlock = block
                     stateIndices.forEach { idx ->
-                        updatedBlock = when (updatedBlock.type) {
-                            UIBlockType.SPIN_BUTTON -> {
+                        updatedBlock = when {
+                            updatedBlock.properties is BlockProperties.SpinButtonProperties -> {
                                 val props = updatedBlock.properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
                                 when (idx) {
                                     0 -> updatedBlock.copy(currentImageUri = imageUri)
@@ -95,7 +95,7 @@ class AssetManagerDelegate(
                                     else -> updatedBlock
                                 }
                             }
-                            UIBlockType.BUTTON -> {
+                            updatedBlock.type == UIBlockType.BUTTON -> {
                                 val props = updatedBlock.properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
                                 when (idx) {
                                     0 -> updatedBlock.copy(currentImageUri = imageUri)

@@ -12,6 +12,7 @@ import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
+import com.mikepenz.markdown.model.rememberMarkdownState
 
 /**
  * 全局统一 Markdown 原生门面组件 (一文件一 Composable)
@@ -72,8 +73,14 @@ fun AppMarkdown(
         sanitizeMarkdownWindowsPaths(content)
     }
 
-    Markdown(
+    val markdownState = rememberMarkdownState(
         content = sanitizedContent,
+        retainState = true,
+        immediate = true
+    )
+
+    Markdown(
+        markdownState = markdownState,
         colors = colors,
         typography = typography,
         components = components,

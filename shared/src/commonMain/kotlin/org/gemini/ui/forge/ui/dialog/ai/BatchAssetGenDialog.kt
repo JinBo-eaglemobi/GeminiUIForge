@@ -76,9 +76,9 @@ fun BatchAssetGenDialog(
     onStartGen: (List<UIBlock>) -> Unit,
     onUpdateBlock: (UIBlock) -> Unit = {}
 ) {
-    // ★ 过滤掉所有的纯容器/占位模块（isPureContainer 为 true，不参与任何图片资源生成）
+    // ★ 过滤掉所有的纯布局容器/占位模块（不参与任何图片资源生成）
     val eligibleBlocks = remember(blocks) {
-        blocks.filter { !it.isPureContainer }
+        blocks.filter { !org.gemini.ui.forge.utils.UIBlockLayoutNormalizer.shouldBePureContainer(it) }
     }
     // 1. 内部维护 blocks 状态，支持在细化编辑后局部实时刷新
     var currentBlocks by remember(eligibleBlocks) { mutableStateOf(eligibleBlocks) }

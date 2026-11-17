@@ -26,7 +26,6 @@ import org.gemini.ui.forge.model.app.PromptLanguage
  * @property isVisible 图层当前是否在画布和预览中可见
  * @property properties 不同组件分类的专属附加属性（如 ButtonProperties, SpinProperties 等）
  * @property resourceBindingPath 资源绑定与导出的层级结构路径
- * @property isPureContainer 纯容器/占位层标记：true 表示该模块仅用于排版或组合，不参与任何 AI 图片资源生成
  * @property clipOverflow 是否裁剪超出范围的子内容（overflow: hidden），默认 false 为可见
  * @property parent 运行时持有的直接父级引用（@Transient 阻断序列化，copy() 自动继承）
  */
@@ -49,7 +48,6 @@ data class UIBlock(
     override val isLocked: Boolean = false, // 新增：图层是否锁定（锁定后在画布上禁止选中和拖动）
     override val properties: BlockProperties? = null, // 新增：不同类型模块的专属属性
     val resourceBindingPath: List<String> = emptyList(), // 新增：资源绑定层级路径
-    override val isPureContainer: Boolean = false, // 纯容器/占位层：表示该模块没有任何资源生成，仅占位排版或作为组合层
     override val clipOverflow: Boolean = false, // 是否裁剪超出范围的子内容（overflow: hidden），默认 false 为可见
     override val scaleX: Float = 1.0f, // 独立水平缩放变换因数 (默认 1.0f 为原寸)
     override val scaleY: Float = 1.0f, // 独立垂直缩放变换因数 (默认 1.0f 为原寸)
@@ -60,18 +58,12 @@ data class UIBlock(
 ) : BaseBlock(), AssetSupport {
 
     /**
-     * 对图元树执行后置整理与自愈（如转轴 Reel 组件子级结构重塑）
-     *
-     * 递归遍历所有子模块，并将 REEL 特殊容器的子图元同步挂入 properties.items 列表。
-     *
-     * @return 后置处理完毕后的全新 [UIBlock] 副本
+     * 对图元树执行后置整理与自愈（如列表/转轴组件子级结构重塑）
      */
     fun postProcess(): UIBlock {
-        // 递归处理子级
         val processedChildren = children.map { it.postProcess() }
 
-        return if (type == UIBlockType.REEL) {
-            // 如果是转轴且包含子级，同步并入 items 属性中，同时完整保留 children 子图层树，绝不清空
+        return if (type == UIBlockType.LIST) {
             if (processedChildren.isNotEmpty()) {
                 val currentProps = properties as? BlockProperties.ReelProperties ?: BlockProperties.ReelProperties()
                 val updatedProps = currentProps.copy(items = currentProps.items + processedChildren)
@@ -95,12 +87,12 @@ data class UIBlock(
     }
 
     override val assetStates: List<AssetState>
-        get() = when (type) {
-            UIBlockType.SPIN_BUTTON -> listOf(
+        get() = when {
+            properties is BlockProperties.SpinButtonProperties -> listOf(
                 AssetState("默认状态 (Spin)", ""),
                 AssetState("停止状态 (Stop)", "/_stop")
             )
-            UIBlockType.BUTTON -> listOf(
+            type == UIBlockType.BUTTON -> listOf(
                 AssetState("默认状态 (Normal)", ""),
                 AssetState("点击状态 (Pressed)", "/_pressed"),
                 AssetState("禁用状态 (Disabled)", "/_disabled")
@@ -109,12 +101,12 @@ data class UIBlock(
         }
 
     override fun getCurrentImageUri(stateIndex: Int): TemplateFile? {
-        return when (type) {
-            UIBlockType.SPIN_BUTTON -> {
+        return when {
+            properties is BlockProperties.SpinButtonProperties -> {
                 val props = properties as? BlockProperties.SpinButtonProperties
                 if (stateIndex == 0) currentImageUri else props?.stopUri
             }
-            UIBlockType.BUTTON -> {
+            type == UIBlockType.BUTTON -> {
                 val props = properties as? BlockProperties.ButtonProperties
                 when (stateIndex) {
                     0 -> currentImageUri
@@ -128,11 +120,11 @@ data class UIBlock(
     }
 
     override fun getHistoricalIdSuffix(stateIndex: Int): String {
-        return when (type) {
-            UIBlockType.SPIN_BUTTON -> {
+        return when {
+            properties is BlockProperties.SpinButtonProperties -> {
                 if (stateIndex == 0) "" else "/_stop"
             }
-            UIBlockType.BUTTON -> {
+            type == UIBlockType.BUTTON -> {
                 when (stateIndex) {
                     0 -> ""
                     1 -> "/_pressed"
@@ -145,8 +137,8 @@ data class UIBlock(
     }
 
     override fun clearImageUri(stateIndex: Int): UIBlock {
-        return when (type) {
-            UIBlockType.SPIN_BUTTON -> {
+        return when {
+            properties is BlockProperties.SpinButtonProperties -> {
                 val props = properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
                 if (stateIndex == 0) {
                     copy(currentImageUri = null)
@@ -154,7 +146,7 @@ data class UIBlock(
                     copy(properties = props.copy(stopUri = null))
                 }
             }
-            UIBlockType.BUTTON -> {
+            type == UIBlockType.BUTTON -> {
                 val props = properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
                 when (stateIndex) {
                     0 -> copy(currentImageUri = null)
@@ -176,8 +168,8 @@ data class UIBlock(
         get() = userPromptZh.ifBlank { userPromptEn }
 
     override fun getPrompt(stateIndex: Int, effectiveLang: PromptLanguage): String {
-        return when (type) {
-            UIBlockType.SPIN_BUTTON -> {
+        return when {
+            properties is BlockProperties.SpinButtonProperties -> {
                 val props = properties as? BlockProperties.SpinButtonProperties
                 if (stateIndex == 0) {
                     if (effectiveLang == PromptLanguage.ZH) userPromptZh else userPromptEn
@@ -185,7 +177,7 @@ data class UIBlock(
                     if (effectiveLang == PromptLanguage.ZH) props?.stopPromptZh.orEmpty() else props?.stopPromptEn.orEmpty()
                 }
             }
-            UIBlockType.BUTTON -> {
+            type == UIBlockType.BUTTON -> {
                 val props = properties as? BlockProperties.ButtonProperties
                 when (stateIndex) {
                     0 -> if (effectiveLang == PromptLanguage.ZH) userPromptZh else userPromptEn
@@ -199,8 +191,8 @@ data class UIBlock(
     }
 
     override fun getOtherPrompt(stateIndex: Int, effectiveLang: PromptLanguage): String {
-        return when (type) {
-            UIBlockType.SPIN_BUTTON -> {
+        return when {
+            properties is BlockProperties.SpinButtonProperties -> {
                 val props = properties as? BlockProperties.SpinButtonProperties
                 if (stateIndex == 0) {
                     if (effectiveLang == PromptLanguage.ZH) userPromptEn else userPromptZh
@@ -208,7 +200,7 @@ data class UIBlock(
                     if (effectiveLang == PromptLanguage.ZH) props?.stopPromptEn.orEmpty() else props?.stopPromptZh.orEmpty()
                 }
             }
-            UIBlockType.BUTTON -> {
+            type == UIBlockType.BUTTON -> {
                 val props = properties as? BlockProperties.ButtonProperties
                 when (stateIndex) {
                     0 -> if (effectiveLang == PromptLanguage.ZH) userPromptEn else userPromptZh
@@ -222,8 +214,8 @@ data class UIBlock(
     }
 
     override fun updatePrompt(stateIndex: Int, effectiveLang: PromptLanguage, newValue: String): UIBlock {
-        return when (type) {
-            UIBlockType.SPIN_BUTTON -> {
+        return when {
+            properties is BlockProperties.SpinButtonProperties -> {
                 val props = properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
                 if (stateIndex == 0) {
                     if (effectiveLang == PromptLanguage.ZH) copy(userPromptZh = newValue) else copy(userPromptEn = newValue)
@@ -236,7 +228,7 @@ data class UIBlock(
                     copy(properties = updatedProps)
                 }
             }
-            UIBlockType.BUTTON -> {
+            type == UIBlockType.BUTTON -> {
                 val props = properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
                 when (stateIndex) {
                     0 -> if (effectiveLang == PromptLanguage.ZH) copy(userPromptZh = newValue) else copy(userPromptEn = newValue)
@@ -246,6 +238,29 @@ data class UIBlock(
                 }
             }
             else -> if (effectiveLang == PromptLanguage.ZH) copy(userPromptZh = newValue) else copy(userPromptEn = newValue)
+        }
+    }
+
+    fun updateImageUri(stateIndex: Int, newUri: TemplateFile?): UIBlock {
+        return when {
+            properties is BlockProperties.SpinButtonProperties -> {
+                val props = properties as? BlockProperties.SpinButtonProperties ?: BlockProperties.SpinButtonProperties()
+                if (stateIndex == 0) {
+                    copy(currentImageUri = newUri)
+                } else {
+                    copy(properties = props.copy(stopUri = newUri))
+                }
+            }
+            type == UIBlockType.BUTTON -> {
+                val props = properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
+                when (stateIndex) {
+                    0 -> copy(currentImageUri = newUri)
+                    1 -> copy(properties = props.copy(pressedUri = newUri))
+                    2 -> copy(properties = props.copy(disabledUri = newUri))
+                    else -> copy(currentImageUri = newUri)
+                }
+            }
+            else -> copy(currentImageUri = newUri)
         }
     }
 }

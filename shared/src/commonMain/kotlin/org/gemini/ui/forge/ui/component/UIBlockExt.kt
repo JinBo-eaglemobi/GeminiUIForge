@@ -1,4 +1,5 @@
 package org.gemini.ui.forge.ui.component
+
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.StringResource
@@ -12,17 +13,12 @@ import org.gemini.ui.forge.model.ui.UIBlockType
 
 fun UIBlockType.getDisplayNameRes(): StringResource {
     return when (this) {
-        UIBlockType.REEL -> Res.string.block_reel
-        UIBlockType.SPIN_BUTTON -> Res.string.block_spin_button
-        UIBlockType.WIN_DISPLAY -> Res.string.block_win_display
-        UIBlockType.BACKGROUND -> Res.string.block_background
-        UIBlockType.SYMBOL -> Res.string.block_symbol
         UIBlockType.BUTTON -> Res.string.block_button
-        UIBlockType.VIEW -> Res.string.block_view
-        UIBlockType.HEADER -> Res.string.block_header
-        UIBlockType.FOOTER -> Res.string.block_footer
+        UIBlockType.COMPONENT -> Res.string.block_component
         UIBlockType.TEXT -> Res.string.block_text
         UIBlockType.IMAGE -> Res.string.block_image
+        UIBlockType.LIST -> Res.string.block_list
+        UIBlockType.SPINE -> Res.string.block_spine
         UIBlockType.COMBO_BOX -> Res.string.block_combo_box
         UIBlockType.PROGRESS_BAR -> Res.string.block_progress_bar
         UIBlockType.POPUP_MENU -> Res.string.block_popup_menu
@@ -35,17 +31,12 @@ fun UIBlockType.getDisplayNameRes(): StringResource {
 
 fun UIBlockType.getIcon(): ImageVector {
     return when (this) {
-        UIBlockType.REEL -> Icons.Default.ViewColumn
-        UIBlockType.SPIN_BUTTON -> Icons.Default.PlayArrow
-        UIBlockType.WIN_DISPLAY -> Icons.Default.Star
-        UIBlockType.BACKGROUND -> Icons.Default.Image
-        UIBlockType.SYMBOL -> Icons.Default.AddCircle
         UIBlockType.BUTTON -> Icons.Default.TouchApp
-        UIBlockType.VIEW -> Icons.Default.WebAsset
-        UIBlockType.HEADER -> Icons.Default.KeyboardArrowUp
-        UIBlockType.FOOTER -> Icons.Default.KeyboardArrowDown
+        UIBlockType.COMPONENT -> Icons.Default.WebAsset
         UIBlockType.TEXT -> Icons.Default.Edit
         UIBlockType.IMAGE -> Icons.Default.Image
+        UIBlockType.LIST -> Icons.Default.ViewColumn
+        UIBlockType.SPINE -> Icons.Default.AutoAwesomeMotion
         UIBlockType.COMBO_BOX -> Icons.AutoMirrored.Filled.List
         UIBlockType.PROGRESS_BAR -> Icons.Default.LinearScale
         UIBlockType.POPUP_MENU -> Icons.AutoMirrored.Filled.MenuOpen

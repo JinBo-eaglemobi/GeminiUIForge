@@ -24,8 +24,7 @@ data class NormalizedAssetItem(
     val category: String = "Default",
     val type: UIBlockType = UIBlockType.IMAGE,
     val bounds: SerialRect,
-    val description: String? = null,
-    val isPureContainer: Boolean = false
+    val description: String? = null
 ) {
     /**
      * 将标准化图元实体无缝转为项目原生的 [UIBlock] 核心领域模型。
@@ -46,7 +45,6 @@ data class NormalizedAssetItem(
             type = type,
             bounds = bounds,
             cropRect = bounds,
-            isPureContainer = isPureContainer,
             referenceImage = templateFile,
             currentImageUri = templateFile,
             userPromptZh = description ?: name,

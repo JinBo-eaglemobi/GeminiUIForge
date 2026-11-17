@@ -113,7 +113,7 @@ fun CommonUserBubble(
                             ) {
                                 message.attachedMentions.forEach { mention ->
                                     val iconEmoji = when (mention.categoryName) {
-                                        "VIEW" -> "🗖"
+                                        "COMPONENT", "VIEW" -> "🗖"
                                         "BLOCK" -> "❖"
                                         "ASSET" -> if (mention.title.contains("📁") || mention.path?.startsWith("asset_folder") == true) "📁" else "📦"
                                         else -> "📄"

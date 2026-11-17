@@ -147,7 +147,7 @@ class TriggerInitialVerificationTool : ToolDefinition {
             val blockWithChildren = block.copy(children = newChildren)
 
             // 1. 顶层背景模块自愈：恒等于全屏画布尺寸
-            if (blockWithChildren.type == UIBlockType.BACKGROUND && block.parent == null) {
+            if (UIBlockLayoutNormalizer.isBackgroundBlock(blockWithChildren) && block.parent == null) {
                 val fullBounds = SerialRect(0f, 0f, pageW, pageH)
                 if (blockWithChildren.bounds != fullBounds) {
                     calibratedCount++
@@ -157,7 +157,7 @@ class TriggerInitialVerificationTool : ToolDefinition {
             }
 
             // 2. 复合组容器模式：包含子组件时自适应贴合与原点归零
-            if (blockWithChildren.children.isNotEmpty() && blockWithChildren.type != UIBlockType.REEL) {
+            if (blockWithChildren.children.isNotEmpty() && blockWithChildren.type != UIBlockType.LIST) {
                 val normalized = UIBlockLayoutNormalizer.normalizeContainerAndChildren(blockWithChildren)
                 calibratedCount++
                 containerCount++

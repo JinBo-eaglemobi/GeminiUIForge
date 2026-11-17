@@ -62,10 +62,6 @@ class AddBlockTool(
                 put("type", "string")
                 put("description", "可选：引用的平级视图页面 ID")
             })
-            put("isPureContainer", buildJsonObject {
-                put("type", "boolean")
-                put("description", "是否为纯布局容器，默认 false")
-            })
             put("insertIndex", buildJsonObject {
                 put("type", "integer")
                 put("description", "可选：插入位置索引，默认追加到末尾")
@@ -96,13 +92,11 @@ class AddBlockTool(
         val finalId = rawId ?: "${blockType.name.lowercase()}_${kotlin.random.Random.nextInt(1000, 9999)}"
         val assetHash = arguments["assetHash"]?.jsonPrimitive?.contentOrNull?.ifBlank { null }
         val targetPageId = arguments["targetPageId"]?.jsonPrimitive?.contentOrNull?.ifBlank { null }
-        val isPureContainer = arguments["isPureContainer"]?.jsonPrimitive?.booleanOrNull ?: (targetPageId != null)
 
         val newBlock = UIStudioBlock(
             id = finalId,
-            type = if (targetPageId != null) UIBlockType.VIEW else blockType,
+            type = if (targetPageId != null) UIBlockType.COMPONENT else blockType,
             bounds = localBounds,
-            isPureContainer = isPureContainer,
             assetHash = assetHash,
             targetPageId = targetPageId
         )

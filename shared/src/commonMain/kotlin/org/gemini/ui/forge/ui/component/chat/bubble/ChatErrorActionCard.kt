@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.service.chat.ChatErrorAction
 import org.gemini.ui.forge.service.chat.ClassifiedChatError
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdownCodeBlock
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -97,21 +98,17 @@ fun ChatErrorActionCard(
             }
 
             AnimatedVisibility(visible = isRawDetailExpanded) {
+                val rawErr = classifiedError.originalMessage
+                val errLang = remember(rawErr) {
+                    val t = rawErr.trim()
+                    if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) "json" else "text"
+                }
                 Column(modifier = Modifier.padding(top = spacing.extraSmall)) {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                    AppMarkdownCodeBlock(
+                        code = rawErr,
+                        language = errLang,
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        SelectionContainer {
-                            Text(
-                                text = classifiedError.originalMessage,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(spacing.small)
-                            )
-                        }
-                    }
+                    )
                 }
             }
 

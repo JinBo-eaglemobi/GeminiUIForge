@@ -46,6 +46,7 @@ import org.gemini.ui.forge.service.mcp.McpController
 import org.gemini.ui.forge.service.mcp.UiRoadmapRegistry
 import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
 import org.gemini.ui.forge.ui.component.ToastType
+import org.gemini.ui.forge.ui.component.markdown.AppMarkdownCodeBlock
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.dialog.mcp.component.ClientBentoCard
 import org.gemini.ui.forge.ui.dialog.mcp.component.CollapsibleSectionCard
@@ -577,52 +578,11 @@ fun McpServerDialog(
                                 modifier = Modifier.padding(bottom = spacing.small)
                             )
 
-                            Card(
-                                shape = AppShapes.medium,
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, AppShapes.medium)
-                            ) {
-                                Column(modifier = Modifier.padding(spacing.medium)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "JSON Snippet",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        OutlinedButton(
-                                            onClick = { copyAction(clientConfigJson, copiedTip) },
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                            modifier = Modifier.height(28.dp).tip("点击复制配置代码")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.ContentCopy,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(13.dp)
-                                            )
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("复制配置代码", style = MaterialTheme.typography.labelSmall)
-                                        }
-                                    }
-                                    Spacer(Modifier.height(spacing.small))
-                                    SelectionContainer {
-                                        Text(
-                                            text = clientConfigJson,
-                                            fontFamily = FontFamily.Monospace,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                }
-                            }
+                            AppMarkdownCodeBlock(
+                                code = clientConfigJson,
+                                language = "json",
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                 }
