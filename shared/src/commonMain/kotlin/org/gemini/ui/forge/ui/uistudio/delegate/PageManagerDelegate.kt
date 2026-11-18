@@ -4,6 +4,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.model.ui.BlockProperties
+import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.utils.findBlockById
@@ -97,8 +99,8 @@ class PageManagerDelegate(
     }
 
     /**
-     * 打开复合组件引用的独立视图页面标签页。
-     * 【架构铁律】：能用顶部 Tab 打开的只能是绑定了独立页面 (targetPageId 非空且在 studioPages 中存在) 的 VIEW 组件！
+     * 打开复合组件或列表组件引用的独立视图页面标签页。
+     * 【架构铁律】：能用顶部 Tab 打开的只能是绑定了独立页面 (targetPageId 非空，或 LIST 组件配置了有效的 defaultItem 子项单页) 的组件！
      * 普通非独立页面的内联容器绝对禁止打开为 Tab。
      */
     fun openContainerTab(containerId: String) {
@@ -107,6 +109,9 @@ class PageManagerDelegate(
         val targetBlock = currentView?.blocks?.findBlockById(containerId) as? UIStudioBlock
         val targetPageId = if (targetBlock != null) {
             targetBlock.targetPageId?.takeIf { it.isNotBlank() }
+                ?: if (targetBlock.type == UIBlockType.LIST) {
+                    (targetBlock.properties as? BlockProperties.ListProperties)?.defaultItem?.takeIf { it.isNotBlank() }
+                } else null
         } else {
             containerId.takeIf { id -> proj.studioPages.any { it.id == id } }
         } ?: return

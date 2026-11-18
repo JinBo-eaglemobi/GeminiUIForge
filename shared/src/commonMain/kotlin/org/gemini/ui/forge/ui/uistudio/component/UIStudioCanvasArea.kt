@@ -30,7 +30,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.SerialRect
+import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.ui.component.tip
@@ -116,27 +118,34 @@ fun UIStudioCanvasArea(
                 }
             )
     ) {
+        val safeDensity = density.coerceAtLeast(0.1f)
         // 画布交互与手势层
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(currentView?.id, state.activeContainerId, state.panOffset, state.scale) {
+                .pointerInput(currentView?.id, state.activeContainerId, state.panOffset, state.scale, safeDensity) {
                     detectTapGestures(
                         onDoubleTap = { tapOffset ->
                             val currentV = currentView ?: return@detectTapGestures
-                            val logicalX = (tapOffset.x - state.panOffset.x) / state.scale
-                            val logicalY = (tapOffset.y - state.panOffset.y) / state.scale
+                            val logicalX = ((tapOffset.x - state.panOffset.x) / state.scale) / safeDensity
+                            val logicalY = ((tapOffset.y - state.panOffset.y) / state.scale) / safeDensity
 
                             if (state.activeContainerId == null) {
-                                // 主视图视口下：仅当双击绑定了独立页面 (targetPageId != null) 的 VIEW 组件时，才打开其独立页面 Tab
+                                // 主视图视口下：双击绑定了独立页面 (targetPageId) 的组件，或配置了有效子项单页 (defaultItem) 的 LIST 组件，打开对应页面 Tab
                                 val hitRoot = currentV.blocks.findLast { b ->
                                     if (!b.isVisible || b.isLocked) return@findLast false
                                     val r = b.bounds
                                     logicalX >= r.left && logicalX <= r.right &&
                                     logicalY >= r.top && logicalY <= r.bottom
                                 }
-                                if (hitRoot != null && !hitRoot.targetPageId.isNullOrBlank()) {
-                                    viewModel.pageManager.openContainerTab(hitRoot.id)
+                                if (hitRoot != null) {
+                                    val listDefaultItem = if (hitRoot.type == UIBlockType.LIST) {
+                                        (hitRoot.properties as? BlockProperties.ListProperties)?.defaultItem?.takeIf { it.isNotBlank() }
+                                    } else null
+                                    val refPageId = hitRoot.targetPageId?.takeIf { it.isNotBlank() } ?: listDefaultItem
+                                    if (refPageId != null && state.project?.studioPages?.any { it.id == refPageId } == true) {
+                                        viewModel.pageManager.openContainerTab(hitRoot.id)
+                                    }
                                 }
                             }
                         },
@@ -146,9 +155,9 @@ fun UIStudioCanvasArea(
                                 viewModel.pageManager.clearSelection()
                                 return@detectTapGestures
                             }
-                            // 将点击绝对坐标通过当前平移与缩放矩阵逆映射至视图逻辑坐标
-                            val logicalX = (tapOffset.x - state.panOffset.x) / state.scale
-                            val logicalY = (tapOffset.y - state.panOffset.y) / state.scale
+                            // 将点击绝对坐标通过当前平移、缩放矩阵与物理密度逆映射至视图逻辑坐标 (.dp)
+                            val logicalX = ((tapOffset.x - state.panOffset.x) / state.scale) / safeDensity
+                            val logicalY = ((tapOffset.y - state.panOffset.y) / state.scale) / safeDensity
 
                             val activeContainer = state.activeContainerBlock
                             if (activeContainer != null) {
@@ -165,7 +174,7 @@ fun UIStudioCanvasArea(
                                     viewModel.canvasEditor.selectBlock(activeContainer.id)
                                 }
                             } else {
-                                // 模式 B：全局主视图视口（旧版铁律）：严禁绕过父组件选中子组件，点击任何子组件返回父组件本身
+                                // 模式 B：全局主视图视口：严禁绕过父组件选中子组件，点击任何子组件返回父组件本身
                                 val hitRoot = currentV.blocks.findLast { b ->
                                     if (!b.isVisible || b.isLocked) return@findLast false
                                     val r = b.bounds
@@ -384,15 +393,20 @@ fun UIStudioCanvasArea(
                                     },
                                     onDoubleTap = {
                                         if (activeContainer == null) {
-                                            // 主视图模式下：仅当双击绑定了独立页面 (targetPageId != null) 的 VIEW 组件时，才打开其独立页面标签
+                                            // 主视图模式下：双击绑定了独立页面 (targetPageId) 的组件，或配置了有效子项单页 (defaultItem) 的 LIST 组件，打开对应页面标签
                                             val rootBlock = currentView.blocks.find { it.id == info.rootBlockId } ?: info.block
-                                            if (!rootBlock.targetPageId.isNullOrBlank()) {
+                                            val listDefaultItem = if (rootBlock.type == UIBlockType.LIST) {
+                                                (rootBlock.properties as? BlockProperties.ListProperties)?.defaultItem?.takeIf { it.isNotBlank() }
+                                            } else null
+                                            val refPageId = rootBlock.targetPageId?.takeIf { it.isNotBlank() } ?: listDefaultItem
+                                            if (refPageId != null && availablePages.any { it.id == refPageId }) {
                                                 viewModel.pageManager.openContainerTab(rootBlock.id)
                                             }
                                         }
                                     },
                                     onDragDelta = { dx, dy ->
-                                        viewModel.canvasEditor.moveBlockDelta(info.block.id, dx, dy)
+                                        val targetDragId = if (activeContainer == null) info.rootBlockId else info.block.id
+                                        viewModel.canvasEditor.moveBlockDelta(targetDragId, dx, dy)
                                     },
                                     onDragEnd = {
                                         // 移动操作已在内存中实时更新并标记 isDirty，绝不执行任何自动刷盘或 Toast 弹窗

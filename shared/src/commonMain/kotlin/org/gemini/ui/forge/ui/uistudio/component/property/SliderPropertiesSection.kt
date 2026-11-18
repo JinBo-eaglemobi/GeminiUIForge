@@ -5,12 +5,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.ui.component.InspectorCheckboxRow
-import org.gemini.ui.forge.ui.component.InspectorSimpleDualPropRow
+import org.gemini.ui.forge.ui.component.InspectorPropRow
+import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
+import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
  * 滑动条组件 (SLIDER) 专属属性配置面板。
- * 遵循 UIFactory 滑动条规范，所有尺寸与间距动态取自 [LocalAppSpacing]。
+ * 全行统一接入 [InspectorPropRow] 实现 0 误差左对齐与 50%/50% 对称栅格对齐。
  */
 @Composable
 fun SliderPropertiesSection(
@@ -24,43 +26,51 @@ fun SliderPropertiesSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(spacing.inspectorRowSpacing)
     ) {
-        // 1. 最小值与最大值 (独立对仗成对属性)
-        InspectorSimpleDualPropRow(
-            label1 = "最小值",
-            value1 = properties.min.toString(),
-            onValueChange1 = {
-                val m = it.toDoubleOrNull() ?: properties.min
-                onPropertiesChanged(properties.copy(min = m))
-            },
-            label2 = "最大值",
-            value2 = properties.max.toString(),
-            onValueChange2 = {
-                val m = it.toDoubleOrNull() ?: properties.max
-                onPropertiesChanged(properties.copy(max = m))
-            },
-            isFloat = true,
-            tooltip1 = "滑块可调节的下限值",
-            tooltip2 = "滑块可调节的上限值"
-        )
+        // 1. 最小值与最大值
+        InspectorPropRow(label = "最小值") {
+            NumberOutlinedTextField(
+                value = properties.min.toString(),
+                onValueChange = {
+                    val m = it.toDoubleOrNull() ?: properties.min
+                    onPropertiesChanged(properties.copy(min = m))
+                },
+                isFloat = true,
+                modifier = Modifier.weight(1f).tip("滑块可调节的下限值")
+            )
+            NumberOutlinedTextField(
+                value = properties.max.toString(),
+                onValueChange = {
+                    val m = it.toDoubleOrNull() ?: properties.max
+                    onPropertiesChanged(properties.copy(max = m))
+                },
+                prefixTag = "最大",
+                isFloat = true,
+                modifier = Modifier.weight(1f).tip("滑块可调节的上限值")
+            )
+        }
 
         // 2. 当前值与步长
-        InspectorSimpleDualPropRow(
-            label1 = "当前值",
-            value1 = properties.value.toString(),
-            onValueChange1 = {
-                val v = it.toDoubleOrNull() ?: properties.value
-                onPropertiesChanged(properties.copy(value = v))
-            },
-            label2 = "步长",
-            value2 = properties.step.toString(),
-            onValueChange2 = {
-                val s = it.toDoubleOrNull() ?: properties.step
-                onPropertiesChanged(properties.copy(step = s))
-            },
-            isFloat = true,
-            tooltip1 = "滑块当前所处的数值",
-            tooltip2 = "每次滑动的最小数值单位"
-        )
+        InspectorPropRow(label = "当前值") {
+            NumberOutlinedTextField(
+                value = properties.value.toString(),
+                onValueChange = {
+                    val v = it.toDoubleOrNull() ?: properties.value
+                    onPropertiesChanged(properties.copy(value = v))
+                },
+                isFloat = true,
+                modifier = Modifier.weight(1f).tip("滑块当前所处的数值")
+            )
+            NumberOutlinedTextField(
+                value = properties.step.toString(),
+                onValueChange = {
+                    val s = it.toDoubleOrNull() ?: properties.step
+                    onPropertiesChanged(properties.copy(step = s))
+                },
+                prefixTag = "步长",
+                isFloat = true,
+                modifier = Modifier.weight(1f).tip("每次滑动的最小数值单位")
+            )
+        }
 
         Spacer(modifier = Modifier.height(spacing.extraSmall))
 

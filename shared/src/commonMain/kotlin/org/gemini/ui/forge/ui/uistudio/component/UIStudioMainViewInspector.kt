@@ -25,7 +25,7 @@ import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 
 /**
  * UI Studio 主视图（页面）属性检查器组件。
- * 尺度、间距与字号 100% 动态取自 [LocalAppSpacing] 与 [MaterialTheme.typography]，自动适配桌面紧凑与移动触控模式。
+ * 全行统一使用 [InspectorPropRow] 实现 0 误差左对齐，尺度与字号动态取自 [LocalAppSpacing] 与 [MaterialTheme.typography]。
  */
 @Composable
 fun UIStudioMainViewInspector(
@@ -65,19 +65,10 @@ fun UIStudioMainViewInspector(
                 }
             )
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = spacing.extraSmall)
+            InspectorPropRow(
+                label = "当前视图",
+                modifier = Modifier.padding(horizontal = spacing.extraSmall)
             ) {
-                Text(
-                    text = "当前视图",
-                    maxLines = 1,
-                    softWrap = false,
-                    style = dynamicBodyStyle.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    modifier = Modifier.width(spacing.inspectorLabelWidth)
-                )
                 Text(
                     text = view.id,
                     maxLines = 1,
@@ -106,30 +97,34 @@ fun UIStudioMainViewInspector(
                     mutableStateOf(view.height.toInt().toString())
                 }
 
-                InspectorDualPropRow(
-                    categoryLabel = "分辨率",
-                    tag1 = "W",
-                    value1 = widthText,
-                    onValueChange1 = { input ->
-                        widthText = input
-                        val newW = input.toFloatOrNull()
-                        if (newW != null && newW > 0 && newW != view.width) {
-                            viewModel.pageManager.updatePageDimensions(view.id, newW, view.height, templateRepo)
-                        }
-                    },
-                    tag2 = "H",
-                    value2 = heightText,
-                    onValueChange2 = { input ->
-                        heightText = input
-                        val newH = input.toFloatOrNull()
-                        if (newH != null && newH > 0 && newH != view.height) {
-                            viewModel.pageManager.updatePageDimensions(view.id, view.width, newH, templateRepo)
-                        }
-                    },
-                    isFloat = false,
-                    tooltip1 = "页面宽度 W (px)",
-                    tooltip2 = "页面高度 H (px)"
-                )
+                InspectorPropRow(label = "分辨率") {
+                    NumberOutlinedTextField(
+                        value = widthText,
+                        onValueChange = { input ->
+                            widthText = input
+                            val newW = input.toFloatOrNull()
+                            if (newW != null && newW > 0 && newW != view.width) {
+                                viewModel.pageManager.updatePageDimensions(view.id, newW, view.height, templateRepo)
+                            }
+                        },
+                        prefixTag = "W",
+                        isFloat = false,
+                        modifier = Modifier.weight(1f).tip("页面宽度 W (px)")
+                    )
+                    NumberOutlinedTextField(
+                        value = heightText,
+                        onValueChange = { input ->
+                            heightText = input
+                            val newH = input.toFloatOrNull()
+                            if (newH != null && newH > 0 && newH != view.height) {
+                                viewModel.pageManager.updatePageDimensions(view.id, view.width, newH, templateRepo)
+                            }
+                        },
+                        prefixTag = "H",
+                        isFloat = false,
+                        modifier = Modifier.weight(1f).tip("页面高度 H (px)")
+                    )
+                }
 
                 // 快捷分辨率预设
                 Row(
@@ -187,19 +182,7 @@ fun UIStudioMainViewInspector(
                 verticalArrangement = Arrangement.spacedBy(spacing.inspectorRowSpacing),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = spacing.extraSmall)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "图层总数",
-                        maxLines = 1,
-                        softWrap = false,
-                        style = dynamicBodyStyle.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        modifier = Modifier.width(spacing.inspectorLabelWidth)
-                    )
+                InspectorPropRow(label = "图层总数") {
                     Text(
                         text = "${view.blocks.size} 个图元组件",
                         style = dynamicBodyStyle.copy(
@@ -211,62 +194,39 @@ fun UIStudioMainViewInspector(
 
                 val currentZoomPercent = (state.scale * 100f).roundToInt()
                 var zoomText by remember(state.scale) { mutableStateOf(currentZoomPercent.toString()) }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "舞台缩放",
-                        maxLines = 1,
-                        softWrap = false,
-                        style = dynamicBodyStyle.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        modifier = Modifier.width(spacing.inspectorLabelWidth)
+                InspectorPropRow(label = "舞台缩放") {
+                    NumberOutlinedTextField(
+                        value = zoomText,
+                        onValueChange = { input ->
+                            zoomText = input
+                            val percent = input.toFloatOrNull()
+                            if (percent != null && percent > 0f) {
+                                val targetScale = (percent / 100f).coerceIn(0.1f, 5.0f)
+                                if (state.scale > 0f) {
+                                    viewModel.viewport.onZoom(targetScale / state.scale, androidx.compose.ui.geometry.Offset.Zero)
+                                }
+                            }
+                        },
+                        isFloat = false,
+                        modifier = Modifier.weight(1f).tip("舞台视口缩放比例 (%)")
                     )
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(spacing.small),
-                        modifier = Modifier.weight(1f)
+                    val btnShape = RoundedCornerShape(spacing.inspectorFieldCornerRadius)
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(spacing.inspectorFieldHeight)
+                            .clip(btnShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
+                            .clickable { viewModel.viewport.resetZoomTo100() }
+                            .tip("一键还原舞台为 100% 原始缩放值")
                     ) {
-                        NumberOutlinedTextField(
-                            value = zoomText,
-                            onValueChange = { input ->
-                                zoomText = input
-                                val percent = input.toFloatOrNull()
-                                if (percent != null && percent > 0f) {
-                                    val targetScale = (percent / 100f).coerceIn(0.1f, 5.0f)
-                                    if (state.scale > 0f) {
-                                        viewModel.viewport.onZoom(targetScale / state.scale, androidx.compose.ui.geometry.Offset.Zero)
-                                    }
-                                }
-                            },
-                            isFloat = false,
-                            contentPadding = PaddingValues(
-                                horizontal = spacing.inspectorFieldPaddingHorizontal,
-                                vertical = spacing.inspectorFieldPaddingVertical
-                            ),
-                            modifier = Modifier.width(spacing.inspectorNumberFieldWidth).tip("舞台视口缩放比例 (%)")
+                        Text(
+                            text = "100%",
+                            style = dynamicChipStyle.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
                         )
-
-                        val btnShape = RoundedCornerShape(spacing.inspectorFieldCornerRadius)
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .height(spacing.inspectorChipHeight)
-                                .clip(btnShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
-                                .clickable { viewModel.viewport.resetZoomTo100() }
-                                .padding(horizontal = spacing.small)
-                                .tip("一键还原舞台为 100% 原始缩放值")
-                        ) {
-                            Text(
-                                text = "100%",
-                                style = dynamicChipStyle.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
                     }
                 }
             }

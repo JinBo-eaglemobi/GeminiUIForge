@@ -33,10 +33,10 @@ import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.ui.common.VerticalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.DropdownInputField
-import org.gemini.ui.forge.ui.component.InspectorDualPropRow
+import org.gemini.ui.forge.ui.component.InspectorPropRow
 import org.gemini.ui.forge.ui.component.InspectorSectionHeader
-import org.gemini.ui.forge.ui.component.InspectorSinglePropRow
-import org.gemini.ui.forge.ui.component.InspectorTextFieldRow
+import org.gemini.ui.forge.ui.component.NumberOutlinedTextField
+import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.component.getDisplayNameRes
 import org.gemini.ui.forge.ui.component.getIcon
 import geminiuiforge.composeapp.generated.resources.Res
@@ -270,33 +270,32 @@ fun UIStudioPropertyPanel(
                             ) {
                                 // 行 1：组件名称 (直接复用 SelectAllOutlinedTextField，回车或失焦直接保存)
                                 var nameText by remember(selectedBlock.id) { mutableStateOf(selectedBlock.id) }
-                                InspectorTextFieldRow(
+                                InspectorPropRow(
                                     label = "组件名称",
-                                    value = nameText,
-                                    onValueChange = { nameText = it },
-                                    onCommit = { trimmed ->
-                                        if (trimmed.isNotBlank() && trimmed != selectedBlock.id) {
-                                            viewModel.canvasEditor.renameBlock(selectedBlock.id, trimmed, templateRepo)
-                                        }
-                                    },
                                     tooltip = "修改组件唯一标识符 ID (回车或失焦自动保存)"
-                                )
+                                ) {
+                                    SelectAllOutlinedTextField(
+                                        value = nameText,
+                                        onValueChange = { nameText = it },
+                                        singleLine = true,
+                                        onEnterConfirm = {
+                                            val trimmed = nameText.trim()
+                                            if (trimmed.isNotBlank() && trimmed != selectedBlock.id) {
+                                                viewModel.canvasEditor.renameBlock(selectedBlock.id, trimmed, templateRepo)
+                                            }
+                                        },
+                                        onBlurConfirm = {
+                                            val trimmed = nameText.trim()
+                                            if (trimmed.isNotBlank() && trimmed != selectedBlock.id) {
+                                                viewModel.canvasEditor.renameBlock(selectedBlock.id, trimmed, templateRepo)
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
 
                                 // 行 2：组件类型 (复用统一组件 DropdownInputField)
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = "组件类型",
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        style = dynamicBodyStyle.copy(
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        ),
-                                        modifier = Modifier.width(spacing.inspectorLabelWidth)
-                                    )
+                                InspectorPropRow(label = "组件类型") {
                                     val typeItems = UIBlockType.entries.map {
                                         it to stringResource(it.getDisplayNameRes())
                                     }
@@ -314,7 +313,7 @@ fun UIStudioPropertyPanel(
                                         itemIcon = { it.first.getIcon() },
                                         leadingIcon = selectedBlock.type.getIcon(),
                                         readOnly = true,
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.fillMaxWidth()
                                     )
                                 }
                             }
@@ -435,44 +434,48 @@ fun UIStudioPropertyPanel(
                                 var posYText by remember(selectedBlock.id, selectedBlock.bounds.top) {
                                     mutableStateOf(selectedBlock.bounds.top.toInt().toString())
                                 }
-                                InspectorDualPropRow(
-                                    categoryLabel = "位置",
-                                    tag1 = "X",
-                                    value1 = posXText,
-                                    onValueChange1 = {
-                                        posXText = it
-                                        val newLeft = it.toFloatOrNull()
-                                        if (newLeft != null) {
-                                            viewModel.canvasEditor.updateBlockBounds(
-                                                selectedBlock.id,
-                                                newLeft,
-                                                selectedBlock.bounds.top,
-                                                selectedBlock.bounds.width,
-                                                selectedBlock.bounds.height,
-                                                templateRepo
-                                            )
-                                        }
-                                    },
-                                    tag2 = "Y",
-                                    value2 = posYText,
-                                    onValueChange2 = {
-                                        posYText = it
-                                        val newTop = it.toFloatOrNull()
-                                        if (newTop != null) {
-                                            viewModel.canvasEditor.updateBlockBounds(
-                                                selectedBlock.id,
-                                                selectedBlock.bounds.left,
-                                                newTop,
-                                                selectedBlock.bounds.width,
-                                                selectedBlock.bounds.height,
-                                                templateRepo
-                                            )
-                                        }
-                                    },
-                                    isFloat = true,
-                                    tooltip1 = "水平坐标 X (px)",
-                                    tooltip2 = "垂直坐标 Y (px)"
-                                )
+                                InspectorPropRow(label = "位置") {
+                                    NumberOutlinedTextField(
+                                        value = posXText,
+                                        onValueChange = {
+                                            posXText = it
+                                            val newLeft = it.toFloatOrNull()
+                                            if (newLeft != null) {
+                                                viewModel.canvasEditor.updateBlockBounds(
+                                                    selectedBlock.id,
+                                                    newLeft,
+                                                    selectedBlock.bounds.top,
+                                                    selectedBlock.bounds.width,
+                                                    selectedBlock.bounds.height,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        prefixTag = "X",
+                                        isFloat = true,
+                                        modifier = Modifier.weight(1f).tip("水平坐标 X (px)")
+                                    )
+                                    NumberOutlinedTextField(
+                                        value = posYText,
+                                        onValueChange = {
+                                            posYText = it
+                                            val newTop = it.toFloatOrNull()
+                                            if (newTop != null) {
+                                                viewModel.canvasEditor.updateBlockBounds(
+                                                    selectedBlock.id,
+                                                    selectedBlock.bounds.left,
+                                                    newTop,
+                                                    selectedBlock.bounds.width,
+                                                    selectedBlock.bounds.height,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        prefixTag = "Y",
+                                        isFloat = true,
+                                        modifier = Modifier.weight(1f).tip("垂直坐标 Y (px)")
+                                    )
+                                }
 
                                 // 第 2 行：尺寸
                                 var widthText by remember(selectedBlock.id, selectedBlock.bounds.width) {
@@ -481,108 +484,121 @@ fun UIStudioPropertyPanel(
                                 var heightText by remember(selectedBlock.id, selectedBlock.bounds.height) {
                                     mutableStateOf(selectedBlock.bounds.height.toInt().toString())
                                 }
-                                InspectorDualPropRow(
-                                    categoryLabel = "尺寸",
-                                    tag1 = "W",
-                                    value1 = widthText,
-                                    onValueChange1 = {
-                                        widthText = it
-                                        val newW = it.toFloatOrNull()
-                                        if (newW != null && newW > 0) {
-                                            viewModel.canvasEditor.updateBlockBounds(
-                                                selectedBlock.id,
-                                                selectedBlock.bounds.left,
-                                                selectedBlock.bounds.top,
-                                                newW,
-                                                selectedBlock.bounds.height,
-                                                templateRepo
-                                            )
-                                        }
-                                    },
-                                    tag2 = "H",
-                                    value2 = heightText,
-                                    onValueChange2 = {
-                                        heightText = it
-                                        val newH = it.toFloatOrNull()
-                                        if (newH != null && newH > 0) {
-                                            viewModel.canvasEditor.updateBlockBounds(
-                                                selectedBlock.id,
-                                                selectedBlock.bounds.left,
-                                                selectedBlock.bounds.top,
-                                                selectedBlock.bounds.width,
-                                                newH,
-                                                templateRepo
-                                            )
-                                        }
-                                    },
-                                    isFloat = true,
-                                    tooltip1 = "宽度 W (px)",
-                                    tooltip2 = "高度 H (px)"
-                                )
+                                InspectorPropRow(label = "尺寸") {
+                                    NumberOutlinedTextField(
+                                        value = widthText,
+                                        onValueChange = {
+                                            widthText = it
+                                            val newW = it.toFloatOrNull()
+                                            if (newW != null && newW > 0) {
+                                                viewModel.canvasEditor.updateBlockBounds(
+                                                    selectedBlock.id,
+                                                    selectedBlock.bounds.left,
+                                                    selectedBlock.bounds.top,
+                                                    newW,
+                                                    selectedBlock.bounds.height,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        prefixTag = "W",
+                                        isFloat = true,
+                                        modifier = Modifier.weight(1f).tip("宽度 W (px)")
+                                    )
+                                    NumberOutlinedTextField(
+                                        value = heightText,
+                                        onValueChange = {
+                                            heightText = it
+                                            val newH = it.toFloatOrNull()
+                                            if (newH != null && newH > 0) {
+                                                viewModel.canvasEditor.updateBlockBounds(
+                                                    selectedBlock.id,
+                                                    selectedBlock.bounds.left,
+                                                    selectedBlock.bounds.top,
+                                                    selectedBlock.bounds.width,
+                                                    newH,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        prefixTag = "H",
+                                        isFloat = true,
+                                        modifier = Modifier.weight(1f).tip("高度 H (px)")
+                                    )
+                                }
 
                                 // 第 3 行：缩放
-                                InspectorDualPropRow(
-                                    categoryLabel = "缩放",
-                                    tag1 = "X",
-                                    value1 = scaleXText,
-                                    onValueChange1 = { input ->
-                                        scaleXText = input
-                                        val scaleVal = input.toFloatOrNull()
-                                        if (scaleVal != null) {
-                                            val clamped = scaleVal.coerceIn(0.0f, 1.0f)
-                                            viewModel.viewport.updateBlockScale(
-                                                selectedBlock.id,
-                                                clamped,
-                                                selectedBlock.scaleY,
-                                                templateRepo
-                                            )
-                                        }
-                                    },
-                                    tag2 = "Y",
-                                    value2 = scaleYText,
-                                    onValueChange2 = { input ->
-                                        scaleYText = input
-                                        val scaleVal = input.toFloatOrNull()
-                                        if (scaleVal != null) {
-                                            val clamped = scaleVal.coerceIn(0.0f, 1.0f)
-                                            viewModel.viewport.updateBlockScale(
-                                                selectedBlock.id,
-                                                selectedBlock.scaleX,
-                                                clamped,
-                                                templateRepo
-                                            )
-                                        }
-                                    },
-                                    isFloat = true,
-                                    step = 0.05f,
-                                    minVal = 0.0f,
-                                    maxVal = 1.0f,
-                                    tooltip1 = "X 轴独立缩放因数 (0.0~1.0)",
-                                    tooltip2 = "Y 轴独立缩放因数 (0.0~1.0)"
-                                )
+                                InspectorPropRow(label = "缩放") {
+                                    NumberOutlinedTextField(
+                                        value = scaleXText,
+                                        onValueChange = { input ->
+                                            scaleXText = input
+                                            val scaleVal = input.toFloatOrNull()
+                                            if (scaleVal != null) {
+                                                val clamped = scaleVal.coerceIn(0.0f, 1.0f)
+                                                viewModel.viewport.updateBlockScale(
+                                                    selectedBlock.id,
+                                                    clamped,
+                                                    selectedBlock.scaleY,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        prefixTag = "X",
+                                        isFloat = true,
+                                        step = 0.05f,
+                                        minVal = 0.0f,
+                                        maxVal = 1.0f,
+                                        modifier = Modifier.weight(1f).tip("X 轴独立缩放因数 (0.0~1.0)")
+                                    )
+                                    NumberOutlinedTextField(
+                                        value = scaleYText,
+                                        onValueChange = { input ->
+                                            scaleYText = input
+                                            val scaleVal = input.toFloatOrNull()
+                                            if (scaleVal != null) {
+                                                val clamped = scaleVal.coerceIn(0.0f, 1.0f)
+                                                viewModel.viewport.updateBlockScale(
+                                                    selectedBlock.id,
+                                                    selectedBlock.scaleX,
+                                                    clamped,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        prefixTag = "Y",
+                                        isFloat = true,
+                                        step = 0.05f,
+                                        minVal = 0.0f,
+                                        maxVal = 1.0f,
+                                        modifier = Modifier.weight(1f).tip("Y 轴独立缩放因数 (0.0~1.0)")
+                                    )
+                                }
 
                                 // 第 4 行：不透明度
-                                InspectorSinglePropRow(
-                                    categoryLabel = "不透明度",
-                                    value = opacityText,
-                                    onValueChange = { input ->
-                                        opacityText = input
-                                        val opVal = input.toFloatOrNull()
-                                        if (opVal != null) {
-                                            val clamped = opVal.coerceIn(0.0f, 1.0f)
-                                            viewModel.viewport.updateBlockOpacity(
-                                                selectedBlock.id,
-                                                clamped,
-                                                templateRepo
-                                            )
-                                        }
-                                    },
-                                    isFloat = true,
-                                    step = 0.05f,
-                                    minVal = 0.0f,
-                                    maxVal = 1.0f,
-                                    tooltip = "不透明度 (0.0~1.0)"
-                                )
+                                InspectorPropRow(label = "不透明度", tooltip = "不透明度 (0.0~1.0)") {
+                                    NumberOutlinedTextField(
+                                        value = opacityText,
+                                        onValueChange = { input ->
+                                            opacityText = input
+                                            val opVal = input.toFloatOrNull()
+                                            if (opVal != null) {
+                                                val clamped = opVal.coerceIn(0.0f, 1.0f)
+                                                viewModel.viewport.updateBlockOpacity(
+                                                    selectedBlock.id,
+                                                    clamped,
+                                                    templateRepo
+                                                )
+                                            }
+                                        },
+                                        isFloat = true,
+                                        step = 0.05f,
+                                        minVal = 0.0f,
+                                        maxVal = 1.0f,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
                             }
                         }
 

@@ -6,15 +6,19 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.AlignHorizontalLeft
+import androidx.compose.material.icons.automirrored.filled.AlignHorizontalRight
+import androidx.compose.material.icons.filled.AlignHorizontalCenter
+import androidx.compose.material.icons.filled.AlignVerticalBottom
+import androidx.compose.material.icons.filled.AlignVerticalCenter
+import androidx.compose.material.icons.filled.AlignVerticalTop
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.ui.component.*
@@ -22,7 +26,7 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
  * 列表组件 (LIST) 专属属性配置面板。
- * 所有尺寸、间距与字号 100% 动态读取 [LocalAppSpacing] 与 [MaterialTheme.typography]，自动适配桌面与移动双模式。
+ * 全行统一接入 [InspectorPropRow] 实现所有控件外框 0 误差左对齐与 50%/50% 对称栅格对齐。
  */
 @Composable
 fun ListPropertiesSection(
@@ -35,12 +39,6 @@ fun ListPropertiesSection(
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
-    val dynamicBodyStyle = if (spacing.isCompact) {
-        MaterialTheme.typography.bodySmall
-    } else {
-        MaterialTheme.typography.bodyMedium
-    }
-
     val safeLineCount = properties.lineCount.coerceAtLeast(0)
     val safeColumnCount = properties.columnCount.coerceAtLeast(0)
     val safeLineGap = properties.lineGap.coerceAtLeast(0)
@@ -71,7 +69,7 @@ fun ListPropertiesSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(spacing.inspectorRowSpacing)
     ) {
-        // 1. 列表布局 (复用统一组件 DropdownInputField)
+        // 1. 列表布局
         val layoutOptions = listOf(
             "SingleRow" to "单行横排 (SingleRow)",
             "SingleColumn" to "单列竖排 (SingleColumn)",
@@ -79,20 +77,7 @@ fun ListPropertiesSection(
             "FlowVertical" to "纵向流动折列 (FlowVertical)",
             "Pagination" to "分页网格 (Pagination)"
         )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "列表布局",
-                maxLines = 1,
-                softWrap = false,
-                style = dynamicBodyStyle.copy(
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                modifier = Modifier.width(spacing.inspectorLabelWidth)
-            )
+        InspectorPropRow(label = "列表布局") {
             DropdownInputField(
                 value = layoutOptions.find { it.first == properties.listLayout }?.second ?: properties.listLayout,
                 onValueChange = {},
@@ -101,111 +86,103 @@ fun ListPropertiesSection(
                 itemLabel = { it.second },
                 isSelected = { it.first == properties.listLayout },
                 readOnly = true,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth()
             )
         }
 
         // 2. 行数与列数
-        InspectorSimpleDualPropRow(
-            label1 = "行数",
-            value1 = safeLineCount.toString(),
-            onValueChange1 = {
-                val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
-                onPropertiesChanged(properties.copy(lineCount = v))
-            },
-            label2 = "列数",
-            value2 = safeColumnCount.toString(),
-            onValueChange2 = {
-                val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
-                onPropertiesChanged(properties.copy(columnCount = v))
-            },
-            isFloat = false,
-            tooltip1 = "物理行数，0 为自适应，在流动或分页时有效",
-            tooltip2 = "物理列数，0 为自适应，在横向折行或分页时有效"
-        )
+        InspectorPropRow(label = "行数") {
+            NumberOutlinedTextField(
+                value = safeLineCount.toString(),
+                onValueChange = {
+                    val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
+                    onPropertiesChanged(properties.copy(lineCount = v))
+                },
+                isFloat = false,
+                modifier = Modifier.weight(1f).tip("物理行数，0 为自适应，在流动或分页时有效")
+            )
+            NumberOutlinedTextField(
+                value = safeColumnCount.toString(),
+                onValueChange = {
+                    val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
+                    onPropertiesChanged(properties.copy(columnCount = v))
+                },
+                prefixTag = "列数",
+                isFloat = false,
+                modifier = Modifier.weight(1f).tip("物理列数，0 为自适应，在横向折行或分页时有效")
+            )
+        }
 
         // 3. 行距与列距
-        InspectorSimpleDualPropRow(
-            label1 = "行距",
-            value1 = safeLineGap.toString(),
-            onValueChange1 = {
-                val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
-                onPropertiesChanged(properties.copy(lineGap = v))
-            },
-            label2 = "列距",
-            value2 = safeColumnGap.toString(),
-            onValueChange2 = {
-                val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
-                onPropertiesChanged(properties.copy(columnGap = v))
-            },
-            isFloat = false,
-            tooltip1 = "行与行之间的物理间距 (px)",
-            tooltip2 = "列与列之间的物理间距 (px)"
-        )
+        InspectorPropRow(label = "行距") {
+            NumberOutlinedTextField(
+                value = safeLineGap.toString(),
+                onValueChange = {
+                    val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
+                    onPropertiesChanged(properties.copy(lineGap = v))
+                },
+                isFloat = false,
+                modifier = Modifier.weight(1f).tip("行与行之间的物理间距 (px)")
+            )
+            NumberOutlinedTextField(
+                value = safeColumnGap.toString(),
+                onValueChange = {
+                    val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
+                    onPropertiesChanged(properties.copy(columnGap = v))
+                },
+                prefixTag = "列距",
+                isFloat = false,
+                modifier = Modifier.weight(1f).tip("列与列之间的物理间距 (px)")
+            )
+        }
 
         // 4. 项宽与项高
-        InspectorSimpleDualPropRow(
-            label1 = "项宽",
-            value1 = safeItemWidth.toString(),
-            onValueChange1 = {
-                val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
-                onPropertiesChanged(properties.copy(itemWidth = v))
-            },
-            label2 = "项高",
-            value2 = safeItemHeight.toString(),
-            onValueChange2 = {
-                val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
-                onPropertiesChanged(properties.copy(itemHeight = v))
-            },
-            isFloat = false,
-            tooltip1 = "卡片子项默认宽度 (px)，0 为自适应",
-            tooltip2 = "卡片子项默认高度 (px)，0 为自适应"
-        )
-
-        // 5. 对齐方式 (水平对齐 & 垂直对齐)
-        val alignOptions = listOf("left" to "靠左", "center" to "居中", "right" to "靠右")
-        val valignOptions = listOf("top" to "靠顶", "middle" to "居中", "bottom" to "靠底")
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "对齐方式",
-                maxLines = 1,
-                softWrap = false,
-                style = dynamicBodyStyle.copy(
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                modifier = Modifier.width(spacing.inspectorLabelWidth)
+        InspectorPropRow(label = "项宽") {
+            NumberOutlinedTextField(
+                value = safeItemWidth.toString(),
+                onValueChange = {
+                    val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
+                    onPropertiesChanged(properties.copy(itemWidth = v))
+                },
+                isFloat = false,
+                modifier = Modifier.weight(1f).tip("卡片子项默认宽度 (px)，0 为自适应")
             )
+            NumberOutlinedTextField(
+                value = safeItemHeight.toString(),
+                onValueChange = {
+                    val v = (it.toIntOrNull() ?: 0).coerceAtLeast(0)
+                    onPropertiesChanged(properties.copy(itemHeight = v))
+                },
+                prefixTag = "项高",
+                isFloat = false,
+                modifier = Modifier.weight(1f).tip("卡片子项默认高度 (px)，0 为自适应")
+            )
+        }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(spacing.small),
+        // 5. 对齐方式 (设计工具标准布局对齐图标 + 同心悬浮胶囊分段器)
+        val alignOptions = listOf(
+            InspectorSegmentedIconOption("left", Icons.AutoMirrored.Filled.AlignHorizontalLeft, "水平靠左 (left)"),
+            InspectorSegmentedIconOption("center", Icons.Default.AlignHorizontalCenter, "水平居中 (center)"),
+            InspectorSegmentedIconOption("right", Icons.AutoMirrored.Filled.AlignHorizontalRight, "水平靠右 (right)")
+        )
+        val valignOptions = listOf(
+            InspectorSegmentedIconOption("top", Icons.Default.AlignVerticalTop, "垂直靠顶 (top)"),
+            InspectorSegmentedIconOption("middle", Icons.Default.AlignVerticalCenter, "垂直居中 (middle)"),
+            InspectorSegmentedIconOption("bottom", Icons.Default.AlignVerticalBottom, "垂直靠底 (bottom)")
+        )
+        InspectorPropRow(label = "对齐方式") {
+            InspectorSegmentedIconGroup(
+                options = alignOptions,
+                selectedKey = properties.align,
+                onSelected = { onPropertiesChanged(properties.copy(align = it)) },
                 modifier = Modifier.weight(1f)
-            ) {
-                DropdownInputField(
-                    value = alignOptions.find { it.first == properties.align }?.second ?: properties.align,
-                    onValueChange = {},
-                    items = alignOptions,
-                    onItemSelected = { (key, _) -> onPropertiesChanged(properties.copy(align = key)) },
-                    itemLabel = { it.second },
-                    isSelected = { it.first == properties.align },
-                    readOnly = true,
-                    modifier = Modifier.weight(1f)
-                )
-                DropdownInputField(
-                    value = valignOptions.find { it.first == properties.verticalAlign }?.second ?: properties.verticalAlign,
-                    onValueChange = {},
-                    items = valignOptions,
-                    onItemSelected = { (key, _) -> onPropertiesChanged(properties.copy(verticalAlign = key)) },
-                    itemLabel = { it.second },
-                    isSelected = { it.first == properties.verticalAlign },
-                    readOnly = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            )
+            InspectorSegmentedIconGroup(
+                options = valignOptions,
+                selectedKey = properties.verticalAlign,
+                onSelected = { onPropertiesChanged(properties.copy(verticalAlign = it)) },
+                modifier = Modifier.weight(1f)
+            )
         }
 
         // 6. 溢出处理
@@ -223,20 +200,7 @@ fun ListPropertiesSection(
             properties.overflow == 2 && properties.scrollType == 2 -> "ScrollBoth"
             else -> "ScrollVertical"
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "溢出处理",
-                maxLines = 1,
-                softWrap = false,
-                style = dynamicBodyStyle.copy(
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                modifier = Modifier.width(spacing.inspectorLabelWidth)
-            )
+        InspectorPropRow(label = "溢出处理") {
             DropdownInputField(
                 value = overflowOptions.find { it.first == currentOverflowMode }?.second ?: "垂直滚动 (Vertical)",
                 onValueChange = {},
@@ -254,7 +218,7 @@ fun ListPropertiesSection(
                 itemLabel = { it.second },
                 isSelected = { it.first == currentOverflowMode },
                 readOnly = true,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth()
             )
         }
 
@@ -264,20 +228,7 @@ fun ListPropertiesSection(
             "Single" to "单选 (Single)",
             "Multiple" to "多选 (Multiple)"
         )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "选择模式",
-                maxLines = 1,
-                softWrap = false,
-                style = dynamicBodyStyle.copy(
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                modifier = Modifier.width(spacing.inspectorLabelWidth)
-            )
+        InspectorPropRow(label = "选择模式") {
             DropdownInputField(
                 value = selOptions.find { it.first == properties.selectionMode }?.second ?: "无 (None)",
                 onValueChange = {},
@@ -286,30 +237,16 @@ fun ListPropertiesSection(
                 itemLabel = { it.second },
                 isSelected = { it.first == properties.selectionMode },
                 readOnly = true,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth()
             )
         }
 
-        // 8. 子项单页 (项目资源：只读 DropdownInputField + 拖入赋值)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "子项单页",
-                maxLines = 1,
-                softWrap = false,
-                style = dynamicBodyStyle.copy(
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                modifier = Modifier.width(spacing.inspectorLabelWidth)
-            )
-
+        // 8. 子项单页 (只读下拉 + 拖入赋值)
+        InspectorPropRow(label = "子项单页") {
             val dropShape = RoundedCornerShape(spacing.inspectorFieldCornerRadius)
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
                     .onGloballyPositioned { coords -> itemDropBounds = coords.boundsInWindow() }
                     .then(
                         if (isDropHovered) {

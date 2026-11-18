@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -116,6 +117,8 @@ fun UIStudioBlockItem(
         else -> typeColor.copy(alpha = 0.65f)
     }
 
+    val currentDensity = LocalDensity.current.density.coerceAtLeast(0.1f)
+
     Box(
         modifier = modifier
             .offset(x = b.left.dp, y = b.top.dp)
@@ -130,34 +133,27 @@ fun UIStudioBlockItem(
                 color = borderColor,
                 shape = RoundedCornerShape(2.dp)
             )
-            .pointerInput(block.id, block.isLocked) {
-                detectTapGestures(
-                    onTap = {
-                        if (!block.isLocked) {
-                            onClick()
-                        }
-                    },
-                    onDoubleTap = {
-                        if (!block.isLocked) {
-                            onDoubleTap()
-                        }
-                    }
-                )
-            }
+            // 仅对未锁定图元挂载点击与拖拽手势；锁定图元（如覆盖在顶层的辅助面板）直接放行指针事件穿透到底层图元
             .then(
                 if (!block.isLocked) {
-                    Modifier.pointerInput(block.id, scale) {
-                        detectDragGestures(
-                            onDragStart = { onClick() },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                val safeScale = if (scale <= 0.01f) 1.0f else scale
-                                onDragDelta(dragAmount.x / safeScale, dragAmount.y / safeScale)
-                            },
-                            onDragEnd = onDragEnd,
-                            onDragCancel = onDragEnd
-                        )
-                    }
+                    Modifier
+                        .pointerInput(block.id, block.isLocked) {
+                            detectTapGestures(
+                                onTap = { onClick() },
+                                onDoubleTap = { onDoubleTap() }
+                            )
+                        }
+                        .pointerInput(block.id, scale, currentDensity) {
+                            detectDragGestures(
+                                onDragStart = { onClick() },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    onDragDelta(dragAmount.x / currentDensity, dragAmount.y / currentDensity)
+                                },
+                                onDragEnd = onDragEnd,
+                                onDragCancel = onDragEnd
+                            )
+                        }
                 } else Modifier
             )
     ) {

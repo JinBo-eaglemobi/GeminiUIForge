@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -15,9 +17,11 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import org.gemini.ui.forge.ResizeHorizontalIcon
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
  * 带有数值校验与空值处理的数字输入框组件：
@@ -32,6 +36,7 @@ fun NumberOutlinedTextField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     label: @Composable (() -> Unit)? = null,
+    prefixTag: String? = null,
     singleLine: Boolean = true,
     isFloat: Boolean = true,
     step: Float = 1f,
@@ -42,6 +47,8 @@ fun NumberOutlinedTextField(
     contentPadding: PaddingValues? = null,
     onEnterConfirm: (() -> Unit)? = null
 ) {
+    val spacing = LocalAppSpacing.current
+    val dynamicTagStyle = if (spacing.isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
     val effectiveMinVal = range?.start ?: minVal
     val effectiveMaxVal = range?.endInclusive ?: maxVal
 
@@ -132,6 +139,19 @@ fun NumberOutlinedTextField(
                     }
                 },
             label = label,
+            leadingIcon = if (!prefixTag.isNullOrBlank()) {
+                {
+                    Text(
+                        text = prefixTag,
+                        maxLines = 1,
+                        softWrap = false,
+                        style = dynamicTagStyle.copy(
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    )
+                }
+            } else null,
             singleLine = singleLine,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             enabled = enabled,

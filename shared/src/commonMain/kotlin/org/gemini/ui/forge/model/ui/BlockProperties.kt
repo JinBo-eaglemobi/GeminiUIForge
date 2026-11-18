@@ -211,7 +211,7 @@ sealed class BlockProperties {
         val overflow: Int = 2,
         val lineCount: Int = 0,
         val columnCount: Int = 0,
-        val autoResizeItem: Boolean = false,
+        val autoResizeItem: Boolean = true,
         val defaultItem: String = "",
         val selectionMode: String = "None",
         val foldHiddenItems: Boolean = false,

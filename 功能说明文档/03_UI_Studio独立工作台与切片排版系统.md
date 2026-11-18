@@ -89,15 +89,19 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
   - 画布内置边缘几何对齐辅助线，图元在移动或拉伸时，靠近相邻图元或容器边缘（$\le 5\text{px}$）自动触发磁力吸附；
   - 8 方向拉伸控制锚点 100% 统一复用 `RectTransformHelper`，光标物理绝对定位。
 
+- **画布点击选中与锁定图元穿透规则**：
+  - 仅对未锁定图元（`!block.isLocked`）挂载画布点击、双击与拖拽手势；被锁定的遮罩或辅助图层（如覆盖在顶层的辅助面板）直接放行指针事件穿透到底层可交互图元，杜绝锁定图层吞噬下层组件点击；
+  - 画布外层点击命中检测统一结合 `scale` 与 `density` 逆映射至 `.dp` 逻辑坐标系，确保在不同 DPI 与布局模式下均能精准命中图元；主视图模式下拖拽嵌套子图元统一路由至顶层根父组件。
+
 ### 6. 右侧动态属性检查器 (PropertyPanel) 与工业流线排版体系
 - **100% 纵向全高舒展视口与单一工业流线风 (STUDIO_COMPACT)**：
   - 彻底废除旧版高占位经典卡片风（`UIStyleMode.MATERIAL_CARD`），将工业流线风确立为全系统唯一排版标准（无冗余外层卡片套娃、折叠分组标题 `InspectorSectionHeader` 极简分隔、双列对称垂直共线）；
-  - 数值调节与表单组件 100% 统一收拢至全局封装组件体系：`InspectorTextFieldRow`、`InspectorDualPropRow`、`InspectorSinglePropRow`、`InspectorSimpleDualPropRow`、`InspectorCheckboxRow`，以及升级后的统一组件 `DropdownInputField`（底层接入 `AppMenu` + `AppMenuItemRow` + `Modifier.matchParentSize()` 向下 4dp 精准展开防遮挡）、`SelectAllOutlinedTextField`（失焦/回车自动提交 + 高对比主色光标）与 `ColorPickerField`（`showFloatingLabel = false` 流线配色行）；
+  - 数值调节与表单组件 100% 统一收拢至极简封装组件体系：**唯一通用行容器 `InspectorPropRow`**（左列固定 `inspectorLabelWidth`、右列统一 `weight(1f)` 锁死全行左起基准线与 50%/50% 双列栅格）、`InspectorSectionHeader`、`InspectorCheckboxRow`、`InspectorSegmentedIconGroup`，以及升级后的统一组件 `DropdownInputField`（底层接入 `AppMenu` + `AppMenuItemRow` + `Modifier.matchParentSize()` 向下 4dp 精准展开防遮挡）、`NumberOutlinedTextField`（支持内嵌前缀标签 `prefixTag` 实现与文本/下拉控件 0 误差左对齐）、`SelectAllOutlinedTextField`（失焦/回车自动提交 + 高对比主色光标）与 `ColorPickerField`（`showFloatingLabel = false` 流线配色行）；
   - 全部尺寸（高度、标签宽度、输入框宽度、间距、图标尺寸）与字号 100% 动态取自 `LocalAppSpacing.current` 与 `MaterialTheme.typography.*`，严禁写死 `.sp` 与静态布局标志；切换 **桌面高密度 (`COMPACT`)** 与 **移动端触控 (`TOUCH`)** 布局模式时，字号、控件热区高度与间距全自动同步缩放；
   - 指针悬停数值输入框即可滚轮/水平拖拽平滑微调。
 - **全组件专属属性配置面板 (UIStudioSpecificProperties)**：
   - 根据选中的图元类型，自动分发呈现对应的无框流线专属配置面板：
-    1. **`LIST` (动态列表与网格)**：配置 `listLayout`（SingleColumn/SingleRow/FlowHorizontal/FlowVertical/Pagination）、`lineCount`/`columnCount`（行数/列数）、`lineGap`/`columnGap`（行距/列距）、`itemWidth`/`itemHeight`（项宽/项高）、`align`/`verticalAlign`、`overflow`/`scrollType`、`selectionMode`、`defaultItem`（**子项单页**：禁止手动输入，支持只读下拉列表选取或直接从左侧「视图界面」拖拽页面释放赋值），以及 `autoResizeItem`、`foldHiddenItems`、`scrollItemToViewFully` 复选开关；
+    1. **`LIST` (动态列表与网格)**：配置 `listLayout`（SingleColumn/SingleRow/FlowHorizontal/FlowVertical/Pagination）、`lineCount`/`columnCount`（行数/列数）、`lineGap`/`columnGap`（行距/列距）、`itemWidth`/`itemHeight`（项宽/项高）、`align`/`verticalAlign`（业内通用水平/垂直双组三段式图标切换器 `InspectorSegmentedIconGroup`）、`overflow`/`scrollType`、`selectionMode`、`defaultItem`（**子项单页**：禁止手动输入，支持只读下拉列表选取或直接从左侧「视图界面」拖拽页面释放赋值；在画布或图层树**双击 `LIST` 组件**或通过右键菜单可直接打开该子项单页视图），以及默认启用的 `autoResizeItem`（默认 `true`）、`foldHiddenItems`、`scrollItemToViewFully` 复选开关；
     2. **`BUTTON` (交互按钮)**：配置文案 `text`、`downEffect`（按压变暗/中心向心缩放）、`downEffectValue`、`mode`（Common/Check/Radio）、单选关联控制器与页面 ID；
     3. **`TEXT` (文本与数值)**：配置内容 `text`、字号 `fontSize`、颜色 Hex、排版对齐、富文本 `isUbb` 开关、加粗、倾斜、下划线、单行限制、描边与行间距；
     4. **`INPUT` (文本输入框)**：配置占位提示 `promptText`、字号、颜色、最大输入长度限制与密码模式；

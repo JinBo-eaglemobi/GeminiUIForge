@@ -42,6 +42,7 @@ import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.getCurrentTimeMillis
 import org.gemini.ui.forge.data.repository.TemplateRepository
+import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.model.ui.UIBlockType
@@ -204,8 +205,12 @@ fun UIStudioHierarchyItem(
                             } else if (totalDistance <= 6f) {
                                 val currentTime = getCurrentTimeMillis()
                                 if (currentTime - lastClickTime < 300L) {
-                                    // 仅绑定了独立页面 (targetPageId != null) 的 VIEW 组件才允许双击打开 Tab
-                                    if (!block.targetPageId.isNullOrBlank()) {
+                                    // 双击打开绑定的独立页面 (targetPageId) 或 LIST 组件配置的子项单页 (defaultItem)
+                                    val listDefaultItem = if (block.type == UIBlockType.LIST) {
+                                        (block.properties as? BlockProperties.ListProperties)?.defaultItem?.takeIf { it.isNotBlank() }
+                                    } else null
+                                    val refPageId = block.targetPageId?.takeIf { it.isNotBlank() } ?: listDefaultItem
+                                    if (refPageId != null && state.project?.studioPages?.any { it.id == refPageId } == true) {
                                         viewModel.pageManager.openContainerTab(block.id)
                                     }
                                     lastClickTime = 0L
@@ -414,10 +419,14 @@ fun UIStudioHierarchyItem(
                     }
                 )
 
-                // 容器操作：仅绑定了独立页面的 VIEW 组件允许通过 Tab 打开独立视图
-                if (!block.targetPageId.isNullOrBlank()) {
+                // 容器或列表操作：绑定了独立页面或有效子项单页时允许打开对应视图
+                val listDefaultItem = if (block.type == UIBlockType.LIST) {
+                    (block.properties as? BlockProperties.ListProperties)?.defaultItem?.takeIf { it.isNotBlank() }
+                } else null
+                val openablePageId = block.targetPageId?.takeIf { it.isNotBlank() } ?: listDefaultItem
+                if (openablePageId != null && state.project?.studioPages?.any { it.id == openablePageId } == true) {
                     DropdownMenuItem(
-                        text = { Text("打开独立页面视图", style = dynamicMenuStyle) },
+                        text = { Text(if (block.type == UIBlockType.LIST) "打开子项单页 ($openablePageId)" else "打开独立页面视图", style = dynamicMenuStyle) },
                         leadingIcon = { Icon(Icons.Default.Layers, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                         onClick = {
                             viewModel.pageManager.openContainerTab(block.id)
