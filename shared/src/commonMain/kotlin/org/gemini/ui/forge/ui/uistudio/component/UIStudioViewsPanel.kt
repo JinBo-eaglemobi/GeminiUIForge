@@ -76,17 +76,19 @@ fun UIStudioViewsPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val dynamicTitleStyle = if (spacing.isCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium
+                val dynamicChipStyle = if (spacing.isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Layers,
                         contentDescription = "Views",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(spacing.iconStandardSize)
                     )
                     Spacer(modifier = Modifier.width(spacing.extraSmall))
                     Text(
                         text = "视图界面",
-                        style = MaterialTheme.typography.titleSmall,
+                        style = dynamicTitleStyle,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -97,8 +99,8 @@ fun UIStudioViewsPanel(
                     ) {
                         Text(
                             text = "${allPages.size}",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = dynamicChipStyle,
+                            modifier = Modifier.padding(horizontal = spacing.small, vertical = 2.dp),
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     }
@@ -106,15 +108,15 @@ fun UIStudioViewsPanel(
 
                 FilledTonalButton(
                     onClick = { viewModel.pageManager.openNewViewDialog() },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = spacing.small, vertical = spacing.inspectorFieldPaddingVertical),
+                    shape = RoundedCornerShape(spacing.inspectorFieldCornerRadius),
                     modifier = Modifier
-                        .height(28.dp)
+                        .height(spacing.inspectorFieldHeight)
                         .tip("新建视图界面 (UIStudioPage)")
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(spacing.inspectorInlineIconSize))
                     Spacer(modifier = Modifier.width(2.dp))
-                    Text("新建", style = MaterialTheme.typography.labelSmall)
+                    Text("新建", style = dynamicChipStyle)
                 }
             }
 

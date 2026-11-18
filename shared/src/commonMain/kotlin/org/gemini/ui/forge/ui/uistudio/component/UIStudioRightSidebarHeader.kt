@@ -3,7 +3,6 @@ package org.gemini.ui.forge.ui.uistudio.component
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,9 +19,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.*
-import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.component.AppIconButton
+import org.gemini.ui.forge.ui.component.AppIconButtonTier
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.model.UIStudioRightTab
@@ -30,17 +29,7 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * UI Studio 右侧边栏顶部控制头组件 (Right Sidebar Header)。
- *
- * 遵循一文件一 Composable 铁律与设计系统 Tokens 规范：
- * - 紧凑高度 40dp，内置曲率守恒分段切换器 [UIStudioRightTab.PROPERTY] 与 [UIStudioRightTab.AI_CHAT]；
- * - 右侧快捷工具：一键逃逸至独立大弹窗 [onOpenFullDialog]、一键折叠收起边栏 [onCollapseSidebar]；
- * - 完备的 Hover/Active 微交互与 I18n 悬浮提示。
- *
- * @param selectedTab 当前激活的右侧边栏分页
- * @param onTabSelected 切换分页回调
- * @param onOpenFullDialog 弹出独立全景大弹窗回调
- * @param onCollapseSidebar 折叠收起右侧边栏回调
- * @param modifier 外部修饰符
+ * 高度、间距、图标尺寸与字号 100% 动态取自 [LocalAppSpacing] 与 [MaterialTheme.typography]。
  */
 @Composable
 fun UIStudioRightSidebarHeader(
@@ -53,36 +42,36 @@ fun UIStudioRightSidebarHeader(
 ) {
     val spacing = LocalAppSpacing.current
     val colorScheme = MaterialTheme.colorScheme
+    val dynamicTabStyle = if (spacing.isCompact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge
 
     Surface(
         color = colorScheme.surface,
-        modifier = modifier.fillMaxWidth().height(40.dp)
+        modifier = modifier.fillMaxWidth().height(spacing.rightSidebarHeaderHeight)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = spacing.small, vertical = 4.dp),
+                    .padding(horizontal = spacing.small, vertical = spacing.extraSmall),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // 1. 左侧区域：大窗打开时锁定纯属性标题；大窗未打开时展示分段切换器 (Segmented Tab Bar)
                 if (isAiChatDialogVisible) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 4.dp)
+                        modifier = Modifier.padding(start = spacing.extraSmall)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Tune,
                             contentDescription = null,
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(spacing.inspectorInlineIconSize),
                             tint = colorScheme.primary
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(spacing.inspectorControlGap))
                         Text(
                             text = stringResource(Res.string.ui_studio_tab_property),
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            style = dynamicTabStyle.copy(fontWeight = FontWeight.SemiBold),
                             color = colorScheme.onSurface
                         )
                     }
@@ -90,7 +79,7 @@ fun UIStudioRightSidebarHeader(
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .height(30.dp)
+                            .fillMaxHeight()
                             .clip(AppShapes.small)
                             .background(colorScheme.surfaceVariant.copy(alpha = 0.5f))
                             .padding(2.dp),
@@ -112,24 +101,23 @@ fun UIStudioRightSidebarHeader(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(spacing.inspectorFieldCornerRadius))
                                 .background(propBg)
                                 .clickable { onTabSelected(UIStudioRightTab.PROPERTY) }
-                                .padding(horizontal = 6.dp),
+                                .padding(horizontal = spacing.small),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Tune,
                                 contentDescription = null,
-                                modifier = Modifier.size(13.dp),
+                                modifier = Modifier.size(spacing.inspectorInlineIconSize),
                                 tint = propContentColor
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(spacing.inspectorControlGap))
                             Text(
                                 text = stringResource(Res.string.ui_studio_tab_property),
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 11.sp,
+                                style = dynamicTabStyle.copy(
                                     fontWeight = if (isPropActive) FontWeight.SemiBold else FontWeight.Medium
                                 ),
                                 color = propContentColor,
@@ -152,24 +140,23 @@ fun UIStudioRightSidebarHeader(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(spacing.inspectorFieldCornerRadius))
                                 .background(aiBg)
                                 .clickable { onTabSelected(UIStudioRightTab.AI_CHAT) }
-                                .padding(horizontal = 6.dp),
+                                .padding(horizontal = spacing.small),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
                                 contentDescription = null,
-                                modifier = Modifier.size(13.dp),
+                                modifier = Modifier.size(spacing.inspectorInlineIconSize),
                                 tint = aiContentColor
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(spacing.inspectorControlGap))
                             Text(
                                 text = stringResource(Res.string.ui_studio_tab_ai_chat),
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 11.sp,
+                                style = dynamicTabStyle.copy(
                                     fontWeight = if (isAiActive) FontWeight.SemiBold else FontWeight.Medium
                                 ),
                                 color = aiContentColor,
@@ -186,37 +173,23 @@ fun UIStudioRightSidebarHeader(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    // 弹出独立大窗按钮（仅当大窗未打开时展示，杜绝重复弹出）
                     if (!isAiChatDialogVisible) {
-                        IconButton(
+                        AppIconButton(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = stringResource(Res.string.ui_studio_tab_open_dialog_tip),
                             onClick = onOpenFullDialog,
-                            modifier = Modifier
-                                .size(28.dp)
-                                .tip(stringResource(Res.string.ui_studio_tab_open_dialog_tip))
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                contentDescription = stringResource(Res.string.ui_studio_tab_open_dialog_tip),
-                                modifier = Modifier.size(14.dp),
-                                tint = colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    // 收起侧栏按钮
-                    IconButton(
-                        onClick = onCollapseSidebar,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .tip(stringResource(Res.string.ui_studio_tab_collapse_tip))
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = stringResource(Res.string.ui_studio_tab_collapse_tip),
-                            modifier = Modifier.size(16.dp),
-                            tint = colorScheme.onSurfaceVariant
+                            tier = AppIconButtonTier.COMPACT,
+                            tooltip = stringResource(Res.string.ui_studio_tab_open_dialog_tip)
                         )
                     }
+
+                    AppIconButton(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = stringResource(Res.string.ui_studio_tab_collapse_tip),
+                        onClick = onCollapseSidebar,
+                        tier = AppIconButtonTier.COMPACT,
+                        tooltip = stringResource(Res.string.ui_studio_tab_collapse_tip)
+                    )
                 }
             }
 

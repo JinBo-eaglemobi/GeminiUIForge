@@ -26,7 +26,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -85,29 +84,31 @@ fun UIStudioPreviewPanel(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // 顶部 Header 标题栏
+            val dynamicTitleStyle = if (spacing.isCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium
+            val dynamicChipStyle = if (spacing.isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 tonalElevation = 1.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(36.dp)
+                    .height(spacing.sidebarTabBarHeight)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 12.dp)
+                        .padding(horizontal = spacing.medium)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Visibility,
                         contentDescription = "实时预览",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(spacing.iconCompactSize)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(spacing.inspectorControlGap))
                     Text(
                         text = "实时预览",
-                        style = MaterialTheme.typography.titleSmall,
+                        style = dynamicTitleStyle,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -118,40 +119,40 @@ fun UIStudioPreviewPanel(
                     when {
                         selectedAsset != null -> {
                             Surface(
-                                shape = RoundedCornerShape(4.dp),
+                                shape = RoundedCornerShape(spacing.inspectorFieldCornerRadius),
                                 color = MaterialTheme.colorScheme.primaryContainer
                             ) {
                                 Text(
                                     text = "素材切片",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = dynamicChipStyle,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    modifier = Modifier.padding(horizontal = spacing.small, vertical = 2.dp)
                                 )
                             }
                         }
                         selectedBlock != null && (selectedBlock.type == org.gemini.ui.forge.model.ui.UIBlockType.COMPONENT || selectedBlock.type == org.gemini.ui.forge.model.ui.UIBlockType.LIST || selectedBlock.children.isNotEmpty() || selectedBlock.targetPageId != null) -> {
                             Surface(
-                                shape = RoundedCornerShape(4.dp),
+                                shape = RoundedCornerShape(spacing.inspectorFieldCornerRadius),
                                 color = MaterialTheme.colorScheme.secondaryContainer
                             ) {
                                 Text(
                                     text = "父组件 · ${selectedBlock.children.size}个子层",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = dynamicChipStyle,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    modifier = Modifier.padding(horizontal = spacing.small, vertical = 2.dp)
                                 )
                             }
                         }
                         selectedBlock != null -> {
                             Surface(
-                                shape = RoundedCornerShape(4.dp),
+                                shape = RoundedCornerShape(spacing.inspectorFieldCornerRadius),
                                 color = MaterialTheme.colorScheme.surfaceVariant
                             ) {
                                 Text(
                                     text = "图元组件",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = dynamicChipStyle,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    modifier = Modifier.padding(horizontal = spacing.small, vertical = 2.dp)
                                 )
                             }
                         }
@@ -291,6 +292,9 @@ private fun AssetPreviewView(asset: UIAssetItem) {
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
+                val spacing = LocalAppSpacing.current
+                val dynamicChipStyle = if (spacing.isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
+                val dynamicBodyStyle = if (spacing.isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -298,44 +302,43 @@ private fun AssetPreviewView(asset: UIAssetItem) {
                 ) {
                     Text(
                         text = asset.name,
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        style = dynamicBodyStyle.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(spacing.inspectorControlGap))
                     Surface(
-                        shape = RoundedCornerShape(4.dp),
+                        shape = RoundedCornerShape(spacing.inspectorFieldCornerRadius),
                         color = MaterialTheme.colorScheme.secondaryContainer
                     ) {
                         Text(
                             text = "${asset.width} × ${asset.height} px",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            style = dynamicChipStyle.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = spacing.small, vertical = 2.dp)
                         )
                     }
                 }
-
                 // 结构化素材库相对路径展示（支持点击一键复制）
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp)
+                        .padding(top = spacing.extraSmall)
                         .copyOnClick(asset.relativePath, stringResource(Res.string.preview_path_copied))
                 ) {
                     Icon(
                         imageVector = Icons.Default.Folder,
                         contentDescription = stringResource(Res.string.preview_relative_path),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(spacing.iconMicroSize)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(spacing.extraSmall))
                     Text(
                         text = asset.relativePath,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        style = dynamicChipStyle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -348,7 +351,7 @@ private fun AssetPreviewView(asset: UIAssetItem) {
                 // Hash
                 Text(
                     text = "Hash: ${asset.hash}",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    style = dynamicChipStyle,
                     color = MaterialTheme.colorScheme.outline,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -540,29 +543,32 @@ private fun ContainerPreviewView(
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
+                val spacing = LocalAppSpacing.current
+                val dynamicBodyStyle = if (spacing.isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
+                val dynamicChipStyle = if (spacing.isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = if (!container.targetPageId.isNullOrBlank()) "组件: ${container.id} (${container.targetPageId})" else "组件: ${container.id}",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        style = dynamicBodyStyle.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = if (!container.targetPageId.isNullOrBlank()) "引用页面 · 渲染 ${renderableChildren.size} 个图元" else "包含 ${container.children.size} 个子组件 · 渲染 ${renderableChildren.size} 个图元",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        style = dynamicChipStyle,
                         color = MaterialTheme.colorScheme.outline
                     )
                 }
                 Surface(
-                    shape = RoundedCornerShape(4.dp),
+                    shape = RoundedCornerShape(spacing.inspectorFieldCornerRadius),
                     color = MaterialTheme.colorScheme.tertiaryContainer
                 ) {
                     Text(
                         text = "${containerW.toInt()} × ${containerH.toInt()} px",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        style = dynamicChipStyle.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = spacing.small, vertical = 2.dp)
                     )
                 }
             }
@@ -664,6 +670,9 @@ private fun BlockPreviewView(
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
+                val spacing = LocalAppSpacing.current
+                val dynamicBodyStyle = if (spacing.isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
+                val dynamicChipStyle = if (spacing.isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -671,24 +680,24 @@ private fun BlockPreviewView(
                 ) {
                     Text(
                         text = "组件: ${block.id}",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        style = dynamicBodyStyle.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(spacing.inspectorControlGap))
                     Surface(
-                        shape = RoundedCornerShape(4.dp),
+                        shape = RoundedCornerShape(spacing.inspectorFieldCornerRadius),
                         color = MaterialTheme.colorScheme.secondaryContainer
                     ) {
                         val origW = bitmap?.width ?: blockW
                         val origH = bitmap?.height ?: blockH
                         Text(
                             text = "$origW × $origH px",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            style = dynamicChipStyle.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = spacing.small, vertical = 2.dp)
                         )
                     }
                 }
@@ -699,19 +708,19 @@ private fun BlockPreviewView(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp)
+                            .padding(top = spacing.extraSmall)
                             .copyOnClick(imagePath, stringResource(Res.string.preview_path_copied))
                     ) {
                         Icon(
                             imageVector = Icons.Default.Folder,
                             contentDescription = stringResource(Res.string.preview_relative_path),
                             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                            modifier = Modifier.size(12.dp)
+                            modifier = Modifier.size(spacing.iconMicroSize)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(spacing.extraSmall))
                         Text(
                             text = imagePath,
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            style = dynamicChipStyle,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -724,7 +733,7 @@ private fun BlockPreviewView(
 
                 Text(
                     text = "类型: ${block.type.name}",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    style = dynamicChipStyle,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.padding(top = 2.dp)
                 )
@@ -753,6 +762,9 @@ private fun BlockPreviewView(
  */
 @Composable
 private fun EmptyPreviewPlaceholder() {
+    val spacing = LocalAppSpacing.current
+    val dynamicTitleStyle = if (spacing.isCompact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge
+    val dynamicSubtitleStyle = if (spacing.isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -762,21 +774,20 @@ private fun EmptyPreviewPlaceholder() {
             imageVector = Icons.Default.VisibilityOff,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.outlineVariant,
-            modifier = Modifier.size(36.dp)
+            modifier = Modifier.size(spacing.iconLargeSize)
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(spacing.small))
         Text(
             text = "未选择预览对象",
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            style = dynamicTitleStyle.copy(fontWeight = FontWeight.Medium),
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(spacing.extraSmall))
         Text(
             text = "在左侧素材库或图层树中选择一项\n即可查看高保真预览与结构效果",
-            style = MaterialTheme.typography.labelSmall,
+            style = dynamicSubtitleStyle,
             color = MaterialTheme.colorScheme.outline,
-            modifier = Modifier.padding(horizontal = 16.dp),
-            lineHeight = 16.sp
+            modifier = Modifier.padding(horizontal = spacing.medium)
         )
     }
 }

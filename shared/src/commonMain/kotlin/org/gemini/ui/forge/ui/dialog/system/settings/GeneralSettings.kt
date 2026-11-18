@@ -13,6 +13,7 @@ import geminiuiforge.composeapp.generated.resources.*
 import org.gemini.ui.forge.getPlatform
 import org.gemini.ui.forge.model.app.LayoutMode
 import org.gemini.ui.forge.model.app.ThemeMode
+import org.gemini.ui.forge.model.app.UIStyleMode
 import org.gemini.ui.forge.ui.component.SelectAllOutlinedTextField
 import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.utils.rememberFilePicker
@@ -225,6 +226,36 @@ fun GeneralSettings(
                         settingsViewModel.saveLayoutMode(mode)
                         appViewModel.setLayoutMode(mode)
                         layoutExpanded = false
+                    }
+                )
+            }
+        }
+    }
+
+    // UI Style Mode (排版风格：系统唯一标准工业流线风)
+    var styleExpanded by remember { mutableStateOf(false) }
+    var currentStyleMode by remember { mutableStateOf(UIStyleMode.STUDIO_COMPACT) }
+    val styleOptions = listOf(
+        UIStyleMode.STUDIO_COMPACT to UIStyleMode.STUDIO_COMPACT.displayNameZh
+    )
+    val currentStyleLabel = styleOptions.find { it.first == currentStyleMode }?.second ?: ""
+
+    ExposedDropdownMenuBox(expanded = styleExpanded, onExpandedChange = { styleExpanded = !styleExpanded }) {
+        SelectAllOutlinedTextField(
+            value = currentStyleLabel,
+            onValueChange = {}, readOnly = true,
+            label = { Text("工作台排版风格") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(styleExpanded) },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            shape = AppShapes.medium
+        )
+        ExposedDropdownMenu(expanded = styleExpanded, onDismissRequest = { styleExpanded = false }) {
+            styleOptions.forEach { (mode, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        currentStyleMode = mode
+                        styleExpanded = false
                     }
                 )
             }

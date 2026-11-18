@@ -4,6 +4,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.getCurrentTimeMillis
+import org.gemini.ui.forge.model.ui.BlockProperties
+import org.gemini.ui.forge.model.ui.createDefaultPropertiesForType
 import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlockType
@@ -470,7 +472,22 @@ class CanvasEditorDelegate(
     fun updateBlockType(blockId: String, newType: UIBlockType, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
         val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
-            it.copy(type = newType)
+            val newDefaultProps = createDefaultPropertiesForType(newType)
+            it.copy(type = newType, properties = newDefaultProps)
+        }.bindParents()
+        val updatedPages = state.project?.studioPages?.map {
+            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
+        } ?: return
+        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
+    }
+
+    /**
+     * 更新指定图元的专属属性配置，即时同步至当前页面图元树并标脏。
+     */
+    fun updateBlockProperties(blockId: String, properties: BlockProperties, repo: TemplateRepository = TemplateRepository()) {
+        val view = state.currentView ?: return
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
+            it.copy(properties = properties)
         }.bindParents()
         val updatedPages = state.project?.studioPages?.map {
             if (it.id == view.id) it.copy(blocks = updatedBlocks) else it

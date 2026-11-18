@@ -26,10 +26,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.ui.component.AppIconButton
 import org.gemini.ui.forge.ui.component.AppIconButtonTier
 import org.gemini.ui.forge.ui.component.AppIconButtonVariant
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
  * UI Studio 素材多选批量操作条组件。
@@ -51,6 +51,8 @@ fun UIStudioAssetBatchBar(
     onDeleteRequested: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val spacing = LocalAppSpacing.current
+    val dynamicBadgeStyle = if (spacing.isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
     AnimatedVisibility(
         visible = selectedCount > 1,
         enter = fadeIn(),
@@ -58,7 +60,7 @@ fun UIStudioAssetBatchBar(
         modifier = modifier.fillMaxWidth()
     ) {
         Surface(
-            shape = RoundedCornerShape(6.dp),
+            shape = RoundedCornerShape(spacing.inspectorFieldCornerRadius),
             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
             tonalElevation = 2.dp,
             modifier = Modifier
@@ -68,25 +70,24 @@ fun UIStudioAssetBatchBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                    .padding(horizontal = spacing.small, vertical = spacing.inspectorFieldPaddingVertical),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 // 左侧已选数量徽章
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(spacing.inspectorControlGap)
                 ) {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(spacing.inspectorInlineIconSize)
                     )
                     Text(
                         text = "已选 $selectedCount 项",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
+                        style = dynamicBadgeStyle.copy(
                             fontWeight = FontWeight.SemiBold
                         ),
                         color = MaterialTheme.colorScheme.onPrimaryContainer

@@ -89,27 +89,46 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
   - 画布内置边缘几何对齐辅助线，图元在移动或拉伸时，靠近相邻图元或容器边缘（$\le 5\text{px}$）自动触发磁力吸附；
   - 8 方向拉伸控制锚点 100% 统一复用 `RectTransformHelper`，光标物理绝对定位。
 
-### 6. 右侧动态属性检查器 (PropertyPanel)
-- **切片排版专属极简属性**：
-  - 专职于图元几何变换（X、Y、Width、Height）、不透明度（Opacity）、图元类型（Button、Image、Text 等；UI Studio 彻底排除传统 CONTAINER 冗余类型，多元素组合统一通过独立页面绑定实现）；
-  - **豁免生图组件**：因 UI Studio 属于纯切片排版，属性面板彻底去除冗余的 AI 生图提示词模块，保持面板紧凑纯净；
-  - 数值调节一律接入 `NumberOutlinedTextField`，指针悬停即可滚轮平滑微调。
+### 6. 右侧动态属性检查器 (PropertyPanel) 与工业流线排版体系
+- **100% 纵向全高舒展视口与单一工业流线风 (STUDIO_COMPACT)**：
+  - 彻底废除旧版高占位经典卡片风（`UIStyleMode.MATERIAL_CARD`），将工业流线风确立为全系统唯一排版标准（无冗余外层卡片套娃、折叠分组标题 `InspectorSectionHeader` 极简分隔、双列对称垂直共线）；
+  - 数值调节与表单组件 100% 统一收拢至全局封装组件体系：`InspectorTextFieldRow`、`InspectorDualPropRow`、`InspectorSinglePropRow`、`InspectorSimpleDualPropRow`、`InspectorCheckboxRow`，以及升级后的统一组件 `DropdownInputField`（底层接入 `AppMenu` + `AppMenuItemRow` + `Modifier.matchParentSize()` 向下 4dp 精准展开防遮挡）、`SelectAllOutlinedTextField`（失焦/回车自动提交 + 高对比主色光标）与 `ColorPickerField`（`showFloatingLabel = false` 流线配色行）；
+  - 全部尺寸（高度、标签宽度、输入框宽度、间距、图标尺寸）与字号 100% 动态取自 `LocalAppSpacing.current` 与 `MaterialTheme.typography.*`，严禁写死 `.sp` 与静态布局标志；切换 **桌面高密度 (`COMPACT`)** 与 **移动端触控 (`TOUCH`)** 布局模式时，字号、控件热区高度与间距全自动同步缩放；
+  - 指针悬停数值输入框即可滚轮/水平拖拽平滑微调。
+- **全组件专属属性配置面板 (UIStudioSpecificProperties)**：
+  - 根据选中的图元类型，自动分发呈现对应的无框流线专属配置面板：
+    1. **`LIST` (动态列表与网格)**：配置 `listLayout`（SingleColumn/SingleRow/FlowHorizontal/FlowVertical/Pagination）、`lineCount`/`columnCount`（行数/列数）、`lineGap`/`columnGap`（行距/列距）、`itemWidth`/`itemHeight`（项宽/项高）、`align`/`verticalAlign`、`overflow`/`scrollType`、`selectionMode`、`defaultItem`（**子项单页**：禁止手动输入，支持只读下拉列表选取或直接从左侧「视图界面」拖拽页面释放赋值），以及 `autoResizeItem`、`foldHiddenItems`、`scrollItemToViewFully` 复选开关；
+    2. **`BUTTON` (交互按钮)**：配置文案 `text`、`downEffect`（按压变暗/中心向心缩放）、`downEffectValue`、`mode`（Common/Check/Radio）、单选关联控制器与页面 ID；
+    3. **`TEXT` (文本与数值)**：配置内容 `text`、字号 `fontSize`、颜色 Hex、排版对齐、富文本 `isUbb` 开关、加粗、倾斜、下划线、单行限制、描边与行间距；
+    4. **`INPUT` (文本输入框)**：配置占位提示 `promptText`、字号、颜色、最大输入长度限制与密码模式；
+    5. **`PROGRESS_BAR` (进度条)**：配置当前数值 `value`、最大数值 `max` 与标题格式（百分比/数值/无文本）；
+    6. **`SLIDER` (滑动条)**：配置最小值 `min`、最大值 `max`、当前值 `value`、步长 `step` 与整型限制；
+    7. **`COMBO_BOX` (下拉框)**：配置选项列表（逗号分隔）、默认选中项索引与展开可见项数；
+    8. **`LOADER` (动态装载器)**：配置默认地址 `url`、填充拉伸模式 `fill` 与视口强裁剪 `clip`；
+    9. **`SPINE` (骨骼动画)**：配置动作名 `animationName`、皮肤名 `skinName`、循环播放与速度；
+    10. **`SCROLL_BAR` (滚动条)**：配置固定滑块尺寸与微调箭头；
+    11. **`COMPONENT` (容器组件)**：配置一维流式排版模型（vertical/horizontal/none）、流间距 `gap`、折行 `flexWrap`、交叉轴/主轴对齐约束、滚动与背景色；
+    12. **`IMAGE` (图片图元)**：配置缩放拉伸模式与九宫格切边拉伸数据（sizeGrid 四周固定边距）。
+- **即时持久化与撤销快照**：
+  - 修改面板中任何配置参数，通过 `updateBlockProperties` 即时更新图元树并标脏，且完整纳入撤销重做（Undo/Redo）快照栈。
 
-### 7. 右下角实时高保真预览面板 (UIStudioPreviewPanel)
+### 7. 左侧边栏高保真实时预览面板 (UIStudioPreviewPanel)
+- **左侧边栏三层就近联动布局**：
+  - 迁移至左侧边栏最底部（位于素材库与图层树下方，中间以 `HorizontalSplitter` 水平分割并支持自由拖拽高度）；
+  - **就近直观联动**：在左侧素材库点选切片或在图层树点选图元时，左侧底部就近实时呈现高清切片原画与微缩预览，视线零跨度；
 - **双模态智能预览感知**：
   - **素材模式 (AssetPreviewView)**：当左侧素材库选中特定切片资产时，自适应呈现切片原画与素材规格详情（名称、物理尺寸、文件哈希）；
   - **图元模式 (BlockPreviewView)**：当画布选中切片图元时，动态加载所绑定切片原画并展示图元尺寸与坐标；
   - **容器与引用页面穿透模式 (ContainerPreviewView)**：
-    - **自动穿透平级引用页面 (`targetPageId`)**：当选中的复合容器或子组件引用了独立平级页面时（如转轴容器包含 5 列 `reel_col_0 ~ reel_col_4` 子页面），实时预览对标主画布渲染引擎，自动从工程 `studioPages` 列表中递归定位目标页面并穿透展开其内部所有子图元，彻底告别空蓝色线框占位；
-    - **多层嵌套相对坐标累加与透明度继承**：逐层累加局部相对偏移量 `(relX, relY)` 与级联透明度 `effectiveOpacity`，将深层嵌套的叶子切片图元（如转轴容器 $\rightarrow$ 单列滚动页面 $\rightarrow$ 符号槽位 $\rightarrow$ 真实切片图标）按精确网格相对坐标微缩排布；
-    - **1:1 真实画面最终渲染**：直接异步加载内部所有切片的本地物理图片，在右下角微缩视口中 100% 完整呈现该容器所代表的最终视觉切片全貌；
+    - **自动穿透平级引用页面 (`targetPageId`)**：当选中的复合容器或子组件引用了独立平级页面时，自动穿透展开其内部所有子图元；
+    - **多层嵌套相对坐标累加与透明度继承**：逐层累加局部相对偏移量 `(relX, relY)` 与级联透明度 `effectiveOpacity`，将深层嵌套的叶子切片图元按精确网格相对坐标微缩排布；
+    - **1:1 真实画面最终渲染**：直接异步加载内部所有切片的本地物理图片，在左下角微缩视口中 100% 完整呈现最终视觉切片全貌；
     - **信息卡片智能感知**：清晰呈现当前组件 ID、关联的引用页面 ID、微缩容器实际几何尺寸及所包含渲染图元的总数量。
 - **沉浸式原寸灯箱大图查看 (CommonImageLightbox)**：
-  - 预览视口右上角挂载半透明毛玻璃放大镜快捷按键（`Icons.Default.ZoomIn`），且预览视口画面主体均支持点击直接唤起灯箱；
-  - 基于真实磁盘绝对物理路径（`TemplateFile(path).getAbsolutePath()`）无损加载，支持鼠标滚轮以光标为中心 0.1x~8.0x 平滑缩放、1:1 原寸还原、拖拽平移与 ESC 一键关闭，彻底解决微观细节无法放大审阅的痛点；
+  - 预览视口右上角挂载半透明毛玻璃放大镜快捷按键（`Icons.Default.ZoomIn`），画面主体支持点击直接唤起灯箱；
+  - 基于真实磁盘绝对物理路径无损加载，支持鼠标滚轮以光标为中心 0.1x~8.0x 平滑缩放、1:1 原寸还原、拖拽平移与 ESC 一键关闭；
 - **素材库相对路径展示与一键复制**：
-  - 信息卡片底部新增结构化相对路径行（展示 `📁 templates/{projectName}/assets/...`），内置 `Modifier.copyOnClick`；
-  - 用户单击整行即可一键复制该资源在项目素材库中的相对路径至系统剪贴板，并即时弹出 Toast 气泡告知。
+  - 信息卡片底部新增结构化相对路径行（展示 `📁 templates/{projectName}/assets/...`），内置 `Modifier.copyOnClick`，单击整行一键复制相对路径至系统剪贴板。
 
 ### 8. 悬浮式 AI 架构师协同入口
 - 画布右下角常驻悬浮轻量级 AI 对话胶囊，一键唤起 `UIProjectAiStudioDialog` 项目级 AI 架构师；
@@ -117,7 +136,14 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
 - **生图执行引擎合一**：架构师对话中无论选择普通对话模型（Function Calling）还是生图专属模型（生图轮直调），生图执行统一经 `generate_image` 工具管道（重试/抠图/素材库归档齐备）；模型菜单保持自由选择不变，详见[06 AI多模态生成与智能体对话系统](06_AI多模态生成与智能体对话系统.md)；
 - **同尺寸重生链路**：选中画布图元后以文案要求“换风格重生”，架构师可经 `get_runtime_status` 查询选中图元精确 bounds → `generate_image(targetWidth/targetHeight)` 以像素级同尺寸生成 → `patch_view_elements` 原位替换素材绑定。
 
-### 9. 游戏项目激活脚手架与全自动构建运行闭环 (Game Project Activation & Build Lifecycle)
+### 9. 一体化融合顶部专业工具栏 (UIStudioTopBar)
+- **双顶栏合二为一**：
+  - 彻底消除了传统外层全局顶栏与工作区顶栏上下叠放的两行并存冗余，整个工作台顶部**恒定保持单一行 52dp 统一专业顶栏**，纵向画布编辑视口高度直接扩容 52dp；
+  - **左侧面包屑层级**：单返回键（`←` 返回大厅，带未保存拦截）+ 软件名称（`Gemini UI Forge`）+ `/` + `[UI Studio]` 模式胶囊 + 当前项目名称 + 视图基准分辨率药丸（如 `680 × 390`）；
+  - **右侧工作区功能组**：左侧面板开闭手柄、右侧检查器开闭手柄、撤销 (`Ctrl+Z`)、重做 (`Ctrl+Y`)、▶ 运行游戏预览、💾 一键保存工程（带未保存动态橙点提示）；
+  - **右侧系统通用功能组（用细分割线解耦隔开）**：● MCP 服务中心（带运行态健康绿点指示，点击唤出通信监控面板）、? 使用帮助手册、⚙ 全局设置中心。
+
+### 10. 游戏项目激活脚手架与全自动构建运行闭环 (Game Project Activation & Build Lifecycle)
 - **TopBar 【▶ 运行预览】交互入口**：
   - 顶栏右侧配备专属「运行预览」操作按钮，根据当前工程是否激活自适应呈现紫色强调或绿色就绪高亮；
   - 若当前工程已激活（检测到有效的 `forge-game.json` 且 `build/index.html` 存在），单击直接调起系统默认浏览器访问本地方案预览地址（`http://localhost:1234/<Drive>/.../build/index.html`）；

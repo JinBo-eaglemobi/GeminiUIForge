@@ -72,7 +72,7 @@ fun AppMenuItemRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 36.dp)
+            .defaultMinSize(minHeight = spacing.menuItemMinHeight)
             .clip(AppShapes.small)
             .then(borderModifier)
             .background(backgroundColor)
@@ -90,7 +90,7 @@ fun AppMenuItemRow(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(spacing.iconStandardSize),
                 tint = iconTint ?: if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = baseAlpha)
             )
         }

@@ -1,14 +1,19 @@
 package org.gemini.ui.forge.ui.component
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -19,6 +24,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.extend.onEnterConfirm
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
@@ -26,8 +32,8 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
  * 封装的全局输入框组件：
  * 1. 支持在通过键盘 (Tab) 获得焦点时自动全选内容。
  * 2. 如果是通过鼠标/触摸点击获得焦点，则保持系统原生行为（光标停留在点击处），避免出现先全选再跳光标的闪烁问题。
- * 3. 组件尺寸的紧凑/触控适配已由 AppTheme 中的全局 LocalDensity 重映射统一接管，
- *    本组件内部不包含任何布局模式判断与手动尺寸设置。
+ * 3. 组件尺寸、间距与字号 100% 由 [LocalAppSpacing] 与 [MaterialTheme.typography] 动态接管，
+ *    自动适配桌面紧凑模式与移动端触控模式，绝不写死固定尺度。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,7 +47,7 @@ fun SelectAllOutlinedTextField(
     trailingIcon: @Composable (() -> Unit)? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     shape: Shape = MaterialTheme.shapes.small,
-    textStyle: TextStyle = MaterialTheme.typography.bodyMedium,
+    textStyle: TextStyle? = null,
     readOnly: Boolean = false,
     enabled: Boolean = true,
     maxLines: Int = Int.MAX_VALUE,
@@ -50,14 +56,15 @@ fun SelectAllOutlinedTextField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     isError: Boolean = false,
     contentPadding: PaddingValues? = null,
-    onEnterConfirm: (() -> Unit)? = null
+    streamlined: Boolean = (label == null),
+    onEnterConfirm: (() -> Unit)? = null,
+    onBlurConfirm: (() -> Unit)? = null
 ) {
-    // 维护带光标和选择状态的 TextFieldValue
+    val spacing = LocalAppSpacing.current
     var textFieldValue by remember { mutableStateOf(TextFieldValue(text = value)) }
     var isFocused by remember { mutableStateOf(false) }
     var isPointerDown by remember { mutableStateOf(false) }
 
-    // 外部 value 发生变化时，同步更新内部状态
     LaunchedEffect(value) {
         if (textFieldValue.text != value) {
             textFieldValue = textFieldValue.copy(text = value)
@@ -67,9 +74,22 @@ fun SelectAllOutlinedTextField(
     val interactionSource = remember { MutableInteractionSource() }
     val colors = OutlinedTextFieldDefaults.colors()
 
-    // 设置 BasicTextField 的文本颜色与光标颜色
-    val mergedTextStyle = textStyle.merge(TextStyle(color = MaterialTheme.colorScheme.onSurface))
+    val baseTypography = if (streamlined && label == null) {
+        if (spacing.isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
+    } else {
+        MaterialTheme.typography.bodyMedium
+    }
+    val effectiveStyle = (textStyle ?: baseTypography).merge(
+        TextStyle(color = MaterialTheme.colorScheme.onSurface)
+    )
     val cursorColor = MaterialTheme.colorScheme.primary
+
+    val heightModifier = if (streamlined && label == null) {
+        if (singleLine) Modifier.height(spacing.inspectorFieldHeight)
+        else Modifier.defaultMinSize(minHeight = spacing.inspectorFieldHeight)
+    } else {
+        Modifier
+    }
 
     BasicTextField(
         value = textFieldValue,
@@ -80,6 +100,7 @@ fun SelectAllOutlinedTextField(
             }
         },
         modifier = modifier
+            .then(heightModifier)
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -93,12 +114,13 @@ fun SelectAllOutlinedTextField(
             }
             .onFocusChanged { focusState ->
                 if (focusState.isFocused && !isFocused) {
-                    // 仅当不是通过鼠标/触摸点击时，才执行全选
                     if (!isPointerDown) {
                         textFieldValue = textFieldValue.copy(
                             selection = TextRange(0, textFieldValue.text.length)
                         )
                     }
+                } else if (!focusState.isFocused && isFocused) {
+                    onBlurConfirm?.invoke()
                 }
                 isFocused = focusState.isFocused
             }
@@ -107,7 +129,7 @@ fun SelectAllOutlinedTextField(
             },
         enabled = enabled,
         readOnly = readOnly,
-        textStyle = mergedTextStyle,
+        textStyle = effectiveStyle,
         cursorBrush = SolidColor(cursorColor),
         keyboardOptions = keyboardOptions,
         singleLine = singleLine,
@@ -116,36 +138,73 @@ fun SelectAllOutlinedTextField(
         visualTransformation = visualTransformation,
         interactionSource = interactionSource,
         decorationBox = @Composable { innerTextField ->
-            OutlinedTextFieldDefaults.DecorationBox(
-                value = textFieldValue.text,
-                visualTransformation = visualTransformation,
-                innerTextField = innerTextField,
-                placeholder = placeholder,
-                label = label,
-                leadingIcon = leadingIcon,
-                trailingIcon = trailingIcon,
-                singleLine = singleLine,
-                enabled = enabled,
-                isError = isError,
-                interactionSource = interactionSource,
-                colors = colors,
-                // 自适应双端间距：紧凑模式保留 6dp 优雅呼吸感（对标 IDEA）；触控模式采用 12dp 大热区（绝不偏上）
-                contentPadding = contentPadding ?: OutlinedTextFieldDefaults.contentPadding(
-                    start = LocalAppSpacing.current.textFieldPaddingHorizontal,
-                    top = LocalAppSpacing.current.textFieldPaddingVertical,
-                    end = LocalAppSpacing.current.textFieldPaddingHorizontal,
-                    bottom = LocalAppSpacing.current.textFieldPaddingVertical
-                ),
-                container = {
-                    OutlinedTextFieldDefaults.Container(
-                        enabled = enabled,
-                        isError = false,
-                        interactionSource = interactionSource,
-                        colors = colors,
-                        shape = shape
-                    )
+            if (streamlined && label == null) {
+                val borderShape = RoundedCornerShape(spacing.inspectorFieldCornerRadius)
+                val borderColor = when {
+                    isError -> MaterialTheme.colorScheme.error
+                    isFocused -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
                 }
-            )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(spacing.inspectorControlGap),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(borderShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f))
+                        .border(if (isFocused) 1.dp else 0.8.dp, borderColor, borderShape)
+                        .padding(
+                            horizontal = spacing.inspectorFieldPaddingHorizontal,
+                            vertical = if (singleLine) 0.dp else spacing.extraSmall
+                        )
+                ) {
+                    if (leadingIcon != null) {
+                        leadingIcon()
+                    }
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (textFieldValue.text.isEmpty() && placeholder != null) {
+                            placeholder()
+                        }
+                        innerTextField()
+                    }
+                    if (trailingIcon != null) {
+                        trailingIcon()
+                    }
+                }
+            } else {
+                OutlinedTextFieldDefaults.DecorationBox(
+                    value = textFieldValue.text,
+                    visualTransformation = visualTransformation,
+                    innerTextField = innerTextField,
+                    placeholder = placeholder,
+                    label = label,
+                    leadingIcon = leadingIcon,
+                    trailingIcon = trailingIcon,
+                    singleLine = singleLine,
+                    enabled = enabled,
+                    isError = isError,
+                    interactionSource = interactionSource,
+                    colors = colors,
+                    contentPadding = contentPadding ?: OutlinedTextFieldDefaults.contentPadding(
+                        start = spacing.textFieldPaddingHorizontal,
+                        top = spacing.textFieldPaddingVertical,
+                        end = spacing.textFieldPaddingHorizontal,
+                        bottom = spacing.textFieldPaddingVertical
+                    ),
+                    container = {
+                        OutlinedTextFieldDefaults.Container(
+                            enabled = enabled,
+                            isError = false,
+                            interactionSource = interactionSource,
+                            colors = colors,
+                            shape = shape
+                        )
+                    }
+                )
+            }
         }
     )
 }

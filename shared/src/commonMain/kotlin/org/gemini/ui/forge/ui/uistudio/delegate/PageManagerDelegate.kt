@@ -437,4 +437,11 @@ class PageManagerDelegate(
         )
         stopSkillsDirectoryWatcher()
     }
+
+    /**
+     * 设置当前正在拖拽的视图页面 ID（用于拖放至 List 项目资源或容器）。
+     */
+    fun setDraggedPageId(id: String?) {
+        state = state.copy(draggedPageId = id)
+    }
 }

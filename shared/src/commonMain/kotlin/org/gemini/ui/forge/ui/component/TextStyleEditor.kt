@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
  * 将 Hex 字符串转换为 Compose Color
@@ -54,8 +55,15 @@ fun ColorPickerField(
     label: String,
     hexColor: String,
     onColorChanged: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showFloatingLabel: Boolean = true
 ) {
+    val spacing = LocalAppSpacing.current
+    val dynamicPlaceholderStyle = if (spacing.isCompact) {
+        MaterialTheme.typography.bodySmall
+    } else {
+        MaterialTheme.typography.bodyMedium
+    }
     var showDialog by remember { mutableStateOf(false) }
     val currentColor = parseHexColor(hexColor, Color.Transparent)
     
@@ -70,25 +78,50 @@ fun ColorPickerField(
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(if (showFloatingLabel) spacing.small else spacing.inspectorRowSpacing)
     ) {
-        SelectAllOutlinedTextField(
-            value = hexColor,
-            onValueChange = onColorChanged,
-            label = { Text(label) },
-            singleLine = true,
-            modifier = Modifier.weight(1f)
-        )
-        
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .padding(top = 6.dp) // 与 OutlinedTextField 对齐
-                .clip(AppShapes.small)
-                .background(currentColor)
-                .border(1.dp, MaterialTheme.colorScheme.outline, AppShapes.small)
-                .clickable { showDialog = true }
-        )
+        if (!showFloatingLabel) {
+            SelectAllOutlinedTextField(
+                value = hexColor,
+                onValueChange = onColorChanged,
+                singleLine = true,
+                placeholder = {
+                    Text(
+                        text = label,
+                        maxLines = 1,
+                        style = dynamicPlaceholderStyle.copy(color = MaterialTheme.colorScheme.outline)
+                    )
+                },
+                modifier = Modifier.weight(1f)
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(spacing.inspectorFieldHeight)
+                    .clip(AppShapes.small)
+                    .background(currentColor)
+                    .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), AppShapes.small)
+                    .clickable { showDialog = true }
+            )
+        } else {
+            SelectAllOutlinedTextField(
+                value = hexColor,
+                onValueChange = onColorChanged,
+                label = { Text(label) },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .padding(top = 6.dp) // 与 OutlinedTextField 对齐
+                    .clip(AppShapes.small)
+                    .background(currentColor)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, AppShapes.small)
+                    .clickable { showDialog = true }
+            )
+        }
     }
 
     if (showDialog) {
@@ -145,9 +178,11 @@ fun TextStyleToolbar(
     verticalAlign: String,
     onVerticalAlignChanged: (String) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Text("排版与对齐", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(4.dp))
+    val spacing = LocalAppSpacing.current
+    val titleStyle = if (spacing.isCompact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = spacing.small)) {
+        Text("排版与对齐", style = titleStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(spacing.extraSmall))
         
         Row(
             modifier = Modifier.fillMaxWidth(),

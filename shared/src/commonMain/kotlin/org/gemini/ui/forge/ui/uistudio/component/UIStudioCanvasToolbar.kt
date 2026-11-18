@@ -3,11 +3,9 @@ package org.gemini.ui.forge.ui.uistudio.component
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CenterFocusStrong
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.*
@@ -20,8 +18,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import org.gemini.ui.forge.ui.component.AppIconButton
+import org.gemini.ui.forge.ui.component.AppIconButtonTier
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.theme.AppShapes
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import kotlin.math.roundToInt
 
@@ -35,110 +36,89 @@ fun UIStudioCanvasToolbar(
     modifier: Modifier = Modifier,
     containerSize: IntSize = IntSize.Zero
 ) {
+    val spacing = LocalAppSpacing.current
     val state = viewModel.state
     val zoomPercent = (state.scale * 100f).roundToInt()
+    val dynamicTextStyle = if (spacing.isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
 
     Surface(
         color = Color(0xDD1E293B),
-        shape = RoundedCornerShape(8.dp),
+        shape = AppShapes.medium,
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
         modifier = modifier
-            .shadow(elevation = 6.dp, shape = RoundedCornerShape(8.dp))
+            .shadow(elevation = 6.dp, shape = AppShapes.medium)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            modifier = Modifier.padding(horizontal = spacing.extraSmall, vertical = 2.dp)
         ) {
             // 1. 缩小
-            IconButton(
+            AppIconButton(
+                imageVector = Icons.Default.Remove,
+                contentDescription = "缩小",
                 onClick = { viewModel.viewport.zoomOut() },
-                modifier = Modifier
-                    .size(28.dp)
-                    .tip("缩小画布 (滚轮向下)")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Remove,
-                    contentDescription = "缩小",
-                    tint = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+                tier = AppIconButtonTier.COMPACT,
+                tint = Color.White.copy(alpha = 0.9f),
+                tooltip = "缩小画布 (滚轮向下)"
+            )
 
             // 2. 缩放百分比胶囊（点击还原 100% 原寸，不影响画布坐标）
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(AppShapes.small)
                     .clickable {
                         viewModel.viewport.resetZoomTo100()
                     }
-                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                    .padding(horizontal = spacing.small, vertical = spacing.extraSmall)
                     .tip("还原为 100% 原始比例 (保持当前坐标)")
             ) {
                 Text(
                     text = "$zoomPercent%",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF38BDF8) // 高亮青蓝
+                    style = dynamicTextStyle.copy(fontWeight = FontWeight.SemiBold),
+                    color = Color(0xFF38BDF8)
                 )
             }
 
             // 3. 放大
-            IconButton(
+            AppIconButton(
+                imageVector = Icons.Default.Add,
+                contentDescription = "放大",
                 onClick = { viewModel.viewport.zoomIn() },
-                modifier = Modifier
-                    .size(28.dp)
-                    .tip("放大画布 (滚轮向上)")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "放大",
-                    tint = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+                tier = AppIconButtonTier.COMPACT,
+                tint = Color.White.copy(alpha = 0.9f),
+                tooltip = "放大画布 (滚轮向上)"
+            )
 
             // 分割线
             Box(
                 modifier = Modifier
                     .width(1.dp)
-                    .height(16.dp)
+                    .height(spacing.iconCompactSize)
                     .padding(horizontal = 2.dp)
             ) {
                 VerticalDivider(color = Color.White.copy(alpha = 0.2f))
             }
 
-            // 4. 一键还原 100% 缩放值 (仅还原缩放比例，不改变画布坐标)
-            IconButton(
-                onClick = {
-                    viewModel.viewport.resetZoomTo100()
-                },
-                modifier = Modifier
-                    .size(28.dp)
-                    .tip("一键还原 100% 缩放值 (保持当前坐标)")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.RestartAlt,
-                    contentDescription = "还原 100%",
-                    tint = Color(0xFF38BDF8), // 青蓝指示原寸
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+            // 4. 一键还原 100% 缩放值
+            AppIconButton(
+                imageVector = Icons.Default.RestartAlt,
+                contentDescription = "还原 100%",
+                onClick = { viewModel.viewport.resetZoomTo100() },
+                tier = AppIconButtonTier.COMPACT,
+                tint = Color(0xFF38BDF8),
+                tooltip = "一键还原 100% 缩放值 (保持当前坐标)"
+            )
 
             // 5. 一键自适应居中
-            IconButton(
+            AppIconButton(
+                imageVector = Icons.Default.CenterFocusStrong,
+                contentDescription = "居中",
                 onClick = { viewModel.viewport.triggerFitToViewport() },
-                modifier = Modifier
-                    .size(28.dp)
-                    .tip("一键自适应视口居中")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.CenterFocusStrong,
-                    contentDescription = "居中",
-                    tint = Color(0xFFA78BFA), // 紫色强调自适应
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+                tier = AppIconButtonTier.COMPACT,
+                tint = Color(0xFFA78BFA),
+                tooltip = "一键自适应视口居中"
+            )
         }
     }
 }

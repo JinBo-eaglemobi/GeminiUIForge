@@ -3,6 +3,9 @@ package org.gemini.ui.forge.ui.uistudio.component
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -17,10 +20,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.extend.contextMenuClickable
 import org.gemini.ui.forge.model.ui.UIStudioPage
@@ -50,7 +57,12 @@ fun UIStudioViewRowItem(
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
+    val dynamicTitleStyle = if (spacing.isCompact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge
+    val dynamicSubtitleStyle = if (spacing.isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
+    val dynamicMenuStyle = if (spacing.isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
     var showContextMenu by remember { mutableStateOf(false) }
+    var rowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val isBeingDragged = viewModel.state.draggedPageId == page.id
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val minMenuWidth = maxOf(200.dp, maxWidth)
@@ -58,18 +70,52 @@ fun UIStudioViewRowItem(
 
         Surface(
             shape = RoundedCornerShape(8.dp),
-            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-            border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+            color = when {
+                isBeingDragged -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                isSelected -> MaterialTheme.colorScheme.primaryContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            },
+            border = if (isSelected || isBeingDragged) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
+                .onGloballyPositioned { rowCoords = it }
                 .contextMenuClickable(
                     onClick = { viewModel.pageManager.selectView(page.id) },
                     onContextMenu = {
-                        // 弹窗菜单不是选中功能，仅唤出菜单，不修改当前激活视图
                         showContextMenu = true
                     }
                 )
+                .pointerInput(page.id) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        if (!down.pressed) return@awaitEachGesture
+                        if (currentEvent.buttons.isSecondaryPressed) return@awaitEachGesture
+
+                        var isDragging = false
+                        var totalDistance = 0f
+
+                        drag(down.id) { change ->
+                            val dragAmount = change.positionChange()
+                            totalDistance += dragAmount.getDistance()
+                            if (!isDragging && totalDistance > 6f) {
+                                isDragging = true
+                                viewModel.pageManager.setDraggedPageId(page.id)
+                            }
+                            if (isDragging) {
+                                rowCoords?.localToWindow(change.position)?.let { winPos ->
+                                    viewModel.viewport.updateDragCursorPosition(winPos)
+                                }
+                                change.consume()
+                            }
+                        }
+
+                        if (isDragging) {
+                            viewModel.pageManager.setDraggedPageId(null)
+                            viewModel.viewport.updateDragCursorPosition(null)
+                        }
+                    }
+                }
         ) {
             Row(
                 modifier = Modifier
@@ -85,7 +131,7 @@ fun UIStudioViewRowItem(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = page.id,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = dynamicTitleStyle,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
@@ -93,7 +139,7 @@ fun UIStudioViewRowItem(
                         )
                         Text(
                             text = "${page.width.toInt()} × ${page.height.toInt()} · ${page.blocks.size} 个图元",
-                            style = MaterialTheme.typography.labelSmall,
+                            style = dynamicSubtitleStyle,
                             color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -148,32 +194,32 @@ fun UIStudioViewRowItem(
                 .padding(vertical = 4.dp)
         ) {
             DropdownMenuItem(
-                text = { Text("切换至此视图", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.Layers, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                text = { Text("切换至此视图", style = dynamicMenuStyle, maxLines = 1, softWrap = false) },
+                leadingIcon = { Icon(Icons.Default.Layers, contentDescription = null, modifier = Modifier.size(spacing.iconCompactSize)) },
                 onClick = {
                     showContextMenu = false
                     viewModel.pageManager.selectView(page.id)
                 }
             )
             DropdownMenuItem(
-                text = { Text("重命名视图 (F2)", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                text = { Text("重命名视图 (F2)", style = dynamicMenuStyle, maxLines = 1, softWrap = false) },
+                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(spacing.iconCompactSize)) },
                 onClick = {
                     showContextMenu = false
                     viewModel.canvasEditor.startRenameView(page)
                 }
             )
             DropdownMenuItem(
-                text = { Text("克隆/复制此视图", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                text = { Text("克隆/复制此视图", style = dynamicMenuStyle, maxLines = 1, softWrap = false) },
+                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(spacing.iconCompactSize)) },
                 onClick = {
                     showContextMenu = false
                     viewModel.pageManager.duplicateView(page, templateRepo)
                 }
             )
             DropdownMenuItem(
-                text = { Text("作为组件实例插入当前视图", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false) },
-                leadingIcon = { Icon(Icons.Default.AddBox, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                text = { Text("作为组件实例插入当前视图", style = dynamicMenuStyle, maxLines = 1, softWrap = false) },
+                leadingIcon = { Icon(Icons.Default.AddBox, contentDescription = null, modifier = Modifier.size(spacing.iconCompactSize)) },
                 onClick = {
                     showContextMenu = false
                     viewModel.canvasEditor.insertPageInstance(page.id, templateRepo)
@@ -181,12 +227,12 @@ fun UIStudioViewRowItem(
             )
             if (canDelete) {
                 HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
+                    modifier = Modifier.padding(vertical = spacing.extraSmall, horizontal = spacing.small),
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
                 )
                 DropdownMenuItem(
-                    text = { Text("删除视图 (Delete)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, maxLines = 1, softWrap = false) },
-                    leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
+                    text = { Text("删除视图 (Delete)", style = dynamicMenuStyle, color = MaterialTheme.colorScheme.error, maxLines = 1, softWrap = false) },
+                    leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(spacing.iconCompactSize)) },
                     onClick = {
                         showContextMenu = false
                         viewModel.pageManager.requestDeleteView(page)

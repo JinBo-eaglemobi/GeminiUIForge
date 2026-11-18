@@ -11,120 +11,42 @@ triggers:
 description: 基于 TSCore UIFactory 的纯代码 FGUI 游戏界面构建全套规范。包含元素多态路由（panel/icon/text/graph/button/list）、流式响应式排版、切片资源加载与 Main 挂载。
 ---
 
-# UIFactory — 纯代码 FGUI 界面构建指南
+# UIFactory — 纯代码 FGUI 界面构建指南（入口指引）
 
 > 适用范围：TSCore 框架下所有**纯代码实现的界面**（不依赖 FGUI 编辑器资源包）。
-> 框架以 `tsCore` 命名空间对外暴露 `UIFactory`，本文所有示例直接以 `UIFactory.xxx` 调用。
+> 框架以 `tsCore` 命名空间对外暴露 `UIFactory`。
 
 ---
 
-## 一、技术选型铁律（必须遵守）
+## 一、详细规范获取方式（使用本技能前必读）
 
-纯代码构建界面时，组件来源按以下三级优先级决策，**不得越级、不得跳过**：
+本技能的**完整详细使用规范**（技术选型三级铁律、元素多态路由表、各元素声明式配置
+Schema、响应式防拉伸排版、Spine 骨骼动画挂接、十大红线铁律等）**不在本文展开**，
+统一由专用参考文档承载，按以下优先级获取：
 
-| 优先级 | 来源 | 适用范围 |
-|---|---|---|
-| ① 首选 | **UIFactory 配置化工厂** | 凡是它能创建的，一律用它：text / icon / graph / panel / list / button 六类内置元素 + `registerCreator` 注册的自定义类型 |
-| ② 兜底 | **fgui 原生组件**（`template/fairygui.min.js` 运行时，`fgui.*` 命名空间） | UIFactory 覆盖不到的组件：GProgressBar、GSlider、GComboBox、GTextInput、GTree、GLoader3D、GMovieClip、GGroup、Transition、Controller 等，直接 `new fgui.XXX()` 实例化后 `addChild` |
-| ③ 红线 | ~~Laya 原生显示对象~~ | **绝对禁止**直接使用 `new Laya.Sprite()`、`new Laya.Text()`、`new Laya.Image()`、`new Laya.Button()` 等原生对象创建 UI |
+### 1. 随包参考文档（首选）
+
+- 文档位置（本技能目录内，相对路径）：[UIFactory_AI_UI_Creation_Guide.md](UIFactory_AI_UI_Creation_Guide.md)
+- 对应应用存储相对路径：`skills/pure_code_ui_creation/UIFactory_AI_UI_Creation_Guide.md`
+- 激活本技能后，**必须优先尝试通过 `read_project_file` 元工具读取上述路径**；
+- 若本地路径未命中（外部存储目录尚未释放该文档），立即降级走下方官方下载地址获取。
+
+### 2. 官方下载地址（兜底 / 获取最新版）
+
+```
+https://raw.githubusercontent.com/boge-mvp/TypeScriptLib/refs/heads/master/AIGuideKit/UIFactory_AI_UI_Creation_Guide.md
+```
+
+- 通过 `web_fetch` 元工具从该地址拉取完整规范内容；
+- 该地址同时用于本地随包文档缺失、损坏或需要获取最新版本的场景。
 
 ---
 
-## 二、UIFactory 能力总览
+## 二、执行纪律（红线摘要）
 
-### 2.1 元素多态路由表（`createElement` 按 `type` 分发）
-
-| type 配置值 | 产出 FGUI 对象 | 创建函数 | 说明 |
-|---|---|---|---|
-| `"text"` | `fgui.GBasicTextField` | `createText` | 普通文本 |
-| `"text"` + `isUbb:true` | `fgui.GRichTextField` | `createRichTextField` | UBB 富文本（自动启用 ubb 语法解析） |
-| `"icon"` | `fgui.GLoader` | `createIcon` | 图片装载器 |
-| `"graph"` | `fgui.GGraph` | `createGraph` | 矢量几何图形 |
-| `"panel"` | `EPanel` | `createPanel` | 子面板容器（可递归嵌套） |
-| `"list"` | `PureList` | `createList` | 动态列表/网格渲染引擎 |
-| `"button"` | `fgui.GButton` | `createButton` | 按钮（有皮肤 / 无皮肤纯代码） |
-
----
-
-## 三、元素多态配置参考
-
-### 3.1 icon — 图片装载器（IIconConfig）
-```typescript
-{
-    type: "icon",
-    name: "bgImage",
-    url: "background.png", // 相对路径，会自动拼接 tsCore.UIFactory.resBasePath = "res/gameui/"
-    x: 0,
-    y: 0,
-    width: 1280,
-    height: 720,
-    alpha: 1
-}
-```
-
-### 3.2 text — 文本（ITextConfig）
-```typescript
-{
-    type: "text",
-    name: "titleLabel",
-    text: "Title Text",
-    fontSize: 32,
-    color: "#ffffff",
-    align: "center",
-    valign: "middle",
-    x: 100,
-    y: 50,
-    width: 300,
-    height: 60
-}
-```
-
-### 3.3 panel — 容器（IPanelConfig）
-```typescript
-{
-    type: "panel",
-    name: "rootContainer",
-    x: 0,
-    y: 0,
-    width: 1280,
-    height: 720,
-    elements: [
-        // 子元素列表
-    ]
-}
-```
-
-### 3.4 button — 交互按钮（IButtonConfig）
-```typescript
-{
-    type: "button",
-    name: "spinBtn",
-    x: 500,
-    y: 600,
-    width: 120,
-    height: 60,
-    elements: [
-        {
-            type: "icon",
-            url: "btn_spin.png",
-            width: 120,
-            height: 60
-        }
-    ]
-}
-```
-
----
-
-## 四、主类挂载标准流程
-
-```typescript
-// 1. 设置切片资源加载根目录
-tsCore.UIFactory.resBasePath = "res/gameui/";
-
-// 2. 根据布局数据创建根面板
-const rootPanel = tsCore.UIFactory.createPanel(layoutConfig, canvasWidth, canvasHeight);
-
-// 3. 挂载到 FGUI 根显示列表
-fgui.GRoot.inst.addChild(rootPanel);
-```
+1. **先读文档，再写代码**：生成任何纯代码 UI 前，必须先完整阅读上述参考文档，
+   严禁凭记忆臆造配置字段或跳过规范直接生成；
+2. **三级技术选型铁律**（详见参考文档第一节）：
+   - ① 首选 `UIFactory` 配置化工厂（text / icon / graph / panel / list / button 等内置元素）；
+   - ② 兜底 `fgui` 原生组件（`new fgui.XXX()`，如 GProgressBar / GSlider / GComboBox 等）；
+   - ③ **绝对禁止**使用 Laya 原生显示对象（`new Laya.Sprite()` / `Text()` / `Image()` 等）构建 UI。

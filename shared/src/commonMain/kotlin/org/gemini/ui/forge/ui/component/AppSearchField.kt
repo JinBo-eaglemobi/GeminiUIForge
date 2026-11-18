@@ -18,21 +18,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import org.gemini.ui.forge.ui.theme.AppShapes
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 
 /**
- * 全局紧凑型独立自定义搜索框组件。
+ * 全局独立自定义搜索框组件。
  *
- * 专门替代 Material 3 在极小高度下因内部默认 Padding 导致文字被截断的 OutlinedTextField。
- * 严格遵循“一文件一 Composable”规范与设计系统 Tokens，内容绝对垂直居中且无高度坍塌。
+ * 专门替代 Material 3 在紧凑高度下因内部默认 Padding 导致文字被截断的 OutlinedTextField。
+ * 严格遵循“一文件一 Composable”规范与设计系统 Tokens，高度、间距与字号 100% 动态随 [LocalAppSpacing] 与 [MaterialTheme.typography] 自适应。
  *
  * @param value 当前搜索关键词
  * @param onValueChange 关键词变更回调
  * @param modifier 外部修饰符
  * @param placeholder 占位提示文案
  * @param enabled 是否启用输入
- * @param height 搜索框固定高度，默认为系统紧凑标准 34.dp
+ * @param height 搜索框高度，缺省时动态取自 [LocalAppSpacing.current.searchFieldHeight]
  * @param onClear 自定义清空回调，为 null 时默认触发 onValueChange("")
  */
 @Composable
@@ -42,20 +42,25 @@ fun AppSearchField(
     modifier: Modifier = Modifier,
     placeholder: String = "搜索...",
     enabled: Boolean = true,
-    height: Dp = 34.dp,
+    height: Dp? = null,
     onClear: (() -> Unit)? = null
 ) {
     val spacing = LocalAppSpacing.current
-    val shape = RoundedCornerShape(8.dp)
+    val effectiveHeight = height ?: spacing.searchFieldHeight
+    val shape = AppShapes.medium
+    val dynamicTextStyle = if (spacing.isCompact) {
+        MaterialTheme.typography.bodySmall
+    } else {
+        MaterialTheme.typography.bodyMedium
+    }
 
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         enabled = enabled,
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodySmall.copy(
-            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-            fontSize = 12.sp
+        textStyle = dynamicTextStyle.copy(
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
         ),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         decorationBox = { innerTextField ->
@@ -77,10 +82,10 @@ fun AppSearchField(
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = null,
-                    modifier = Modifier.size(15.dp),
+                    modifier = Modifier.size(spacing.inspectorInlineIconSize),
                     tint = if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outline.copy(alpha = 0.38f)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(spacing.inspectorControlGap))
                 Box(
                     modifier = Modifier.weight(1f),
                     contentAlignment = Alignment.CenterStart
@@ -88,9 +93,8 @@ fun AppSearchField(
                     if (value.isEmpty()) {
                         Text(
                             text = placeholder,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = if (enabled) 0.8f else 0.38f),
-                                fontSize = 12.sp
+                            style = dynamicTextStyle.copy(
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = if (enabled) 0.8f else 0.38f)
                             ),
                             maxLines = 1
                         )
@@ -101,13 +105,13 @@ fun AppSearchField(
                     IconButton(
                         onClick = { onClear?.invoke() ?: onValueChange("") },
                         modifier = Modifier
-                            .size(18.dp)
+                            .size(spacing.iconButtonMicroSize)
                             .tip("清空搜索")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Clear,
                             contentDescription = "清空",
-                            modifier = Modifier.size(12.dp),
+                            modifier = Modifier.size(spacing.iconMicroSize),
                             tint = MaterialTheme.colorScheme.outline
                         )
                     }
@@ -116,6 +120,6 @@ fun AppSearchField(
         },
         modifier = modifier
             .fillMaxWidth()
-            .height(height)
+            .height(effectiveHeight)
     )
 }

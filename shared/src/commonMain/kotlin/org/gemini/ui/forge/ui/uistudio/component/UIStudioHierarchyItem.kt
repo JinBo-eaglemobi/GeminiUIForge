@@ -37,7 +37,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.extend.rememberClipboardAction
@@ -92,6 +91,8 @@ fun UIStudioHierarchyItem(
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
+    val dynamicBodyStyle = if (spacing.isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
+    val dynamicMenuStyle = if (spacing.isCompact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge
     val state = viewModel.state
     val copy = rememberClipboardAction()
     val isSelected = state.selectedBlockId == block.id
@@ -232,6 +233,9 @@ fun UIStudioHierarchyItem(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = (depth * 14 + 4).dp, end = 4.dp, top = 3.dp, bottom = 3.dp)
+                            .clickable {
+                                viewModel.canvasEditor.selectBlock(block.id)
+                            }
                             .semantics {
                                 onClick {
                                     viewModel.canvasEditor.selectBlock(block.id)
@@ -273,8 +277,7 @@ fun UIStudioHierarchyItem(
                         // 组件名称
                         Text(
                             text = block.id,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 12.sp,
+                            style = dynamicBodyStyle.copy(
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             ),
                             color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
@@ -358,32 +361,32 @@ fun UIStudioHierarchyItem(
                     )
             ) {
                 DropdownMenuItem(
-                    text = { Text("上移一层", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Default.KeyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
+                    text = { Text("上移一层", style = dynamicMenuStyle) },
+                    leadingIcon = { Icon(Icons.Default.KeyboardArrowUp, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                     onClick = {
                         viewModel.canvasEditor.moveBlockUp(block.id, templateRepo)
                         showContextMenu = false
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("下移一层", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(16.dp)) },
+                    text = { Text("下移一层", style = dynamicMenuStyle) },
+                    leadingIcon = { Icon(Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                     onClick = {
                         viewModel.canvasEditor.moveBlockDown(block.id, templateRepo)
                         showContextMenu = false
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("置于顶层", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Default.VerticalAlignTop, null, modifier = Modifier.size(16.dp)) },
+                    text = { Text("置于顶层", style = dynamicMenuStyle) },
+                    leadingIcon = { Icon(Icons.Default.VerticalAlignTop, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                     onClick = {
                         viewModel.canvasEditor.bringBlockToFront(block.id, templateRepo)
                         showContextMenu = false
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("置于底层", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Default.VerticalAlignBottom, null, modifier = Modifier.size(16.dp)) },
+                    text = { Text("置于底层", style = dynamicMenuStyle) },
+                    leadingIcon = { Icon(Icons.Default.VerticalAlignBottom, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                     onClick = {
                         viewModel.canvasEditor.sendBlockToBack(block.id, templateRepo)
                         showContextMenu = false
@@ -391,18 +394,18 @@ fun UIStudioHierarchyItem(
                 )
 
                 HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
+                    modifier = Modifier.padding(vertical = spacing.extraSmall, horizontal = spacing.small),
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                 )
 
                 // 锁定/解锁组件
                 DropdownMenuItem(
-                    text = { Text(if (block.isLocked) "解除锁定" else "锁定组件", fontSize = 13.sp) },
+                    text = { Text(if (block.isLocked) "解除锁定" else "锁定组件", style = dynamicMenuStyle) },
                     leadingIcon = {
                         Icon(
                             if (block.isLocked) Icons.Default.LockOpen else Icons.Default.Lock,
                             null,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(spacing.iconCompactSize)
                         )
                     },
                     onClick = {
@@ -414,8 +417,8 @@ fun UIStudioHierarchyItem(
                 // 容器操作：仅绑定了独立页面的 VIEW 组件允许通过 Tab 打开独立视图
                 if (!block.targetPageId.isNullOrBlank()) {
                     DropdownMenuItem(
-                        text = { Text("打开独立页面视图", fontSize = 13.sp) },
-                        leadingIcon = { Icon(Icons.Default.Layers, null, modifier = Modifier.size(16.dp)) },
+                        text = { Text("打开独立页面视图", style = dynamicMenuStyle) },
+                        leadingIcon = { Icon(Icons.Default.Layers, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                         onClick = {
                             viewModel.pageManager.openContainerTab(block.id)
                             showContextMenu = false
@@ -425,8 +428,8 @@ fun UIStudioHierarchyItem(
 
                 if (isContainer && block.targetPageId.isNullOrBlank()) {
                     DropdownMenuItem(
-                        text = { Text("解散父容器", fontSize = 13.sp) },
-                        leadingIcon = { Icon(Icons.Default.LayersClear, null, modifier = Modifier.size(16.dp)) },
+                        text = { Text("解散父容器", style = dynamicMenuStyle) },
+                        leadingIcon = { Icon(Icons.Default.LayersClear, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                         onClick = {
                             viewModel.canvasEditor.ungroupContainer(block.id, templateRepo)
                             showContextMenu = false
@@ -435,15 +438,15 @@ fun UIStudioHierarchyItem(
                 }
 
                 HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
+                    modifier = Modifier.padding(vertical = spacing.extraSmall, horizontal = spacing.small),
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                 )
 
                 if (!block.assetHash.isNullOrBlank()) {
                     val shortHash = block.assetHash.toShortHash()
                     DropdownMenuItem(
-                        text = { Text("复制资源哈希 (Hash)", fontSize = 13.sp) },
-                        leadingIcon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp)) },
+                        text = { Text("复制资源哈希 (Hash)", style = dynamicMenuStyle) },
+                        leadingIcon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                         onClick = {
                             copy(shortHash, "已复制资源哈希: $shortHash")
                             showContextMenu = false
@@ -452,8 +455,8 @@ fun UIStudioHierarchyItem(
                 }
 
                 DropdownMenuItem(
-                    text = { Text("复制图元 ID", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp)) },
+                    text = { Text("复制图元 ID", style = dynamicMenuStyle) },
+                    leadingIcon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                     onClick = {
                         copy(block.id, "已复制图元 ID: ${block.id}")
                         showContextMenu = false
@@ -461,8 +464,8 @@ fun UIStudioHierarchyItem(
                 )
 
                 DropdownMenuItem(
-                    text = { Text("重命名", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp)) },
+                    text = { Text("重命名", style = dynamicMenuStyle) },
+                    leadingIcon = { Icon(Icons.Default.Edit, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                     onClick = {
                         viewModel.canvasEditor.startRenameBlock(block.id)
                         showContextMenu = false
@@ -470,8 +473,8 @@ fun UIStudioHierarchyItem(
                 )
 
                 DropdownMenuItem(
-                    text = { Text("删除组件", fontSize = 13.sp, color = MaterialTheme.colorScheme.error) },
-                    leadingIcon = { Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
+                    text = { Text("删除组件", style = dynamicMenuStyle, color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(spacing.iconCompactSize)) },
                     onClick = {
                         viewModel.canvasEditor.requestDeleteBlock(block.id, templateRepo)
                         showContextMenu = false

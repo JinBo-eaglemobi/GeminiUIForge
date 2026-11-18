@@ -51,7 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,6 +59,7 @@ import org.gemini.ui.forge.data.repository.TemplateRepository
 import org.gemini.ui.forge.extend.rememberClipboardAction
 import org.gemini.ui.forge.utils.toShortHash
 import org.gemini.ui.forge.ui.component.tip
+import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
 import org.gemini.ui.forge.utils.readLocalFileBytes
@@ -95,6 +95,8 @@ fun UIStudioAssetTreeLeafItem(
     onDragEnd: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val spacing = LocalAppSpacing.current
+    val dynamicBodyStyle = if (spacing.isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
     val state = viewModel.state
     val copy = rememberClipboardAction()
     val coroutineScope = rememberCoroutineScope()
@@ -237,7 +239,7 @@ fun UIStudioAssetTreeLeafItem(
                 // 素材名称（宽高移至右下侧独立预览面板展示）
                 Text(
                     text = item.name,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Normal),
+                    style = dynamicBodyStyle.copy(fontWeight = FontWeight.Normal),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface,

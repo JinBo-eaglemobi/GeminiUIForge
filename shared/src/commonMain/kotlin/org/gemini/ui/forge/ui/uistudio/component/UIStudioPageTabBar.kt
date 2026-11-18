@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.gemini.ui.forge.extend.contextMenuClickable
 import org.gemini.ui.forge.ui.common.HorizontalScrollbarAdapter
 import org.gemini.ui.forge.ui.component.AppIconButton
@@ -48,6 +47,7 @@ fun UIStudioPageTabBar(
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalAppSpacing.current
+    val dynamicTabStyle = if (spacing.isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
     val state = viewModel.state
     val allPages = state.project?.studioPages ?: emptyList()
     val openIds = state.openViewIds
@@ -59,7 +59,7 @@ fun UIStudioPageTabBar(
         tonalElevation = 1.dp,
         modifier = modifier
             .fillMaxWidth()
-            .height(38.dp)
+            .height(spacing.sidebarTabBarHeight)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -115,12 +115,11 @@ fun UIStudioPageTabBar(
                                 imageVector = Icons.AutoMirrored.Filled.ViewQuilt,
                                 contentDescription = null,
                                 tint = contentColor,
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(spacing.inspectorInlineIconSize)
                             )
                             Text(
                                 text = page.id,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 12.sp,
+                                style = dynamicTabStyle.copy(
                                     fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
                                 ),
                                 color = contentColor,

@@ -48,7 +48,7 @@ enum class UIBlockType {
      * 核心特性标识：该类型组件是否拥有专属的属性配置面板
      */
     val hasSpecificProperties: Boolean
-        get() = this in listOf(LIST, BUTTON, COMPONENT, TEXT, INPUT)
+        get() = true
 
     /**
      * 核心特性标识：该类型组件是否支持在未绑定正式图片时，从底图对应全局坐标中提取切片定位渲染。

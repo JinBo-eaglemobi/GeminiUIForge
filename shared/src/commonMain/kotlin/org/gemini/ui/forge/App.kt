@@ -510,27 +510,29 @@ fun App(typography: Typography? = null) {
 
                         modifier = Modifier.fillMaxSize(),
                         topBar = {
-                            AppTopBar(
-                                viewModel = appViewModel,
-                                globalState = globalState,
-                                onNavigateHome = {
-                                    if (appState.isDirty) {
-                                        showExitConfirmDialog = true
-                                    } else {
-                                        appViewModel.navigateTo(AppScreen.HOME)
-                                    }
-                                },
-                                onCloudAssetManagerClicked = { showCloudAssetDialog = true },
-                                onCompileClicked = { showCompileDialog = true },
-                                onGlobalStyleClicked = { appViewModel.dispatchGlobalStyleEvent() },
-                                onLiveOverlayPreviewClicked = { showOverlayPreviewDialog = true },
-                                onSettingsClicked = {
-                                    settingsInitialCategory = SettingCategory.GENERAL
-                                    showSettingsDialog = true
-                                },
-                                onMcpClicked = { showMcpDialog = true },
-                                onHelpClicked = { showHelpDialog = true }
-                            )
+                            if (globalState.currentScreen != AppScreen.UI_STUDIO) {
+                                AppTopBar(
+                                    viewModel = appViewModel,
+                                    globalState = globalState,
+                                    onNavigateHome = {
+                                        if (appState.isDirty) {
+                                            showExitConfirmDialog = true
+                                        } else {
+                                            appViewModel.navigateTo(AppScreen.HOME)
+                                        }
+                                    },
+                                    onCloudAssetManagerClicked = { showCloudAssetDialog = true },
+                                    onCompileClicked = { showCompileDialog = true },
+                                    onGlobalStyleClicked = { appViewModel.dispatchGlobalStyleEvent() },
+                                    onLiveOverlayPreviewClicked = { showOverlayPreviewDialog = true },
+                                    onSettingsClicked = {
+                                        settingsInitialCategory = SettingCategory.GENERAL
+                                        showSettingsDialog = true
+                                    },
+                                    onMcpClicked = { showMcpDialog = true },
+                                    onHelpClicked = { showHelpDialog = true }
+                                )
+                            }
                         },
                         bottomBar = {
                             val isMcpRunning by McpController.isRunning.collectAsState()
@@ -670,7 +672,13 @@ fun App(typography: Typography? = null) {
                                 AppScreen.UI_STUDIO -> {
                                     UIStudioScreen(
                                         appViewModel = appViewModel,
-                                        templateRepository = templateRepo
+                                        templateRepository = templateRepo,
+                                        onMcpClicked = { showMcpDialog = true },
+                                        onHelpClicked = { showHelpDialog = true },
+                                        onSettingsClicked = {
+                                            settingsInitialCategory = SettingCategory.GENERAL
+                                            showSettingsDialog = true
+                                        }
                                     )
                                 }
                             }

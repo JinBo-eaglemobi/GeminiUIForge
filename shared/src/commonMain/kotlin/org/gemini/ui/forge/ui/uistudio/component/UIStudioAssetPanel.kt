@@ -59,7 +59,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.uistudio_drop_hint
 import geminiuiforge.composeapp.generated.resources.uistudio_import_files_mixed
@@ -237,6 +236,9 @@ fun UIStudioAssetPanel(
             verticalArrangement = Arrangement.spacedBy(spacing.extraSmall)
         ) {
             // 顶部 Header 栏：标题 + 按钮组
+            val dynamicTitleStyle = if (spacing.isCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium
+            val dynamicChipStyle = if (spacing.isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
+            val dynamicBodyStyle = if (spacing.isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -250,11 +252,11 @@ fun UIStudioAssetPanel(
                         imageVector = Icons.Default.Collections,
                         contentDescription = "Assets",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(spacing.iconStandardSize)
                     )
                     Text(
                         text = "素材库",
-                        style = MaterialTheme.typography.titleSmall,
+                        style = dynamicTitleStyle,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -264,8 +266,8 @@ fun UIStudioAssetPanel(
                     ) {
                         Text(
                             text = "${library.items.size}",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = dynamicChipStyle,
+                            modifier = Modifier.padding(horizontal = spacing.small, vertical = 2.dp),
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     }
@@ -312,39 +314,39 @@ fun UIStudioAssetPanel(
                     Box {
                         FilledTonalButton(
                             onClick = { showImportMenu = true },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = spacing.small, vertical = spacing.inspectorFieldPaddingVertical),
+                            shape = RoundedCornerShape(spacing.inspectorFieldCornerRadius),
                             modifier = Modifier
-                                .height(28.dp)
+                                .height(spacing.inspectorFieldHeight)
                                 .tip("导入外部图集并切片 / 导入图片文件或文件夹")
                         ) {
-                            Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import", modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import", modifier = Modifier.size(spacing.inspectorInlineIconSize))
                             Spacer(modifier = Modifier.width(2.dp))
-                            Text("导入", style = MaterialTheme.typography.labelSmall)
+                            Text("导入", style = dynamicChipStyle)
                         }
                         DropdownMenu(
                             expanded = showImportMenu,
                             onDismissRequest = { showImportMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("导入图集切片", style = MaterialTheme.typography.bodySmall) },
-                                leadingIcon = { Icon(Icons.Default.Collections, null, modifier = Modifier.size(16.dp)) },
+                                text = { Text("导入图集切片", style = dynamicBodyStyle) },
+                                leadingIcon = { Icon(Icons.Default.Collections, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                                 onClick = {
                                     showImportMenu = false
                                     viewModel.sliceImport.openImportSheetDialog()
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text(stringResource(Res.string.uistudio_import_files_mixed), style = MaterialTheme.typography.bodySmall) },
-                                leadingIcon = { Icon(Icons.Default.AddPhotoAlternate, null, modifier = Modifier.size(16.dp)) },
+                                text = { Text(stringResource(Res.string.uistudio_import_files_mixed), style = dynamicBodyStyle) },
+                                leadingIcon = { Icon(Icons.Default.AddPhotoAlternate, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                                 onClick = {
                                     showImportMenu = false
                                     launchMultiFilePicker()
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text(stringResource(Res.string.uistudio_import_folder), style = MaterialTheme.typography.bodySmall) },
-                                leadingIcon = { Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp)) },
+                                text = { Text(stringResource(Res.string.uistudio_import_folder), style = dynamicBodyStyle) },
+                                leadingIcon = { Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(spacing.iconCompactSize)) },
                                 onClick = {
                                     showImportMenu = false
                                     launchFolderPicker()
@@ -387,7 +389,7 @@ fun UIStudioAssetPanel(
                         )
                         Text(
                             text = "暂无素材，点击右上角「导入」切片",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            style = dynamicBodyStyle,
                             color = MaterialTheme.colorScheme.outline
                         )
                     }
@@ -461,7 +463,7 @@ fun UIStudioAssetPanel(
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = folder.name,
-                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                            style = dynamicBodyStyle.copy(fontWeight = FontWeight.Medium),
                                             color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
@@ -469,7 +471,7 @@ fun UIStudioAssetPanel(
                                         )
                                         Text(
                                             text = "${folderItems.size}",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            style = dynamicChipStyle,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         AppIconButton(

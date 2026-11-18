@@ -26,7 +26,6 @@ import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import geminiuiforge.composeapp.generated.resources.Res
 import geminiuiforge.composeapp.generated.resources.uistudio_asset_missing
 import kotlinx.coroutines.Dispatchers
@@ -189,14 +188,14 @@ fun UIStudioBlockItem(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(Res.string.uistudio_asset_missing),
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = missingColor,
                         textAlign = TextAlign.Center,
                         maxLines = 1
                     )
                     Text(
                         text = displayName,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.6f),
                         textAlign = TextAlign.Center,
                         maxLines = 1
@@ -213,7 +212,7 @@ fun UIStudioBlockItem(
             ) {
                 Text(
                     text = displayName,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.85f),
                     maxLines = 1
                 )

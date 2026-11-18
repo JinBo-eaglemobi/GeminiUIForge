@@ -49,6 +49,9 @@ import geminiuiforge.composeapp.generated.resources.*
 fun UIStudioScreen(
     appViewModel: AppViewModel,
     templateRepository: TemplateRepository = remember { TemplateRepository() },
+    onMcpClicked: () -> Unit = {},
+    onHelpClicked: () -> Unit = {},
+    onSettingsClicked: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val projectState = appViewModel.state.value.project
@@ -125,7 +128,10 @@ fun UIStudioScreen(
                     viewModel.requestExit(onDirectExit = {
                         appViewModel.navigateTo(AppScreen.HOME)
                     })
-                }
+                },
+                onMcpClicked = onMcpClicked,
+                onHelpClicked = onHelpClicked,
+                onSettingsClicked = onSettingsClicked
             )
         },
         modifier = modifier
@@ -436,6 +442,12 @@ fun UIStudioScreen(
         }
         UIStudioDragGhostBadge(
             asset = draggedAsset,
+            cursorPos = state.dragCursorPosition
+        )
+
+        // 顶层全局悬浮页面拖拽光标跟随胶囊 (Page Drag Ghost Badge)
+        UIStudioPageDragGhostBadge(
+            pageId = state.draggedPageId,
             cursorPos = state.dragCursorPosition
         )
 

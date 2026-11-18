@@ -79,6 +79,7 @@ fun AppMenu(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     tier: AppMenuTier = AppMenuTier.COMPACT,
+    minMenuWidth: Dp? = null,
     maxMenuWidth: Dp? = null,
     anchorWidth: Dp? = null,
     title: String? = null,
@@ -118,7 +119,7 @@ fun AppMenu(
             if (candidateMaxList.isNotEmpty()) candidateMaxList.min() else safeViewportWidth,
             safeViewportWidth
         )
-        val effectiveMin = maxOf(tier.minWidth, anchorWidth ?: 0.dp).coerceAtMost(effectiveMax)
+        val effectiveMin = maxOf(minMenuWidth ?: tier.minWidth, anchorWidth ?: 0.dp).coerceAtMost(effectiveMax)
 
         // 2. 高度几何算法：完全基于当前屏幕/窗口物理高度动态计算，绝不写死任何固定高度
         val safetyMargin = 16.dp
@@ -227,6 +228,7 @@ fun <T> AppMenu(
     onItemSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
     tier: AppMenuTier = AppMenuTier.COMPACT,
+    minMenuWidth: Dp? = null,
     maxMenuWidth: Dp? = null,
     anchorWidth: Dp? = null,
     title: String? = null,
@@ -254,6 +256,7 @@ fun <T> AppMenu(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
         tier = tier,
+        minMenuWidth = minMenuWidth,
         maxMenuWidth = maxMenuWidth,
         anchorWidth = anchorWidth,
         title = title,

@@ -84,6 +84,30 @@ data class AppSpacing(
     /** 行内置操作按钮垂直内边距 */
     val buttonActionPaddingVertical: Dp = 0.dp,
 
+    /** 工业流线属性检查器与工作台双模式动态 Tokens (COMPACT 桌面高密度 vs TOUCH 移动大热区) */
+    val inspectorFieldHeight: Dp = if (isCompact) 28.dp else 38.dp,
+    val inspectorSectionHeaderHeight: Dp = if (isCompact) 28.dp else 38.dp,
+    val inspectorCheckboxRowHeight: Dp = if (isCompact) 26.dp else 38.dp,
+    val inspectorChipHeight: Dp = if (isCompact) 24.dp else 32.dp,
+    val inspectorLabelWidth: Dp = if (isCompact) 68.dp else 72.dp,
+    val inspectorTagWidth: Dp = if (isCompact) 18.dp else 20.dp,
+    val inspectorDualTag2Width: Dp = if (isCompact) 36.dp else 38.dp,
+    val inspectorDualTagLongWidth: Dp = if (isCompact) 48.dp else 58.dp,
+    val inspectorSimpleLabel1Width: Dp = if (isCompact) 90.dp else 98.dp,
+    val inspectorNumberFieldWidth: Dp = if (isCompact) 58.dp else 62.dp,
+    val inspectorControlGap: Dp = if (isCompact) 4.dp else 6.dp,
+    val inspectorDualGroupGap: Dp = 12.dp,
+    val inspectorRowSpacing: Dp = if (isCompact) 6.dp else 10.dp,
+    val inspectorInlineIconSize: Dp = if (isCompact) 14.dp else 18.dp,
+    val inspectorFieldPaddingHorizontal: Dp = if (isCompact) 8.dp else 10.dp,
+    val inspectorFieldPaddingVertical: Dp = if (isCompact) 2.dp else 4.dp,
+    val inspectorFieldCornerRadius: Dp = if (isCompact) 4.dp else 6.dp,
+    val searchFieldHeight: Dp = if (isCompact) 34.dp else 40.dp,
+    val sidebarTabBarHeight: Dp = if (isCompact) 36.dp else 44.dp,
+    val topBarHeight: Dp = if (isCompact) 52.dp else 56.dp,
+    val rightSidebarHeaderHeight: Dp = if (isCompact) 40.dp else 48.dp,
+    val menuItemMinHeight: Dp = if (isCompact) 36.dp else 44.dp,
+
     /**
      * 图标按钮与内部图标四阶标准尺寸阶梯 (Icon & IconButton Tokens)
      * 遵循 8pt/4pt 空间网格系统与人机工程学比例，容器与内部图标尺寸严格成对守恒：
@@ -140,7 +164,29 @@ val DefaultSpacing = AppSpacing(
     buttonActionMinWidth = 64.dp,
     buttonActionHeight = 32.dp,
     buttonActionPaddingHorizontal = 10.dp,
-    buttonActionPaddingVertical = 0.dp
+    buttonActionPaddingVertical = 0.dp,
+    inspectorFieldHeight = 38.dp,
+    inspectorSectionHeaderHeight = 38.dp,
+    inspectorCheckboxRowHeight = 38.dp,
+    inspectorChipHeight = 32.dp,
+    inspectorLabelWidth = 72.dp,
+    inspectorTagWidth = 20.dp,
+    inspectorDualTag2Width = 38.dp,
+    inspectorDualTagLongWidth = 58.dp,
+    inspectorSimpleLabel1Width = 98.dp,
+    inspectorNumberFieldWidth = 62.dp,
+    inspectorControlGap = 6.dp,
+    inspectorDualGroupGap = 12.dp,
+    inspectorRowSpacing = 10.dp,
+    inspectorInlineIconSize = 18.dp,
+    inspectorFieldPaddingHorizontal = 10.dp,
+    inspectorFieldPaddingVertical = 4.dp,
+    inspectorFieldCornerRadius = 6.dp,
+    searchFieldHeight = 40.dp,
+    sidebarTabBarHeight = 44.dp,
+    topBarHeight = 56.dp,
+    rightSidebarHeaderHeight = 48.dp,
+    menuItemMinHeight = 44.dp
 )
 
 /**
@@ -161,5 +207,27 @@ val CompactSpacing = AppSpacing(
     buttonActionMinWidth = 60.dp,
     buttonActionHeight = 28.dp,
     buttonActionPaddingHorizontal = 8.dp,
-    buttonActionPaddingVertical = 0.dp
+    buttonActionPaddingVertical = 0.dp,
+    inspectorFieldHeight = 28.dp,
+    inspectorSectionHeaderHeight = 28.dp,
+    inspectorCheckboxRowHeight = 26.dp,
+    inspectorChipHeight = 24.dp,
+    inspectorLabelWidth = 68.dp,
+    inspectorTagWidth = 18.dp,
+    inspectorDualTag2Width = 36.dp,
+    inspectorDualTagLongWidth = 48.dp,
+    inspectorSimpleLabel1Width = 90.dp,
+    inspectorNumberFieldWidth = 58.dp,
+    inspectorControlGap = 4.dp,
+    inspectorDualGroupGap = 12.dp,
+    inspectorRowSpacing = 6.dp,
+    inspectorInlineIconSize = 14.dp,
+    inspectorFieldPaddingHorizontal = 8.dp,
+    inspectorFieldPaddingVertical = 2.dp,
+    inspectorFieldCornerRadius = 4.dp,
+    searchFieldHeight = 34.dp,
+    sidebarTabBarHeight = 36.dp,
+    topBarHeight = 52.dp,
+    rightSidebarHeaderHeight = 40.dp,
+    menuItemMinHeight = 36.dp
 )

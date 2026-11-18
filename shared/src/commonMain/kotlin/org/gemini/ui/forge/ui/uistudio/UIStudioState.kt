@@ -157,6 +157,7 @@ data class UIStudioState(
     val openContainerTabs: List<String> = emptyList(),
     val activeContainerId: String? = null,
     val draggedAssetHash: String? = null,
+    val draggedPageId: String? = null,
     val hoveredFolderId: String? = null,
     val viewViewportCache: Map<String, ViewportState> = emptyMap(),
     val dragCursorPosition: androidx.compose.ui.geometry.Offset? = null,

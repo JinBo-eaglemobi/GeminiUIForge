@@ -1,5 +1,7 @@
 package org.gemini.ui.forge.service.game
 
+import org.gemini.ui.forge.model.ui.BlockProperties
+import org.gemini.ui.forge.model.ui.ImageResizeMode
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIStudioBlock
 import org.gemini.ui.forge.model.ui.UIStudioPage
@@ -152,7 +154,7 @@ object GameUiExportService {
             appendLine("$indent{")
             when (block.type) {
                 UIBlockType.BUTTON -> {
-                    // 按钮类型：构建为 fgui.GButton，默认注入点击变暗特效（downEffect: 1, downEffectValue: 0.8）
+                    val props = block.properties as? BlockProperties.ButtonProperties ?: BlockProperties.ButtonProperties()
                     appendLine("$indent    type: 'button',")
                     appendLine("$indent    name: '${block.id}',")
                     appendLine("$indent    x: $x,")
@@ -160,12 +162,23 @@ object GameUiExportService {
                     appendLine("$indent    width: $w,")
                     appendLine("$indent    height: $h,")
                     appendLine("$indent    alpha: $alpha,")
-                    appendLine("$indent    downEffect: 1,")
-                    appendLine("$indent    downEffectValue: 0.8,")
+                    appendLine("$indent    downEffect: ${props.downEffect},")
+                    appendLine("$indent    downEffectValue: ${props.downEffectValue},")
+                    if (props.mode != "Common") {
+                        appendLine("$indent    mode: '${props.mode}',")
+                    }
+                    if (props.relatedController.isNotBlank()) {
+                        appendLine("$indent    relatedController: '${props.relatedController}',")
+                    }
+                    if (props.pageId.isNotBlank()) {
+                        appendLine("$indent    pageId: '${props.pageId}',")
+                    }
+                    if (props.text.isNotBlank()) {
+                        appendLine("$indent    text: '${props.text}',")
+                    }
                     appendLine("$indent    elements: [")
 
                     val buttonElements = mutableListOf<String>()
-                    // 1. 若按钮自身绑定切片资产，作为内部背景/主体 icon 元件
                     if (!assetFileName.isNullOrBlank()) {
                         val iconCode = buildString {
                             appendLine("$indent        {")
@@ -181,7 +194,6 @@ object GameUiExportService {
                         buttonElements.add(iconCode)
                     }
 
-                    // 2. 若按钮包含子图元，递归渲染
                     if (block.children.isNotEmpty()) {
                         val childrenCode = generateElementsTsCode(block.children, assetNameMap, "$indent        ").trimEnd()
                         if (childrenCode.isNotBlank()) {
@@ -195,8 +207,132 @@ object GameUiExportService {
                     appendLine("$indent    ]")
                 }
 
+                UIBlockType.LIST -> {
+                    val props = block.properties as? BlockProperties.ListProperties ?: BlockProperties.ListProperties()
+                    appendLine("$indent    type: 'list',")
+                    appendLine("$indent    name: '${block.id}',")
+                    appendLine("$indent    x: $x,")
+                    appendLine("$indent    y: $y,")
+                    appendLine("$indent    width: $w,")
+                    appendLine("$indent    height: $h,")
+                    appendLine("$indent    alpha: $alpha,")
+                    appendLine("$indent    listLayout: '${props.listLayout}',")
+                    appendLine("$indent    lineGap: ${props.safeLineGap},")
+                    appendLine("$indent    columnGap: ${props.safeColumnGap},")
+                    if (props.safeItemWidth > 0) appendLine("$indent    itemWidth: ${props.safeItemWidth},")
+                    if (props.safeItemHeight > 0) appendLine("$indent    itemHeight: ${props.safeItemHeight},")
+                    appendLine("$indent    align: '${props.align}',")
+                    appendLine("$indent    verticalAlign: '${props.verticalAlign}',")
+                    if (props.scrollType >= 0) {
+                        appendLine("$indent    scrollType: ${props.scrollType},")
+                        appendLine("$indent    overflow: ${props.overflow},")
+                    }
+                    if (props.safeLineCount > 0) appendLine("$indent    lineCount: ${props.safeLineCount},")
+                    if (props.safeColumnCount > 0) appendLine("$indent    columnCount: ${props.safeColumnCount},")
+                    if (props.autoResizeItem) appendLine("$indent    autoResizeItem: true,")
+                    if (props.selectionMode != "None") appendLine("$indent    selectionMode: '${props.selectionMode}',")
+                    if (props.defaultItem.isNotBlank()) {
+                        // 【单页面渲染铁律】：若配置了 defaultItem，列表渲染唯一绑定该页面模板
+                        appendLine("$indent    defaultItem: '${props.defaultItem}'")
+                    } else {
+                        appendLine("$indent    elements: [")
+                        append(generateElementsTsCode(block.children, assetNameMap, "$indent        "))
+                        appendLine("$indent    ]")
+                    }
+                }
+
+                UIBlockType.PROGRESS_BAR -> {
+                    val props = block.properties as? BlockProperties.ProgressBarProperties ?: BlockProperties.ProgressBarProperties()
+                    appendLine("$indent    type: 'progressBar',")
+                    appendLine("$indent    name: '${block.id}',")
+                    appendLine("$indent    x: $x,")
+                    appendLine("$indent    y: $y,")
+                    appendLine("$indent    width: $w,")
+                    appendLine("$indent    height: $h,")
+                    appendLine("$indent    alpha: $alpha,")
+                    appendLine("$indent    max: ${props.max},")
+                    appendLine("$indent    value: ${props.value},")
+                    appendLine("$indent    titleType: '${props.titleType}'")
+                }
+
+                UIBlockType.SLIDER -> {
+                    val props = block.properties as? BlockProperties.SliderProperties ?: BlockProperties.SliderProperties()
+                    appendLine("$indent    type: 'slider',")
+                    appendLine("$indent    name: '${block.id}',")
+                    appendLine("$indent    x: $x,")
+                    appendLine("$indent    y: $y,")
+                    appendLine("$indent    width: $w,")
+                    appendLine("$indent    height: $h,")
+                    appendLine("$indent    alpha: $alpha,")
+                    appendLine("$indent    min: ${props.min},")
+                    appendLine("$indent    max: ${props.max},")
+                    appendLine("$indent    value: ${props.value},")
+                    appendLine("$indent    step: ${props.step},")
+                    appendLine("$indent    wholeNumbers: ${props.wholeNumbers}")
+                }
+
+                UIBlockType.COMBO_BOX, UIBlockType.POPUP_MENU -> {
+                    val props = block.properties as? BlockProperties.ComboBoxProperties ?: BlockProperties.ComboBoxProperties()
+                    appendLine("$indent    type: 'comboBox',")
+                    appendLine("$indent    name: '${block.id}',")
+                    appendLine("$indent    x: $x,")
+                    appendLine("$indent    y: $y,")
+                    appendLine("$indent    width: $w,")
+                    appendLine("$indent    height: $h,")
+                    appendLine("$indent    alpha: $alpha,")
+                    val itemsCode = props.items.joinToString(", ", "[", "]") { "'$it'" }
+                    appendLine("$indent    items: $itemsCode,")
+                    appendLine("$indent    selectedIndex: ${props.selectedIndex},")
+                    appendLine("$indent    visibleItemCount: ${props.visibleItemCount}")
+                }
+
+                UIBlockType.LOADER -> {
+                    val props = block.properties as? BlockProperties.LoaderProperties ?: BlockProperties.LoaderProperties()
+                    val url = props.url.ifBlank { assetFileName ?: "" }
+                    appendLine("$indent    type: 'icon',")
+                    appendLine("$indent    name: '${block.id}',")
+                    appendLine("$indent    url: '$url',")
+                    appendLine("$indent    x: $x,")
+                    appendLine("$indent    y: $y,")
+                    appendLine("$indent    width: $w,")
+                    appendLine("$indent    height: $h,")
+                    appendLine("$indent    alpha: $alpha,")
+                    appendLine("$indent    fill: '${props.fill}',")
+                    if (props.clip) appendLine("$indent    clip: true,")
+                    appendLine("$indent    align: '${props.align}',")
+                    appendLine("$indent    valign: '${props.verticalAlign}'")
+                }
+
+                UIBlockType.SPINE -> {
+                    val props = block.properties as? BlockProperties.SpineProperties ?: BlockProperties.SpineProperties()
+                    appendLine("$indent    type: 'spine',")
+                    appendLine("$indent    name: '${block.id}',")
+                    appendLine("$indent    x: $x,")
+                    appendLine("$indent    y: $y,")
+                    appendLine("$indent    width: $w,")
+                    appendLine("$indent    height: $h,")
+                    appendLine("$indent    alpha: $alpha,")
+                    appendLine("$indent    animationName: '${props.animationName}',")
+                    appendLine("$indent    skinName: '${props.skinName}',")
+                    appendLine("$indent    loop: ${props.loop},")
+                    appendLine("$indent    timeScale: ${props.timeScale}")
+                }
+
+                UIBlockType.SCROLL_BAR -> {
+                    val props = block.properties as? BlockProperties.ScrollBarProperties ?: BlockProperties.ScrollBarProperties()
+                    appendLine("$indent    type: 'scrollBar',")
+                    appendLine("$indent    name: '${block.id}',")
+                    appendLine("$indent    x: $x,")
+                    appendLine("$indent    y: $y,")
+                    appendLine("$indent    width: $w,")
+                    appendLine("$indent    height: $h,")
+                    appendLine("$indent    alpha: $alpha,")
+                    appendLine("$indent    fixedGripSize: ${props.fixedGripSize},")
+                    appendLine("$indent    arrowButton: ${props.arrowButton}")
+                }
+
                 UIBlockType.COMPONENT -> {
-                    // 纯视图容器层，构建为 panel 并递归嵌套子图元
+                    val props = block.properties as? BlockProperties.ViewProperties ?: BlockProperties.ViewProperties()
                     appendLine("$indent    type: 'panel',")
                     appendLine("$indent    name: '${block.id}',")
                     appendLine("$indent    x: $x,")
@@ -204,16 +340,66 @@ object GameUiExportService {
                     appendLine("$indent    width: $w,")
                     appendLine("$indent    height: $h,")
                     appendLine("$indent    alpha: $alpha,")
+                    if (props.layoutType != "none") {
+                        appendLine("$indent    layoutType: '${props.layoutType}',")
+                        appendLine("$indent    gap: ${props.gap},")
+                        if (props.flexWrap) appendLine("$indent    flexWrap: true,")
+                        if (props.alignItems != "flex-start") appendLine("$indent    alignItems: '${props.alignItems}',")
+                        if (props.justifyContent != "flex-start") appendLine("$indent    justifyContent: '${props.justifyContent}',")
+                    }
+                    if (props.scrollType >= 0) {
+                        appendLine("$indent    scrollType: ${props.scrollType},")
+                        appendLine("$indent    overflow: ${props.overflow},")
+                    }
+                    if (props.backgroundColor.isNotBlank()) {
+                        appendLine("$indent    background: { type: 'graph', fillColor: '${props.backgroundColor}' },")
+                    }
                     appendLine("$indent    elements: [")
                     append(generateElementsTsCode(block.children, assetNameMap, "$indent        "))
                     appendLine("$indent    ]")
                 }
 
                 UIBlockType.TEXT -> {
-                    // 纯文本图元
+                    val props = block.properties as? BlockProperties.TextProperties ?: BlockProperties.TextProperties()
+                    val textVal = props.text.ifBlank { block.id }
+                    val hAlign = props.horizontalAlign.lowercase()
+                    val vAlign = if (props.verticalAlign.equals("CENTER", true)) "middle" else props.verticalAlign.lowercase()
                     appendLine("$indent    type: 'text',")
                     appendLine("$indent    name: '${block.id}',")
-                    appendLine("$indent    text: '${block.id}',")
+                    appendLine("$indent    text: '$textVal',")
+                    appendLine("$indent    fontSize: ${props.textSize},")
+                    appendLine("$indent    color: '${props.textColor}',")
+                    appendLine("$indent    align: '$hAlign',")
+                    appendLine("$indent    valign: '$vAlign',")
+                    if (props.isUbb) appendLine("$indent    isUbb: true,")
+                    if (props.isBold) appendLine("$indent    bold: true,")
+                    if (props.isItalic) appendLine("$indent    italic: true,")
+                    if (props.underline) appendLine("$indent    underline: true,")
+                    if (props.singleLine) appendLine("$indent    singleLine: true,")
+                    if (props.strokeWidth > 0 && props.strokeColor.isNotBlank()) {
+                        appendLine("$indent    stroke: ${props.strokeWidth},")
+                        appendLine("$indent    strokeColor: '${props.strokeColor}',")
+                    }
+                    if (props.leading != 4) appendLine("$indent    leading: ${props.leading},")
+                    if (props.letterSpacing != 0) appendLine("$indent    letterSpacing: ${props.letterSpacing},")
+                    appendLine("$indent    x: $x,")
+                    appendLine("$indent    y: $y,")
+                    appendLine("$indent    width: $w,")
+                    appendLine("$indent    height: $h,")
+                    appendLine("$indent    alpha: $alpha")
+                }
+
+                UIBlockType.INPUT -> {
+                    val props = block.properties as? BlockProperties.InputProperties ?: BlockProperties.InputProperties()
+                    appendLine("$indent    type: 'text',")
+                    appendLine("$indent    isInput: true,")
+                    appendLine("$indent    name: '${block.id}',")
+                    if (props.hintText.isNotBlank()) appendLine("$indent    promptText: '${props.hintText}',")
+                    appendLine("$indent    fontSize: ${props.textSize},")
+                    appendLine("$indent    color: '${props.textColor}',")
+                    if (props.maxLength > 0) appendLine("$indent    maxLength: ${props.maxLength},")
+                    if (props.isPassword) appendLine("$indent    isPassword: true,")
+                    appendLine("$indent    singleLine: ${props.singleLine},")
                     appendLine("$indent    x: $x,")
                     appendLine("$indent    y: $y,")
                     appendLine("$indent    width: $w,")
@@ -222,7 +408,8 @@ object GameUiExportService {
                 }
 
                 else -> {
-                    // 其他图元类型（IMAGE, BACKGROUND, ICON 等）
+                    // 其他图元类型（IMAGE, ICON 等）
+                    val imgProps = block.properties as? BlockProperties.ImageProperties
                     if (block.children.isNotEmpty()) {
                         // 带有子图元的复合图元，构建为 panel 容器
                         appendLine("$indent    type: 'panel',")
@@ -251,6 +438,10 @@ object GameUiExportService {
                         appendLine("$indent    type: 'icon',")
                         appendLine("$indent    name: '${block.id}',")
                         appendLine("$indent    url: '$assetFileName',")
+                        if (imgProps != null && imgProps.resizeMode == ImageResizeMode.NINE_PATCH) {
+                            val np = imgProps.ninePatchConfig
+                            appendLine("$indent    sizeGrid: '${np.left},${np.top},${np.right},${np.bottom}',")
+                        }
                         appendLine("$indent    x: $x,")
                         appendLine("$indent    y: $y,")
                         appendLine("$indent    width: $w,")
