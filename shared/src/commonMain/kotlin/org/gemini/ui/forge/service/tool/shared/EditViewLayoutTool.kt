@@ -58,6 +58,16 @@ class EditViewLayoutTool : ToolDefinition {
                             put("type", "string")
                             put("description", "简短阐述该排版操作的设计构思与核心模块划分")
                         })
+                        put("controllers", buildJsonObject {
+                            put("type", "array")
+                            put("description", "可选：页面根级状态机控制器列表 (REPLACE_PAGE 模式专用，Root-Only)。格式: [{ name: 'pageCtrl', pages: ['normal', 'dark'], selectedIndex: 0 }]，数据将原样保真导出至 layoutConfig.ts")
+                            put("items", buildJsonObject { put("type", "object") })
+                        })
+                        put("transitions", buildJsonObject {
+                            put("type", "array")
+                            put("description", "可选：页面根级补间动效列表 (REPLACE_PAGE 模式专用，Root-Only)。格式: [{ name: 'slideIn', items: [{ type: 'xy', target: 'blockId', startValue: [0,100], endValue: [0,0], duration: 0.3 }] }]，每个 item 的 target 必须命中页面内存在的图元 ID，数据原样保真导出至 layoutConfig.ts")
+                            put("items", buildJsonObject { put("type", "object") })
+                        })
                         put("elements", buildJsonObject {
                             put("type", "array")
                             put("description", "图元数据列表（统一数据模型）。REPLACE_PAGE 时为页面顶层图元；REPLACE_CONTAINER 时为容器内部子图元；PATCH 时为待微调或增删的图元项。")
@@ -73,17 +83,17 @@ class EditViewLayoutTool : ToolDefinition {
                                     put("name", buildJsonObject { put("type", "string"); put("description", "展示名称") })
                                     put("assetHash", buildJsonObject { put("type", "string"); put("description", "绑定的素材库切片唯一Hash (最高优先级精确装配主键)") })
                                     put("assetFileName", buildJsonObject { put("type", "string"); put("description", "绑定的素材库切片文件名，如 'Back_Button.png'") })
-                                    put("targetPageId", buildJsonObject { put("type", "string"); put("description", "引用的平级子页面 ID (若该图元为组件实例，指向对应独立子页面。红线契约：设置 targetPageId 时绝对严禁传入 children，组件子图元必须在对应独立页面中维护)") })
+                                    put("targetPageId", buildJsonObject { put("type", "string"); put("description", "引用的平级子页面 ID (若该图元为组件实例，指向对应独立子页面。红线契约：除 LIST 预置 item 模式外，设置 targetPageId 时绝对严禁传入 children，组件子图元必须在对应独立页面中维护)") })
                                     put("slotRole", buildJsonObject { put("type", "string"); put("description", "插槽语义角色(用于全自动装配): BACKGROUND, SPIN_BUTTON, REEL_SYMBOL, BUTTON, HUD_FRAME, TITLE_LOGO, BET_CONTROL") })
-                                    put("op", buildJsonObject { put("type", "string"); put("description", "PATCH 模式专用动词: UPDATE (默认, 局部修改指定字段), ADD (追加新图元), REMOVE (删除图元)") })
-                                    put("parentBlockId", buildJsonObject { put("type", "string"); put("description", "PATCH ADD 追加图元时的目标父容器 ID (缺省时追加到页面顶层)") })
+                                    put("op", buildJsonObject { put("type", "string"); put("description", "PATCH 模式专用动词: UPDATE (默认, 局部修改指定字段), ADD (追加新图元), REMOVE (删除图元)。若 id 为 '__page_root__' 则专职更新页面根级的 controllers/transitions") })
+                                    put("parentBlockId", buildJsonObject { put("type", "string"); put("description", "PATCH ADD 追加图元时的目标父容器 ID (缺省时追加到页面顶层，仅官方白名单复合组件或 LIST 可作为目标父容器)") })
                                     put("properties", buildJsonObject {
                                         put("type", "object")
                                         put("description", "组件专属高级配置属性 (BlockProperties)，覆盖全量 13 种基础类型。例如：LIST 的 listLayout, lineGap, columnGap, autoResizeItem, lineCount, columnCount, defaultItem, overflow, scrollType; BUTTON 的 text, downEffect, downEffectValue, mode; COMPONENT 的 clipOverflow, layoutType, gap; PROGRESS_BAR 的 max, value, titleType; TEXT 的 fontSize, color, align, ubb 等")
                                     })
                                     put("children", buildJsonObject {
                                         put("type", "array")
-                                        put("description", "嵌套子图元列表 (红线契约：当设置了 targetPageId 时，绝对严禁包含任何 children！否则将被引擎直接打回拒绝)")
+                                        put("description", "嵌套子图元列表。红线契约：无引用的 COMPONENT 禁止内联 children (界面级复合单元必须拆分为独立页面引用)；仅官方复合组件 (BUTTON/PROGRESS_BAR/SLIDER/SCROLL_BAR 叶子契约子节点) 与 LIST (预置 item，无论有无引用均支持) 允许携带 children；非 LIST 的引用节点绝对严禁包含 children")
                                         put("items", buildJsonObject { put("type", "object") })
                                     })
                                 })

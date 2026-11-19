@@ -32,12 +32,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import geminiuiforge.composeapp.generated.resources.Res
+import geminiuiforge.composeapp.generated.resources.uistudio_integrity_fix_now
+import org.jetbrains.compose.resources.stringResource
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.model.UIStudioDataError
+import org.gemini.ui.forge.ui.uistudio.model.UIStudioDataErrorType
 
 /**
  * UI Studio 画布顶部常驻的数据健康与完整性诊断横幅。
@@ -48,6 +53,7 @@ import org.gemini.ui.forge.ui.uistudio.model.UIStudioDataError
 fun UIStudioDataIntegrityBanner(
     errors: List<UIStudioDataError>,
     onNavigateToPage: (pageId: String) -> Unit,
+    onFixRequested: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (errors.isEmpty()) return
@@ -109,6 +115,24 @@ fun UIStudioDataIntegrityBanner(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val hasFixable = errors.any { it.errorType == UIStudioDataErrorType.INLINE_PAGE_NESTED }
+                    if (hasFixable && onFixRequested != null) {
+                        Text(
+                            text = stringResource(Res.string.uistudio_integrity_fix_now),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = warningIconColor,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(warningBorder.copy(alpha = 0.35f))
+                                .clickable { onFixRequested() }
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                        Spacer(modifier = Modifier.width(spacing.medium))
+                    }
+
                     Text(
                         text = if (isExpanded) "收起详情" else "展开详情 (${errors.size})",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),

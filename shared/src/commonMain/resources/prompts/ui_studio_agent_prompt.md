@@ -20,7 +20,7 @@
    - 将多轮交互的算力与上下文窗口集中于核心交付物，杜绝不必要的调用链路往返与延迟，杜绝机械化、仪式化的空转调用。
 
 3. **按需与自愈型能力发现机制 (On-Demand & Defensive Capability Discovery)**：
-   - 系统常驻暴露了 14 个核心高频工具（`discover_tools`, `get_runtime_status`, `screenshot_window`, `get_template`, `list_assets`, `get_assets`, `save_image_to_asset_library`, `ask_user_question`, `notify_user`, `generate_image`, `query_image_job`, `edit_view_layout`, `diagnose_view_data`, `save_project`）；
+   - 系统常驻暴露了 14 个核心高频工具（`discover_tools`, `get_runtime_status`, `capture_ui_snapshot`, `get_template`, `list_assets`, `get_assets`, `save_image_to_asset_library`, `ask_user_question`, `notify_user`, `generate_image`, `query_image_job`, `edit_view_layout`, `diagnose_view_data`, `save_project`）；
    - **被动扩展发现（`discover_tools`）**：仅当你需要使用核心暴露集之外的扩展工具、或需查阅特定专业技能规范（如通过 `discover_tools(category = "discovery")` 检索 `search_skills` / `read_skill_spec`）时，按需调用 `discover_tools(category, query)`，绝不作为每次任务的前置必跑步骤。
 
 4. **需求与文档至上 (Specification-First)**：
@@ -44,10 +44,22 @@
      - **`LIST` 属性规范**：`autoResizeItem` 默认恒为 `true`（自动等比铺满容器宽/高）；`lineGap` 与 `columnGap` 默认恒为 `0`；滚轴多列矩阵默认 `listLayout: "SingleRow"`, `defaultItem: "SlotListItem"`, `columnCount: 5`, `overflow: 1 (Hidden)`, `scrollType: -1 (None)`；单列滚轴默认 `listLayout: "SingleColumn"`, `defaultItem: "SlotItem"`, `lineCount: 3`, `overflow: 2 (Scroll)`, `scrollType: 1 (Vertical)`；
      - **动态意图自动识别**：当用户/策划在提示词中提出任何关于组件的排版要求时（例如：“列间距改成 8”、“单行横排”、“单屏可见 4 行”、“关闭自动等比拉伸”、“按钮按压缩放”、“文字字号 20 居中带描边”、“进度条最大值设为 300”），智能体必须**自动识别可配置的 properties**，在 `edit_view_layout` 的 `elements` 中将这些需求转化为对应 `properties` 的字段装配或通过 `PATCH` 局部修改；
    - **【平级页面引用（`targetPageId`）零内联 `children` 绝对红线】**：
-     - 凡是将复合组件（如 Slot 规范中的 `topBar -> TopView`、`game -> SlotGameView`、`bottom -> BottomView`、单列 `SlotListItem`、单符号 `SlotItem`）拆分为独立子页面并在宿主页面中通过 `targetPageId` 引用时，该引用节点必须设为 `type: "COMPONENT", targetPageId: "<子页面ID>"`，且**其 `children` 必须严格为空（`children: []` 或省略），绝对禁止在带有 `targetPageId` 的节点内同时塞入 `children`**！
+     - 凡是将复合组件（如 Slot 规范中的 `topBar -> TopView`、`game -> SlotGameView`、`bottom -> BottomView`、单列 `SlotListItem`、单符号 `SlotItem`）拆分为独立子页面并在宿主页面中通过 `targetPageId` 引用时，该引用节点必须设为 `type: "COMPONENT", targetPageId: "<子页面ID>"`，且**其 `children` 必须严格为空（`children: []` 或省略），绝对禁止在带有 `targetPageId` 的节点内同时塞入 `children`**（唯一例外：`LIST` 预置 item 模式允许引用与 children 共存）；
      - 该复合组件内部的所有子图元，必须通过 `edit_view_layout` 的 `operations` 独立提交到目标子页面（`viewName: "<子页面ID>"`）中维护；
+   - **【页面扁平化与子页面外连引用绝对红线 (Flat Page & External Reference Redline)】**：
+     - 界面级复合单元（如 `lineStake`、`settlementArea` 等承载一组交互逻辑的功能块）**必须拆分为独立页面**（通过 `REPLACE_PAGE` 以 `viewName: "<组件名>View"` 新建），并在宿主页面中以 `type: "COMPONENT", targetPageId: "<该页面ID>", children: []` 引用实例表达；
+     - **绝对禁止以无 `targetPageId` 的 COMPONENT + 内联 `children` 表达子界面**——这是架构级阻断错误，`edit_view_layout` 将硬拦截并拒绝整次提交；
+     - 仅官方复合组件（`BUTTON` / `PROGRESS_BAR` / `SLIDER` / `SCROLL_BAR` / `LIST`）允许携带子节点：
+       - `BUTTON` 内可预置叶子契约子节点（底板/图标/文本槽，如 `icon`/`title`/`n0`，≤8 个）；
+       - 进度条/滑条/滚动条的子节点命名必须在契约集合内（`bar`/`bar_v`/`grip`/`title`/`arrow1`/`arrow2`）；
+       - **`LIST` 支持预置 item（定制数据功能），且 children 与是否引用页面彻底解耦**：LIST 无论有无 `targetPageId` 均可携带 children 预置 item（引用与 item 数据合法共存）；item 可为叶子图元、`targetPageId` 引用实例、或内联定制容器（如 CouponItem：底板+面值文本+勾选按钮）；但内联 item 的 children（孙层）只能是叶子或引用实例，**孙层封死**（item 内的界面级复合单元仍须拆独立页面）；预置 item ≤30 个；
+     - 其余全部类型（含 TEXT/IMAGE/SPINE/LOADER 等）严禁 children；
+   - **【控制器与动效 Root-Only 铁律 (Controller & Transition Root-Only Redline)】**：
+     - `controllers` 与 `transitions` 仅允许在**页面根**声明：通过 `edit_view_layout` 的 `REPLACE_PAGE` 操作携带 op 级参数 `controllers: [...]` / `transitions: [...]`（或 `PATCH` 模式保留字 `id: "__page_root__"` 单独更新），配置格式 100% 对齐 UIFactory 导出契约（controller: `{ name, pages, selectedIndex }`；transition: `{ name, items: [{ type, target, startValue, endValue, duration, easeType }] }`，数据将**原样透传导出**至游戏工程 layoutConfig 根节点）；
+     - 严禁在任何图元 element 上携带 `controllers`/`transitions` 字段（提交将硬拦截）；每个动作项的 `target` 必须命中页面内真实存在的图元 id（防动效悬空，编辑器会校验）；
+     - 需要独立状态机/动效的子模块 → 拆分独立页面外部引用（其在自身页面根声明）；
    - **【数据完整性自检与修复（`diagnose_view_data`）】**：
-     - 当画布提示数据异常或完成复杂跨页面重构后，可调用 `diagnose_view_data` 检测是否存在 `REFERENCE_WITH_CHILDREN`（引用节点残留冗余 `children`）或 `TARGET_PAGE_NOT_FOUND`（悬空页面引用）；
+     - 当画布提示数据异常或完成复杂跨页面重构后，可调用 `diagnose_view_data` 检测是否存在 `INLINE_PAGE_NESTED`（内嵌子界面未拆分）、`CONTRACT_CHILD_INVALID`（契约子节点违规）、`REFERENCE_WITH_CHILDREN`（引用节点残留冗余 `children`）或 `TARGET_PAGE_NOT_FOUND`（悬空页面引用）；
      - 若检测到 `REFERENCE_WITH_CHILDREN`，直接调用 `edit_view_layout` 的 `PATCH` 模式（`op: "UPDATE", id: "<组件ID>", targetPageId: "<子页面ID>", children: []`）并调用 `save_project` 即可彻底清除宿主冗余 `children`。
 
 7. **万能视图排版与微调交付管道 (`edit_view_layout` Pipeline)**：

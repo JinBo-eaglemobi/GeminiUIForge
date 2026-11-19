@@ -859,4 +859,10 @@
     <string name="code_block_unfold_all_scopes_tip">展开全部方法/节点</string>
     <string name="code_block_fold_line_tip">折叠此代码段 (%1$d 行)</string>
     <string name="code_block_unfold_line_tip">展开此代码段 (%1$d 行)</string>
+
+    <!-- UI Studio Nesting Repair -->
+    <string name="uistudio_integrity_fix_now">一键修复</string>
+    <string name="uistudio_repair_confirm_title">拆分修复内嵌子页面</string>
+    <string name="uistudio_repair_confirm_body">检测到 %1$d 处内嵌子界面（如 lineStake / betStake）。即将自动提取拆分为独立页面并转为外部引用实例。操作支持 Ctrl+Z 整体撤销。</string>
+    <string name="uistudio_repair_done">修复完成：已自动新建 %1$d 个独立页面，双击引用组件即可进入编辑。</string>
 </resources>

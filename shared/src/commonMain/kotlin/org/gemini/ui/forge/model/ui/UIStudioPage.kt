@@ -1,6 +1,7 @@
 package org.gemini.ui.forge.model.ui
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * UI Studio 专用页面模型 (UIStudioPage)
@@ -14,6 +15,8 @@ import kotlinx.serialization.Serializable
  * @property height 页面逻辑高度
  * @property canvasBackgroundColor 页面画布背景色（可空，null 时使用主题默认）
  * @property blocks 页面包含的所有子功能块列表
+ * @property controllers 页面根级状态机控制器列表（Root-Only，对齐 UIFactory 契约，JsonObject 原样保真）
+ * @property transitions 页面根级补间动效列表（Root-Only，对齐 UIFactory 契约，JsonObject 原样保真）
  */
 @Serializable
 data class UIStudioPage(
@@ -21,5 +24,7 @@ data class UIStudioPage(
     val width: Float = 1080f,
     val height: Float = 1920f,
     val canvasBackgroundColor: String? = null,
-    val blocks: List<UIStudioBlock> = emptyList()
+    val blocks: List<UIStudioBlock> = emptyList(),
+    val controllers: List<JsonObject> = emptyList(),
+    val transitions: List<JsonObject> = emptyList()
 )

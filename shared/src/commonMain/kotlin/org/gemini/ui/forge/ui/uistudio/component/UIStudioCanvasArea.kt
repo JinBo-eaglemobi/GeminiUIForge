@@ -39,6 +39,7 @@ import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.ui.component.tip
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
 import org.gemini.ui.forge.ui.uistudio.model.UIStudioRightTab
+import org.gemini.ui.forge.ui.uistudio.dialog.NestingRepairConfirmDialog
 import org.gemini.ui.forge.ui.uistudio.utils.StudioDataDiagnostics
 import org.gemini.ui.forge.ui.uistudio.UIStudioViewModel
 
@@ -437,6 +438,9 @@ fun UIStudioCanvasArea(
                     errors = dataErrors,
                     onNavigateToPage = { pageId ->
                         viewModel.pageManager.openViewTab(pageId)
+                    },
+                    onFixRequested = {
+                        viewModel.pageManager.requestNestingRepair()
                     }
                 )
             }
@@ -528,6 +532,15 @@ fun UIStudioCanvasArea(
                     }
                 }
             }
+        }
+
+        // 内嵌子页面一键修复二次确认弹窗
+        state.pendingNestingRepair?.let { plan ->
+            NestingRepairConfirmDialog(
+                plan = plan,
+                onConfirm = { viewModel.pageManager.executeNestingRepair() },
+                onDismiss = { viewModel.pageManager.cancelNestingRepair() }
+            )
         }
     }
 }

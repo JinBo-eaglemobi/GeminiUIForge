@@ -95,6 +95,20 @@ object GameUiExportService {
             appendLine("    y: 0,")
             appendLine("    width: $canvasWidth,")
             appendLine("    height: $canvasHeight,")
+            if (page.controllers.isNotEmpty()) {
+                appendLine("    controllers: [")
+                appendLine(page.controllers.joinToString(",\n") { ctrl ->
+                    "        " + ctrl.toString()
+                })
+                appendLine("    ],")
+            }
+            if (page.transitions.isNotEmpty()) {
+                appendLine("    transitions: [")
+                appendLine(page.transitions.joinToString(",\n") { trans ->
+                    "        " + trans.toString()
+                })
+                appendLine("    ],")
+            }
             appendLine("    elements: [")
             append(elementsTsCode)
             appendLine("    ]")
@@ -232,9 +246,9 @@ object GameUiExportService {
                     if (props.autoResizeItem) appendLine("$indent    autoResizeItem: true,")
                     if (props.selectionMode != "None") appendLine("$indent    selectionMode: '${props.selectionMode}',")
                     if (props.defaultItem.isNotBlank()) {
-                        // 【单页面渲染铁律】：若配置了 defaultItem，列表渲染唯一绑定该页面模板
-                        appendLine("$indent    defaultItem: '${props.defaultItem}'")
-                    } else {
+                        appendLine("$indent    defaultItem: '${props.defaultItem}',")
+                    }
+                    if (block.children.isNotEmpty()) {
                         appendLine("$indent    elements: [")
                         append(generateElementsTsCode(block.children, assetNameMap, "$indent        "))
                         appendLine("$indent    ]")

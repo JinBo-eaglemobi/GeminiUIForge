@@ -849,4 +849,10 @@
     <string name="code_block_unfold_all_scopes_tip">Unfold all methods/nodes</string>
     <string name="code_block_fold_line_tip">Fold code scope (%1$d lines)</string>
     <string name="code_block_unfold_line_tip">Unfold code scope (%1$d lines)</string>
+
+    <!-- UI Studio Nesting Repair -->
+    <string name="uistudio_integrity_fix_now">Auto Fix</string>
+    <string name="uistudio_repair_confirm_title">Extract Inline Sub-Pages</string>
+    <string name="uistudio_repair_confirm_body">Found %1$d inline sub-page(s) (such as lineStake/betStake). They will be extracted into independent pages and converted to external references. You can undo this via Ctrl+Z.</string>
+    <string name="uistudio_repair_done">Repair complete: created %1$d standalone pages. Double-click any component to edit.</string>
 </resources>

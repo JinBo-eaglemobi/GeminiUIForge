@@ -158,14 +158,30 @@ object UiStudioLayoutService {
                             autoFitAssetsToSlots(assembledBlocks, slotRoleMap, assetLibrary)
                         } else assembledBlocks
 
+                        // 解析页面根级控制器与动效（Root-Only，JsonObject 原样保真）
+                        val rootControllers = op["controllers"]?.jsonArray?.mapNotNull { it as? JsonObject } ?: emptyList()
+                        val rootTransitions = op["transitions"]?.jsonArray?.mapNotNull { it as? JsonObject } ?: emptyList()
+
                         val newPageId = targetPage?.id ?: sanitizedName.replace(" ", "_")
                         val newPage = UIStudioPage(
                             id = newPageId,
                             width = width,
                             height = height,
-                            blocks = finalBlocks
+                            blocks = finalBlocks,
+                            controllers = rootControllers,
+                            transitions = rootTransitions
                         )
                         newPage.blocks.bindParents()
+
+                        // 页面根控制器/动效轻量校验（防悬空 target）
+                        val rootViolations = org.gemini.ui.forge.model.ui.UIStudioNestingContract.checkPageRootConfigs(newPage)
+                        if (rootViolations.isNotEmpty()) {
+                            return EditLayoutResult(
+                                isSuccess = false,
+                                summary = "",
+                                errorMessage = "第 ${index + 1} 项操作 (REPLACE_PAGE) 页面根配置校验失败: ${rootViolations.first().message}"
+                            )
+                        }
 
                         // 更新工作集
                         if (targetPage != null) {
@@ -203,11 +219,18 @@ object UiStudioLayoutService {
                                 errorMessage = "在视图 [${page.id}] 中未找到目标容器图元 '$targetContainerId'"
                             )
                         }
-                        if (!existingContainer.targetPageId.isNullOrBlank()) {
+                        if (!existingContainer.targetPageId.isNullOrBlank() && existingContainer.type != UIBlockType.LIST) {
                             return EditLayoutResult(
                                 isSuccess = false,
                                 summary = "",
                                 errorMessage = "目标图元 '$targetContainerId' 是独立页面引用实例 (targetPageId='${existingContainer.targetPageId}')，架构红线严禁向引用图元注入 children！请直接针对目标视图页面 [${existingContainer.targetPageId}] 发起 REPLACE_PAGE 操作进行重构。"
+                            )
+                        }
+                        if (!org.gemini.ui.forge.model.ui.UIStudioNestingContract.allowsContractChildren(existingContainer.type)) {
+                            return EditLayoutResult(
+                                isSuccess = false,
+                                summary = "",
+                                errorMessage = "目标图元 '$targetContainerId' (类型 ${existingContainer.type}) 不在官方复合组件白名单内，架构红线禁止向其注入 children！界面级复合单元请拆分为独立页面。"
                             )
                         }
 
@@ -519,9 +542,9 @@ object UiStudioLayoutService {
             SerialRect(x, y, x + finalW, y + finalH)
         }
 
-        // 解析嵌套子组件：若声明了 targetPageId，页面引用图元严禁内联 children
+        // 解析嵌套子组件：若声明了 targetPageId，页面引用图元严禁内联 children（LIST 预置 item 模式合法豁免）
         val childBlocks = mutableListOf<UIStudioBlock>()
-        if (targetPageId == null) {
+        if (targetPageId == null || finalType == UIBlockType.LIST) {
             val rawChildren = obj["children"]?.jsonArray
             if (rawChildren != null && rawChildren.isNotEmpty()) {
                 for (childElement in rawChildren) {
@@ -992,6 +1015,15 @@ object UiStudioLayoutService {
             }
 
             val id = patch["id"]?.jsonPrimitive?.contentOrNull
+
+            // ★ v3 支持 PATCH 更新页面根 controllers/transitions 保留字 "__page_root__"
+            if (id == "__page_root__") {
+                if (op != "UPDATE") {
+                    return "$step: 保留标识符 '__page_root__' 仅支持 UPDATE 操作"
+                }
+                continue
+            }
+
             when (op) {
                 "UPDATE" -> {
                     if (id.isNullOrBlank()) {
@@ -1013,9 +1045,16 @@ object UiStudioLayoutService {
                     val children = patch["children"]?.jsonArray
                     val existingBlock = findBlockRecursively(targetPage.blocks, id)
                     val effectiveTargetPageId = targetPageId ?: existingBlock?.targetPageId
-                    if (!effectiveTargetPageId.isNullOrBlank()) {
+                    val effectiveType = patch["type"]?.jsonPrimitive?.contentOrNull?.let { parseBlockType(it) } ?: existingBlock?.type ?: UIBlockType.COMPONENT
+                    if (!effectiveTargetPageId.isNullOrBlank() && effectiveType != UIBlockType.LIST) {
                         if (children != null && children.isNotEmpty()) {
                             return "$step: 图元 '$id' 为页面引用实例 (targetPageId='$effectiveTargetPageId')，架构红线严禁在 children 中内联塞入子图元！其子组件必须在独立页面内维护"
+                        }
+                    }
+                    // S1/S2 契约拦截：非白名单类型携带 children 报错
+                    if (children != null && children.isNotEmpty() && effectiveTargetPageId.isNullOrBlank() && effectiveType != UIBlockType.LIST) {
+                        if (!org.gemini.ui.forge.model.ui.UIStudioNestingContract.allowsContractChildren(effectiveType)) {
+                            return "$step: 图元 '$id' (类型 $effectiveType) 不在官方复合组件白名单内，禁止携带 children！界面级复合单元请拆分为独立页面。"
                         }
                     }
                     val typeStr = patch["type"]?.jsonPrimitive?.contentOrNull?.uppercase()?.trim()
@@ -1050,8 +1089,16 @@ object UiStudioLayoutService {
                         return "$step: 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 或 'LIST'"
                     }
                     val parentBlockId = patch["parentBlockId"]?.jsonPrimitive?.contentOrNull
-                    if (!parentBlockId.isNullOrBlank() && parentBlockId !in existingBlockIds) {
-                        return "$step: ADD 指定的父容器 parentBlockId '$parentBlockId' 在当前页面中不存在"
+                    if (!parentBlockId.isNullOrBlank()) {
+                        if (parentBlockId !in existingBlockIds) {
+                            return "$step: ADD 指定的父容器 parentBlockId '$parentBlockId' 在当前页面中不存在"
+                        }
+                        val parentBlock = findBlockRecursively(targetPage.blocks, parentBlockId)
+                        if (parentBlock != null && parentBlock.targetPageId.isNullOrBlank() && parentBlock.type != UIBlockType.LIST) {
+                            if (!org.gemini.ui.forge.model.ui.UIStudioNestingContract.allowsContractChildren(parentBlock.type)) {
+                                return "$step: ADD 指定的父容器 '$parentBlockId' (类型 ${parentBlock.type}) 不在官方复合组件白名单内，禁止向其注入子组件！"
+                            }
+                        }
                     }
                     val newTargetPageId = patch["targetPageId"]?.jsonPrimitive?.contentOrNull?.trim()
                     val children = patch["children"]?.jsonArray
@@ -1083,7 +1130,7 @@ object UiStudioLayoutService {
         val visitedIds = mutableSetOf<String>()
         val validAssetHashes = assetLibrary.items.mapNotNull { it.hash?.lowercase() }.toSet()
 
-        fun validateBlockNode(obj: JsonObject, path: String): String? {
+        fun validateBlockNode(obj: JsonObject, path: String, isListItemChild: Boolean): String? {
             val id = obj["id"]?.jsonPrimitive?.contentOrNull?.trim()
             if (id.isNullOrBlank()) {
                 return "$path: 图元缺少必填的 'id' 字段"
@@ -1093,10 +1140,17 @@ object UiStudioLayoutService {
             }
             visitedIds.add(id)
 
+            // ★ 规范 S3：控制器/动效 Root-Only 硬拦截（防 AI 按导出契约把 controllers 塞进图元）
+            if (obj.containsKey("controllers") || obj.containsKey("transitions")) {
+                return "$path (图元 '$id'): 架构红线！控制器(controllers)与动效(transitions)仅允许在页面根声明 (Root-Only)，" +
+                    "严禁挂载在任何图元子节点。请在 op 级参数（REPLACE_PAGE 的 controllers/transitions）中声明页面根配置。"
+            }
+
             val typeStr = obj["type"]?.jsonPrimitive?.contentOrNull?.uppercase()?.trim()
             if (typeStr == "CONTAINER") {
                 return "$path (图元 '$id'): 类型 'CONTAINER' 已彻底废弃，请使用 'VIEW' 或 'LIST'"
             }
+            val type = parseBlockType(typeStr ?: "COMPONENT")
 
             obj["width"]?.jsonPrimitive?.floatOrNull?.let { w ->
                 if (w <= 0f) return "$path (图元 '$id'): width 必须大于 0 (当前值: $w)"
@@ -1111,8 +1165,46 @@ object UiStudioLayoutService {
                 if (availablePageIds.isNotEmpty() && targetPageId !in availablePageIds) {
                     return "$path (图元 '$id'): 指定的引用页面 targetPageId '$targetPageId' 不存在"
                 }
-                if (children != null && children.isNotEmpty()) {
-                    return "$path (图元 '$id'): 是页面引用实例 (targetPageId='$targetPageId')，严禁在 children 中内联塞入子图元！组件内容必须在其独立子页面中维护"
+                // v3 裁定：带 targetPageId 的节点 children 必须为空——LIST 除外！
+                if (children != null && children.isNotEmpty() && type != UIBlockType.LIST) {
+                    return "$path (图元 '$id'): 是页面引用实例 (targetPageId='$targetPageId')，严禁在 children 中内联塞入子图元！" +
+                        "组件内容必须在其独立子页面中维护。（唯一例外：LIST 无论有无引用均可预置 item 数据）"
+                }
+            }
+
+            // ★ 规范 S1/S2/S2-1 扁平化架构契约校验（LIST 无论有无引用均走 item 规则）
+            if (children != null && children.isNotEmpty()) {
+                // S1 红线：无引用的 COMPONENT 禁止内联 children（唯一豁免：LIST 直接子节点 item 位）
+                if (type == UIBlockType.COMPONENT && targetPageId.isNullOrBlank() && !isListItemChild) {
+                    return "$path (图元 '$id'): 架构红线！无引用的 COMPONENT 禁止内联 children。" +
+                        "界面级复合单元必须拆分为独立页面 (REPLACE_PAGE 新建 viewName) 并通过 targetPageId 外部引用，" +
+                        "严禁在当前页面内内联子页面数据。（唯一豁免位：LIST 的直接子节点 item）"
+                }
+                if (type != UIBlockType.LIST && !org.gemini.ui.forge.model.ui.UIStudioNestingContract.allowsContractChildren(type)) {
+                    return "$path (图元 '$id', 类型 ${typeStr}): 架构红线！该类型不允许内嵌子图元。" +
+                        "仅官方复合组件 (BUTTON/PROGRESS_BAR/SLIDER/SCROLL_BAR 契约子节点) 与 LIST (预置 item 定制数据) 允许携带子节点"
+                }
+                // S2：BUTTON/PB/SLIDER/SB 子节点必须全为叶子
+                if (type != UIBlockType.LIST && children.any { (it as? JsonObject)?.get("children")?.jsonArray?.isNotEmpty() == true }) {
+                    return "$path (图元 '$id'): 官方复合组件的契约子节点必须为叶子图元，检测到二次嵌套子树！"
+                }
+                // S2-1：LIST 预置 item 孙层封死——item 的 children 中不得再嵌无引用 COMPONENT 容器
+                if (type == UIBlockType.LIST) {
+                    val deepContainer = children.withIndex().firstOrNull { (_, c) ->
+                        val co = c as? JsonObject
+                        co != null && co["targetPageId"]?.jsonPrimitive?.contentOrNull.isNullOrBlank() &&
+                            co["type"]?.jsonPrimitive?.contentOrNull?.uppercase() == "COMPONENT" &&
+                            co["children"]?.jsonArray?.any { gc ->
+                                val gco = gc as? JsonObject
+                                gco != null && gco["targetPageId"]?.jsonPrimitive?.contentOrNull.isNullOrBlank() &&
+                                    gco["type"]?.jsonPrimitive?.contentOrNull?.uppercase() == "COMPONENT" &&
+                                    !gco["children"]?.jsonArray.isNullOrEmpty()
+                            } == true
+                    }
+                    if (deepContainer != null) {
+                        return "$path (图元 '$id') -> children[${deepContainer.index}]: 孙层封死约束！" +
+                            "内联定制 item 内部只能平铺叶子图元或页面引用实例，item 内的界面级复合单元仍须拆分独立页面"
+                    }
                 }
             }
 
@@ -1125,7 +1217,7 @@ object UiStudioLayoutService {
                 for ((cIdx, child) in children.withIndex()) {
                     val childObj = child as? JsonObject
                         ?: return "$path (图元 '$id') -> children[$cIdx]: 格式错误，必须为 JSON 对象"
-                    val childErr = validateBlockNode(childObj, "$path -> $id -> children[$cIdx]")
+                    val childErr = validateBlockNode(childObj, "$path -> $id -> children[$cIdx]", isListItemChild = type == UIBlockType.LIST)
                     if (childErr != null) return childErr
                 }
             }
@@ -1135,7 +1227,7 @@ object UiStudioLayoutService {
         for ((idx, item) in rawBlocks.withIndex()) {
             val blockObj = item as? JsonObject
                 ?: return "blocks[$idx]: 格式错误，必须为 JSON 对象"
-            val err = validateBlockNode(blockObj, "blocks[$idx]")
+            val err = validateBlockNode(blockObj, "blocks[$idx]", isListItemChild = false)
             if (err != null) return err
         }
         return null
@@ -1213,12 +1305,26 @@ object UiStudioLayoutService {
         availablePages: List<UIStudioPage>
     ): PatchElementsResult {
         var currentBlocks = targetPage.blocks
+        var currentControllers = targetPage.controllers
+        var currentTransitions = targetPage.transitions
         var appliedCount = 0
         val routedPagesMap = mutableMapOf<String, UIStudioPage>()
 
         for (patch in patchList) {
             val op = patch["op"]?.jsonPrimitive?.contentOrNull?.uppercase() ?: "UPDATE"
             val id = patch["id"]?.jsonPrimitive?.contentOrNull
+
+            // ★ v3 支持通过保留标识符 "__page_root__" 增量更新页面根级控制器与动效
+            if (id == "__page_root__") {
+                if (patch.containsKey("controllers")) {
+                    currentControllers = patch["controllers"]?.jsonArray?.mapNotNull { it as? JsonObject } ?: emptyList()
+                }
+                if (patch.containsKey("transitions")) {
+                    currentTransitions = patch["transitions"]?.jsonArray?.mapNotNull { it as? JsonObject } ?: emptyList()
+                }
+                appliedCount++
+                continue
+            }
 
             when (op) {
                 "UPDATE" -> {
@@ -1259,11 +1365,11 @@ object UiStudioLayoutService {
 
                         // 外部显式处理 children 规则：
                         // 1. 若未在 patch 中触碰 children 且未新设 targetPageId，则保持 existing.children 原样不变；
-                        // 2. 若外部在 patch 中显式传入了 "children"（如 children: [] 清理冗余子图元）或显式设置了 "targetPageId"，则彻底清空或更新 children，不再保留历史冗余子图元。
+                        // 2. 若外部在 patch 中显式传入了 "children"（如 children: [] 清理冗余子图元）或显式设置了 "targetPageId"，则彻底清空或更新 children，不再保留历史冗余子图元（LIST 预置 item 模式合法豁免）。
                         var updatedChildren = existing.children
                         if (patch.containsKey("children")) {
                             val rawChildArr = patch["children"]?.jsonArray
-                            if (rawChildArr == null || rawChildArr.isEmpty() || targetPageId != null) {
+                            if (rawChildArr == null || rawChildArr.isEmpty() || (targetPageId != null && type != UIBlockType.LIST)) {
                                 updatedChildren = emptyList()
                             } else {
                                 val parsedChildren = mutableListOf<UIStudioBlock>()
@@ -1273,11 +1379,11 @@ object UiStudioLayoutService {
                                 }
                                 updatedChildren = parsedChildren
                             }
-                        } else if (patch.containsKey("targetPageId") && targetPageId != null) {
+                        } else if (patch.containsKey("targetPageId") && targetPageId != null && type != UIBlockType.LIST) {
                             updatedChildren = emptyList()
                         }
 
-                        if (targetPageId != null) {
+                        if (targetPageId != null && type != UIBlockType.LIST) {
                             type = UIBlockType.COMPONENT
                             if (!patch.containsKey("assetHash") && fileName.isNullOrBlank()) {
                                 assetHash = null
@@ -1360,7 +1466,11 @@ object UiStudioLayoutService {
             }
         }
 
-        val updatedPage = targetPage.copy(blocks = currentBlocks.bindParents())
+        val updatedPage = targetPage.copy(
+            blocks = currentBlocks.bindParents(),
+            controllers = currentControllers,
+            transitions = currentTransitions
+        )
         val routedList = routedPagesMap.values.toList()
         return PatchElementsResult(
             isSuccess = true,

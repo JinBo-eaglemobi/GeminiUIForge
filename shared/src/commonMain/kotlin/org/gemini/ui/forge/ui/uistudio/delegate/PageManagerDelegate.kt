@@ -14,7 +14,11 @@ import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.ToastType
 import org.gemini.ui.forge.ui.uistudio.UIStudioLeftBottomTab
 import org.gemini.ui.forge.ui.uistudio.UIStudioState
+import org.gemini.ui.forge.ui.uistudio.model.NestingRepairPlan
+import org.gemini.ui.forge.ui.uistudio.model.UIStudioDataErrorType
 import org.gemini.ui.forge.ui.uistudio.model.UIStudioRightTab
+import org.gemini.ui.forge.ui.uistudio.utils.StudioDataDiagnostics
+import org.gemini.ui.forge.ui.uistudio.utils.StudioNestingRepairService
 import org.gemini.ui.forge.utils.Toast
 
 /**
@@ -448,5 +452,68 @@ class PageManagerDelegate(
      */
     fun setDraggedPageId(id: String?) {
         state = state.copy(draggedPageId = id)
+    }
+
+    /**
+     * 发起一键修复内嵌子页面请求：扫描当前工程中所有可自动修复的违规记录，生成预案并弹出确认弹窗。
+     */
+    fun requestNestingRepair() {
+        val proj = state.project ?: return
+        val fixableErrors = StudioDataDiagnostics.diagnoseProject(proj)
+            .filter { it.errorType == UIStudioDataErrorType.INLINE_PAGE_NESTED }
+        if (fixableErrors.isEmpty()) {
+            Toast.show("当前工程中未检测到可自动拆分的内嵌子页面", ToastType.INFO)
+            return
+        }
+        state = state.copy(pendingNestingRepair = NestingRepairPlan(errors = fixableErrors))
+    }
+
+    /**
+     * 取消一键修复确认弹窗。
+     */
+    fun cancelNestingRepair() {
+        state = state.copy(pendingNestingRepair = null)
+    }
+
+    /**
+     * 确认执行一键修复内嵌子页面：
+     * 1. 建立撤销快照（支持 Ctrl+Z 整体回滚）；
+     * 2. 调用 StudioNestingRepairService 迭代收敛拆分；
+     * 3. 内存状态与画布视口更新并标记 isDirty；
+     * 4. 异步保存工程全量数据至本地磁盘（原子持久化）；
+     * 5. 弹出成功 Toast 告知新建页面数。
+     */
+    fun executeNestingRepair(repo: TemplateRepository = TemplateRepository()) {
+        if (state.isRepairingNesting) return
+        val proj = state.project ?: return
+        state = state.copy(isRepairingNesting = true, pendingNestingRepair = null)
+
+        // 撤销快照保护：压入 undoStack
+        val snapshot = proj.copy(studioPages = proj.studioPages.map { page ->
+            page.copy(blocks = page.blocks.map { it.copy() })
+        })
+        val undoEntry = org.gemini.ui.forge.ui.uistudio.UIStudioHistoryEntry(label = "一键修复内嵌子页面", project = snapshot)
+        val newUndo = (state.undoStack + undoEntry).let { if (it.size > 50) it.drop(1) else it }
+
+        val repairResult = StudioNestingRepairService.repairAll(proj)
+        val updatedProject = repairResult.repairedProject
+
+        // 自动将新建的页面追加到 openViewIds（方便用户在标签页中直接查阅），保持当前视口不跳
+        val newPageIds = repairResult.createdPageIds
+        val updatedOpen = state.openViewIds + newPageIds.filterNot { state.openViewIds.contains(it) }
+
+        state = state.copy(
+            project = updatedProject,
+            openViewIds = updatedOpen,
+            undoStack = newUndo,
+            redoStack = emptyList(),
+            isDirty = true,
+            isRepairingNesting = false
+        )
+
+        scope.launch {
+            repo.saveTemplate(updatedProject.projectId, updatedProject)
+            Toast.show("修复完成：已自动新建 ${newPageIds.size} 个独立页面，双击组件即可编辑", ToastType.SUCCESS)
+        }
     }
 }

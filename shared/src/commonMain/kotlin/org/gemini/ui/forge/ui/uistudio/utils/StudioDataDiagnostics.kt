@@ -1,7 +1,9 @@
 package org.gemini.ui.forge.ui.uistudio.utils
 
 import org.gemini.ui.forge.state.ui.ProjectState
+import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.model.ui.UIStudioNestingContract
 import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.ui.uistudio.model.UIStudioDataError
 import org.gemini.ui.forge.ui.uistudio.model.UIStudioDataErrorType
@@ -44,8 +46,8 @@ object StudioDataDiagnostics {
                     )
                 }
 
-                // 2. 检查引用图元是否包含了冗余历史 children
-                if (block.children.isNotEmpty()) {
+                // 2. 检查引用图元是否包含了冗余历史 children（LIST 预置 item 模式合法豁免）
+                if (block.children.isNotEmpty() && block.type != UIBlockType.LIST) {
                     errors.add(
                         UIStudioDataError(
                             pageId = page.id,
@@ -66,8 +68,47 @@ object StudioDataDiagnostics {
         }
 
         for (page in pages) {
+            // 1. 基础引用完备性扫描
             for (rootBlock in page.blocks) {
                 scanBlock(rootBlock, page, "")
+            }
+
+            // 2. 规范 S1/S2 扁平化架构契约扫描
+            val nestingViolations = UIStudioNestingContract.checkPage(page)
+            for (v in nestingViolations) {
+                val errorType = when (v.type) {
+                    UIStudioNestingContract.ViolationType.INLINE_PAGE_NESTED ->
+                        UIStudioDataErrorType.INLINE_PAGE_NESTED
+                    else ->
+                        UIStudioDataErrorType.CONTRACT_CHILD_INVALID
+                }
+                errors.add(
+                    UIStudioDataError(
+                        pageId = page.id,
+                        pageName = page.id,
+                        blockId = v.blockId,
+                        blockName = v.blockId,
+                        targetPageId = null,
+                        errorType = errorType,
+                        message = "视图「${page.id}」：${v.message}"
+                    )
+                )
+            }
+
+            // 3. 规范 S3 页面根控制器与动效轻量校验
+            val rootViolations = UIStudioNestingContract.checkPageRootConfigs(page)
+            for (rv in rootViolations) {
+                errors.add(
+                    UIStudioDataError(
+                        pageId = page.id,
+                        pageName = page.id,
+                        blockId = rv.blockId,
+                        blockName = rv.blockPath,
+                        targetPageId = null,
+                        errorType = UIStudioDataErrorType.ROOT_CONFIG_INVALID,
+                        message = "视图「${page.id}」：${rv.message}"
+                    )
+                )
             }
         }
 

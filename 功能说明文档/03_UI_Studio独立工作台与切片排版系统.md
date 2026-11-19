@@ -239,6 +239,12 @@ UI Studio 独立工作台是 Gemini UI Forge 针对现代游戏 UI 切片资产�
 14. **【纯代码组件按 Type 严格分发与按钮点击变暗特效红线】**：
     - **严格 Type 单一事实源分发**：系统将 UI Studio 图元树转换为 `layoutConfig.ts` 时，**必须 100% 严格依据图元自身的强类型字段 `block.type`（`UIBlockType`）决定导出组件类型，绝对禁止依据图元名称（如包含 btn/button）进行任何模糊猜测**；
     - **按钮默认点击变暗特效**：凡 `block.type == UIBlockType.BUTTON` 的组件，导出为 UIFactory 的 `type: "button"`（对应 `fgui.GButton`），并**默认且强制注入点击变暗特效**（`downEffect: 1, downEffectValue: 0.8`）；若按钮自身绑定切片资产，自动将其作为内部 `icon` 元件填充至 `elements` 中（若有子图元则一并嵌套）；当鼠标点击该按钮时，子元件亮度自动降为 80% 产生自然的点击变暗视觉反馈，松开时平滑恢复。
+15. **【页面扁平化架构契约、官方复合组件白名单与 Root-Only 导出透传红线 (Flat Page Hierarchy & Root-Only Export)】**：
+    - **规范 S1 页面扁平化与界面级复合单元外连引用**：单页面（`UIStudioPage`）内所有图元必须直接平铺于根级 `blocks`；界面级复合单元（如 `lineStake`、`settlementArea`）必须拆分为独立页面文件（`pages/{id}.json`），并在宿主页面中以 `type=COMPONENT + targetPageId` 引用实例存在；无引用的普通 `COMPONENT` 严禁携带 `children`（违规将触发 `INLINE_PAGE_NESTED` 阻断诊断与横幅警示）；
+    - **规范 S2 官方复合组件白名单与契约子节点约束**：仅官方复合组件（`BUTTON`、`PROGRESS_BAR`、`SLIDER`、`SCROLL_BAR`）允许携带子节点，且子节点必须为叶子图元；受限类型的子节点命名受严格契约集合约束（`PROGRESS_BAR` 仅限 `bar/bar_v/title`；`SLIDER` 仅限 `bar/bar_v/grip/title`；`SCROLL_BAR` 仅限 `grip/bar/arrow1/arrow2/title`；`BUTTON` 允许自由命名叶子装饰槽，上限 8 个）；
+    - **规范 S2-1 LIST 预置 item 特权与引用解耦**：`LIST` 具备定制数据功能，其携带 `children` 的合法性与 `targetPageId` 完全解耦——无论 `LIST` 是否引用了其它页面，均允许携带 `children` 预置 item 数据；item 可为叶子图元、`targetPageId` 引用实例、或内联定制容器（如 `CouponItem`，此为 S1 红线的唯一合法豁免位）；但内联定制 item 自身的 children（孙层）必须全部为叶子或引用实例，**孙层封死**，严禁在 item 内部再嵌套界面级复合单元；
+    - **规范 S3 控制器与动效 Root-Only 声明与导出原样透传**：页面状态机控制器（`controllers`）与补间动效（`transitions`）必须且只能在单页面根节点（`UIStudioPage`）声明，图元层严禁携带；数据模型以 `List<JsonObject>` 原样保真存储（对齐 UIFactory 规范 §4.1 与 §4.3 全系 10 大 Gears 契约）；在通过 `GameUiExportService` 导出 `layoutConfig.ts` 时，页面根级的 `controllers` 与 `transitions` 100% 原样透传输出至 Root panel 节点，实现零损耗纯代码编译闭环；
+    - **数据完整性常驻诊断与迭代收敛一键修复**：画布顶部横幅（`UIStudioDataIntegrityBanner`）实时对工程全量页面执行契约扫描；检测到 `INLINE_PAGE_NESTED` 时动态呈现「一键修复」按钮，经用户弹窗二次确认后，通过 `StudioNestingRepairService` 迭代收敛拆分，利用图元局部相对坐标天然无损的几何优势自动生成独立页面并建立引用，全程支持 `Ctrl+Z` 整体撤销。
 
 ---
 

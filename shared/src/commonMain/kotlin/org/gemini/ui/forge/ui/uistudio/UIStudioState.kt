@@ -11,6 +11,7 @@ import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.model.chat.VisualChatMessage
 import org.gemini.ui.forge.model.chat.VisualChatSession
 import org.gemini.ui.forge.ui.uistudio.model.ImportConflictState
+import org.gemini.ui.forge.ui.uistudio.model.NestingRepairPlan
 import org.gemini.ui.forge.ui.uistudio.model.ProjectAgentConfig
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetFolder
 import org.gemini.ui.forge.ui.uistudio.model.UIAssetItem
@@ -178,7 +179,9 @@ data class UIStudioState(
     val gameActivationTotalSteps: Int = 6,
     val gameActivationMessage: String = "",
     val gameActivationLogs: List<String> = emptyList(),
-    val gameActivationError: String? = null
+    val gameActivationError: String? = null,
+    val pendingNestingRepair: NestingRepairPlan? = null,
+    val isRepairingNesting: Boolean = false
 ) {
     val canUndo: Boolean get() = undoStack.isNotEmpty()
     val canRedo: Boolean get() = redoStack.isNotEmpty()

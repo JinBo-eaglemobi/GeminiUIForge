@@ -22,7 +22,7 @@ class DiagnoseViewDataTool(
     override val name: String = "diagnose_view_data"
 
     override val description: String =
-        "诊断 UI Studio 视图页面的数据完整性与架构规范合规性。检测包括：1. REFERENCE_WITH_CHILDREN (图元引用了独立页面却仍包含冗余历史子图元)；2. TARGET_PAGE_NOT_FOUND (引用的独立页面不存在)。支持按视图名称 (viewName) 或视图 ID (viewId) 定向筛选，也可缺省扫描当前活跃工程的全量视图。返回详尽的问题清单及 edit_view_layout 工具的具体修复指引。"
+        "诊断 UI Studio 视图页面的数据完整性与架构规范合规性。检测包括：1. INLINE_PAGE_NESTED (界面级复合单元被内嵌在页面中，未拆分为独立页面引用)；2. CONTRACT_CHILD_INVALID (官方复合组件契约违规或非白名单携带 children)；3. REFERENCE_WITH_CHILDREN (引用图元仍含冗余历史子图元)；4. TARGET_PAGE_NOT_FOUND (引用的独立页面不存在)；5. ROOT_CONFIG_INVALID (页面根控制器/动效配置非法或悬空)。支持按 viewName/viewId 定向筛选或扫描全工程，返回详尽的问题清单及 edit_view_layout 工具的具体修复指引。"
 
     override val annotations: ToolAnnotations = ToolAnnotations(
         readOnlyHint = true,
@@ -109,6 +109,14 @@ class DiagnoseViewDataTool(
                     put("errorType", err.errorType.name)
                     put("message", err.message)
                     put("repairGuidance", when (err.errorType) {
+                        UIStudioDataErrorType.INLINE_PAGE_NESTED ->
+                            "界面级复合单元必须拆分为独立页面！请使用 edit_view_layout 的 operations 流水线：① 以 REPLACE_PAGE 模式新建目标独立页面 (例如 '${err.blockId.replaceFirstChar { it.uppercase() }}View')，将该组件的 children 作为新页面的顶层 blocks 迁入；② 在当前页面中将该组件改为 'type: \"COMPONENT\", targetPageId: \"<新建页面ID>\", children: []' 引用实例。画布横幅亦提供一键自动拆分修复入口。"
+                        UIStudioDataErrorType.CONTRACT_CHILD_INVALID ->
+                            "该图元违反官方复合组件契约：仅 BUTTON/PROGRESS_BAR/SLIDER/SCROLL_BAR 契约子节点与 LIST 预置 item 允许携带 children，且契约子节点必须为叶子。请移除多余 children 或将其重构成叶子图元。"
+                        UIStudioDataErrorType.CONTROLLER_ON_NON_ROOT ->
+                            "控制器与动效属于 Root-Only 契约属性，严禁挂载在任何图元子节点上。请移至所属独立页面的根节点声明。"
+                        UIStudioDataErrorType.ROOT_CONFIG_INVALID ->
+                            "页面根级控制器(controllers)或动效(transitions)配置格式不合规或 target 未命中页面内图元。请检查必填 name/pages/items 字段并确保动效 target 与页面图元 ID 一致。"
                         UIStudioDataErrorType.REFERENCE_WITH_CHILDREN ->
                             "该图元为组件实例，其子组件必须在独立页面 [${err.targetPageId}] 中维护。若需修复并清理宿主冗余子图元，可使用 edit_view_layout 工具对该视图发起排版，保持 targetPageId 不变并将 children 设为空数组，或通过 PATCH 仅保留引用外壳。"
                         UIStudioDataErrorType.TARGET_PAGE_NOT_FOUND ->
@@ -118,8 +126,10 @@ class DiagnoseViewDataTool(
             }
         }
 
+        val inlineNestedCount = filteredErrors.count { it.errorType == UIStudioDataErrorType.INLINE_PAGE_NESTED }
         val refWithChildrenCount = filteredErrors.count { it.errorType == UIStudioDataErrorType.REFERENCE_WITH_CHILDREN }
         val targetNotFoundCount = filteredErrors.count { it.errorType == UIStudioDataErrorType.TARGET_PAGE_NOT_FOUND }
+        val otherContractCount = filteredErrors.size - inlineNestedCount - refWithChildrenCount - targetNotFoundCount
 
         val filterDesc = when {
             !viewName.isNullOrBlank() -> "视图 [$viewName]"
@@ -130,7 +140,7 @@ class DiagnoseViewDataTool(
         val summaryText = if (filteredErrors.isEmpty()) {
             "工程 [${targetProject.projectId}] $filterDesc 数据完全健康，未检测到任何架构违规或冗余数据！"
         } else {
-            "在工程 [${targetProject.projectId}] $filterDesc 中检测到 ${filteredErrors.size} 处数据异常 (REFERENCE_WITH_CHILDREN: $refWithChildrenCount, TARGET_PAGE_NOT_FOUND: $targetNotFoundCount)。"
+            "在工程 [${targetProject.projectId}] $filterDesc 中检测到 ${filteredErrors.size} 处数据异常 (内嵌子页面违规: $inlineNestedCount, 冗余children: $refWithChildrenCount, 悬空引用: $targetNotFoundCount, 其它契约异常: $otherContractCount)。"
         }
 
         val resultJson = buildJsonObject {

@@ -10,6 +10,7 @@ import org.gemini.ui.forge.model.ui.DropPosition
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.model.ui.UIStudioNestingContract
 import org.gemini.ui.forge.model.ui.UIStudioPage
 import org.gemini.ui.forge.state.ui.ProjectState
 import org.gemini.ui.forge.ui.component.ToastType
@@ -265,6 +266,13 @@ class CanvasEditorDelegate(
             return
         }
         val view = state.currentView ?: return
+
+        // 规范 S1：粘贴目标为页面顶层，拦截无引用的内联 COMPONENT 子树
+        if (copied.targetPageId.isNullOrBlank() && copied.children.isNotEmpty() && copied.type == UIBlockType.COMPONENT) {
+            Toast.show("剪贴板组件包含内嵌子树，违背页面扁平化规范！请先将其拆分为独立页面引用后再行装配", ToastType.ERROR)
+            return
+        }
+
         saveSnapshot("粘贴组件")
         val timestamp = getCurrentTimeMillis()
         val newId = "block_${timestamp % 100000}_${(100..999).random()}"
@@ -660,6 +668,12 @@ class CanvasEditorDelegate(
         val targetParentId = view.blocks.findParentBlockId(targetId)
 
         if (position == DropPosition.INSIDE) {
+            // ★ 规范 S1/S2：架构契约校验（拦截向无引用普通 COMPONENT 内联嵌套）
+            if (targetBlock.type == UIBlockType.COMPONENT && targetBlock.targetPageId.isNullOrBlank()) {
+                Toast.show("架构红线：无外连引用的组件禁止内联嵌套子图元！界面级复合单元请创建独立页面后拖入页面引用", ToastType.ERROR)
+                return
+            }
+
             // 移入目标成组逻辑判定：
             // 1. 若目标本身就是容器类型或页面组件实例
             if (targetBlock.type == UIBlockType.COMPONENT || targetBlock.type == UIBlockType.LIST || targetBlock.children.isNotEmpty() || targetBlock.targetPageId != null) {
