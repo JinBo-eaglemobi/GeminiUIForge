@@ -18,7 +18,7 @@ object ToolExposurePolicy {
         "discover_tools",
         // 2. 运行态感知与实机自审
         "get_runtime_status",
-        "screenshot_window",
+        "capture_ui_snapshot",
         // 3. 项目模板全貌查询与素材资产发现提取
         "get_template",
         "list_assets",

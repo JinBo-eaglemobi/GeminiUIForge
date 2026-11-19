@@ -125,7 +125,7 @@
   7. **层级文字重叠打架**：子文本与容器标签发生重叠覆盖遮挡。
 - **弹窗与单模块审查局部精准截图红线 (Modal & Component Local Precision Screenshot Redline)**: **【红线规则】**
   - **严禁全屏大图审查弹窗与局部组件**：凡是针对居中对话框（`Dialog`）、设置浮层（`Surface` / `Popup`）、侧边抽屉面板、属性卡片或单图元组件进行实机视觉与交互审查时，**绝对严禁随意截取全屏大图**，严防弹窗细节被大面积无关背景稀释；
-  - **强制语义 Bounds 精准局部裁剪**：必须先通过 `gemini-ui-forge_get_semantic_tree` 动态查询目标弹窗或组件的物理包围盒（Bounds），并**必须且仅能通过 `gemini-ui-forge_screenshot_window` 携带 `targetNodeId` 或 `region: { left, top, right, bottom }`（外扩 32~48px 呼吸边距）进行局部高清截图**；
+  - **强制语义 Bounds 精准局部裁剪**：必须先通过 `gemini-ui-forge_get_semantic_tree` 动态查询目标弹窗或组件的物理包围盒（Bounds），并**必须且仅能通过 `gemini-ui-forge_capture_ui_snapshot` 携带 `targetNodeId` 或 `region: { left, top, right, bottom }`（外扩 32~48px 呼吸边距）进行局部高清截图**；
   - **唯一全屏豁免特例**：仅当用户明确要求审查整个软件窗口视口全貌、或当前界面为无弹窗全屏工作区画布且需审视全局布局拓扑时，方允许截取整窗大图。
 
 ## 业务架构与模块模型规范

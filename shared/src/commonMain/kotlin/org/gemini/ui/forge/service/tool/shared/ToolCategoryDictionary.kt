@@ -74,7 +74,7 @@ object ToolCategoryDictionary {
             in setOf(
                 "get_runtime_status", "check_environment", "get_job_status",
                 "cancel_job", "list_chat_sessions", "get_traffic_record",
-                "invoke_gemini_text", "compose_page_screenshot", "screenshot_window",
+                "invoke_gemini_text", "compose_page_screenshot", "capture_ui_snapshot",
                 "execute_ui_action_sequence", "get_ui_roadmap", "get_semantic_tree",
                 "trigger_initial_verification", "set_project_generating_status"
             ) -> CATEGORY_RUNTIME

@@ -59,7 +59,7 @@ object McpCommandDictionary {
         "remove_background" to "调用本地离线 Python AI 引擎 (rembg) 对指定图像执行高精度透明抠图去背",
         "compare_with_reference" to "将实机页面截图与原始设计参考图执行逐像素对齐与网格差异比对分析",
         "compose_page_screenshot" to "通过 Skia 引擎离屏渲染拼装整页所有图元，生成高清晰度的完整全景预览截图",
-        "screenshot_window" to "执行操作系统级原生屏幕截图，获取当前软件界面的视觉呈现",
+        "capture_ui_snapshot" to "执行应用程序界面原生快照截图，获取当前软件界面的视觉呈现（支持整窗与局部组件）",
         "check_env" to "诊断本地运行环境（Python, rembg, pillow 依赖自检与版本状态）",
         "list_chat_sessions" to "读取指定图元的多轮视觉微调设计历史会话记录与思维链状态",
         "get_traffic_record" to "读取大模型推理时上行发送的 Prompt 文本与下行返回的原始通信报文",
@@ -112,7 +112,7 @@ object McpCommandDictionary {
         return when {
             protocolCommands.containsKey(name) -> McpCommandCategory.PROTOCOL
             name in setOf("create_template", "get_template", "list_templates", "update_block", "move_block", "delete_block", "set_block_reference_image") -> McpCommandCategory.TEMPLATE
-            name in setOf("generate_block_asset", "generate_all_assets", "chat_refine_image", "remove_background", "bake_nine_patch", "compose_page_screenshot", "compare_with_reference", "screenshot_window", "list_matting_presets") -> McpCommandCategory.ASSET
+            name in setOf("generate_block_asset", "generate_all_assets", "chat_refine_image", "remove_background", "bake_nine_patch", "compose_page_screenshot", "compare_with_reference", "capture_ui_snapshot", "list_matting_presets") -> McpCommandCategory.ASSET
             name in setOf("ask_user_confirmation", "ask_user_choice", "notify_user") -> McpCommandCategory.INTERACTION
             name in setOf("invoke_gemini_text", "list_prompts", "get_prompt", "save_prompt", "reset_prompt") -> McpCommandCategory.AI_PROMPT
             name in setOf("check_env", "list_chat_sessions", "get_traffic_record", "get_runtime_status", "discover_tools") -> McpCommandCategory.RUNTIME

@@ -67,7 +67,7 @@ object McpToolRegistry {
             // 离屏渲染与视觉比对共享工具
             ComposePageScreenshotTool(),
             CompareWithReferenceTool(),
-            ScreenshotWindowTool(),
+            CaptureUiSnapshotTool(),
             RenderTemplateOverlayTool(),
             InspectBlockWithReferenceTool(),
             ExecuteUiActionSequenceTool(),

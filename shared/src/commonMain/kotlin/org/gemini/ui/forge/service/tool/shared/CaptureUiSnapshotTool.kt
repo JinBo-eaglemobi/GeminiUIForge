@@ -1,10 +1,5 @@
 package org.gemini.ui.forge.service.tool.shared
 
-import org.gemini.ui.forge.service.tool.ToolAnnotations
-import org.gemini.ui.forge.service.tool.ToolContent
-import org.gemini.ui.forge.service.tool.ToolDefinition
-import org.gemini.ui.forge.service.tool.ToolResult
-
 import androidx.compose.ui.unit.IntRect
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -17,26 +12,28 @@ import org.gemini.ui.forge.accessibility.ComposeAccessibilityGateway
 import org.gemini.ui.forge.captureActiveScreenShot
 import org.gemini.ui.forge.model.ui.UIBlock
 import org.gemini.ui.forge.service.mcp.McpUiActionPipeline
+import org.gemini.ui.forge.service.tool.ToolAnnotations
+import org.gemini.ui.forge.service.tool.ToolDefinition
+import org.gemini.ui.forge.service.tool.ToolResult
 import org.gemini.ui.forge.utils.ImageCacheManager
 import org.gemini.ui.forge.utils.UiGeometryHelper
 import org.gemini.ui.forge.utils.bindParents
 import org.gemini.ui.forge.utils.compressToCompactImage
 import org.gemini.ui.forge.utils.findBlockById
 import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
- * 应用主窗口截图工具（供 AI 调试与视觉状态确认）
+ * 应用界面原生快照截图工具（供 AI 调试、视觉审查与状态对账）
  *
- * 截取对象恒为应用自身窗口 (离屏重绘，界面最小化/后台运行同样有效)，
- * 支持按原生语义节点 (targetNodeId) 或窗口像素区域 (region) 精准裁剪。
+ * 截取对象为应用内部 Compose 视图层 (离屏重绘，界面最小化或后台运行同样有效，绝不截取操作系统桌面)，
+ * 支持按原生语义节点/图元 (targetNodeId) 或视口像素区域 (region) 精准裁剪特写，亦可缺省截取整窗全貌。
  */
-class ScreenshotWindowTool : ToolDefinition {
+class CaptureUiSnapshotTool : ToolDefinition {
 
-    override val name: String = "screenshot_window"
+    override val name: String = "capture_ui_snapshot"
 
     override val description: String =
-        "获取应用程序自身窗口的实时画面截图 (ImageContent，离屏渲染，窗口最小化或后台运行同样有效，绝不截取系统桌面)。可选 targetNodeId (如画布图元 ID 或组件标识) 或 region {left,top,right,bottom} (屏幕绝对像素区域) 精准截取某个模块/组件/程序区域 (主窗与弹窗内容均支持)。"
+        "获取应用程序界面/视图的实时画面快照 (ImageContent，离屏渲染，窗口最小化或后台运行同样有效，绝不截取系统桌面)。可选 targetNodeId (如画布图元 ID 或组件标识) 或 region {left,top,right,bottom} (屏幕绝对像素区域) 精准截取某个模块/组件/程序区域 (主窗与弹窗内容均支持)。"
 
     override val annotations: ToolAnnotations = ToolAnnotations(
         readOnlyHint = true,
@@ -78,7 +75,6 @@ class ScreenshotWindowTool : ToolDefinition {
             if (targetBlock != null) {
                 // 携带模块类型与唯一 ID，例如 block_button_btn_spin 或 block_btn_spin
                 blockFilePrefix = "block_${targetBlock.type.name.lowercase()}_$cleanId"
-                val abs = targetBlock.toAbsoluteBounds()
                 val blockInWindow = UiGeometryHelper.getBlockBoundsInWindow(targetBlock)
                 val r = UiGeometryHelper.getBlockCropRegionInWindow(targetBlock, paddingPx = 32)
                 r to "图元 [$cleanId] 视口区域 (${r.width}x${r.height}px)"
@@ -105,20 +101,19 @@ class ScreenshotWindowTool : ToolDefinition {
 
         onProgress?.invoke(0.7f, "正在压缩编码 (WEBP 优先) 并缓存到磁盘...")
         // 统一走公共工具压缩中枢：携带图元唯一 ID 与语义化名称，彻底消除无名匿名缓存
-        val prefix = blockFilePrefix ?: if (region != null) "window_region" else "window"
+        val prefix = blockFilePrefix ?: if (region != null) "ui_region" else "ui_snapshot"
         val compact = compressToCompactImage(shotBytes)
         val vm = McpUiActionPipeline.getActiveViewModel()
         val currentProjectName = vm?.state?.value?.projectName?.takeIf { it.isNotBlank() }
         val cachedPath = ImageCacheManager.saveCache(prefix, compact, projectName = currentProjectName)
 
         val b64 = Base64.encode(compact.bytes)
-        onProgress?.invoke(1.0f, "应用窗口画面捕获就绪")
+        onProgress?.invoke(1.0f, "应用界面画面快照捕获就绪")
 
         return ToolResult.image(
             base64Data = b64,
             mimeType = compact.mimeType,
-            message = "📸 应用窗口截图完成 [$regionDesc] (${compact.extension.uppercase()} 压缩, ${compact.bytes.size / 1024}KB)，磁盘缓存: $cachedPath"
+            message = "📸 应用界面快照完成 [$regionDesc] (${compact.extension.uppercase()} 压缩, ${compact.bytes.size / 1024}KB)，磁盘缓存: $cachedPath"
         )
     }
 }
-

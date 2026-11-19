@@ -39,7 +39,7 @@ import org.gemini.ui.forge.ui.theme.LocalAppSpacing
  *
  * 核心人机工程学与取证使命：
  * 1. 替代 OS 默认丑陋且阻塞 MCP 截图的外部灰色弹窗；
- * 2. 渲染于 Compose 顶层，确保 [screenshot_window] 工具可 100% 捕获完整报错画面与文字；
+ * 2. 渲染于 Compose 顶层，确保 [capture_ui_snapshot] 工具可 100% 捕获完整报错画面与文字；
  * 3. 严格遵循系统原本的处理生命周期契约：点击"确定 / 退出程序"安全退出，亦提供快捷复制与忽略通道。
  *
  * @param payload 异常载荷实体

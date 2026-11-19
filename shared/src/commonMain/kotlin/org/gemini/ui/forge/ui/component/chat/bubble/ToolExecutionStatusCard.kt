@@ -35,7 +35,7 @@ import org.gemini.ui.forge.model.chat.ChatToolCallRecord
 /**
  * 视觉资产生成类工具名称白名单。
  * 仅此类工具产出的图片，才被认定为新生成的视觉图片资产，并在卡片下方展示「存入素材库/添加到页面」操作栏。
- * 审查、观测、截图类工具（如 screenshot_window, compose_page_screenshot 等）绝不展示资产操作栏。
+ * 审查、观测、截图类工具（如 capture_ui_snapshot, compose_page_screenshot 等）绝不展示资产操作栏。
  */
 private val ASSET_GENERATION_TOOL_NAMES: Set<String> = setOf(
     "generate_image",
@@ -161,7 +161,7 @@ fun ToolExecutionStatusCard(
                     )
                 }
                 // 仅限新生成的视觉图片资产才挂载操作栏（存入素材库/添加到页面）
-                // 截图与审查类工具（如 screenshot_window）仅供视觉自审，严禁展示资产操作栏
+                // 截图与审查类工具（如 capture_ui_snapshot）仅供视觉自审，严禁展示资产操作栏
                 val isAssetGenerationTool = record.toolName in ASSET_GENERATION_TOOL_NAMES
                 if (isAssetGenerationTool && imageActions != null) {
                     Spacer(Modifier.height(4.dp))
