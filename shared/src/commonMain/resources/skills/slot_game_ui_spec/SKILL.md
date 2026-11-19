@@ -32,21 +32,29 @@ tools:
 
 ---
 
-## 一、 全局基础组件类型枚举 (`UIBlockType` 唯一合法集合)
+## 一、 全局基础组件类型枚举 (`UIBlockType` 唯一合法集合) 与 Properties 高级配置体系
 
-调用 `edit_view_layout` 时，每个图元的 `type` 字段**仅允许从以下 13 个基础组件类型中选取**：
-- **`COMPONENT`**：通用组件、面板容器或引用独立子页面的组件实例（设置 `targetPageId` 时强制为 `COMPONENT`）
-- **`LIST`**：动态滚动列表/网格容器（对应 `fgui.GList` / `PureList`，如横向多列转轴列表、单列垂直滚动列表、优惠券列表）
-- **`IMAGE`**：静态图片、背景底图、装饰外框或符号静态纹理
-- **`LOADER`**：动态资源装载器（对应 `fgui.GLoader`，如符号动态图标槽 `icon`、赢分图标 `winIcon`）
-- **`SPINE`**：骨骼动画与特效节点（对应 `fgui.GLoader3D` / `tsCore.GSpineSkeleton`）
-- **`BUTTON`**：交互按钮（包含核心 `spinBtn`、`autoSpinBtn`、`backBtn`、`SymbolBtn` 等一切可点击按钮）
-- **`TEXT`**：文本标签与富文本数值框（对应 `fgui.GTextField` / `fgui.GRichTextField`，如 `msgInfo`、`balanceText`、`winText`、`totalBetText`）
-- **`COMBO_BOX`**：下拉选择框（对应 `TopComboBox`，如顶部菜单 `menuBtn`）
-- **`PROGRESS_BAR`**：进度条（对应 `tsCore.ProgressBar`，如奖池收集进度条）
-- **`SLIDER`** / **`SCROLL_BAR`** / **`POPUP_MENU`** / **`INPUT`**
+调用 `edit_view_layout` 时，每个图元的 `type` 字段**仅允许从以下 13 个基础组件类型中选取**。
+**全量 13 个基础组件均全面支持挂载专属高级配置 `properties`**。在排版时，除了基础几何坐标 (`x, y, width, height`) 外，智能体必须**自动识别图元的业务角色与玩家个性化需求，精准挂载和修改对应的 `properties`**！
 
-> 📌 **【组件类型约束】**：图元类型必须严格从上述 13 个标准枚举中选取，严禁使用非标准或自定义复合类型名；所有复合容器与子页面引用一律使用 `COMPONENT` 类型。
+### 全量基础组件类型与 Properties 映射全景表
+
+| 基础组件类型 (`type`) | 属性模型 (`properties`) | 核心默认属性与出厂规范（基于工业级项目如 `forestStar` 标杆） | 玩家/策划意图自动识别场景 |
+| :--- | :--- | :--- | :--- |
+| **`LIST`** | `ListProperties` | **`autoResizeItem: true`**（默认自动等比铺满）<br>**`lineGap: 0, columnGap: 0`**（默认行列间距为 0）<br>`listLayout: "SingleRow" \| "SingleColumn" \| "FlowHorizontal" \| "FlowVertical" \| "Pagination"`<br>`lineCount: 0, columnCount: 0`（0 为自适应）<br>`defaultItem: ""`（绑定的子项独立页面模板）<br>`overflow: 2 (Scroll), scrollType: 1 (Vertical)`<br>`align: "left", verticalAlign: "top"`<br>`selectionMode: "None" \| "Single" \| "Multiple"` | • 列距/行距调整（如“间距 6px” $\rightarrow$ `columnGap: 6`）<br>• 单屏显示几行/几列（如“可见 3 行” $\rightarrow$ `lineCount: 3`）<br>• 滚动方向与折行（如“单行横排” $\rightarrow$ `SingleRow`）<br>• 子项单页模板绑定（`defaultItem`）<br>• 单选/多选模式切换 |
+| **`BUTTON`** | `ButtonProperties` | `text: ""`（按钮默认文案）<br>`downEffect: 1`（按压视觉反馈：`0: 无, 1: 滤镜变暗, 2: 向心缩放`）<br>`downEffectValue: 0.8f`（缩放系数如 `0.92f`，变暗系数如 `0.8f`）<br>`mode: "Common"`（交互模式：`"Common"` 普通, `"Check"` 勾选, `"Radio"` 单选互斥）<br>`sound: ""`（点击音效名）<br>`isMultiState: false`（是否生成多状态切图） | • 按钮点击缩放/变暗效果<br>• 单选/复选按钮模式<br>• 按钮文案与按键音效指定 |
+| **`COMPONENT`** | `ViewProperties` | `clipOverflow: false`（是否裁剪溢出内容）<br>`layoutType: "none"`（布局模式：`"none"` 绝对定位, `"horizontal"` 横向一维流, `"vertical"` 垂直一维流）<br>`gap: 0`（一维流元素间隙）<br>`flexWrap: false`（横向一维流是否折行）<br>`justifyContent: "flex-start"`（主轴对齐：`"flex-start"`, `"center"`, `"flex-end"`, `"space-between"`, `"space-around"`）<br>`alignItems: "flex-start"`（交叉轴对齐：`"flex-start"`, `"center"`, `"flex-end"`, `"stretch"`）<br>`overflow: 0 (Visible) \| 1 (Hidden) \| 2 (Scroll)`<br>`scrollType: -1 (None) \| 0 (H) \| 1 (V) \| 2 (Both)`<br>`backgroundColor: ""`（背景色十六进制 HEX） | • 容器流式横向/纵向排布<br>• 自动居中对齐/两端分散对齐<br>• 容器是否裁剪/滚动<br>• 容器背景纯色填充 |
+| **`PROGRESS_BAR`** | `ProgressBarProperties` | `max: 100.0`, `value: 50.0`<br>`titleType: "Percent"`（展示模式：`"Percent"` 百分比, `"ValueAndMax"` 当前/最大值, `"Value"` 纯数值, `"None"` 不显示） | • 进度条初始进度与最大值<br>• 进度文案格式（百分比 vs 当前/总量） |
+| **`SLIDER`** | `SliderProperties` | `min: 0.0`, `max: 100.0`, `value: 50.0`<br>`step: 1.0`, `wholeNumbers: true`（是否仅取整数） | • 滑动条数值范围与步长<br>• 是否允许浮点数滑动 |
+| **`COMBO_BOX`** / **`POPUP_MENU`** | `ComboBoxProperties` | `items: []`（选项文本列表）<br>`selectedIndex: 0`（默认选中项索引）<br>`visibleItemCount: 5`（下拉展开最大可见项数） | • 下拉菜单选项列表与默认选项<br>• 菜单展开行数 |
+| **`LOADER`** | `LoaderProperties` | `url: ""`（装载的资源 URL 或相对路径）<br>`fill: "none"`（缩放模式：`"none"`, `"scale"`, `"scalefree"`, `"scalenoborder"`, `"scalematchheight"`, `"scalematchwidth"`）<br>`clip: false`（视口边缘裁剪）<br>`align: "center"`, `verticalAlign: "middle"` | • 动态装载切片缩放填充模式<br>• 居中对齐与裁剪 |
+| **`SPINE`** | `SpineProperties` | `animationName: "idle"`（默认播放动画名）<br>`skinName: "default"`（骨骼皮肤名）<br>`loop: true`（是否循环播放）<br>`timeScale: 1.0f`（播放速度倍率） | • 骨骼动画名（如 "win", "idle", "attack"）<br>• 循环播放控制与动画倍速 |
+| **`TEXT`** | `TextProperties` | `text: ""`（静态文本内容）<br>`fontSize: 14`, `color: "#FFFFFF"`<br>`bold: false`, `italic: false`, `underline: false`<br>`align: "left"` (`"left"`, `"center"`, `"right"`)<br>`verticalAlign: "top"` (`"top"`, `"middle"`, `"bottom"`)<br>`singleLine: false`, `ubb: true`<br>`autoSize: "none"` (`"none"`, `"both"`, `"height"`)<br>`strokeColor: ""`, `strokeWidth: 0f` | • 文本字号与文字颜色 HEX<br>• 粗体/下划线、水平/垂直居中<br>• 单行限制与文字描边 |
+| **`IMAGE`** | `ImageProperties` | `resizeMode: "STRETCH"` (`"STRETCH"` 普通拉伸, `"NINE_PATCH"` 九宫格)<br>`ninePatchConfig: { left: 0, top: 0, right: 0, bottom: 0 }` | • 边框底图九宫格拉伸边缘保护 |
+| **`SCROLL_BAR`** | `ScrollBarProperties` | `fixedGripSize: false`（是否固定滑块大小）<br>`arrowButton: false`（两端是否有微调箭头） | • 滚动条滑块固定与箭头显示 |
+| **`INPUT`** | `InputProperties` | `text: ""`, `promptText: ""`（占位灰色提示文案 Placeholder）<br>`fontSize: 14`, `color: "#FFFFFF"`<br>`maxLength: 0`（0 为不限字数）<br>`keyboardType: "Default"` (`"Default"`, `"Number"`, `"Password"`)<br>`restrict: ""`（允许输入的正则表达式规则） | • 输入框占位文本 Placeholder<br>• 最大字数与纯数字/密码键盘 |
+
+> 📌 **【组件属性装配铁律】**：图元在创建或修改时，智能体**除基础几何与素材绑定外，必须主动为其装配对应的 `properties`**；当用户提出具体排版或样式需求时，**必须自动识别并转化为对应组件 `properties` 字段的修改**！
 
 ---
 
@@ -226,10 +234,31 @@ Slot 游戏全套 UI 制作清单
 ### 1. 结构与节点规范
 - **游戏标题外框 (`name` / `title`，`IMAGE`)**；
 - **状态播报文本框 (`msgInfo` / `winLineTextField`，`TEXT`)**：居中横跨于转轴上方，富文本格式；
-- **横向列列表 (`list`，`LIST`)**：`layout="row"`，容纳 $N$ 列单列实例（复用 `SlotListItem`）；
+- **横向多列转轴列表 (`list`，`LIST`)**：
+  - **对齐工业级标杆 (如 `forestStar/GameView.xml`) 的标准属性默认值**：
+    - **`listLayout: "SingleRow"`**（单行横排多列）
+    - **`autoResizeItem: true`**（默认自动等比铺满容器）
+    - **`lineGap: 0, columnGap: 0`**（默认行列间距为 0，若有具体视觉留白需求则动态调整 `columnGap`）
+    - **`columnCount: 5`**（5列标准转轴）
+    - **`overflow: 1`**（`"Hidden"`，严格裁剪超出轮盘框体的内容）
+    - **`scrollType: -1`**（不可触控随意乱划滚动）
+    - **`defaultItem: "SlotListItem"`**（必须绑定单列独立页面模板！）
 - **矢量连线画布 (`linePanel`，`COMPONENT`，引用 `LineGraphics`)**：挂载于转轴列表正上方。
 
-### 2. 底层代码实现的功能与自动识别绑定
+> 📌 **【转轴纯净性与活动挂件解耦铁律】**：`SlotGameView` **专职且仅能包含滚轴列表 `list`、连线层 `linePanel` 与状态播报文本**。类似 `bonusProgress`、活动礼盒、奖池宝箱等玩法挂件，严禁塞入 `SlotGameView` 中混装，必须按照工业级标准剥离为独立的 `JackpotView` 或活动组件，直接挂载在主场景 `Scene / Main` 的视口空白边缘！
+
+### 2. 单列垂直滚动模板标准属性规范 (`SlotListItem`)
+- **内部垂直滚动列表 (`list`，`LIST`)**：
+  - **对齐工业级标杆 (如 `forestStar/SlotListItem.xml`) 的标准属性默认值**：
+    - **`listLayout: "SingleColumn"`**（单列垂直排布）
+    - **`autoResizeItem: true`**（默认子项自动铺满列宽）
+    - **`lineGap: 0, columnGap: 0`**（默认子项紧密贴合）
+    - **`lineCount: 3`**（可见 3 行标准符号高度）
+    - **`overflow: 2`**（`"Scroll"`，物理滚动视口）
+    - **`scrollType: 1`**（`"Vertical"`，垂直无限循环滚动）
+    - **`defaultItem: "SlotItem"`**（必须绑定单符号独立原子模板！）
+
+### 3. 底层代码实现的功能与自动识别绑定
 底层 `BaseSlotView` 自动接管连线逻辑：
 - **矢量折线动态绘制**：中奖结算时，框架自动读取中奖线配置与当前中奖索引，在 `linePanel` 表面通过矢量绘图 API 以亮色（如青色 `#40ffff`、高光描边）瞬间绘制出贯穿各轴符号中心点的中奖折线；
 - **轮播中奖线与文案播报**：若同时中多条线，框架自动启动轮播计时器，每隔 1~2 秒切换高亮一条中奖线，并自动在 `winLineTextField` 上实时更新文本：`"You won line 3 !"`，直至下一次旋转开始。

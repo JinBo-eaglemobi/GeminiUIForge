@@ -382,6 +382,7 @@ object GameUiExportService {
                     }
                     if (props.leading != 4) appendLine("$indent    leading: ${props.leading},")
                     if (props.letterSpacing != 0) appendLine("$indent    letterSpacing: ${props.letterSpacing},")
+                    if (props.autoSize != "both") appendLine("$indent    autoSize: '${props.autoSize}',")
                     appendLine("$indent    x: $x,")
                     appendLine("$indent    y: $y,")
                     appendLine("$indent    width: $w,")

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.ui.component.*
 import org.gemini.ui.forge.ui.theme.LocalAppSpacing
@@ -25,21 +26,32 @@ fun TextPropertiesSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(spacing.inspectorRowSpacing)
     ) {
-        // 1. 文本内容输入框
-        InspectorPropRow(label = "文本内容", tooltip = "显示的文本内容，支持换行符 \\n") {
+        // 1. 文本内容输入框（上下结构或多行舒展容器，彻底杜绝单行水平挤压）
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(spacing.extraSmall)
+        ) {
+            Text(
+                text = "文本内容",
+                style = dynamicBodyStyle.copy(
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            )
             SelectAllOutlinedTextField(
                 value = properties.text,
                 onValueChange = { onPropertiesChanged(properties.copy(text = it)) },
-                singleLine = true,
+                singleLine = false,
+                minLines = 3,
+                maxLines = 6,
+                streamlined = false,
                 placeholder = {
                     Text(
-                        text = "要展示的文字内容...",
-                        maxLines = 1,
-                        softWrap = false,
+                        text = "输入文本内容，支持换行...",
                         style = dynamicBodyStyle.copy(color = MaterialTheme.colorScheme.outline)
                     )
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp, max = 150.dp)
             )
         }
 
@@ -111,9 +123,30 @@ fun TextPropertiesSection(
             )
         }
 
+        // 6. 自动大小 (FairyGUI 标准 5 项枚举)
+        val autoSizeOptions = listOf(
+            "none" to "(无)",
+            "both" to "宽度和高度",
+            "height" to "高度",
+            "shrink" to "自动收缩",
+            "ellipsis" to "显示省略号"
+        )
+        InspectorPropRow(label = "自动大小", tooltip = "对齐 FGUI autoSize 属性：默认自适应宽度和高度") {
+            DropdownInputField(
+                value = autoSizeOptions.find { it.first == properties.autoSize }?.second ?: "宽度和高度",
+                onValueChange = {},
+                items = autoSizeOptions,
+                onItemSelected = { (key, _) -> onPropertiesChanged(properties.copy(autoSize = key)) },
+                itemLabel = { it.second },
+                isSelected = { it.first == properties.autoSize },
+                readOnly = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
         Spacer(modifier = Modifier.height(spacing.extraSmall))
 
-        // 6. UBB 富文本与单行限制开关
+        // 7. UBB 富文本与单行限制开关
         InspectorCheckboxRow(
             label = "启用 UBB 富文本标记",
             checked = properties.isUbb,

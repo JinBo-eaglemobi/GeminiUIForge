@@ -39,6 +39,10 @@
      - 全系统 `type` 字段仅允许使用以下 13 个基础 UI 组件枚举：`BUTTON, COMPONENT, TEXT, IMAGE, LIST, SPINE, COMBO_BOX, PROGRESS_BAR, POPUP_MENU, LOADER, SCROLL_BAR, SLIDER, INPUT`；
      - 已彻底废除 `CONTAINER, BACKGROUND, REEL, SPIN_BUTTON, SYMBOL, HEADER, FOOTER, WIN_DISPLAY` 等旧类型，且已移除 `isPureContainer` 属性；
      - 通用面板/组合层/页面引用实例使用 `COMPONENT`；动态滚动列表/网格容器使用 `LIST`；骨骼动画使用 `SPINE`；文本与数值框（如 `msgInfo`、`balanceText`、`winText`、`totalBetText`）必须使用 `TEXT`；
+   - **【全量基础组件专属 Properties 高级属性装配与意图识别铁律】**：
+     - 全量 13 个基础组件均全面支持传入高级属性 `properties: { ... }`；
+     - **`LIST` 属性规范**：`autoResizeItem` 默认恒为 `true`（自动等比铺满容器宽/高）；`lineGap` 与 `columnGap` 默认恒为 `0`；滚轴多列矩阵默认 `listLayout: "SingleRow"`, `defaultItem: "SlotListItem"`, `columnCount: 5`, `overflow: 1 (Hidden)`, `scrollType: -1 (None)`；单列滚轴默认 `listLayout: "SingleColumn"`, `defaultItem: "SlotItem"`, `lineCount: 3`, `overflow: 2 (Scroll)`, `scrollType: 1 (Vertical)`；
+     - **动态意图自动识别**：当用户/策划在提示词中提出任何关于组件的排版要求时（例如：“列间距改成 8”、“单行横排”、“单屏可见 4 行”、“关闭自动等比拉伸”、“按钮按压缩放”、“文字字号 20 居中带描边”、“进度条最大值设为 300”），智能体必须**自动识别可配置的 properties**，在 `edit_view_layout` 的 `elements` 中将这些需求转化为对应 `properties` 的字段装配或通过 `PATCH` 局部修改；
    - **【平级页面引用（`targetPageId`）零内联 `children` 绝对红线】**：
      - 凡是将复合组件（如 Slot 规范中的 `topBar -> TopView`、`game -> SlotGameView`、`bottom -> BottomView`、单列 `SlotListItem`、单符号 `SlotItem`）拆分为独立子页面并在宿主页面中通过 `targetPageId` 引用时，该引用节点必须设为 `type: "COMPONENT", targetPageId: "<子页面ID>"`，且**其 `children` 必须严格为空（`children: []` 或省略），绝对禁止在带有 `targetPageId` 的节点内同时塞入 `children`**！
      - 该复合组件内部的所有子图元，必须通过 `edit_view_layout` 的 `operations` 独立提交到目标子页面（`viewName: "<子页面ID>"`）中维护；

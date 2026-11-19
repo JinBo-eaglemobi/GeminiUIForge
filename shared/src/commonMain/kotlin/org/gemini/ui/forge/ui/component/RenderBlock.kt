@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.produceState
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,12 +53,30 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
+ * 将水平与垂直方向轴映射为 Compose Alignment
+ */
+fun parseTextAlignment(horizontal: String, vertical: String): Alignment {
+    val h = horizontal.uppercase().trim()
+    val v = vertical.uppercase().trim()
+    return when {
+        v == "TOP" && h == "LEFT" -> Alignment.TopStart
+        v == "TOP" && h == "RIGHT" -> Alignment.TopEnd
+        v == "TOP" -> Alignment.TopCenter
+        v == "BOTTOM" && h == "LEFT" -> Alignment.BottomStart
+        v == "BOTTOM" && h == "RIGHT" -> Alignment.BottomEnd
+        v == "BOTTOM" -> Alignment.BottomCenter
+        h == "LEFT" -> Alignment.CenterStart
+        h == "RIGHT" -> Alignment.CenterEnd
+        else -> Alignment.Center
+    }
+}
+
+/**
  * 将垂直方向轴映射为 Compose Alignment
  */
 fun parseVerticalAlignment(vertical: String): Alignment {
-    return when (vertical) {
+    return when (vertical.uppercase().trim()) {
         "TOP" -> Alignment.TopCenter
-        "CENTER" -> Alignment.Center
         "BOTTOM" -> Alignment.BottomCenter
         else -> Alignment.Center
     }
@@ -67,7 +86,7 @@ fun parseVerticalAlignment(vertical: String): Alignment {
  * 将水平方向轴映射为 Compose TextAlign
  */
 fun parseTextAlign(horizontal: String): TextAlign {
-    return when (horizontal) {
+    return when (horizontal.uppercase().trim()) {
         "LEFT" -> TextAlign.Left
         "RIGHT" -> TextAlign.Right
         else -> TextAlign.Center
@@ -87,15 +106,13 @@ fun RenderStyledText(
 ) {
     val color = parseHexColor(textProperties.textColor).copy(alpha = alpha)
     val fontSize = (textProperties.textSize * baseScale).sp
+    val letterSpacing = (textProperties.letterSpacing * baseScale).sp
     val fontWeight = if (textProperties.isBold) FontWeight.Bold else FontWeight.Normal
     val fontStyle = if (textProperties.isItalic) FontStyle.Italic else FontStyle.Normal
     val textAlign = parseTextAlign(textProperties.horizontalAlign)
 
     val baseStyle = TextStyle(
-        lineHeightStyle = LineHeightStyle(
-            alignment = LineHeightStyle.Alignment.Center,
-            trim = LineHeightStyle.Trim.Both
-        )
+        letterSpacing = letterSpacing
     )
 
     Box(modifier = modifier) {
@@ -105,13 +122,12 @@ fun RenderStyledText(
                 text = textProperties.text,
                 color = sColor,
                 fontSize = fontSize,
+                letterSpacing = letterSpacing,
                 fontWeight = fontWeight,
                 fontStyle = fontStyle,
                 textAlign = textAlign,
-                lineHeight = fontSize,
                 softWrap = false,
                 maxLines = 1,
-                modifier = Modifier.fillMaxWidth(),
                 style = baseStyle.copy(
                     drawStyle = Stroke(miter = 10f, width = textProperties.strokeWidth * baseScale)
                 )
@@ -122,14 +138,13 @@ fun RenderStyledText(
             text = textProperties.text,
             color = color,
             fontSize = fontSize,
+            letterSpacing = letterSpacing,
             fontWeight = fontWeight,
             fontStyle = fontStyle,
             textAlign = textAlign,
-            lineHeight = fontSize,
             softWrap = false,
             maxLines = 1,
-            style = baseStyle,
-            modifier = Modifier.fillMaxWidth()
+            style = baseStyle
         )
     }
 }

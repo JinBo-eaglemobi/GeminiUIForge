@@ -360,8 +360,20 @@ class CanvasEditorDelegate(
 
     fun updateBlockBounds(blockId: String, left: Float, top: Float, width: Float, height: Float, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
-        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
-            it.copy(bounds = SerialRect(left, top, left + width, top + height))
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) { b ->
+            var updatedProps = b.properties
+            // 联动规则：当文本组件处于 autoSize == "both"（宽度和高度自适应）时，
+            // 一旦手动修改宽高，自动切换为 "(无)" ("none")
+            if (b.type == UIBlockType.TEXT) {
+                val textProps = b.properties as? BlockProperties.TextProperties
+                if (textProps != null && textProps.autoSize.equals("both", ignoreCase = true)) {
+                    updatedProps = textProps.copy(autoSize = "none")
+                }
+            }
+            b.copy(
+                bounds = SerialRect(left, top, left + width, top + height),
+                properties = updatedProps
+            )
         }.bindParents()
 
         val proj = state.project ?: return
@@ -483,16 +495,31 @@ class CanvasEditorDelegate(
 
     /**
      * 更新指定图元的专属属性配置，即时同步至当前页面图元树并标脏。
+     * 若文本组件处于 both 状态且文本/字号/字距发生变化，自动动态重算外包尺寸并更新图元 bounds。
      */
     fun updateBlockProperties(blockId: String, properties: BlockProperties, repo: TemplateRepository = TemplateRepository()) {
         val view = state.currentView ?: return
-        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) {
-            it.copy(properties = properties)
+        val updatedBlocks = updateBlockInTreeRecursively(view.blocks, blockId) { b ->
+            var finalBounds = b.bounds
+            if (b.type == UIBlockType.TEXT && properties is BlockProperties.TextProperties) {
+                if (properties.autoSize.equals("both", ignoreCase = true)) {
+                    val (measuredW, measuredH) = org.gemini.ui.forge.utils.TextDimensionCalculator.calculateDimension(
+                        text = properties.text,
+                        fontSize = properties.textSize,
+                        letterSpacing = properties.letterSpacing,
+                        leading = properties.leading
+                    )
+                    finalBounds = SerialRect(
+                        left = b.bounds.left,
+                        top = b.bounds.top,
+                        right = b.bounds.left + measuredW,
+                        bottom = b.bounds.top + measuredH
+                    )
+                }
+            }
+            b.copy(properties = properties, bounds = finalBounds)
         }.bindParents()
-        val updatedPages = state.project?.studioPages?.map {
-            if (it.id == view.id) it.copy(blocks = updatedBlocks) else it
-        } ?: return
-        state = state.copy(project = state.project?.copy(studioPages = updatedPages), isDirty = true)
+        updateViewBlocksAndSave(view.id, updatedBlocks, repo)
     }
 
     fun deleteSelectedBlock(blockId: String, repo: TemplateRepository) {

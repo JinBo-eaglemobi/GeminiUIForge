@@ -34,6 +34,9 @@ import kotlinx.coroutines.withContext
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlockType
 import org.gemini.ui.forge.model.ui.UIStudioBlock
+import org.gemini.ui.forge.model.ui.BlockProperties
+import org.gemini.ui.forge.ui.component.RenderStyledText
+import org.gemini.ui.forge.ui.component.parseVerticalAlignment
 import org.gemini.ui.forge.utils.readLocalFileBytes
 import org.gemini.ui.forge.utils.toImageBitmap
 
@@ -199,19 +202,59 @@ fun UIStudioBlockItem(
                 }
             }
         } else if (!isPureContainer) {
-            // 无图普通组件占位（遵循多维语义化配色）
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(typeColor.copy(alpha = 0.08f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = displayName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.85f),
-                    maxLines = 1
-                )
+            val textProps = (block.properties as? BlockProperties.TextProperties)?.takeIf { it.text.isNotEmpty() }
+            val inputProps = (block.properties as? BlockProperties.InputProperties)?.takeIf { it.hintText.isNotEmpty() }
+
+            if (block.type == UIBlockType.TEXT && textProps != null) {
+                // 文本组件专属渲染：真实样式文字、颜色、描边与排版对齐
+                // 在 autoSize == both 下，组件 bounds 严格精确等于文字实际渲染尺寸，紧密无缝贴合！
+                val alignMode = if (textProps.autoSize.equals("both", ignoreCase = true)) {
+                    Alignment.TopStart
+                } else {
+                    org.gemini.ui.forge.ui.component.parseTextAlignment(
+                        horizontal = textProps.horizontalAlign,
+                        vertical = textProps.verticalAlign
+                    )
+                }
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = alignMode
+                ) {
+                    RenderStyledText(
+                        textProperties = textProps,
+                        baseScale = 1f
+                    )
+                }
+            } else if (block.type == UIBlockType.INPUT && inputProps != null) {
+                // 输入框组件专属渲染：占位提示文案
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
+                    contentAlignment = org.gemini.ui.forge.ui.component.parseTextAlignment(
+                        horizontal = inputProps.horizontalAlign,
+                        vertical = inputProps.verticalAlign
+                    )
+                ) {
+                    RenderStyledText(
+                        textProperties = inputProps,
+                        baseScale = 1f,
+                        alpha = 0.6f
+                    )
+                }
+            } else {
+                // 无图普通组件占位（遵循多维语义化配色）
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(typeColor.copy(alpha = 0.08f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = displayName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.85f),
+                        maxLines = 1
+                    )
+                }
             }
         }
 

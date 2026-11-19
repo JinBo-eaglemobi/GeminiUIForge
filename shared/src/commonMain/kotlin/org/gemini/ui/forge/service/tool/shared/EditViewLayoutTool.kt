@@ -77,6 +77,10 @@ class EditViewLayoutTool : ToolDefinition {
                                     put("slotRole", buildJsonObject { put("type", "string"); put("description", "插槽语义角色(用于全自动装配): BACKGROUND, SPIN_BUTTON, REEL_SYMBOL, BUTTON, HUD_FRAME, TITLE_LOGO, BET_CONTROL") })
                                     put("op", buildJsonObject { put("type", "string"); put("description", "PATCH 模式专用动词: UPDATE (默认, 局部修改指定字段), ADD (追加新图元), REMOVE (删除图元)") })
                                     put("parentBlockId", buildJsonObject { put("type", "string"); put("description", "PATCH ADD 追加图元时的目标父容器 ID (缺省时追加到页面顶层)") })
+                                    put("properties", buildJsonObject {
+                                        put("type", "object")
+                                        put("description", "组件专属高级配置属性 (BlockProperties)，覆盖全量 13 种基础类型。例如：LIST 的 listLayout, lineGap, columnGap, autoResizeItem, lineCount, columnCount, defaultItem, overflow, scrollType; BUTTON 的 text, downEffect, downEffectValue, mode; COMPONENT 的 clipOverflow, layoutType, gap; PROGRESS_BAR 的 max, value, titleType; TEXT 的 fontSize, color, align, ubb 等")
+                                    })
                                     put("children", buildJsonObject {
                                         put("type", "array")
                                         put("description", "嵌套子图元列表 (红线契约：当设置了 targetPageId 时，绝对严禁包含任何 children！否则将被引擎直接打回拒绝)")

@@ -25,6 +25,8 @@ interface TextStyled {
     val strokeColor: String
     /** 文字外描边宽度（像素） */
     val strokeWidth: Float
+    /** 字符间距（像素，纯整数） */
+    val letterSpacing: Int get() = 0
 }
 
 /**
@@ -143,7 +145,8 @@ sealed class BlockProperties {
         override val strokeWidth: Float = 0f,
         val isUbb: Boolean = false,
         val leading: Int = 4,
-        val letterSpacing: Int = 0,
+        override val letterSpacing: Int = 0,
+        val autoSize: String = "both",
         val underline: Boolean = false,
         val singleLine: Boolean = false
     ) : BlockProperties(), TextStyled

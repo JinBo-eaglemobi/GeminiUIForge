@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import org.gemini.ui.forge.model.ui.BlockProperties
 import org.gemini.ui.forge.model.ui.SerialRect
 import org.gemini.ui.forge.model.ui.UIBlockType
@@ -373,7 +374,7 @@ fun UIStudioCanvasArea(
                     } else {
                         // 渲染该视图中的所有可见图元实体（全层级递归展平绝对坐标）
                         Box(modifier = Modifier.fillMaxSize()) {
-                            renderableBlocks.forEach { info ->
+                            renderableBlocks.forEachIndexed { index, info ->
                                 UIStudioBlockItem(
                                     block = info.block,
                                     absBounds = info.absBounds,
@@ -382,6 +383,7 @@ fun UIStudioCanvasArea(
                                     scale = state.scale,
                                     assetPathResolver = assetPathResolver,
                                     assetUpdatedAtResolver = assetUpdatedAtResolver,
+                                    modifier = Modifier.zIndex(if (info.block.id == state.selectedBlockId) 1000f else (index + 1).toFloat()),
                                     onClick = {
                                         if (activeContainer == null) {
                                             // 主视图模式层级门禁：严禁绕过父容器直接选中子组件，点击必须选中所属顶层根父容器

@@ -99,8 +99,16 @@ val injectAdminManifest = tasks.register<Exec>("injectAdminManifest") {
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
-        "-File",
-        "scripts/inject-admin-manifest.ps1"
+        "-Command",
+        """
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
+        ${'$'}OutputEncoding = [System.Text.Encoding]::UTF8;
+        ${'$'}script = (Resolve-Path 'scripts/inject-admin-manifest.ps1').Path;
+        ${'$'}dir = Split-Path -Parent ${'$'}script;
+        ${'$'}bytes = [System.IO.File]::ReadAllBytes(${'$'}script);
+        ${'$'}code = [System.Text.Encoding]::UTF8.GetString(${'$'}bytes);
+        & ([ScriptBlock]::Create(${'$'}code)) -exePath "${'$'}dir/../desktopApp/build/compose/binaries/main/app/GeminiUIForge/GeminiUIForge.exe" -manifestPath "${'$'}dir/../desktopApp/src/main/resources/app.manifest"
+        """.trimIndent().replace("\r\n", " ").replace("\n", " ")
     )
 }
 

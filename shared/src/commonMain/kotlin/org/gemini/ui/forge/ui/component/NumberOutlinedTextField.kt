@@ -80,11 +80,20 @@ fun NumberOutlinedTextField(
                                     if (scrollDelta != 0f) {
                                         change.consume()
                                         val scrollDir = if (scrollDelta > 0) -1 else 1 // 滚轮向后（下）是减，向前（上）是加
-                                        val currentVal = localText.toFloatOrNull() ?: 0f
-                                        var newVal = currentVal + scrollDir * step
-                                        if (effectiveMinVal != null) newVal = maxOf(effectiveMinVal, newVal)
-                                        if (effectiveMaxVal != null) newVal = minOf(effectiveMaxVal, newVal)
-                                        val formatted = normalizeNumberString(newVal.toString(), isFloat, effectiveMinVal, effectiveMaxVal)
+                                        val formatted = if (isFloat) {
+                                            val currentVal = localText.toFloatOrNull() ?: 0f
+                                            var newVal = currentVal + scrollDir * step
+                                            if (effectiveMinVal != null) newVal = maxOf(effectiveMinVal, newVal)
+                                            if (effectiveMaxVal != null) newVal = minOf(effectiveMaxVal, newVal)
+                                            normalizeNumberString(newVal.toString(), isFloat = true, effectiveMinVal, effectiveMaxVal)
+                                        } else {
+                                            val currentVal = localText.toIntOrNull() ?: 0
+                                            val intStep = kotlin.math.round(step).toInt().coerceAtLeast(1)
+                                            var newVal = currentVal + scrollDir * intStep
+                                            if (effectiveMinVal != null) newVal = maxOf(effectiveMinVal.toInt(), newVal)
+                                            if (effectiveMaxVal != null) newVal = minOf(effectiveMaxVal.toInt(), newVal)
+                                            newVal.toString()
+                                        }
                                         localText = formatted
                                         currentOnValueChange(formatted)
                                     }
@@ -206,11 +215,20 @@ fun NumberOutlinedTextField(
                                             val steps = (accumulatedDrag / threshold).toInt()
                                             accumulatedDrag -= steps * threshold
 
-                                            val currentVal = localText.toFloatOrNull() ?: 0f
-                                            var newVal = currentVal + steps * step
-                                            if (effectiveMinVal != null) newVal = maxOf(effectiveMinVal, newVal)
-                                            if (effectiveMaxVal != null) newVal = minOf(effectiveMaxVal, newVal)
-                                            val formatted = normalizeNumberString(newVal.toString(), isFloat, effectiveMinVal, effectiveMaxVal)
+                                            val formatted = if (isFloat) {
+                                                val currentVal = localText.toFloatOrNull() ?: 0f
+                                                var newVal = currentVal + steps * step
+                                                if (effectiveMinVal != null) newVal = maxOf(effectiveMinVal, newVal)
+                                                if (effectiveMaxVal != null) newVal = minOf(effectiveMaxVal, newVal)
+                                                normalizeNumberString(newVal.toString(), isFloat = true, effectiveMinVal, effectiveMaxVal)
+                                            } else {
+                                                val currentVal = localText.toIntOrNull() ?: 0
+                                                val intStep = kotlin.math.round(step).toInt().coerceAtLeast(1)
+                                                var newVal = currentVal + steps * intStep
+                                                if (effectiveMinVal != null) newVal = maxOf(effectiveMinVal.toInt(), newVal)
+                                                if (effectiveMaxVal != null) newVal = minOf(effectiveMaxVal.toInt(), newVal)
+                                                newVal.toString()
+                                            }
                                             localText = formatted
                                             currentOnValueChange(formatted)
                                         }

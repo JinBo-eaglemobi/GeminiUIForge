@@ -531,11 +531,25 @@ object UiStudioLayoutService {
             }
         }
 
+        val parsedProps = parseBlockProperties(finalType, obj["properties"]?.jsonObject)
+        val finalBounds = if (finalType == UIBlockType.TEXT && parsedProps is BlockProperties.TextProperties && parsedProps.autoSize.equals("both", ignoreCase = true)) {
+            val (mW, mH) = org.gemini.ui.forge.utils.TextDimensionCalculator.calculateDimension(
+                text = parsedProps.text,
+                fontSize = parsedProps.textSize,
+                letterSpacing = parsedProps.letterSpacing,
+                leading = parsedProps.leading
+            )
+            SerialRect(bounds.left, bounds.top, bounds.left + mW, bounds.top + mH)
+        } else {
+            bounds
+        }
+
         val block = UIStudioBlock(
             id = id,
             type = finalType,
-            bounds = bounds,
+            bounds = finalBounds,
             assetHash = matchedAsset?.hash,
+            properties = parsedProps,
             children = childBlocks,
             targetPageId = targetPageId
         )
@@ -721,6 +735,219 @@ object UiStudioLayoutService {
                 upper.contains("BTN") || upper.contains("BUTTON") || upper.contains("SPIN") -> UIBlockType.BUTTON
                 upper.contains("TEXT") || upper.contains("LABEL") -> UIBlockType.TEXT
                 else -> UIBlockType.COMPONENT
+            }
+        }
+    }
+
+    /**
+     * 解析基础图元专属的高级配置属性 (BlockProperties)，覆盖全量 13 个基础组件类型
+     */
+    fun parseBlockProperties(
+        type: UIBlockType,
+        propObj: JsonObject?,
+        existingProps: BlockProperties? = null
+    ): BlockProperties? {
+        if (propObj == null || propObj.isEmpty()) {
+            return existingProps ?: createDefaultPropertiesForType(type)
+        }
+
+        return when (type) {
+            UIBlockType.LIST -> {
+                val base = (existingProps as? BlockProperties.ListProperties) ?: BlockProperties.ListProperties()
+                base.copy(
+                    listLayout = propObj["listLayout"]?.jsonPrimitive?.contentOrNull ?: base.listLayout,
+                    lineGap = propObj["lineGap"]?.jsonPrimitive?.intOrNull ?: base.lineGap,
+                    columnGap = propObj["columnGap"]?.jsonPrimitive?.intOrNull ?: base.columnGap,
+                    itemWidth = propObj["itemWidth"]?.jsonPrimitive?.intOrNull ?: base.itemWidth,
+                    itemHeight = propObj["itemHeight"]?.jsonPrimitive?.intOrNull ?: base.itemHeight,
+                    align = propObj["align"]?.jsonPrimitive?.contentOrNull ?: base.align,
+                    verticalAlign = propObj["verticalAlign"]?.jsonPrimitive?.contentOrNull ?: base.verticalAlign,
+                    scrollType = propObj["scrollType"]?.jsonPrimitive?.intOrNull ?: base.scrollType,
+                    overflow = propObj["overflow"]?.jsonPrimitive?.intOrNull ?: base.overflow,
+                    lineCount = propObj["lineCount"]?.jsonPrimitive?.intOrNull ?: base.lineCount,
+                    columnCount = propObj["columnCount"]?.jsonPrimitive?.intOrNull ?: base.columnCount,
+                    autoResizeItem = propObj["autoResizeItem"]?.jsonPrimitive?.booleanOrNull ?: base.autoResizeItem,
+                    defaultItem = propObj["defaultItem"]?.jsonPrimitive?.contentOrNull ?: base.defaultItem,
+                    selectionMode = propObj["selectionMode"]?.jsonPrimitive?.contentOrNull ?: base.selectionMode,
+                    foldHiddenItems = propObj["foldHiddenItems"]?.jsonPrimitive?.booleanOrNull ?: base.foldHiddenItems,
+                    scrollItemToViewFully = propObj["scrollItemToViewFully"]?.jsonPrimitive?.booleanOrNull ?: base.scrollItemToViewFully
+                )
+            }
+            UIBlockType.BUTTON -> {
+                val base = (existingProps as? BlockProperties.ButtonProperties) ?: BlockProperties.ButtonProperties()
+                base.copy(
+                    text = propObj["text"]?.jsonPrimitive?.contentOrNull ?: base.text,
+                    isMultiState = propObj["isMultiState"]?.jsonPrimitive?.booleanOrNull ?: base.isMultiState,
+                    downEffect = propObj["downEffect"]?.jsonPrimitive?.intOrNull ?: base.downEffect,
+                    downEffectValue = propObj["downEffectValue"]?.jsonPrimitive?.floatOrNull ?: base.downEffectValue,
+                    mode = propObj["mode"]?.jsonPrimitive?.contentOrNull ?: base.mode,
+                    relatedController = propObj["relatedController"]?.jsonPrimitive?.contentOrNull ?: base.relatedController,
+                    pageId = propObj["pageId"]?.jsonPrimitive?.contentOrNull ?: base.pageId,
+                    sound = propObj["sound"]?.jsonPrimitive?.contentOrNull ?: base.sound
+                )
+            }
+            UIBlockType.COMPONENT -> {
+                val base = (existingProps as? BlockProperties.ViewProperties) ?: BlockProperties.ViewProperties()
+                base.copy(
+                    backgroundColor = propObj["backgroundColor"]?.jsonPrimitive?.contentOrNull ?: base.backgroundColor,
+                    clipOverflow = propObj["clipOverflow"]?.jsonPrimitive?.booleanOrNull ?: base.clipOverflow,
+                    layoutType = propObj["layoutType"]?.jsonPrimitive?.contentOrNull ?: base.layoutType,
+                    gap = propObj["gap"]?.jsonPrimitive?.intOrNull ?: base.gap,
+                    flexWrap = propObj["flexWrap"]?.jsonPrimitive?.booleanOrNull ?: base.flexWrap,
+                    alignItems = propObj["alignItems"]?.jsonPrimitive?.contentOrNull ?: base.alignItems,
+                    justifyContent = propObj["justifyContent"]?.jsonPrimitive?.contentOrNull ?: base.justifyContent,
+                    scrollType = propObj["scrollType"]?.jsonPrimitive?.intOrNull ?: base.scrollType,
+                    overflow = propObj["overflow"]?.jsonPrimitive?.intOrNull ?: base.overflow,
+                    paddingTop = propObj["paddingTop"]?.jsonPrimitive?.intOrNull ?: base.paddingTop,
+                    paddingBottom = propObj["paddingBottom"]?.jsonPrimitive?.intOrNull ?: base.paddingBottom,
+                    paddingLeft = propObj["paddingLeft"]?.jsonPrimitive?.intOrNull ?: base.paddingLeft,
+                    paddingRight = propObj["paddingRight"]?.jsonPrimitive?.intOrNull ?: base.paddingRight
+                )
+            }
+            UIBlockType.PROGRESS_BAR -> {
+                val base = (existingProps as? BlockProperties.ProgressBarProperties) ?: BlockProperties.ProgressBarProperties()
+                base.copy(
+                    max = propObj["max"]?.jsonPrimitive?.doubleOrNull ?: base.max,
+                    value = propObj["value"]?.jsonPrimitive?.doubleOrNull ?: base.value,
+                    titleType = propObj["titleType"]?.jsonPrimitive?.contentOrNull ?: base.titleType
+                )
+            }
+            UIBlockType.SLIDER -> {
+                val base = (existingProps as? BlockProperties.SliderProperties) ?: BlockProperties.SliderProperties()
+                base.copy(
+                    min = propObj["min"]?.jsonPrimitive?.doubleOrNull ?: base.min,
+                    max = propObj["max"]?.jsonPrimitive?.doubleOrNull ?: base.max,
+                    value = propObj["value"]?.jsonPrimitive?.doubleOrNull ?: base.value,
+                    step = propObj["step"]?.jsonPrimitive?.doubleOrNull ?: base.step,
+                    wholeNumbers = propObj["wholeNumbers"]?.jsonPrimitive?.booleanOrNull ?: base.wholeNumbers
+                )
+            }
+            UIBlockType.COMBO_BOX, UIBlockType.POPUP_MENU -> {
+                val base = (existingProps as? BlockProperties.ComboBoxProperties) ?: BlockProperties.ComboBoxProperties()
+                val itemsList = propObj["items"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: base.items
+                base.copy(
+                    items = itemsList,
+                    selectedIndex = propObj["selectedIndex"]?.jsonPrimitive?.intOrNull ?: base.selectedIndex,
+                    visibleItemCount = propObj["visibleItemCount"]?.jsonPrimitive?.intOrNull ?: base.visibleItemCount
+                )
+            }
+            UIBlockType.LOADER -> {
+                val base = (existingProps as? BlockProperties.LoaderProperties) ?: BlockProperties.LoaderProperties()
+                base.copy(
+                    url = propObj["url"]?.jsonPrimitive?.contentOrNull ?: base.url,
+                    fill = propObj["fill"]?.jsonPrimitive?.contentOrNull ?: base.fill,
+                    clip = propObj["clip"]?.jsonPrimitive?.booleanOrNull ?: base.clip,
+                    align = propObj["align"]?.jsonPrimitive?.contentOrNull ?: base.align,
+                    verticalAlign = propObj["verticalAlign"]?.jsonPrimitive?.contentOrNull ?: base.verticalAlign
+                )
+            }
+            UIBlockType.SPINE -> {
+                val base = (existingProps as? BlockProperties.SpineProperties) ?: BlockProperties.SpineProperties()
+                base.copy(
+                    animationName = propObj["animationName"]?.jsonPrimitive?.contentOrNull ?: base.animationName,
+                    skinName = propObj["skinName"]?.jsonPrimitive?.contentOrNull ?: base.skinName,
+                    loop = propObj["loop"]?.jsonPrimitive?.booleanOrNull ?: base.loop,
+                    timeScale = propObj["timeScale"]?.jsonPrimitive?.floatOrNull ?: base.timeScale
+                )
+            }
+            UIBlockType.TEXT -> {
+                val base = (existingProps as? BlockProperties.TextProperties) ?: BlockProperties.TextProperties()
+                val rawColor = propObj["textColor"]?.jsonPrimitive?.contentOrNull
+                    ?: propObj["color"]?.jsonPrimitive?.contentOrNull
+                    ?: base.textColor
+                val rawSize = propObj["textSize"]?.jsonPrimitive?.intOrNull
+                    ?: propObj["fontSize"]?.jsonPrimitive?.intOrNull
+                    ?: base.textSize
+                val rawBold = propObj["isBold"]?.jsonPrimitive?.booleanOrNull
+                    ?: propObj["bold"]?.jsonPrimitive?.booleanOrNull
+                    ?: base.isBold
+                val rawItalic = propObj["isItalic"]?.jsonPrimitive?.booleanOrNull
+                    ?: propObj["italic"]?.jsonPrimitive?.booleanOrNull
+                    ?: base.isItalic
+                val rawHAlign = propObj["horizontalAlign"]?.jsonPrimitive?.contentOrNull
+                    ?: propObj["align"]?.jsonPrimitive?.contentOrNull
+                    ?: base.horizontalAlign
+                val rawVAlign = propObj["verticalAlign"]?.jsonPrimitive?.contentOrNull
+                    ?: base.verticalAlign
+                val rawUbb = propObj["isUbb"]?.jsonPrimitive?.booleanOrNull
+                    ?: propObj["ubb"]?.jsonPrimitive?.booleanOrNull
+                    ?: base.isUbb
+
+                base.copy(
+                    text = propObj["text"]?.jsonPrimitive?.contentOrNull ?: base.text,
+                    textColor = rawColor,
+                    textSize = rawSize,
+                    isBold = rawBold,
+                    isItalic = rawItalic,
+                    horizontalAlign = rawHAlign,
+                    verticalAlign = rawVAlign,
+                    strokeColor = propObj["strokeColor"]?.jsonPrimitive?.contentOrNull ?: base.strokeColor,
+                    strokeWidth = propObj["strokeWidth"]?.jsonPrimitive?.floatOrNull ?: base.strokeWidth,
+                    isUbb = rawUbb,
+                    leading = propObj["leading"]?.jsonPrimitive?.intOrNull ?: base.leading,
+                    letterSpacing = propObj["letterSpacing"]?.jsonPrimitive?.intOrNull ?: base.letterSpacing,
+                    autoSize = propObj["autoSize"]?.jsonPrimitive?.contentOrNull ?: base.autoSize,
+                    underline = propObj["underline"]?.jsonPrimitive?.booleanOrNull ?: base.underline,
+                    singleLine = propObj["singleLine"]?.jsonPrimitive?.booleanOrNull ?: base.singleLine
+                )
+            }
+            UIBlockType.IMAGE -> {
+                val base = (existingProps as? BlockProperties.ImageProperties) ?: BlockProperties.ImageProperties()
+                val resizeModeStr = propObj["resizeMode"]?.jsonPrimitive?.contentOrNull?.uppercase()
+                val resizeMode = when (resizeModeStr) {
+                    "NINE_PATCH", "9PATCH" -> ImageResizeMode.NINE_PATCH
+                    else -> base.resizeMode
+                }
+                base.copy(resizeMode = resizeMode)
+            }
+            UIBlockType.SCROLL_BAR -> {
+                val base = (existingProps as? BlockProperties.ScrollBarProperties) ?: BlockProperties.ScrollBarProperties()
+                base.copy(
+                    fixedGripSize = propObj["fixedGripSize"]?.jsonPrimitive?.booleanOrNull ?: base.fixedGripSize,
+                    arrowButton = propObj["arrowButton"]?.jsonPrimitive?.booleanOrNull ?: base.arrowButton
+                )
+            }
+            UIBlockType.INPUT -> {
+                val base = (existingProps as? BlockProperties.InputProperties) ?: BlockProperties.InputProperties()
+                val rawHint = propObj["hintText"]?.jsonPrimitive?.contentOrNull
+                    ?: propObj["promptText"]?.jsonPrimitive?.contentOrNull
+                    ?: propObj["text"]?.jsonPrimitive?.contentOrNull
+                    ?: base.hintText
+                val rawColor = propObj["textColor"]?.jsonPrimitive?.contentOrNull
+                    ?: propObj["color"]?.jsonPrimitive?.contentOrNull
+                    ?: base.textColor
+                val rawSize = propObj["textSize"]?.jsonPrimitive?.intOrNull
+                    ?: propObj["fontSize"]?.jsonPrimitive?.intOrNull
+                    ?: base.textSize
+                val rawBold = propObj["isBold"]?.jsonPrimitive?.booleanOrNull
+                    ?: propObj["bold"]?.jsonPrimitive?.booleanOrNull
+                    ?: base.isBold
+                val rawItalic = propObj["isItalic"]?.jsonPrimitive?.booleanOrNull
+                    ?: propObj["italic"]?.jsonPrimitive?.booleanOrNull
+                    ?: base.isItalic
+                val rawHAlign = propObj["horizontalAlign"]?.jsonPrimitive?.contentOrNull
+                    ?: propObj["align"]?.jsonPrimitive?.contentOrNull
+                    ?: base.horizontalAlign
+                val rawVAlign = propObj["verticalAlign"]?.jsonPrimitive?.contentOrNull
+                    ?: base.verticalAlign
+                val rawPassword = propObj["isPassword"]?.jsonPrimitive?.booleanOrNull
+                    ?: (propObj["keyboardType"]?.jsonPrimitive?.contentOrNull?.equals("Password", true) == true)
+                    ?: base.isPassword
+
+                base.copy(
+                    hintText = rawHint,
+                    textColor = rawColor,
+                    textSize = rawSize,
+                    maxLength = propObj["maxLength"]?.jsonPrimitive?.intOrNull ?: base.maxLength,
+                    isBold = rawBold,
+                    isItalic = rawItalic,
+                    horizontalAlign = rawHAlign,
+                    verticalAlign = rawVAlign,
+                    strokeColor = propObj["strokeColor"]?.jsonPrimitive?.contentOrNull ?: base.strokeColor,
+                    strokeWidth = propObj["strokeWidth"]?.jsonPrimitive?.floatOrNull ?: base.strokeWidth,
+                    isPassword = rawPassword,
+                    singleLine = propObj["singleLine"]?.jsonPrimitive?.booleanOrNull ?: base.singleLine
+                )
             }
         }
     }
@@ -1059,10 +1286,30 @@ object UiStudioLayoutService {
                             assetHash = null
                         }
 
+                        var properties = existing.properties
+                        if (patch.containsKey("properties")) {
+                            properties = parseBlockProperties(type, patch["properties"]?.jsonObject, existing.properties)
+                        }
+
+                        var patchBounds = SerialRect(x, y, x + w, y + h)
+                        if (type == UIBlockType.TEXT && properties is BlockProperties.TextProperties && properties.autoSize.equals("both", ignoreCase = true)) {
+                            // 若补丁未显式指定修改宽高数值，而是修改了文本内容、字号或字距，则自动重算贴合尺寸
+                            if (patch["width"] == null && patch["height"] == null) {
+                                val (measuredW, measuredH) = org.gemini.ui.forge.utils.TextDimensionCalculator.calculateDimension(
+                                    text = properties.text,
+                                    fontSize = properties.textSize,
+                                    letterSpacing = properties.letterSpacing,
+                                    leading = properties.leading
+                                )
+                                patchBounds = SerialRect(x, y, x + measuredW, y + measuredH)
+                            }
+                        }
+
                         existing.copy(
                             type = type,
-                            bounds = SerialRect(x, y, x + w, y + h),
+                            bounds = patchBounds,
                             assetHash = assetHash,
+                            properties = properties,
                             targetPageId = targetPageId,
                             children = updatedChildren
                         )
